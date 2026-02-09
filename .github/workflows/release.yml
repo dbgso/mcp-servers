@@ -13,7 +13,32 @@ permissions:
   id-token: write
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      interactive-instruction: ${{ steps.filter.outputs.interactive-instruction }}
+      git-repo-explorer: ${{ steps.filter.outputs.git-repo-explorer }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            interactive-instruction:
+              - 'packages/mcp-interactive-instruction/**'
+            git-repo-explorer:
+              - 'packages/mcp-git-repo-explorer/**'
+            shared:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig.base.json'
+              - 'packages/shared/**'
+
   release-interactive-instruction:
+    needs: changes
+    if: needs.changes.outputs.interactive-instruction == 'true' || needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,6 +74,8 @@ jobs:
         run: npx semantic-release
 
   release-git-repo-explorer:
+    needs: changes
+    if: needs.changes.outputs.git-repo-explorer == 'true' || needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
