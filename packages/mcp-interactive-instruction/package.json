@@ -49,9 +49,8 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@semantic-release/npm": "^13.1.4",
+    "@semantic-release/npm": "13.1.4",
     "@vitest/coverage-v8": "^4.0.18",
-    "semantic-release": "^24.2.9",
+    "semantic-release": "24.2.9",
     "vitest": "^4.0.18"
-  }
-}
+  }}

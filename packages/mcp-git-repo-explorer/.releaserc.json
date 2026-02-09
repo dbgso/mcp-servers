@@ -1,0 +1,20 @@
+{
+  "branches": ["main", "master"],
+  "tagFormat": "mcp-git-repo-explorer-v${version}",
+  "plugins": [
+    ["@semantic-release/commit-analyzer", {
+      "preset": "angular",
+      "releaseRules": [
+        {"type": "feat", "scope": "git-repo-explorer", "release": "minor"},
+        {"type": "fix", "scope": "git-repo-explorer", "release": "patch"},
+        {"type": "feat", "release": "minor"},
+        {"type": "fix", "release": "patch"}
+      ]
+    }],
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/npm",
+    ["@semantic-release/github", {
+      "releasedLabels": ["released-git-repo-explorer"]
+    }]
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "branches": ["main", "master"],
+  "tagFormat": "mcp-interactive-instruction-v${version}",
+  "plugins": [
+    ["@semantic-release/commit-analyzer", {
+      "preset": "angular",
+      "releaseRules": [
+        {"type": "feat", "scope": "interactive-instruction", "release": "minor"},
+        {"type": "fix", "scope": "interactive-instruction", "release": "patch"},
+        {"type": "feat", "release": "minor"},
+        {"type": "fix", "release": "patch"}
+      ]
+    }],
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/npm",
+    ["@semantic-release/github", {
+      "releasedLabels": ["released-interactive-instruction"]
+    }]
+  ]
+}
