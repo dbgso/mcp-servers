@@ -2,6 +2,13 @@
 
 MCP server for exploring git repositories with worktree support.
 
+## Why
+
+- **Fast search** - `git grep` is significantly faster than traditional `find`/`grep` for code exploration
+- **Multi-branch investigation** - Explore multiple branches simultaneously without switching contexts
+- **No local clone needed** - AI agents can investigate remote repositories without cluttering the local workspace
+- **Lightweight** - Sufficient functionality for quick code investigation and research tasks
+
 ## Features
 
 - Clone repositories as bare repos for efficient storage
