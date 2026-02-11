@@ -51,5 +51,8 @@ jobs:
       - name: Publish to npm
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
+          echo "=== OIDC Token Debug ==="
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL: $ACTIONS_ID_TOKEN_REQUEST_URL"
+          echo "Has token URL: $([ -n \"$ACTIONS_ID_TOKEN_REQUEST_URL\" ] && echo 'yes' || echo 'no')"
           cd packages/git-repo-explorer-mcp && npm publish --access public || true
           cd ../kroki-mcp && npm publish --access public || true
