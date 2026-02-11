@@ -8,19 +8,73 @@ Automated release setup using Changesets with npm OIDC provenance for secure, to
 1. Developer makes changes
    ↓
 2. pnpm changeset
-   → Select packages
+   → Select packages to version bump
    → Choose bump type (major/minor/patch)
    → Write summary
    ↓
 3. PR includes .changeset/*.md files
    ↓
-4. Merge to master
+4. Merge to main
    ↓
 5. GitHub Actions creates "Version Packages" PR
    → Updates CHANGELOG.md
    → Updates package.json versions
    ↓
 6. Merge Version PR → npm publish
+```
+
+## Monorepo Release Strategy
+
+### Important: Changeset vs Publish
+
+| Function | Scope |
+|----------|-------|
+| **Version bump** | Only packages selected in changeset |
+| **Publish** | All packages where local version ≠ npm version |
+
+This means:
+- Changeset controls **which packages get version bumps**
+- Publish runs on **all packages not yet on npm with that version**
+
+### To release only selected packages
+
+All packages must be registered on npm first. Then:
+1. Changeset bumps only selected packages
+2. Only those packages have version mismatch with npm
+3. Only those packages get published
+
+### Adding a New Package to npm
+
+1. **First-time manual publish:**
+   ```bash
+   cd packages/your-package
+   npm publish --access public --auth-type=web
+   ```
+
+2. **Configure Trusted Publisher on npm:**
+   - Go to https://www.npmjs.com/package/your-package/access
+   - Add GitHub Actions as Trusted Publisher:
+     - Organization: `dbgso`
+     - Repository: `mcp-servers`
+     - Workflow: `release.yml`
+
+3. **Now changesets will handle future releases**
+
+### Keeping a Package Private
+
+Option 1: Add `"private": true` to package.json
+```json
+{
+  "name": "my-package",
+  "private": true
+}
+```
+
+Option 2: Add to `.changeset/config.json` ignore list
+```json
+{
+  "ignore": ["my-package"]
+}
 ```
 
 ## Commands
@@ -79,7 +133,7 @@ The package must be configured on npm to allow publishing from GitHub Actions vi
 ```json
 {
   "access": "public",
-  "baseBranch": "master",
+  "baseBranch": "main",
   "updateInternalDependencies": "patch"
 }
 ```
