@@ -42,7 +42,7 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          publish: pnpm release
+          publish: pnpm -r publish --access public --no-git-checks
           version: pnpm run version
           title: "chore: version packages"
           commit: "chore: version packages"
