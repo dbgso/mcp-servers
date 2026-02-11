@@ -1,6 +1,7 @@
 {
   "name": "interactive-instruction-mcp",
   "version": "0.1.0",
+  "private": true,
   "description": "MCP server for interactive instruction documents - list, view, add, and update markdown files on demand",
   "type": "module",
   "main": "dist/index.js",
