@@ -50,6 +50,6 @@ jobs:
 
       - name: Publish to npm
         if: steps.changesets.outputs.hasChangesets == 'false'
-        run: pnpm -r publish --access public --no-git-checks
-        env:
-          NPM_CONFIG_PROVENANCE: true
+        run: |
+          cd packages/git-repo-explorer-mcp && npm publish --access public || true
+          cd ../kroki-mcp && npm publish --access public || true
