@@ -37,12 +37,12 @@ Automated release setup using Changesets with npm OIDC provenance for secure, to
 $ pnpm changeset
 
 🦋 Which packages would you like to include?
-  ◯ mcp-git-repo-explorer
-  ◉ mcp-interactive-instruction
-  ◯ mcp-traceable-chain
+  ◯ git-repo-explorer-mcp
+  ◉ interactive-instruction-mcp
+  ◯ traceable-chain-mcp
 
 🦋 Which packages should have a minor bump?
-  ◉ mcp-interactive-instruction
+  ◉ interactive-instruction-mcp
 
 🦋 Please enter a summary for this change:
   Added new validation feature
@@ -52,7 +52,7 @@ This creates `.changeset/<random-name>.md`:
 
 ```markdown
 ---
-"mcp-interactive-instruction": minor
+"interactive-instruction-mcp": minor
 ---
 
 Added new validation feature

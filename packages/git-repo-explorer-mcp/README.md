@@ -1,4 +1,4 @@
-# mcp-git-repo-explorer
+# git-repo-explorer-mcp
 
 MCP server for exploring git repositories with worktree support.
 
@@ -12,7 +12,7 @@ MCP server for exploring git repositories with worktree support.
 ## Installation
 
 ```bash
-npm install mcp-git-repo-explorer
+npm install git-repo-explorer-mcp
 ```
 
 ## Usage
@@ -24,9 +24,9 @@ Add to your MCP configuration:
 ```json
 {
   "mcpServers": {
-    "mcp-git-repo-explorer": {
+    "git-repo-explorer-mcp": {
       "command": "npx",
-      "args": ["mcp-git-repo-explorer", "/tmp/git-repos", "--remind-mcp"]
+      "args": ["-y", "git-repo-explorer-mcp", "/tmp/git-repos", "--remind-mcp"]
     }
   }
 }
