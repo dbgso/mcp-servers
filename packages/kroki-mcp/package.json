@@ -29,6 +29,11 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/kroki-mcp"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true

@@ -27,6 +27,11 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/git-repo-explorer-mcp"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
