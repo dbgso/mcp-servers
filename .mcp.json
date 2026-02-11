@@ -11,6 +11,10 @@
     "traceable-chain-mcp": {
       "command": "npx",
       "args": ["tsx", "./packages/traceable-chain-mcp/src/index.ts"]
+    },
+    "kroki-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/kroki-mcp/src/index.ts"]
     }
   }
 }
