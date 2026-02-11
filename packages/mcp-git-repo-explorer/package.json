@@ -1,6 +1,6 @@
 {
   "name": "mcp-git-repo-explorer",
-  "version": "0.0.0-development",
+  "version": "0.1.0",
   "description": "MCP server for exploring git repositories with worktree support",
   "type": "module",
   "main": "dist/index.js",
@@ -16,8 +16,7 @@
     "test:watch": "vitest",
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
-    "prepublishOnly": "npm run build",
-    "semantic-release": "semantic-release"
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "mcp",
@@ -37,14 +36,7 @@
     "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
-    "@semantic-release/npm": "13.1.4",
     "@vitest/coverage-v8": "^4.0.18",
-    "semantic-release": "24.2.9",
     "vitest": "^4.0.18"
-  },
-  "pnpm": {
-    "overrides": {
-      "@semantic-release/npm": "13.1.4"
-    }
   }
 }

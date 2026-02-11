@@ -9,9 +9,13 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "dev": "pnpm -r --parallel dev"
+    "dev": "pnpm -r --parallel dev",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.8",
     "@types/node": "^22.15.21",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
@@ -19,10 +23,5 @@
   "packageManager": "pnpm@10.19.0",
   "engines": {
     "node": ">=18.0.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@semantic-release/npm": "13.1.4"
-    }
   }
 }

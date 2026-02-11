@@ -1,6 +1,6 @@
 {
   "name": "mcp-interactive-instruction",
-  "version": "0.0.0-development",
+  "version": "0.1.0",
   "description": "MCP server for interactive instruction documents - list, view, add, and update markdown files on demand",
   "type": "module",
   "main": "dist/index.js",
@@ -18,8 +18,7 @@
     "test:watch": "vitest",
     "prepublishOnly": "npm run build",
     "start": "tsx src/index.ts",
-    "dev": "tsx src/index.ts",
-    "semantic-release": "semantic-release"
+    "dev": "tsx src/index.ts"
   },
   "keywords": [
     "mcp",
@@ -49,8 +48,7 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@semantic-release/npm": "13.1.4",
     "@vitest/coverage-v8": "^4.0.18",
-    "semantic-release": "24.2.9",
     "vitest": "^4.0.18"
-  }}
+  }
+}

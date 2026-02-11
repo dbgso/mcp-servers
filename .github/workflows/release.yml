@@ -3,48 +3,21 @@ name: Release
 on:
   push:
     branches:
-      - main
       - master
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: write
-  issues: write
   pull-requests: write
   id-token: write
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      interactive-instruction: ${{ steps.filter.outputs.interactive-instruction }}
-      git-repo-explorer: ${{ steps.filter.outputs.git-repo-explorer }}
-      shared: ${{ steps.filter.outputs.shared }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            interactive-instruction:
-              - 'packages/mcp-interactive-instruction/**'
-            git-repo-explorer:
-              - 'packages/mcp-git-repo-explorer/**'
-            shared:
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'tsconfig.base.json'
-              - 'packages/shared/**'
-
-  release-interactive-instruction:
-    needs: changes
-    if: needs.changes.outputs.interactive-instruction == 'true' || needs.changes.outputs.shared == 'true'
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -54,9 +27,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-
-      - name: Update npm for OIDC support
-        run: npm install -g npm@latest && npm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -65,44 +35,15 @@ jobs:
         run: pnpm build
 
       - name: Test
-        run: pnpm -r test
+        run: pnpm test
 
-      - name: Release mcp-interactive-instruction
+      - name: Create Release Pull Request or Publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          publish: pnpm release
+          version: pnpm version
+          title: "chore: version packages"
+          commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        working-directory: packages/mcp-interactive-instruction
-        run: npx semantic-release
-
-  release-git-repo-explorer:
-    needs: changes
-    if: needs.changes.outputs.git-repo-explorer == 'true' || needs.changes.outputs.shared == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Update npm for OIDC support
-        run: npm install -g npm@latest && npm --version
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Release mcp-git-repo-explorer
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        working-directory: packages/mcp-git-repo-explorer
-        run: npx semantic-release
