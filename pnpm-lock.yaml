@@ -21,7 +21,7 @@ importers:
         specifier: ^5.8.3
         version: 5.9.3
 
-  packages/mcp-git-repo-explorer:
+  packages/git-repo-explorer-mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
@@ -40,7 +40,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/mcp-interactive-instruction:
+  packages/interactive-instruction-mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
@@ -56,7 +56,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/mcp-traceable-chain:
+  packages/traceable-chain-mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0

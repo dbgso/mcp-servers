@@ -1,12 +1,16 @@
 {
   "mcpServers": {
-    "mcp-git-repo-explorer": {
+    "git-repo-explorer-mcp": {
       "command": "npx",
-      "args": ["tsx", "./packages/mcp-git-repo-explorer/src/index.ts", "/tmp/mcp-git-repos", "--remind-mcp"]
+      "args": ["tsx", "./packages/git-repo-explorer-mcp/src/index.ts", "/tmp/mcp-git-repos", "--remind-mcp"]
     },
-    "mcp-interactive-instruction": {
+    "interactive-instruction-mcp": {
       "command": "npx",
-      "args": ["tsx", "./packages/mcp-interactive-instruction/src/index.ts", "./docs", "--remind-mcp"]
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./docs", "--remind-mcp"]
+    },
+    "traceable-chain-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/traceable-chain-mcp/src/index.ts"]
     }
   }
 }

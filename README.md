@@ -6,8 +6,9 @@ A collection of Model Context Protocol (MCP) servers.
 
 | Package | Description |
 |---------|-------------|
-| [mcp-git-repo-explorer](./packages/mcp-git-repo-explorer) | Git repository explorer with worktree support |
-| [mcp-interactive-instruction](./packages/mcp-interactive-instruction) | Interactive instruction document management |
+| [git-repo-explorer-mcp](./packages/git-repo-explorer-mcp) | Git repository explorer with worktree support |
+| [interactive-instruction-mcp](./packages/interactive-instruction-mcp) | Interactive instruction document management |
+| [traceable-chain-mcp](./packages/traceable-chain-mcp) | Traceable document chains with enforced dependencies |
 
 ## Development
 
@@ -31,7 +32,7 @@ pnpm build
 ### Run a package
 
 ```bash
-cd packages/mcp-git-repo-explorer
+cd packages/git-repo-explorer-mcp
 pnpm dev
 ```
 
@@ -42,13 +43,17 @@ Add to your `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "mcp-git-repo-explorer": {
+    "git-repo-explorer-mcp": {
       "command": "npx",
-      "args": ["mcp-git-repo-explorer", "/tmp/git-repos"]
+      "args": ["git-repo-explorer-mcp", "/tmp/git-repos"]
     },
-    "mcp-interactive-instruction": {
+    "interactive-instruction-mcp": {
       "command": "npx",
-      "args": ["mcp-interactive-instruction", "./docs"]
+      "args": ["interactive-instruction-mcp", "./docs"]
+    },
+    "traceable-chain-mcp": {
+      "command": "npx",
+      "args": ["traceable-chain-mcp"]
     }
   }
 }
