@@ -38,14 +38,18 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Create Release Pull Request or Publish
+      - name: Create Release Pull Request
         id: changesets
         uses: changesets/action@v1
         with:
-          publish: pnpm -r publish --access public --no-git-checks
           version: pnpm run version
           title: "chore: version packages"
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: pnpm -r publish --access public --no-git-checks
+        env:
           NPM_CONFIG_PROVENANCE: true
