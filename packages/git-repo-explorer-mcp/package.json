@@ -32,6 +32,10 @@
     "url": "git+https://github.com/dbgso/mcp-servers.git",
     "directory": "packages/git-repo-explorer-mcp"
   },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/git-repo-explorer-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:git-repo-explorer-mcp"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
