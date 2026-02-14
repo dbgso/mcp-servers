@@ -1,10 +1,14 @@
+import * as path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { MarkdownReader } from "./services/markdown-reader.js";
+import { PlanReader } from "./services/plan-reader.js";
 import { registerDescriptionTool } from "./tools/description.js";
 import { registerHelpTool } from "./tools/help.js";
 import { registerDraftTool } from "./tools/draft/index.js";
 import { registerApplyTool } from "./tools/apply/index.js";
+import { registerPlanTool } from "./tools/plan/index.js";
 import type { ReminderConfig } from "./types/index.js";
+import { PLAN_DIR } from "./constants.js";
 
 const DEFAULT_CONFIG: ReminderConfig = {
   remindMcp: false,
@@ -27,10 +31,14 @@ export function createServer(params: {
   // Shared reader instance for consistent caching
   const reader = new MarkdownReader(markdownDir);
 
+  // Plan reader for task management (tmp/ subdirectory)
+  const planReader = new PlanReader(path.join(markdownDir, PLAN_DIR));
+
   registerDescriptionTool({ server, config });
   registerHelpTool({ server, reader, config });
   registerDraftTool({ server, reader, config });
   registerApplyTool({ server, reader, config });
+  registerPlanTool({ server, planReader, config });
 
   return server;
 }
