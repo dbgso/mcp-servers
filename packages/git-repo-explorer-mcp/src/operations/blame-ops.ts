@@ -50,7 +50,16 @@ function parseBlameOutput(output: string): BlameLine[] {
   return result;
 }
 
-export const blameOp: GitOperation = {
+const blameArgsSchema = z.object({
+  repo_url: z.string().optional().describe("Repository URL (omit for current working directory)"),
+  ref: z.string().optional().describe('Branch name or commit hash (default: "HEAD")'),
+  path: z.string().describe("Target file path (required)"),
+  line_start: z.number().int().min(1).optional().describe("Start line number"),
+  line_end: z.number().int().min(1).optional().describe("End line number"),
+});
+type BlameArgs = z.infer<typeof blameArgsSchema>;
+
+export const blameOp: GitOperation<BlameArgs> = {
   id: "blame",
   summary: "Show line-by-line author and commit info",
   detail: `Show git blame information for each line in a file. Optionally specify line range.
@@ -60,13 +69,7 @@ Examples:
   params: { path: "src/lib/mcp/index.ts" }
   params: { repo_url: "git@github.com:org/repo.git", ref: "main", path: "packages/api/src/handler.ts", line_start: 10, line_end: 30 }`,
   category: "History",
-  argsSchema: z.object({
-    repo_url: z.string().optional().describe("Repository URL (omit for current working directory)"),
-    ref: z.string().optional().describe('Branch name or commit hash (default: "HEAD")'),
-    path: z.string().describe("Target file path (required)"),
-    line_start: z.number().int().min(1).optional().describe("Start line number"),
-    line_end: z.number().int().min(1).optional().describe("End line number"),
-  }),
+  argsSchema: blameArgsSchema,
   execute: async (args, ctx): Promise<CallToolResult> => {
     const ref = args.ref ?? "HEAD";
     const output = await gitBlame(ctx.repoPath, ref, args.path, {
@@ -91,4 +94,4 @@ Examples:
   },
 };
 
-export const blameOperations: GitOperation[] = [blameOp];
+export const blameOperations = [blameOp];
