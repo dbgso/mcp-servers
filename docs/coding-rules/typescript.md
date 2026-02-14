@@ -2,6 +2,51 @@
 
 このプロジェクト固有のTypeScriptコーディング規約。
 
+## Zod
+
+### z.infer vs z.input
+
+- `z.infer<T>` / `z.output<T>`: パース後の出力型（デフォルト値適用後）
+- `z.input<T>`: パース前の入力型（デフォルト値適用前）
+
+```typescript
+const schema = z.object({
+  name: z.string(),
+  age: z.number().optional().default(0),
+});
+
+// z.input: { name: string; age?: number | undefined }
+// z.infer: { name: string; age: number }
+
+// ❌ Bad - 用途を考えずに使う
+type Args = z.infer<typeof schema>;
+
+// ✅ Good - 用途に応じて使い分け
+type InputArgs = z.input<typeof schema>;   // バリデーション前
+type OutputArgs = z.infer<typeof schema>;  // バリデーション後
+```
+
+### Operation型での使い方
+
+```typescript
+// スキーマを先に定義
+const argsSchema = z.object({
+  id: z.string(),
+  limit: z.number().optional(),  // .default() は避ける
+});
+
+// パース後の型を使用（executeが受け取る型）
+type Args = z.infer<typeof argsSchema>;
+
+export const op: Operation<Args> = {
+  argsSchema,
+  execute: async (args, ctx) => {
+    // args.limit は number | undefined
+    const limit = args.limit ?? 10;  // デフォルトはここで適用
+  },
+};
+```
+
 ## 型定義
 
 ### インターフェース命名
