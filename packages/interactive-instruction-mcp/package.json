@@ -1,12 +1,11 @@
 {
-  "name": "interactive-instruction-mcp",
-  "version": "0.1.0",
-  "private": true,
+  "name": "mcp-interactive-instruction",
+  "version": "1.2.0",
   "description": "MCP server for interactive instruction documents - list, view, add, and update markdown files on demand",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "interactive-instruction-mcp": "./dist/index.js"
+    "mcp-interactive-instruction": "./dist/index.js"
   },
   "files": [
     "dist",
@@ -35,11 +34,16 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dbgso/mcp-interactive-instruction.git"
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/interactive-instruction-mcp"
   },
-  "homepage": "https://github.com/dbgso/mcp-interactive-instruction#readme",
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/interactive-instruction-mcp#readme",
   "bugs": {
-    "url": "https://github.com/dbgso/mcp-interactive-instruction/issues"
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:mcp-interactive-instruction"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=18"

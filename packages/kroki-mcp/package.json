@@ -34,6 +34,10 @@
     "url": "git+https://github.com/dbgso/mcp-servers.git",
     "directory": "packages/kroki-mcp"
   },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/kroki-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:kroki-mcp"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
