@@ -3,7 +3,14 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { GitOperation } from "./types.js";
 import { gitShow } from "../git-repo-manager.js";
 
-export const showOp: GitOperation = {
+const showArgsSchema = z.object({
+  repo_url: z.string().optional().describe("Repository URL (omit for current working directory)"),
+  ref: z.string().describe("Commit hash or branch name (required)"),
+  path: z.string().optional().describe("File path (omit to show commit details)"),
+});
+type ShowArgs = z.infer<typeof showArgsSchema>;
+
+export const showOp: GitOperation<ShowArgs> = {
   id: "show",
   summary: "Show commit details or file content",
   detail: `Show commit details or file content with git show.
@@ -19,11 +26,7 @@ Examples:
   params: { ref: "main", path: "src/lib/mcp/index.ts" }
   params: { repo_url: "git@github.com:org/repo.git", ref: "HEAD", path: "package.json" }`,
   category: "File",
-  argsSchema: z.object({
-    repo_url: z.string().optional().describe("Repository URL (omit for current working directory)"),
-    ref: z.string().describe("Commit hash or branch name (required)"),
-    path: z.string().optional().describe("File path (omit to show commit details)"),
-  }),
+  argsSchema: showArgsSchema,
   execute: async (args, ctx): Promise<CallToolResult> => {
     const output = await gitShow(ctx.repoPath, args.ref, args.path);
 
@@ -38,4 +41,4 @@ Examples:
   },
 };
 
-export const showOperations: GitOperation[] = [showOp];
+export const showOperations = [showOp];

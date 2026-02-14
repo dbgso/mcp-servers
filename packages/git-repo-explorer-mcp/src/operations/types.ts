@@ -6,11 +6,12 @@ export interface GitOperationContext {
   repoName: string;
 }
 
-export interface GitOperation<TArgs = any> {
+export interface GitOperation<TArgs = unknown> {
   id: string;
   summary: string;
   detail: string;
   category: string;
   argsSchema: z.ZodType<TArgs>;
-  execute: (args: TArgs, ctx: GitOperationContext) => Promise<CallToolResult>;
+  // Method syntax for bivariance (allows assignment to GitOperation<unknown>[])
+  execute(args: TArgs, ctx: GitOperationContext): Promise<CallToolResult>;
 }

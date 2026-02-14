@@ -4,16 +4,6 @@
 
 ## 型定義
 
-### 明示的な型を使用
-
-```typescript
-// ❌ Bad
-const data: any = fetchData();
-
-// ✅ Good
-const data: UserResponse = fetchData();
-```
-
 ### インターフェース命名
 
 ```typescript
@@ -110,3 +100,49 @@ async function fetchUser(params: { id: string }): Promise<Result<User>> {
   }
 }
 ```
+
+## テスト
+
+### test.each を使用
+
+テストケースは `test.each` / `it.each` で記述し、テストデータは型付きの変数に抽出する。
+
+```typescript
+// ❌ Bad - 個別のテスト
+it('should parse "hello"', () => {
+  expect(parse('hello')).toBe('hello');
+});
+
+it('should parse "world"', () => {
+  expect(parse('world')).toBe('world');
+});
+
+// ❌ Bad - インライン配列、型なし
+it.each([
+  ['hello', 'hello'],
+  ['world', 'world'],
+])('should parse %s', (input, expected) => {
+  expect(parse(input)).toBe(expected);
+});
+
+// ✅ Good - 型付き変数 + test.each
+type ParseTestCase = {
+  input: string;
+  expected: string;
+};
+
+const parseTestCases: ParseTestCase[] = [
+  { input: 'hello', expected: 'hello' },
+  { input: 'world', expected: 'world' },
+];
+
+it.each(parseTestCases)('should parse "$input"', ({ input, expected }) => {
+  expect(parse(input)).toBe(expected);
+});
+```
+
+### 理由
+
+1. **型安全**: テストデータの構造が明確
+2. **保守性**: ケース追加が容易
+3. **可読性**: テストの意図が明確
