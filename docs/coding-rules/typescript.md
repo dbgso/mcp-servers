@@ -2,66 +2,6 @@
 
 このプロジェクト固有のTypeScriptコーディング規約。
 
-## 関数の引数パターン (single-params-object)
-
-**複数の引数を持つ関数は、単一のparamsオブジェクトを使用すること。**
-
-ESLint `custom/single-params-object` ルールで検証される。
-
-### ❌ Bad
-
-```typescript
-function createUser(name: string, age: number, email: string) {
-  // ...
-}
-
-async function sendMessage(to: string, subject: string, body: string) {
-  // ...
-}
-
-const calculate = (a: number, b: number) => a + b;
-```
-
-### ✅ Good
-
-```typescript
-function createUser(params: { name: string; age: number; email: string }) {
-  const { name, age, email } = params;
-  // ...
-}
-
-async function sendMessage(params: {
-  to: string;
-  subject: string;
-  body: string;
-}) {
-  const { to, subject, body } = params;
-  // ...
-}
-
-// 単一引数はそのままでOK
-function greet(name: string) {
-  return `Hello, ${name}`;
-}
-
-// 引数なしもOK
-function getTimestamp() {
-  return Date.now();
-}
-```
-
-### 理由
-
-1. **可読性**: 引数の意味が明確になる
-2. **拡張性**: 新しい引数を追加しても呼び出し側の変更が最小限
-3. **順序非依存**: 引数の順序を覚える必要がない
-4. **オプショナル引数**: デフォルト値の設定が容易
-
-### 例外
-
-- コンストラクタは除外（`ignoreConstructors: true`）
-- テストファイルは除外
-
 ## 型定義
 
 ### 明示的な型を使用
