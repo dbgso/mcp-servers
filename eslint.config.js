@@ -45,6 +45,7 @@ module.exports = [
       // TypeScript関連
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
 
       // 一般的なルール
       'prefer-const': 'warn',
@@ -72,6 +73,7 @@ module.exports = [
     files: ['packages/**/__tests__/**/*.ts', 'packages/**/*.test.ts'],
     rules: {
       'custom/single-params-object': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
     },
   },
 ];

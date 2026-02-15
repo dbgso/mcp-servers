@@ -24,15 +24,15 @@ export function formatParallel(
   const hasUnits = task.parallelizable_units && task.parallelizable_units.length > 0;
 
   if (options.style === "info") {
-    if (hasUnits) {
-      return `yes (units: ${task.parallelizable_units!.join(", ")})`;
+    if (hasUnits && task.parallelizable_units) {
+      return `yes (units: ${task.parallelizable_units.join(", ")})`;
     }
     return "yes";
   }
 
   // style === "tag"
-  if (hasUnits) {
-    return ` [parallel: ${task.parallelizable_units!.join(", ")}]`;
+  if (hasUnits && task.parallelizable_units) {
+    return ` [parallel: ${task.parallelizable_units.join(", ")}]`;
   }
   return " [parallel]";
 }
