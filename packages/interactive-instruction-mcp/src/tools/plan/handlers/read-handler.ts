@@ -1,29 +1,47 @@
+import { z } from "zod";
 import type {
-  PlanActionHandler,
-  PlanActionParams,
   PlanActionContext,
   ToolResult,
+  PlanRawParams,
 } from "../../../types/index.js";
 
-export class ReadHandler implements PlanActionHandler {
-  async execute(params: {
-    actionParams: PlanActionParams;
-    context: PlanActionContext;
-  }): Promise<ToolResult> {
-    const { id } = params.actionParams;
-    const { planReader } = params.context;
+const paramsSchema = z.object({
+  id: z.string().describe("Task ID to read"),
+});
 
-    if (!id) {
+/**
+ * ReadHandler: Read task details
+ */
+export class ReadHandler {
+  readonly action = "read";
+
+  readonly help = `# plan read
+
+Read task details.
+
+## Usage
+\`\`\`
+plan(action: "read", id: "<task-id>")
+\`\`\`
+
+## Parameters
+- **id** (required): Task ID to read
+
+## Notes
+- Returns all task details including feedback history
+`;
+
+  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
+    const parseResult = paramsSchema.safeParse(params.rawParams);
+    if (!parseResult.success) {
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: "Error: id is required for read action",
-          },
-        ],
+        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
         isError: true,
       };
     }
+
+    const { id } = parseResult.data;
+    const { planReader } = params.context;
 
     const task = await planReader.getTask(id);
     if (!task) {

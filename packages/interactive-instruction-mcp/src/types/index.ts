@@ -89,11 +89,26 @@ export interface FileChange {
   description: string;
 }
 
-export interface ReviewReport {
-  changes: FileChange[];
-  why: string;
-  references_used: string[] | null;
-  references_reason: string;
+// TaskOutput: フェーズ別の成果物報告
+// 共通フィールド + フェーズ別フィールドを含む
+export interface TaskOutput {
+  what: string;        // 何をしたのか
+  why: string;         // なぜこれで十分なのか
+  how: string;         // どうやって調べた/実装したのか
+  blockers: string[];  // 遭遇した障害
+  risks: string[];     // リスク・懸念事項
+  phase: string;       // research | implement | verify | fix
+  // フェーズ別フィールド（オプショナル）
+  findings?: string;           // research: 調査結果
+  sources?: string[];          // research: 調査ソース
+  changes?: FileChange[];      // implement/fix: ファイル変更
+  design_decisions?: string;   // implement: 設計判断
+  test_target?: string;        // verify: テスト対象
+  test_results?: string;       // verify: テスト結果
+  coverage?: string;           // verify: 網羅性
+  feedback_addressed?: string; // fix: 対応したフィードバック
+  references_used: string[];   // 参照したドキュメント（必須）
+  references_reason: string;   // 参照理由（必須）
 }
 
 export interface TaskMetadata {
@@ -107,7 +122,9 @@ export interface TaskMetadata {
   completion_criteria: string;
   deliverables: string[];
   output: string;
-  review_report: ReviewReport | null;
+  /** @deprecated Use task_output instead */
+  output_content: string;
+  task_output: TaskOutput | null;
   is_parallelizable: boolean;
   references: string[];
   feedback: Feedback[];
@@ -128,30 +145,77 @@ export interface TaskSummary {
   is_parallelizable: boolean;
 }
 
-export interface PlanActionParams {
-  id?: string;
+// Base params shared across actions
+type BaseParams = {
+  id: string;
+};
+
+// Action-specific param types
+export type StartParams = BaseParams;
+
+export type RequestChangesParams = BaseParams & {
+  comment: string;
+};
+
+export type SkipParams = BaseParams & {
+  reason: string;
+};
+
+export type BlockParams = BaseParams & {
+  reason: string;
+};
+
+export type AddParams = {
+  id: string;
+  title: string;
+  content: string;
+  parent?: string;
+  dependencies: string[];
+  dependency_reason?: string;
+  prerequisites: string;
+  completion_criteria: string;
+  deliverables: string[];
+  is_parallelizable: boolean;
+  references: string[];
+};
+
+export type UpdateParams = BaseParams & {
   title?: string;
   content?: string;
-  parent?: string;
   dependencies?: string[];
   dependency_reason?: string;
   prerequisites?: string;
   completion_criteria?: string;
-  deliverables?: string[];
-  output?: string;
   is_parallelizable?: boolean;
   references?: string[];
-  status?: TaskStatus;
-  comment?: string;
-  decision?: FeedbackDecision;
-  changes?: FileChange[];
-  why?: string;
-  references_used?: string[] | null;
-  references_reason?: string;
-  // Feedback-related params
-  feedback_id?: string;
-  interpretation?: string;
+  /** @deprecated Use submit_review action instead */
+  output_content?: string;
+};
+
+export type InterpretParams = BaseParams & {
+  feedback_id: string;
+  interpretation: string;
+};
+
+export type FeedbackParams = BaseParams & {
+  comment: string;
+  decision: FeedbackDecision;
+};
+
+// Raw params passed from tool input to handlers
+// Each handler validates its own fields with Zod
+export type PlanRawParams = Record<string, unknown>;
+
+// Handler interface for plan actions
+export interface PlanActionHandler {
+  readonly action: string;
+  readonly help: string;
+  execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult>;
 }
+
+// Legacy: Used by state machine (TransitionContext) for status transitions
+export type PlanActionParams = PlanRawParams;
+
 
 export interface PlanReporter {
   updatePendingReviewFile(): Promise<void>;
@@ -190,9 +254,9 @@ export interface PlanActionContext {
   planReporter: PlanReporter;
   feedbackReader: FeedbackReaderInterface;
   config: ReminderConfig;
+  planDir: string;
 }
 
-export type PlanActionHandler = ActionHandler<PlanActionParams, PlanActionContext>;
 
 // Forward declaration for PlanReader (actual implementation in services)
 export interface PlanReader {
@@ -223,15 +287,13 @@ export interface PlanReader {
     completion_criteria?: string;
     is_parallelizable?: boolean;
     references?: string[];
+    output_content?: string;
   }): Promise<{ success: boolean; error?: string }>;
   updateStatus(params: {
     id: string;
     status: TaskStatus;
     output?: string;
-    changes?: FileChange[];
-    why?: string;
-    references_used?: string[] | null;
-    references_reason?: string;
+    task_output?: TaskOutput;
   }): Promise<{ success: boolean; error?: string; actualStatus?: TaskStatus }>;
   approveTask(id: string): Promise<{ success: boolean; error?: string }>;
   addFeedback(params: {

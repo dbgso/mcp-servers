@@ -1,20 +1,53 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { wrapResponse } from "../../utils/response-wrapper.js";
-import type { ReminderConfig, PlanActionHandler, PlanReporter, FeedbackReaderInterface } from "../../types/index.js";
+import type { ReminderConfig, PlanReporter, FeedbackReaderInterface, PlanActionContext, PlanRawParams, PlanActionHandler } from "../../types/index.js";
 import type { PlanReader } from "../../services/plan-reader.js";
 import {
-  ListHandler,
-  ReadHandler,
   AddHandler,
   UpdateHandler,
-  DeleteHandler,
-  StatusHandler,
   FeedbackHandler,
-  InterpretHandler,
+  ListHandler,
+  ReadHandler,
+  ReadOutputHandler,
+  DeleteHandler,
   ClearHandler,
   GraphHandler,
+  StartHandler,
+  RequestChangesHandler,
+  SkipHandler,
+  BlockHandler,
+  InterpretHandler,
+  ResearchSubmitHandler,
+  ImplementSubmitHandler,
+  VerifySubmitHandler,
+  FixSubmitHandler,
 } from "./handlers/index.js";
+
+const handlers: PlanActionHandler[] = [
+  new ListHandler(),
+  new ReadHandler(),
+  new ReadOutputHandler(),
+  new AddHandler(),
+  new UpdateHandler(),
+  new DeleteHandler(),
+  new FeedbackHandler(),
+  new InterpretHandler(),
+  new ClearHandler(),
+  new GraphHandler(),
+  new StartHandler(),
+  new ResearchSubmitHandler(),
+  new ImplementSubmitHandler(),
+  new VerifySubmitHandler(),
+  new FixSubmitHandler(),
+  new RequestChangesHandler(),
+  new SkipHandler(),
+  new BlockHandler(),
+];
+
+function resolveHandler(action: string): PlanActionHandler | undefined {
+  return handlers.find((h) => h.action === action);
+}
 
 const getPlanHelp = (planDir: string) => `# Plan Tool
 
@@ -51,11 +84,18 @@ Now "implement-feature" cannot be approved until impl-code, build-check, and tes
 
 ## IMPORTANT: Review Workflow
 
-When marking a task as \`completed\`, it automatically becomes \`pending_review\`:
-1. You set status to "completed" with output → Task becomes "pending_review"
-2. User reviews the output and uses the separate \`approve\` tool → Task becomes "completed"
+Use dedicated state transition actions:
 
-**Note:** The \`approve\` tool is separate and for human reviewers only. Do NOT look for or call approve - wait for user approval.
+1. **Start work**: \`plan(action: "start", id: "<id>")\`
+2. **Submit for review** (use phase-specific action):
+   - Research: \`plan(action: "submit_research", id: "<id>__research", findings: "...", sources: [...])\`
+   - Implement: \`plan(action: "submit_implement", id: "<id>__implement", changes: [...], design_decisions: "...")\`
+   - Verify: \`plan(action: "submit_verify", id: "<id>__verify", test_target: "...", test_results: "...", coverage: "...")\`
+   - Fix: \`plan(action: "submit_fix", id: "<id>__fix", changes: [...], feedback_addressed: "...")\`
+3. **User approves**: \`approve(target: "task", id: "<id>")\` → Task becomes "completed"
+4. **Or user requests changes**: \`plan(action: "request_changes", id: "<id>", comment: "<feedback>")\`
+
+**Note:** The \`approve\` tool is separate and for human reviewers only. Do NOT call approve - wait for user approval.
 
 ## Task Statuses
 - \`pending\`: Task not started (ready if no incomplete dependencies)
@@ -67,16 +107,41 @@ When marking a task as \`completed\`, it automatically becomes \`pending_review\
 
 ## Actions
 
+### Basic Actions
 - \`plan()\` - Show this help
 - \`plan(action: "list")\` - List all tasks with status and dependencies
 - \`plan(action: "read", id: "<id>")\` - Read task detail
-- \`plan(action: "add", id, title, content, dependencies, dependency_reason, prerequisites, completion_criteria, is_parallelizable, references)\` - Create new task
+- \`plan(action: "read_output", id: "<id>")\` - Read task output (what/why/how)
+- \`plan(action: "add", ...)\` - Create new task (auto-creates 4 subtasks)
 - \`plan(action: "update", id: "<id>", ...)\` - Update task fields
-- \`plan(action: "delete", id: "<id>")\` - Delete task (fails if other tasks depend on it)
-- \`plan(action: "status", id: "<id>", status: "completed", output: "<result>")\` - Mark task done (becomes pending_review)
-- \`plan(action: "clear")\` - Clear all tasks (reset plan)
-- \`plan(action: "graph")\` - Show task dependency graph (Mermaid format)
-- \`plan(action: "feedback", id: "<id>", comment: "<feedback>", decision: "adopted" | "rejected")\` - Record user feedback
+- \`plan(action: "delete", id: "<id>")\` - Delete task
+- \`plan(action: "clear")\` - Clear all tasks
+- \`plan(action: "graph")\` - Show dependency graph
+
+### State Transitions (Recommended)
+- \`plan(action: "start", id: "<id>")\` - Start task (pending → in_progress)
+- \`plan(action: "submit_research", ...)\` - Submit research task for review
+- \`plan(action: "submit_implement", ...)\` - Submit implementation task for review
+- \`plan(action: "submit_verify", ...)\` - Submit verification task for review
+- \`plan(action: "submit_fix", ...)\` - Submit fix task for review
+- \`plan(action: "request_changes", id: "<id>", comment: "<feedback>")\` - Request changes (pending_review → in_progress)
+- \`plan(action: "skip", id: "<id>", reason: "<why>")\` - Skip task (any → skipped)
+- \`plan(action: "block", id: "<id>", reason: "<why>")\` - Block task (any → blocked)
+
+### Common Fields for All submit_* Actions
+- \`output_what\`: 何をしたのか (What was done)
+- \`output_why\`: なぜこれで十分なのか (Why this is sufficient)
+- \`output_how\`: どうやって調べた/実装したのか (How it was done)
+- \`blockers\`: 遭遇した障害 (Array, can be empty)
+- \`risks\`: リスク・懸念事項 (Array, can be empty)
+- \`references_used\`: Array of doc IDs (required, must include prompts/<task-id>)
+- \`references_reason\`: Why referenced or why not needed
+
+### Phase-Specific Required Fields
+- **submit_research**: \`findings\`, \`sources\`
+- **submit_implement**: \`changes\`, \`design_decisions\`
+- **submit_verify**: \`test_target\`, \`test_results\`, \`coverage\`
+- **submit_fix**: \`changes\`, \`feedback_addressed\`
 
 ## Example
 
@@ -123,19 +188,6 @@ const TaskStatusSchema = z.enum([
   "skipped",
 ]);
 
-const actionHandlers: Record<string, PlanActionHandler> = {
-  list: new ListHandler(),
-  read: new ReadHandler(),
-  add: new AddHandler(),
-  update: new UpdateHandler(),
-  delete: new DeleteHandler(),
-  status: new StatusHandler(),
-  feedback: new FeedbackHandler(),
-  interpret: new InterpretHandler(),
-  clear: new ClearHandler(),
-  graph: new GraphHandler(),
-};
-
 export function registerPlanTool(params: {
   server: McpServer;
   planReader: PlanReader;
@@ -153,9 +205,13 @@ export function registerPlanTool(params: {
         "Temporary task planning for current work session. Plan, track, and complete tasks with mandatory review workflow. Supports parent-child relationships for enforcing verification steps. Tasks are stored in OS temp directory and should be cleared when done.",
       inputSchema: {
         action: z
-          .enum(["list", "read", "add", "update", "delete", "status", "feedback", "interpret", "clear", "graph"])
+          .enum([
+            "list", "read", "read_output", "add", "update", "delete", "feedback", "interpret", "clear", "graph",
+            // Dedicated state transitions
+            "start", "submit_research", "submit_implement", "submit_verify", "submit_fix", "request_changes", "skip", "block"
+          ])
           .optional()
-          .describe("Action to perform. Omit to show help."),
+          .describe("Action to perform. Omit to show help. State transitions: start (pending→in_progress), submit_* (in_progress→pending_review), request_changes (pending_review→in_progress), skip/block (any→skipped/blocked)"),
         id: z.string().optional().describe("Task ID"),
         title: z.string().optional().describe("Task title (required for add)"),
         content: z
@@ -197,6 +253,36 @@ export function registerPlanTool(params: {
           .optional()
           .describe(
             "Summary of what was accomplished (required when status is 'completed')"
+          ),
+        output_content: z
+          .string()
+          .optional()
+          .describe(
+            "Deliverables/results content for the task (deprecated: use output_what/output_why/output_how instead)"
+          ),
+        output_what: z
+          .string()
+          .optional()
+          .describe(
+            "何をしたのか - What was done (required for submit_review)"
+          ),
+        output_why: z
+          .string()
+          .optional()
+          .describe(
+            "なぜこれで十分なのか - Why this is sufficient (required for submit_review)"
+          ),
+        output_how: z
+          .string()
+          .optional()
+          .describe(
+            "どうやって調べた/実装したのか - How it was done/investigated (required for submit_review)"
+          ),
+        reason: z
+          .string()
+          .optional()
+          .describe(
+            "Reason for skip/block actions"
           ),
         is_parallelizable: z
           .boolean()
@@ -262,6 +348,52 @@ export function registerPlanTool(params: {
           .describe(
             "AI's detailed interpretation of feedback - action items to address it (required for interpret action)"
           ),
+        // Common fields for all submit_* actions
+        blockers: z
+          .array(z.string())
+          .optional()
+          .describe("遭遇した障害・ブロッカー (required for submit_*, can be empty [])"),
+        risks: z
+          .array(z.string())
+          .optional()
+          .describe("リスク・懸念事項 (required for submit_*, can be empty [])"),
+        // submit_research specific
+        findings: z
+          .string()
+          .optional()
+          .describe("調査結果・発見事項 (required for submit_research)"),
+        sources: z
+          .array(z.string())
+          .optional()
+          .describe("調査したソース - URL、ファイルパスなど (required for submit_research)"),
+        // submit_implement specific
+        design_decisions: z
+          .string()
+          .optional()
+          .describe("設計判断・なぜこの実装を選んだか (required for submit_implement)"),
+        // submit_verify specific
+        test_target: z
+          .string()
+          .optional()
+          .describe("テスト対象・何をテストしたか (required for submit_verify)"),
+        test_results: z
+          .string()
+          .optional()
+          .describe("テスト結果・成功/失敗の詳細 (required for submit_verify)"),
+        coverage: z
+          .string()
+          .optional()
+          .describe("網羅性・どの程度カバーしたか (required for submit_verify)"),
+        // submit_fix specific
+        feedback_addressed: z
+          .string()
+          .optional()
+          .describe("対応したフィードバックの内容 (required for submit_fix)"),
+        // start action specific
+        prompt: z
+          .string()
+          .optional()
+          .describe("依頼内容・指示 (required for start action, saved to prompts/{task-id}.md)"),
       },
     },
     async ({
@@ -276,17 +408,32 @@ export function registerPlanTool(params: {
       completion_criteria,
       deliverables,
       output,
+      output_content,
+      output_what,
+      output_why,
+      output_how,
+      reason,
       is_parallelizable,
       references,
       status,
       comment,
-      decision,
+      decision: _decision,
       changes,
       why,
       references_used,
       references_reason,
       feedback_id,
       interpretation,
+      blockers,
+      risks,
+      findings,
+      sources,
+      design_decisions,
+      test_target,
+      test_results,
+      coverage,
+      feedback_addressed,
+      prompt,
     }) => {
       if (!action) {
         return wrapResponse({
@@ -297,48 +444,32 @@ export function registerPlanTool(params: {
         });
       }
 
-      const handler = actionHandlers[action];
+      const context: PlanActionContext = { planReader, planReporter, feedbackReader, config, planDir };
+
+      // Resolve handler by action name
+      const handler = resolveHandler(action);
       if (!handler) {
         return wrapResponse({
           result: {
-            content: [
-              {
-                type: "text" as const,
-                text: `Error: Unknown action "${action}"`,
-              },
-            ],
+            content: [{ type: "text" as const, text: `Error: Unknown action "${action}"` }],
             isError: true,
           },
           config,
         });
       }
 
-      const result = await handler.execute({
-        actionParams: {
-          id,
-          title,
-          content,
-          parent,
-          dependencies,
-          dependency_reason,
-          prerequisites,
-          completion_criteria,
-          deliverables,
-          output,
-          is_parallelizable,
-          references,
-          status,
-          comment,
-          decision,
-          changes,
-          why,
-          references_used,
-          references_reason,
-          feedback_id,
-          interpretation,
-        },
-        context: { planReader, planReporter, feedbackReader, config },
-      });
+      // Pass all params - handler validates what it needs
+      const rawParams: PlanRawParams = {
+        id, title, content, parent, dependencies, dependency_reason,
+        prerequisites, completion_criteria, deliverables, output, output_content,
+        output_what, output_why, output_how, reason, is_parallelizable, references,
+        status, comment, changes, why, references_used, references_reason,
+        feedback_id, interpretation,
+        blockers, risks, findings, sources, design_decisions,
+        test_target, test_results, coverage, feedback_addressed, prompt,
+      };
+
+      const result = await handler.execute({ rawParams, context });
       return wrapResponse({ result, config });
     }
   );

@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { Task } from "../types/index.js";
+import type { Task, TaskOutput } from "../types/index.js";
 import type { PlanReader } from "./plan-reader.js";
 
 export class PlanReporter {
@@ -34,52 +34,128 @@ export class PlanReporter {
   }
 
   private formatTaskReport(task: Task): string {
-    const report = task.review_report;
+    const output = task.task_output;
 
-    // Format changes table
-    const changesTable = (() => {
-      if (!report?.changes || report.changes.length === 0) {
-        return "| File | Lines | Changes |\n|------|-------|---------|\n| _(no changes recorded)_ | - | - |";
-      }
-      const rows = report.changes.map(
-        (c) => `| \`${c.file}\` | ${c.lines} | ${c.description} |`
-      );
-      return `| File | Lines | Changes |\n|------|-------|---------|\n${rows.join("\n")}`;
-    })();
+    if (!output) {
+      return `## ${task.id}: ${task.title}
 
-    // Format references section
-    const referencesSection = (() => {
-      if (!report) {
-        return "- **参照なし**\n- **理由**: (未記入)";
-      }
-      if (report.references_used === null || report.references_used.length === 0) {
-        return `- **参照なし**\n- **理由**: ${report.references_reason || "(未記入)"}`;
-      }
-      return `- **参照**: ${report.references_used.join(", ")}\n- **理由**: ${report.references_reason || "(未記入)"}`;
-    })();
-
-    return `## ${task.id}: ${task.title}
-
-### 1. What (具体的な成果物)
-
-${changesTable}
-
-### 2. Why (完了条件との対応)
-
-- **Completion criteria**: ${task.completion_criteria || "(未設定)"}
-- **満たす理由**: ${report?.why || "(未記入)"}
-
-### 3. References
-
-${referencesSection}
+_No output recorded._
 
 ---
 
-承認: \`plan(action: "approve", id: "${task.id}")\`
+承認: \`approve(target: "task", id: "${task.id}")\`
 
 ---
 
 `;
+    }
+
+    // Format phase-specific section
+    const phaseSection = this.formatPhaseSection(output);
+
+    // Format blockers & risks
+    const blockersRisks = this.formatBlockersRisks(output);
+
+    // Format references section
+    const referencesSection = (() => {
+      if (!output.references_used || output.references_used.length === 0) {
+        return `- **参照なし**\n- **理由**: ${output.references_reason || "(未記入)"}`;
+      }
+      return `- **参照**: ${output.references_used.join(", ")}\n- **理由**: ${output.references_reason || "(未記入)"}`;
+    })();
+
+    return `## ${task.id}: ${task.title}
+
+### Phase: ${output.phase}
+
+### What (何をしたか)
+${output.what}
+
+### Why (なぜこれで十分か)
+${output.why}
+
+### How (どのように行ったか)
+${output.how}
+
+${phaseSection}
+
+${blockersRisks}
+
+### References
+${referencesSection}
+
+---
+
+**Completion criteria**: ${task.completion_criteria || "(未設定)"}
+
+承認: \`approve(target: "task", id: "${task.id}")\`
+
+---
+
+`;
+  }
+
+  private formatPhaseSection(output: TaskOutput): string {
+    switch (output.phase) {
+      case "research":
+        return `### Findings (調査結果)
+${output.findings || "(未記入)"}
+
+### Sources (調査ソース)
+${output.sources?.map((s) => `- ${s}`).join("\n") || "- (なし)"}`;
+
+      case "implement":
+        return `### Changes (ファイル変更)
+${this.formatChangesTable(output.changes)}
+
+### Design Decisions (設計判断)
+${output.design_decisions || "(未記入)"}`;
+
+      case "verify":
+        return `### Test Target (テスト対象)
+${output.test_target || "(未記入)"}
+
+### Test Results (テスト結果)
+${output.test_results || "(未記入)"}
+
+### Coverage (網羅性)
+${output.coverage || "(未記入)"}`;
+
+      case "fix":
+        return `### Changes (ファイル変更)
+${this.formatChangesTable(output.changes)}
+
+### Feedback Addressed (対応したフィードバック)
+${output.feedback_addressed || "(未記入)"}`;
+
+      default:
+        return "";
+    }
+  }
+
+  private formatChangesTable(changes: TaskOutput["changes"]): string {
+    if (!changes || changes.length === 0) {
+      return "| File | Lines | Changes |\n|------|-------|---------|\n| _(no changes recorded)_ | - | - |";
+    }
+    const rows = changes.map(
+      (c) => `| \`${c.file}\` | ${c.lines} | ${c.description} |`
+    );
+    return `| File | Lines | Changes |\n|------|-------|---------|\n${rows.join("\n")}`;
+  }
+
+  private formatBlockersRisks(output: TaskOutput): string {
+    const blockers = output.blockers?.length
+      ? output.blockers.map((b) => `- ${b}`).join("\n")
+      : "- なし";
+    const risks = output.risks?.length
+      ? output.risks.map((r) => `- ${r}`).join("\n")
+      : "- なし";
+
+    return `### Blockers (遭遇した障害)
+${blockers}
+
+### Risks (リスク・懸念事項)
+${risks}`;
   }
 
   async updateGraphFile(): Promise<void> {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildReminderBlock } from "../utils/response-wrapper.js";
+import { buildReminderBlock, wrapResponse } from "../utils/response-wrapper.js";
 import type { ReminderConfig } from "../types/index.js";
 
 describe("buildReminderBlock", () => {
@@ -67,5 +67,104 @@ describe("buildReminderBlock", () => {
     });
 
     expect(result).toMatch(/^\n\n---\n\n/);
+  });
+});
+
+describe("wrapResponse", () => {
+  it("should return original result when no reminders configured", () => {
+    const originalResult = {
+      content: [{ type: "text" as const, text: "Original content" }],
+    };
+    const config: ReminderConfig = {
+      remindMcp: false,
+      remindOrganize: false,
+      customReminders: [],
+      topicForEveryTask: null,
+      infoValidSeconds: 60,
+    };
+
+    const result = wrapResponse({ result: originalResult, config });
+
+    expect(result).toEqual(originalResult);
+    expect(result.content[0].text).toBe("Original content");
+  });
+
+  it("should append reminder block when reminders configured", () => {
+    const originalResult = {
+      content: [{ type: "text" as const, text: "Original content" }],
+    };
+    const config: ReminderConfig = {
+      remindMcp: true,
+      remindOrganize: false,
+      customReminders: [],
+      topicForEveryTask: null,
+      infoValidSeconds: 60,
+    };
+
+    const result = wrapResponse({ result: originalResult, config });
+
+    expect(result.content[0].text).toContain("Original content");
+    expect(result.content[0].text).toContain("---");
+    expect(result.content[0].text).toContain("Always refer to this MCP");
+  });
+
+  it("should wrap multiple content items", () => {
+    const originalResult = {
+      content: [
+        { type: "text" as const, text: "First" },
+        { type: "text" as const, text: "Second" },
+      ],
+    };
+    const config: ReminderConfig = {
+      remindMcp: true,
+      remindOrganize: false,
+      customReminders: [],
+      topicForEveryTask: null,
+      infoValidSeconds: 60,
+    };
+
+    const result = wrapResponse({ result: originalResult, config });
+
+    expect(result.content).toHaveLength(2);
+    expect(result.content[0].text).toContain("First");
+    expect(result.content[0].text).toContain("Always refer to this MCP");
+    expect(result.content[1].text).toContain("Second");
+    expect(result.content[1].text).toContain("Always refer to this MCP");
+  });
+
+  it("should preserve isError flag", () => {
+    const originalResult = {
+      content: [{ type: "text" as const, text: "Error message" }],
+      isError: true,
+    };
+    const config: ReminderConfig = {
+      remindMcp: true,
+      remindOrganize: false,
+      customReminders: [],
+      topicForEveryTask: null,
+      infoValidSeconds: 60,
+    };
+
+    const result = wrapResponse({ result: originalResult, config });
+
+    expect(result.isError).toBe(true);
+  });
+
+  it("should preserve additional properties on result", () => {
+    const originalResult = {
+      content: [{ type: "text" as const, text: "Content" }],
+      customProperty: "value",
+    };
+    const config: ReminderConfig = {
+      remindMcp: false,
+      remindOrganize: false,
+      customReminders: [],
+      topicForEveryTask: null,
+      infoValidSeconds: 60,
+    };
+
+    const result = wrapResponse({ result: originalResult, config });
+
+    expect(result.customProperty).toBe("value");
   });
 });

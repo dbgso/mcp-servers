@@ -1,54 +1,54 @@
-import type {
-  PlanActionHandler,
-  PlanActionParams,
-  PlanActionContext,
-  ToolResult,
-} from "../../../types/index.js";
+import { z } from "zod";
+import type { PlanActionContext, ToolResult, PlanRawParams } from "../../../types/index.js";
 
-export class InterpretHandler implements PlanActionHandler {
-  async execute(params: {
-    actionParams: PlanActionParams;
-    context: PlanActionContext;
-  }): Promise<ToolResult> {
-    const { id, feedback_id, interpretation } = params.actionParams;
+const paramsSchema = z.object({
+  id: z.string().describe("Task ID"),
+  feedback_id: z.string().describe("Feedback ID"),
+  interpretation: z.string().describe("AI interpretation of feedback"),
+});
+
+/**
+ * InterpretHandler: Add interpretation to feedback
+ */
+export class InterpretHandler {
+  readonly action = "interpret";
+
+  readonly help = `# plan interpret
+
+Add your interpretation of user feedback.
+
+## Usage
+\`\`\`
+plan(action: "interpret", id: "<task-id>", feedback_id: "<feedback-id>", interpretation: "<your-interpretation>")
+\`\`\`
+
+## Parameters
+- **id** (required): Task ID
+- **feedback_id** (required): Feedback ID
+- **interpretation** (required): AI interpretation of feedback
+
+## Notes
+- Feedback must be in draft status
+- Provide a detailed interpretation of what actions you will take to address the feedback
+- After interpretation, present to user for approval
+`;
+
+  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
+    const parseResult = paramsSchema.safeParse(params.rawParams);
+    if (!parseResult.success) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${parseResult.error.errors.map((e) => e.message).join(", ")}\n\n${this.help}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const { id, feedback_id, interpretation } = parseResult.data;
     const { feedbackReader } = params.context;
-
-    // Validate required params
-    if (!id) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: id (task_id) is required for interpret action.`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    if (!feedback_id) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: feedback_id is required for interpret action.`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    if (!interpretation) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: interpretation is required for interpret action.\n\nProvide a detailed interpretation of what actions you will take to address the feedback.`,
-          },
-        ],
-        isError: true,
-      };
-    }
 
     // Get the feedback to validate it exists
     const feedback = await feedbackReader.getFeedback(id, feedback_id);

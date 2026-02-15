@@ -1,29 +1,43 @@
+import { z } from "zod";
 import type {
-  PlanActionHandler,
-  PlanActionParams,
   PlanActionContext,
   ToolResult,
+  PlanRawParams,
 } from "../../../types/index.js";
 
-export class DeleteHandler implements PlanActionHandler {
-  async execute(params: {
-    actionParams: PlanActionParams;
-    context: PlanActionContext;
-  }): Promise<ToolResult> {
-    const { id } = params.actionParams;
-    const { planReader, planReporter } = params.context;
+const paramsSchema = z.object({
+  id: z.string().describe("Task ID to delete"),
+});
 
-    if (!id) {
+/**
+ * DeleteHandler: Remove a task from the plan
+ */
+export class DeleteHandler {
+  readonly action = "delete";
+
+  readonly help = `# plan delete
+
+Delete a task from the plan.
+
+## Usage
+\`\`\`
+plan(action: "delete", id: "<task-id>")
+\`\`\`
+
+## Parameters
+- **id** (required): Task ID to delete
+`;
+
+  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
+    const parseResult = paramsSchema.safeParse(params.rawParams);
+    if (!parseResult.success) {
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: "Error: id is required for delete action",
-          },
-        ],
+        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
         isError: true,
       };
     }
+    const { id } = parseResult.data;
+    const { planReader, planReporter } = params.context;
 
     const result = await planReader.deleteTask(id);
 
