@@ -25,14 +25,14 @@ const paramsSchema = z.object({
     .boolean()
     .optional()
     .describe("Whether the task can run in parallel with others"),
+  parallelizable_units: z
+    .array(z.string())
+    .optional()
+    .describe("Array of task IDs that can run in parallel with this task"),
   references: z
     .array(z.string())
     .optional()
     .describe("Array of document IDs for reference"),
-  output_content: z
-    .string()
-    .optional()
-    .describe("Deliverables/results content"),
 });
 
 /**
@@ -59,8 +59,8 @@ plan(action: "update", id: "<task-id>", title?: "...", content?: "...", ...)
 - **prerequisites**: What is needed before starting
 - **completion_criteria**: What defines completion
 - **is_parallelizable**: Can run in parallel?
+- **parallelizable_units**: Array of task IDs that can run in parallel with this task
 - **references**: Array of document IDs
-- **output_content**: Deliverables/results content
 
 ## Notes
 - At least one field to update must be provided (besides id)
@@ -90,8 +90,8 @@ plan(action: "update", id: "<task-id>", title?: "...", content?: "...", ...)
       prerequisites,
       completion_criteria,
       is_parallelizable,
+      parallelizable_units,
       references,
-      output_content,
     } = parseResult.data;
 
     // Check if at least one field to update is provided
@@ -103,8 +103,8 @@ plan(action: "update", id: "<task-id>", title?: "...", content?: "...", ...)
       prerequisites === undefined &&
       completion_criteria === undefined &&
       is_parallelizable === undefined &&
-      references === undefined &&
-      output_content === undefined
+      parallelizable_units === undefined &&
+      references === undefined
     ) {
       return {
         content: [
@@ -150,8 +150,8 @@ Please explain why this task depends on: ${dependencies.join(", ")}`,
       prerequisites,
       completion_criteria,
       is_parallelizable,
+      parallelizable_units,
       references,
-      output_content,
     });
 
     if (!result.success) {

@@ -122,10 +122,9 @@ export interface TaskMetadata {
   completion_criteria: string;
   deliverables: string[];
   output: string;
-  /** @deprecated Use task_output instead */
-  output_content: string;
   task_output: TaskOutput | null;
   is_parallelizable: boolean;
+  parallelizable_units?: string[];
   references: string[];
   feedback: Feedback[];
   created: string;
@@ -143,6 +142,7 @@ export interface TaskSummary {
   parent: string;
   dependencies: string[];
   is_parallelizable: boolean;
+  parallelizable_units?: string[];
 }
 
 // Base params shared across actions
@@ -176,6 +176,7 @@ export type AddParams = {
   completion_criteria: string;
   deliverables: string[];
   is_parallelizable: boolean;
+  parallelizable_units?: string[];
   references: string[];
 };
 
@@ -187,9 +188,8 @@ export type UpdateParams = BaseParams & {
   prerequisites?: string;
   completion_criteria?: string;
   is_parallelizable?: boolean;
+  parallelizable_units?: string[];
   references?: string[];
-  /** @deprecated Use submit_review action instead */
-  output_content?: string;
 };
 
 export type InterpretParams = BaseParams & {
@@ -274,6 +274,7 @@ export interface PlanReader {
     completion_criteria: string;
     deliverables: string[];
     is_parallelizable: boolean;
+    parallelizable_units?: string[];
     references: string[];
   }): Promise<{ success: boolean; error?: string; path?: string }>;
   getChildTasks(parentId: string): Promise<TaskSummary[]>;
@@ -286,8 +287,8 @@ export interface PlanReader {
     prerequisites?: string;
     completion_criteria?: string;
     is_parallelizable?: boolean;
+    parallelizable_units?: string[];
     references?: string[];
-    output_content?: string;
   }): Promise<{ success: boolean; error?: string }>;
   updateStatus(params: {
     id: string;

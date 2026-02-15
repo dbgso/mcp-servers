@@ -1,10 +1,11 @@
 import { z } from "zod";
 import type {
   PlanActionContext,
-  ToolResult,
-  TaskSummary,
   PlanRawParams,
+  TaskSummary,
+  ToolResult,
 } from "../../../types/index.js";
+import { formatParallel } from "./format-utils.js";
 
 const paramsSchema = z.object({});
 
@@ -55,14 +56,12 @@ None required.
       };
     }
 
-    // Group tasks by status
+    // Group tasks by status (only statuses used in output)
     const byStatus = {
       in_progress: tasks.filter((t) => t.status === "in_progress"),
       pending_review: tasks.filter((t) => t.status === "pending_review"),
-      pending: tasks.filter((t) => t.status === "pending"),
       blocked: [] as TaskSummary[],
       completed: tasks.filter((t) => t.status === "completed"),
-      skipped: tasks.filter((t) => t.status === "skipped"),
     };
 
     // Get blocked and ready tasks
@@ -103,7 +102,7 @@ None required.
     if (readyTasks.length > 0) {
       output += "## Ready to Start\n";
       for (const t of readyTasks) {
-        const parallel = t.is_parallelizable ? " [parallel]" : "";
+        const parallel = formatParallel({ task: t, options: { style: "tag" } });
         output += `- **${t.id}**: ${t.title}${parallel}\n`;
       }
       output += "\n";

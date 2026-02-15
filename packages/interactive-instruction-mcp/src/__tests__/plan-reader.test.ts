@@ -1355,7 +1355,6 @@ prerequisites: ""
 completion_criteria: ""
 deliverables: []
 output: ""
-output_content: ""
 task_output: ""
 is_parallelizable: false
 references: []
@@ -1385,7 +1384,6 @@ prerequisites: ""
 completion_criteria: ""
 deliverables: []
 output: ""
-output_content: ""
 task_output: "null"
 is_parallelizable: false
 references: []
@@ -1415,7 +1413,6 @@ prerequisites: ""
 completion_criteria: ""
 deliverables: []
 output: ""
-output_content: ""
 task_output: "not valid json {{"
 is_parallelizable: false
 references: []
@@ -1469,7 +1466,6 @@ prerequisites: ""
 completion_criteria: ""
 deliverables: [file1.ts, file2.ts]
 output: ""
-output_content: ""
 task_output: "null"
 is_parallelizable: false
 references: [ref1, ref2]
@@ -1501,7 +1497,6 @@ prerequisites: 'Some prereqs'
 completion_criteria: ''
 deliverables: []
 output: ''
-output_content: ''
 task_output: "null"
 is_parallelizable: false
 references: []
@@ -1532,7 +1527,6 @@ prerequisites: ""
 completion_criteria: ""
 deliverables: []
 output: ""
-output_content: ""
 task_output: "null"
 is_parallelizable: false
 references: []

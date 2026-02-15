@@ -120,6 +120,23 @@ export class PlanReader implements IPlanReader {
       return null;
     })();
 
+    // Parse parallelizable_units - can be JSON string or already parsed array
+    const parallelizable_units: string[] | undefined = (() => {
+      if (typeof metadata.parallelizable_units === "string" && metadata.parallelizable_units) {
+        try {
+          const unescaped = metadata.parallelizable_units.replace(/\\"/g, '"');
+          return JSON.parse(unescaped);
+        } catch {
+          return undefined;
+        }
+      }
+      // If it was already parsed as an array by parseYamlValue
+      if (Array.isArray(metadata.parallelizable_units)) {
+        return metadata.parallelizable_units as string[];
+      }
+      return undefined;
+    })();
+
     return {
       id: metadata.id as string,
       title: metadata.title as string,
@@ -131,9 +148,9 @@ export class PlanReader implements IPlanReader {
       completion_criteria: (metadata.completion_criteria as string) || "",
       deliverables: (metadata.deliverables as string[]) || [],
       output: (metadata.output as string) || "",
-      output_content: (metadata.output_content as string) || "",
       task_output,
       is_parallelizable: (metadata.is_parallelizable as boolean) || false,
+      parallelizable_units,
       references: (metadata.references as string[]) || [],
       feedback,
       created: (metadata.created as string) || new Date().toISOString(),
@@ -158,6 +175,10 @@ export class PlanReader implements IPlanReader {
     // Escape double quotes in JSON for YAML string
     const feedbackJson = JSON.stringify(task.feedback || []).replace(/"/g, '\\"');
     const taskOutputJson = JSON.stringify(task.task_output).replace(/"/g, '\\"');
+    // Serialize parallelizable_units as JSON string (optional field)
+    const parallelizableUnitsJson = task.parallelizable_units
+      ? JSON.stringify(task.parallelizable_units).replace(/"/g, '\\"')
+      : "";
 
     return `---
 id: ${task.id}
@@ -170,9 +191,9 @@ prerequisites: "${task.prerequisites}"
 completion_criteria: "${task.completion_criteria}"
 deliverables: ${delivs}
 output: "${task.output}"
-output_content: "${task.output_content}"
 task_output: "${taskOutputJson}"
 is_parallelizable: ${task.is_parallelizable}
+parallelizable_units: "${parallelizableUnitsJson}"
 references: ${refs}
 feedback: "${feedbackJson}"
 created: ${task.created}
@@ -227,6 +248,7 @@ ${task.content}`;
       parent: task.parent,
       dependencies: task.dependencies,
       is_parallelizable: task.is_parallelizable,
+      parallelizable_units: task.parallelizable_units,
     }));
   }
 
@@ -251,6 +273,7 @@ ${task.content}`;
     completion_criteria: string;
     deliverables: string[];
     is_parallelizable: boolean;
+    parallelizable_units?: string[];
     references: string[];
   }): Promise<{ success: boolean; error?: string; path?: string }> {
     await this.ensureDirectory();
@@ -289,9 +312,9 @@ ${task.content}`;
       completion_criteria: params.completion_criteria,
       deliverables: params.deliverables,
       output: "",
-      output_content: "",
       task_output: null,
       is_parallelizable: params.is_parallelizable,
+      parallelizable_units: params.parallelizable_units,
       references: params.references,
       feedback: [],
       created: now,
@@ -315,8 +338,8 @@ ${task.content}`;
     prerequisites?: string;
     completion_criteria?: string;
     is_parallelizable?: boolean;
+    parallelizable_units?: string[];
     references?: string[];
-    output_content?: string;
   }): Promise<{ success: boolean; error?: string }> {
     const task = await this.getTask(params.id);
     if (!task) {
@@ -343,8 +366,8 @@ ${task.content}`;
       prerequisites: params.prerequisites ?? task.prerequisites,
       completion_criteria: params.completion_criteria ?? task.completion_criteria,
       is_parallelizable: params.is_parallelizable ?? task.is_parallelizable,
+      parallelizable_units: params.parallelizable_units ?? task.parallelizable_units,
       references: params.references ?? task.references,
-      output_content: params.output_content ?? task.output_content,
       updated: new Date().toISOString(),
     };
 
@@ -411,10 +434,10 @@ ${task.content}`;
       };
     }
 
-    // Check if all child tasks are completed
+    // Check if all child tasks are finished (completed or skipped)
     const childTasks = await this.getChildTasks(id);
     const incompleteChildren = childTasks.filter(
-      (child) => child.status !== "completed"
+      (child) => !this.isTaskFinished(child.status)
     );
     if (incompleteChildren.length > 0) {
       return {
@@ -478,6 +501,7 @@ ${task.content}`;
           parent: task.parent,
           dependencies: task.dependencies,
           is_parallelizable: task.is_parallelizable,
+          parallelizable_units: task.parallelizable_units,
         });
       }
     }
@@ -586,6 +610,14 @@ ${task.content}`;
     return { valid: true };
   }
 
+  /**
+   * Checks if a task status indicates the task is finished (no longer blocking).
+   * Both "completed" and "skipped" are considered finished states.
+   */
+  private isTaskFinished(status: TaskStatus): boolean {
+    return status === "completed" || status === "skipped";
+  }
+
   private async getDependents(taskId: string): Promise<string[]> {
     const tasks = await this.loadCache();
     const dependents: string[] = [];
@@ -606,7 +638,7 @@ ${task.content}`;
     const tasks = await this.loadCache();
     return task.dependencies.filter((depId) => {
       const dep = tasks.get(depId);
-      return dep && dep.status !== "completed";
+      return dep && !this.isTaskFinished(dep.status);
     });
   }
 
@@ -617,10 +649,10 @@ ${task.content}`;
     for (const task of tasks.values()) {
       if (task.status !== "pending") continue;
 
-      // Check if all dependencies are completed
+      // Check if all dependencies are finished (completed or skipped)
       const allDepsComplete = task.dependencies.every((depId) => {
         const dep = tasks.get(depId);
-        return dep && dep.status === "completed";
+        return dep && this.isTaskFinished(dep.status);
       });
 
       if (allDepsComplete) {
@@ -631,6 +663,7 @@ ${task.content}`;
           parent: task.parent,
           dependencies: task.dependencies,
           is_parallelizable: task.is_parallelizable,
+          parallelizable_units: task.parallelizable_units,
         });
       }
     }
@@ -645,10 +678,10 @@ ${task.content}`;
     for (const task of tasks.values()) {
       if (task.status !== "pending" || task.dependencies.length === 0) continue;
 
-      // Check if any dependency is not completed
+      // Check if any dependency is not finished (not completed and not skipped)
       const hasIncompleteDep = task.dependencies.some((depId) => {
         const dep = tasks.get(depId);
-        return !dep || dep.status !== "completed";
+        return !dep || !this.isTaskFinished(dep.status);
       });
 
       if (hasIncompleteDep) {
@@ -659,6 +692,7 @@ ${task.content}`;
           parent: task.parent,
           dependencies: task.dependencies,
           is_parallelizable: task.is_parallelizable,
+          parallelizable_units: task.parallelizable_units,
         });
       }
     }

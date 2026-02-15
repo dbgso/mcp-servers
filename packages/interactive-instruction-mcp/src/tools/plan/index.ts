@@ -254,12 +254,6 @@ export function registerPlanTool(params: {
           .describe(
             "Summary of what was accomplished (required when status is 'completed')"
           ),
-        output_content: z
-          .string()
-          .optional()
-          .describe(
-            "Deliverables/results content for the task (deprecated: use output_what/output_why/output_how instead)"
-          ),
         output_what: z
           .string()
           .optional()
@@ -288,6 +282,10 @@ export function registerPlanTool(params: {
           .boolean()
           .optional()
           .describe("Can this task run in parallel? (required for add)"),
+        parallelizable_units: z
+          .array(z.string())
+          .optional()
+          .describe("Array of task IDs that can run in parallel with this task"),
         references: z
           .array(z.string())
           .optional()
@@ -408,12 +406,12 @@ export function registerPlanTool(params: {
       completion_criteria,
       deliverables,
       output,
-      output_content,
       output_what,
       output_why,
       output_how,
       reason,
       is_parallelizable,
+      parallelizable_units,
       references,
       status,
       comment,
@@ -461,8 +459,8 @@ export function registerPlanTool(params: {
       // Pass all params - handler validates what it needs
       const rawParams: PlanRawParams = {
         id, title, content, parent, dependencies, dependency_reason,
-        prerequisites, completion_criteria, deliverables, output, output_content,
-        output_what, output_why, output_how, reason, is_parallelizable, references,
+        prerequisites, completion_criteria, deliverables, output,
+        output_what, output_why, output_how, reason, is_parallelizable, parallelizable_units, references,
         status, comment, changes, why, references_used, references_reason,
         feedback_id, interpretation,
         blockers, risks, findings, sources, design_decisions,
