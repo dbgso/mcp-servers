@@ -11,7 +11,7 @@ export class DeleteHandler implements PlanActionHandler {
     context: PlanActionContext;
   }): Promise<ToolResult> {
     const { id } = params.actionParams;
-    const { planReader } = params.context;
+    const { planReader, planReporter } = params.context;
 
     if (!id) {
       return {
@@ -33,6 +33,9 @@ export class DeleteHandler implements PlanActionHandler {
         isError: true,
       };
     }
+
+    // Update markdown files
+    await planReporter.updateAll();
 
     return {
       content: [

@@ -4,6 +4,10 @@ import type {
   Task,
   TaskStatus,
   TaskSummary,
+  Feedback,
+  FeedbackDecision,
+  FileChange,
+  ReviewReport,
   PlanReader as IPlanReader,
 } from "../types/index.js";
 
@@ -95,16 +99,47 @@ export class PlanReader implements IPlanReader {
       return null;
     }
 
+    // Parse feedback from JSON string if present (unescape quotes first)
+    const feedback: Feedback[] = (() => {
+      if (typeof metadata.feedback === "string" && metadata.feedback) {
+        try {
+          const unescaped = metadata.feedback.replace(/\\"/g, '"');
+          return JSON.parse(unescaped);
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    })();
+
+    // Parse review_report from JSON string if present (unescape quotes first)
+    const review_report: ReviewReport | null = (() => {
+      if (typeof metadata.review_report === "string" && metadata.review_report) {
+        try {
+          const unescaped = metadata.review_report.replace(/\\"/g, '"');
+          return JSON.parse(unescaped);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    })();
+
     return {
       id: metadata.id as string,
       title: metadata.title as string,
       status: metadata.status as TaskStatus,
+      parent: (metadata.parent as string) || "",
       dependencies: (metadata.dependencies as string[]) || [],
       dependency_reason: (metadata.dependency_reason as string) || "",
       prerequisites: (metadata.prerequisites as string) || "",
       completion_criteria: (metadata.completion_criteria as string) || "",
+      deliverables: (metadata.deliverables as string[]) || [],
+      output: (metadata.output as string) || "",
+      review_report,
       is_parallelizable: (metadata.is_parallelizable as boolean) || false,
       references: (metadata.references as string[]) || [],
+      feedback,
       created: (metadata.created as string) || new Date().toISOString(),
       updated: (metadata.updated as string) || new Date().toISOString(),
       content: content.trim(),
@@ -120,17 +155,29 @@ export class PlanReader implements IPlanReader {
       task.references.length > 0
         ? `[${task.references.map((r) => `"${r}"`).join(", ")}]`
         : "[]";
+    const delivs =
+      task.deliverables.length > 0
+        ? `[${task.deliverables.map((d) => `"${d}"`).join(", ")}]`
+        : "[]";
+    // Escape double quotes in JSON for YAML string
+    const feedbackJson = JSON.stringify(task.feedback || []).replace(/"/g, '\\"');
+    const reviewReportJson = JSON.stringify(task.review_report).replace(/"/g, '\\"');
 
     return `---
 id: ${task.id}
 title: "${task.title}"
 status: ${task.status}
+parent: "${task.parent}"
 dependencies: ${deps}
 dependency_reason: "${task.dependency_reason}"
 prerequisites: "${task.prerequisites}"
 completion_criteria: "${task.completion_criteria}"
+deliverables: ${delivs}
+output: "${task.output}"
+review_report: "${reviewReportJson}"
 is_parallelizable: ${task.is_parallelizable}
 references: ${refs}
+feedback: "${feedbackJson}"
 created: ${task.created}
 updated: ${task.updated}
 ---
@@ -141,6 +188,44 @@ ${task.content}`;
   invalidateCache(): void {
     this.cache = null;
     this.cacheTime = 0;
+  }
+
+  private appendReviewReportToContent(params: {
+    originalContent: string;
+    report: ReviewReport;
+  }): string {
+    const { originalContent, report } = params;
+    const changesTable = report.changes
+      .map((c) => `| \`${c.file}\` | ${c.lines} | ${c.description} |`)
+      .join("\n");
+
+    const referencesSection =
+      report.references_used === null || report.references_used.length === 0
+        ? `- 参照なし\n- 理由: ${report.references_reason}`
+        : `- 参照: ${report.references_used.join(", ")}\n- 理由: ${report.references_reason}`;
+
+    const reviewMarkdown = `
+
+---
+
+## 完了報告
+
+### 1. What (具体的な成果物)
+
+| File | Lines | Changes |
+|------|-------|---------|
+${changesTable}
+
+### 2. Why (完了条件との対応)
+
+${report.why}
+
+### 3. References
+
+${referencesSection}
+`;
+
+    return originalContent + reviewMarkdown;
   }
 
   private async loadCache(): Promise<Map<string, Task>> {
@@ -181,6 +266,7 @@ ${task.content}`;
       id: task.id,
       title: task.title,
       status: task.status,
+      parent: task.parent,
       dependencies: task.dependencies,
       is_parallelizable: task.is_parallelizable,
     }));
@@ -200,10 +286,12 @@ ${task.content}`;
     id: string;
     title: string;
     content: string;
+    parent: string;
     dependencies: string[];
     dependency_reason: string;
     prerequisites: string;
     completion_criteria: string;
+    deliverables: string[];
     is_parallelizable: boolean;
     references: string[];
   }): Promise<{ success: boolean; error?: string; path?: string }> {
@@ -212,6 +300,14 @@ ${task.content}`;
     // Check if task already exists
     if (await this.taskExists(params.id)) {
       return { success: false, error: `Task "${params.id}" already exists.` };
+    }
+
+    // Validate parent exists if specified
+    if (params.parent && !(await this.taskExists(params.parent))) {
+      return {
+        success: false,
+        error: `Parent task "${params.parent}" not found. Create the parent task first.`,
+      };
     }
 
     // Validate dependencies
@@ -228,12 +324,17 @@ ${task.content}`;
       id: params.id,
       title: params.title,
       status: "pending",
+      parent: params.parent,
       dependencies: params.dependencies,
       dependency_reason: params.dependency_reason,
       prerequisites: params.prerequisites,
       completion_criteria: params.completion_criteria,
+      deliverables: params.deliverables,
+      output: "",
+      review_report: null,
       is_parallelizable: params.is_parallelizable,
       references: params.references,
+      feedback: [],
       created: now,
       updated: now,
       content: params.content,
@@ -296,8 +397,13 @@ ${task.content}`;
   async updateStatus(params: {
     id: string;
     status: TaskStatus;
-  }): Promise<{ success: boolean; error?: string }> {
-    const { id, status } = params;
+    output?: string;
+    changes?: FileChange[];
+    why?: string;
+    references_used?: string[] | null;
+    references_reason?: string;
+  }): Promise<{ success: boolean; error?: string; actualStatus?: TaskStatus }> {
+    const { id, status, output, changes, why, references_used, references_reason } = params;
     const task = await this.getTask(id);
     if (!task) {
       return { success: false, error: `Task "${id}" not found.` };
@@ -316,9 +422,70 @@ ${task.content}`;
       }
     }
 
+    // Auto-convert "completed" to "pending_review" for review workflow
+    const actualStatus = status === "completed" ? "pending_review" : status;
+
+    // Build review_report when completing a task
+    const review_report: ReviewReport | null =
+      status === "completed" && changes && why && references_reason !== undefined
+        ? {
+            changes,
+            why,
+            references_used: references_used ?? null,
+            references_reason: references_reason ?? "",
+          }
+        : task.review_report;
+
+    // Append review report as markdown to content when completing
+    const updatedContent =
+      status === "completed" && review_report
+        ? this.appendReviewReportToContent({ originalContent: task.content, report: review_report })
+        : task.content;
+
     const updatedTask: Task = {
       ...task,
-      status,
+      status: actualStatus,
+      output: output ?? task.output,
+      review_report,
+      content: updatedContent,
+      updated: new Date().toISOString(),
+    };
+
+    const filePath = this.idToPath(id);
+    await fs.writeFile(filePath, this.serializeTask(updatedTask), "utf-8");
+    this.invalidateCache();
+
+    return { success: true, actualStatus };
+  }
+
+  async approveTask(id: string): Promise<{ success: boolean; error?: string }> {
+    const task = await this.getTask(id);
+    if (!task) {
+      return { success: false, error: `Task "${id}" not found.` };
+    }
+
+    if (task.status !== "pending_review") {
+      return {
+        success: false,
+        error: `Task "${id}" is not pending review. Current status: ${task.status}`,
+      };
+    }
+
+    // Check if all child tasks are completed
+    const childTasks = await this.getChildTasks(id);
+    const incompleteChildren = childTasks.filter(
+      (child) => child.status !== "completed"
+    );
+    if (incompleteChildren.length > 0) {
+      return {
+        success: false,
+        error: `Cannot complete: child tasks not finished. Incomplete: ${incompleteChildren.map((c) => c.id).join(", ")}`,
+      };
+    }
+
+    const updatedTask: Task = {
+      ...task,
+      status: "completed",
       updated: new Date().toISOString(),
     };
 
@@ -327,6 +494,55 @@ ${task.content}`;
     this.invalidateCache();
 
     return { success: true };
+  }
+
+  async addFeedback(params: {
+    id: string;
+    comment: string;
+    decision: FeedbackDecision;
+  }): Promise<{ success: boolean; error?: string }> {
+    const task = await this.getTask(params.id);
+    if (!task) {
+      return { success: false, error: `Task "${params.id}" not found.` };
+    }
+
+    const newFeedback: Feedback = {
+      comment: params.comment,
+      decision: params.decision,
+      timestamp: new Date().toISOString(),
+    };
+
+    const updatedTask: Task = {
+      ...task,
+      feedback: [...task.feedback, newFeedback],
+      updated: new Date().toISOString(),
+    };
+
+    const filePath = this.idToPath(params.id);
+    await fs.writeFile(filePath, this.serializeTask(updatedTask), "utf-8");
+    this.invalidateCache();
+
+    return { success: true };
+  }
+
+  async getChildTasks(parentId: string): Promise<TaskSummary[]> {
+    const tasks = await this.loadCache();
+    const children: TaskSummary[] = [];
+
+    for (const task of tasks.values()) {
+      if (task.parent === parentId) {
+        children.push({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          parent: task.parent,
+          dependencies: task.dependencies,
+          is_parallelizable: task.is_parallelizable,
+        });
+      }
+    }
+
+    return children;
   }
 
   async deleteTask(id: string): Promise<{ success: boolean; error?: string }> {
@@ -472,6 +688,7 @@ ${task.content}`;
           id: task.id,
           title: task.title,
           status: task.status,
+          parent: task.parent,
           dependencies: task.dependencies,
           is_parallelizable: task.is_parallelizable,
         });
@@ -499,6 +716,7 @@ ${task.content}`;
           id: task.id,
           title: task.title,
           status: "blocked",
+          parent: task.parent,
           dependencies: task.dependencies,
           is_parallelizable: task.is_parallelizable,
         });

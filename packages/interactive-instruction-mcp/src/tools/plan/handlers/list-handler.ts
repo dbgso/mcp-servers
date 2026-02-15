@@ -28,6 +28,7 @@ export class ListHandler implements PlanActionHandler {
     // Group tasks by status
     const byStatus = {
       in_progress: tasks.filter((t) => t.status === "in_progress"),
+      pending_review: tasks.filter((t) => t.status === "pending_review"),
       pending: tasks.filter((t) => t.status === "pending"),
       blocked: [] as TaskSummary[],
       completed: tasks.filter((t) => t.status === "completed"),
@@ -43,9 +44,31 @@ export class ListHandler implements PlanActionHandler {
     let output = "# Task Plan\n\n";
     output += `**Summary:** ${tasks.length} total | `;
     output += `${byStatus.completed.length} completed | `;
+    output += `${byStatus.pending_review.length} pending_review | `;
     output += `${byStatus.in_progress.length} in progress | `;
     output += `${readyTasks.length} ready | `;
     output += `${byStatus.blocked.length} blocked\n\n`;
+
+    // Pending Review section with full details
+    if (byStatus.pending_review.length > 0) {
+      output += "## ⚠️ Pending Review (承認待ち)\n\n";
+      output += "以下のタスクはユーザーの承認を待っています。内容を確認して承認または差し戻してください。\n\n";
+
+      for (const t of byStatus.pending_review) {
+        const task = await planReader.getTask(t.id);
+        if (task) {
+          output += `### ${t.id}: ${t.title}\n\n`;
+          output += `**What (何をしたか)**\n`;
+          output += `- 成果物: ${task.deliverables.length > 0 ? task.deliverables.join(", ") : "なし"}\n`;
+          output += `- 結果: ${task.output || "(未記入)"}\n\n`;
+          output += `**Why (判断基準)**\n`;
+          output += `- 完了条件: ${task.completion_criteria || "(未設定)"}\n\n`;
+          output += `**How (次のアクション)**\n`;
+          output += `- 承認: \`plan(action: "approve", id: "${t.id}")\`\n`;
+          output += `- 差し戻し: \`plan(action: "status", id: "${t.id}", status: "in_progress")\`\n\n`;
+        }
+      }
+    }
 
     if (readyTasks.length > 0) {
       output += "## Ready to Start\n";

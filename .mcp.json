@@ -6,7 +6,7 @@
     },
     "interactive-instruction-mcp": {
       "command": "npx",
-      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./docs", "--remind-mcp"]
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./docs", "--remind-mcp", "--topic-for-every-task", "every-task"]
     },
     "traceable-chain-mcp": {
       "command": "npx",

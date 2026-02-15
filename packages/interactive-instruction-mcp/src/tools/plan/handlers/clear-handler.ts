@@ -10,7 +10,7 @@ export class ClearHandler implements PlanActionHandler {
     actionParams: PlanActionParams;
     context: PlanActionContext;
   }): Promise<ToolResult> {
-    const { planReader } = params.context;
+    const { planReader, planReporter } = params.context;
 
     const tasks = await planReader.listTasks();
     if (tasks.length === 0) {
@@ -32,6 +32,9 @@ export class ClearHandler implements PlanActionHandler {
         isError: true,
       };
     }
+
+    // Update markdown files
+    await planReporter.updateAll();
 
     return {
       content: [
