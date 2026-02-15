@@ -3,25 +3,12 @@ import type {
   PlanActionContext,
   ToolResult,
   PlanRawParams,
-  Task,
 } from "../../../types/index.js";
+import { formatParallel } from "./format-utils.js";
 
 const paramsSchema = z.object({
   id: z.string().describe("Task ID to read"),
 });
-
-/**
- * Format parallelizable info for task display.
- */
-function formatParallelInfo(task: Task): string {
-  if (!task.is_parallelizable) {
-    return "no";
-  }
-  if (task.parallelizable_units && task.parallelizable_units.length > 0) {
-    return `yes (units: ${task.parallelizable_units.join(", ")})`;
-  }
-  return "yes";
-}
 
 /**
  * ReadHandler: Read task details
@@ -86,7 +73,7 @@ plan(action: "read", id: "<task-id>")
       }
     }
 
-    const parallelInfo = formatParallelInfo(task);
+    const parallelInfo = formatParallel({ task, options: { style: "info" } });
 
     const output = `# Task: ${task.title}
 

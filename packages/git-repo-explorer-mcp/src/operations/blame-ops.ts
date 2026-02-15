@@ -24,9 +24,9 @@ function parseBlameOutput(output: string): BlameLine[] {
   for (const line of lines) {
     // Commit header line: <sha> <orig-line> <final-line> [<num-lines>]
     const commitMatch = line.match(/^([0-9a-f]{40}) \d+ (\d+)/);
-    if (commitMatch) {
-      currentCommit = commitMatch[1]!;
-      currentLineNum = Number.parseInt(commitMatch[2]!, 10);
+    if (commitMatch && commitMatch[1] && commitMatch[2]) {
+      currentCommit = commitMatch[1];
+      currentLineNum = Number.parseInt(commitMatch[2], 10);
       continue;
     }
 
