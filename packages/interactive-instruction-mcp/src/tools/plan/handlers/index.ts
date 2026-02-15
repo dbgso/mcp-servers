@@ -4,4 +4,7 @@ export { AddHandler } from "./add-handler.js";
 export { UpdateHandler } from "./update-handler.js";
 export { DeleteHandler } from "./delete-handler.js";
 export { StatusHandler } from "./status-handler.js";
+export { FeedbackHandler } from "./feedback-handler.js";
+export { InterpretHandler } from "./interpret-handler.js";
 export { ClearHandler } from "./clear-handler.js";
+export { GraphHandler } from "./graph-handler.js";
