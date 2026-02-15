@@ -537,7 +537,6 @@ prerequisites: ""
 completion_criteria: ""
 deliverables: []
 output: ""
-output_content: ""
 task_output: "null"
 is_parallelizable: false
 references: []
@@ -565,7 +564,6 @@ prerequisites: ""
 completion_criteria: ""
 deliverables: []
 output: ""
-output_content: ""
 task_output: "null"
 is_parallelizable: false
 references: []
@@ -671,7 +669,6 @@ prerequisites: ""
 completion_criteria: ""
 deliverables: []
 output: ""
-output_content: ""
 task_output: "null"
 is_parallelizable: false
 references: []
@@ -923,7 +920,6 @@ prerequisites: ""
 completion_criteria: ""
 deliverables: []
 output: ""
-output_content: ""
 task_output: "{\\"what\\":\\"Done\\",\\"why\\":\\"Complete\\",\\"how\\":\\"Manual\\",\\"blockers\\":[],\\"risks\\":[],\\"phase\\":\\"unknown_phase\\",\\"references_used\\":null,\\"references_reason\\":\\"\\"}"
 is_parallelizable: false
 references: []

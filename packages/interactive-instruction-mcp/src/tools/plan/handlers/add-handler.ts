@@ -31,6 +31,10 @@ const paramsSchema = z.object({
     .array(z.string())
     .describe("Array of expected outputs/artifacts (can be empty [])"),
   is_parallelizable: z.boolean().describe("Can run in parallel with other tasks?"),
+  parallelizable_units: z
+    .array(z.string())
+    .optional()
+    .describe("Array of task IDs that can run in parallel with this task"),
   references: z
     .array(z.string())
     .describe("Array of document IDs (can be empty [])"),
@@ -62,6 +66,7 @@ plan(action: "add", id: "<task-id>", title: "<title>", content: "<description>",
 - **completion_criteria** (required): What defines completion
 - **deliverables** (required): Array of expected outputs/artifacts (can be empty [])
 - **is_parallelizable** (required): Can run in parallel with other tasks?
+- **parallelizable_units** (optional): Array of task IDs that can run in parallel with this task
 - **references** (required): Array of document IDs (can be empty [])
 
 ## Notes
@@ -94,6 +99,7 @@ plan(action: "add", id: "<task-id>", title: "<title>", content: "<description>",
       completion_criteria,
       deliverables,
       is_parallelizable,
+      parallelizable_units,
       references,
     } = parseResult.data;
     const { planReader, planReporter } = params.context;
@@ -126,6 +132,7 @@ Please explain why this task depends on: ${dependencies.join(", ")}`,
       completion_criteria,
       deliverables,
       is_parallelizable,
+      parallelizable_units,
       references,
     });
 
