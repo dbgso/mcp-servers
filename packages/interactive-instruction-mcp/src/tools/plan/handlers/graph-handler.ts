@@ -1,16 +1,45 @@
+import { z } from "zod";
 import type {
-  PlanActionHandler,
-  PlanActionParams,
   PlanActionContext,
   ToolResult,
   TaskSummary,
+  PlanRawParams,
 } from "../../../types/index.js";
 
-export class GraphHandler implements PlanActionHandler {
-  async execute(params: {
-    actionParams: PlanActionParams;
-    context: PlanActionContext;
-  }): Promise<ToolResult> {
+const paramsSchema = z.object({});
+
+/**
+ * GraphHandler: Display task graph as Mermaid flowchart
+ */
+export class GraphHandler {
+  readonly action = "graph";
+
+  readonly help = `# plan graph
+
+Display task graph as Mermaid flowchart.
+
+## Usage
+\`\`\`
+plan(action: "graph")
+\`\`\`
+
+## Parameters
+None
+
+## Output
+- Mermaid flowchart showing task dependencies
+- Status icons and styling for each task
+- Legend explaining symbols
+`;
+
+  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
+    const parseResult = paramsSchema.safeParse(params.rawParams);
+    if (!parseResult.success) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
+        isError: true,
+      };
+    }
     const { planReader } = params.context;
     const tasks: TaskSummary[] = await planReader.listTasks();
 

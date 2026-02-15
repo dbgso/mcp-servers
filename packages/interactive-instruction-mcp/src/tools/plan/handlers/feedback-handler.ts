@@ -1,35 +1,58 @@
+import { z } from "zod";
 import type {
-  PlanActionHandler,
-  PlanActionParams,
   PlanActionContext,
   ToolResult,
   FeedbackEntry,
+  PlanRawParams,
 } from "../../../types/index.js";
 
-export class FeedbackHandler implements PlanActionHandler {
-  async execute(params: {
-    actionParams: PlanActionParams;
-    context: PlanActionContext;
-  }): Promise<ToolResult> {
-    const { id, feedback_id } = params.actionParams;
-    const { feedbackReader, planReader } = params.context;
+const paramsSchema = z.object({
+  id: z.string().describe("Task ID to view feedback for"),
+  feedback_id: z.string().optional().describe("Feedback ID to show details"),
+});
 
-    // Validate task id is provided
-    if (!id) {
+export class FeedbackHandler {
+  readonly action = "feedback";
+
+  readonly help = `# plan feedback
+
+View feedback for a task.
+
+## Usage
+
+\`\`\`
+plan(action: "feedback", id: "<task-id>")                         → List all feedback for task
+plan(action: "feedback", id: "<task-id>", feedback_id: "<fb-id>")  → Show specific feedback
+\`\`\`
+
+## Parameters
+
+- **id** (required): Task ID to view feedback for
+- **feedback_id** (optional): Feedback ID to show details
+
+## Examples
+
+List all feedback for a task:
+\`\`\`
+plan(action: "feedback", id: "task-001")
+\`\`\`
+
+Show specific feedback details:
+\`\`\`
+plan(action: "feedback", id: "task-001", feedback_id: "fb-001")
+\`\`\`
+`;
+
+  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
+    const parseResult = paramsSchema.safeParse(params.rawParams);
+    if (!parseResult.success) {
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: id (task_id) is required for feedback action.
-
-Usage:
-  plan(action: "feedback", id: "<task-id>")                         → List all feedback for task
-  plan(action: "feedback", id: "<task-id>", feedback_id: "<fb-id>")  → Show specific feedback`,
-          },
-        ],
+        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
         isError: true,
       };
     }
+    const { id, feedback_id } = parseResult.data;
+    const { feedbackReader, planReader } = params.context;
 
     // Validate task exists
     const task = await planReader.getTask(id);

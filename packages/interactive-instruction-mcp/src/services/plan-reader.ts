@@ -4,10 +4,9 @@ import type {
   Task,
   TaskStatus,
   TaskSummary,
+  TaskOutput,
   Feedback,
   FeedbackDecision,
-  FileChange,
-  ReviewReport,
   PlanReader as IPlanReader,
 } from "../types/index.js";
 
@@ -31,10 +30,6 @@ export class PlanReader implements IPlanReader {
 
   private idToPath(id: string): string {
     return path.join(this.directory, `${id}.md`);
-  }
-
-  private pathToId(filePath: string): string {
-    return path.basename(filePath, ".md");
   }
 
   private parseYamlValue(value: string): string | boolean | string[] {
@@ -112,11 +107,11 @@ export class PlanReader implements IPlanReader {
       return [];
     })();
 
-    // Parse review_report from JSON string if present (unescape quotes first)
-    const review_report: ReviewReport | null = (() => {
-      if (typeof metadata.review_report === "string" && metadata.review_report) {
+    // Parse task_output from JSON string if present (unescape quotes first)
+    const task_output: TaskOutput | null = (() => {
+      if (typeof metadata.task_output === "string" && metadata.task_output) {
         try {
-          const unescaped = metadata.review_report.replace(/\\"/g, '"');
+          const unescaped = metadata.task_output.replace(/\\"/g, '"');
           return JSON.parse(unescaped);
         } catch {
           return null;
@@ -136,7 +131,8 @@ export class PlanReader implements IPlanReader {
       completion_criteria: (metadata.completion_criteria as string) || "",
       deliverables: (metadata.deliverables as string[]) || [],
       output: (metadata.output as string) || "",
-      review_report,
+      output_content: (metadata.output_content as string) || "",
+      task_output,
       is_parallelizable: (metadata.is_parallelizable as boolean) || false,
       references: (metadata.references as string[]) || [],
       feedback,
@@ -161,7 +157,7 @@ export class PlanReader implements IPlanReader {
         : "[]";
     // Escape double quotes in JSON for YAML string
     const feedbackJson = JSON.stringify(task.feedback || []).replace(/"/g, '\\"');
-    const reviewReportJson = JSON.stringify(task.review_report).replace(/"/g, '\\"');
+    const taskOutputJson = JSON.stringify(task.task_output).replace(/"/g, '\\"');
 
     return `---
 id: ${task.id}
@@ -174,7 +170,8 @@ prerequisites: "${task.prerequisites}"
 completion_criteria: "${task.completion_criteria}"
 deliverables: ${delivs}
 output: "${task.output}"
-review_report: "${reviewReportJson}"
+output_content: "${task.output_content}"
+task_output: "${taskOutputJson}"
 is_parallelizable: ${task.is_parallelizable}
 references: ${refs}
 feedback: "${feedbackJson}"
@@ -189,45 +186,6 @@ ${task.content}`;
     this.cache = null;
     this.cacheTime = 0;
   }
-
-  private appendReviewReportToContent(params: {
-    originalContent: string;
-    report: ReviewReport;
-  }): string {
-    const { originalContent, report } = params;
-    const changesTable = report.changes
-      .map((c) => `| \`${c.file}\` | ${c.lines} | ${c.description} |`)
-      .join("\n");
-
-    const referencesSection =
-      report.references_used === null || report.references_used.length === 0
-        ? `- 参照なし\n- 理由: ${report.references_reason}`
-        : `- 参照: ${report.references_used.join(", ")}\n- 理由: ${report.references_reason}`;
-
-    const reviewMarkdown = `
-
----
-
-## 完了報告
-
-### 1. What (具体的な成果物)
-
-| File | Lines | Changes |
-|------|-------|---------|
-${changesTable}
-
-### 2. Why (完了条件との対応)
-
-${report.why}
-
-### 3. References
-
-${referencesSection}
-`;
-
-    return originalContent + reviewMarkdown;
-  }
-
   private async loadCache(): Promise<Map<string, Task>> {
     const now = Date.now();
     if (this.cache && now - this.cacheTime < this.CACHE_TTL) {
@@ -331,7 +289,8 @@ ${referencesSection}
       completion_criteria: params.completion_criteria,
       deliverables: params.deliverables,
       output: "",
-      review_report: null,
+      output_content: "",
+      task_output: null,
       is_parallelizable: params.is_parallelizable,
       references: params.references,
       feedback: [],
@@ -357,6 +316,7 @@ ${referencesSection}
     completion_criteria?: string;
     is_parallelizable?: boolean;
     references?: string[];
+    output_content?: string;
   }): Promise<{ success: boolean; error?: string }> {
     const task = await this.getTask(params.id);
     if (!task) {
@@ -384,6 +344,7 @@ ${referencesSection}
       completion_criteria: params.completion_criteria ?? task.completion_criteria,
       is_parallelizable: params.is_parallelizable ?? task.is_parallelizable,
       references: params.references ?? task.references,
+      output_content: params.output_content ?? task.output_content,
       updated: new Date().toISOString(),
     };
 
@@ -398,12 +359,9 @@ ${referencesSection}
     id: string;
     status: TaskStatus;
     output?: string;
-    changes?: FileChange[];
-    why?: string;
-    references_used?: string[] | null;
-    references_reason?: string;
+    task_output?: TaskOutput;
   }): Promise<{ success: boolean; error?: string; actualStatus?: TaskStatus }> {
-    const { id, status, output, changes, why, references_used, references_reason } = params;
+    const { id, status, output, task_output } = params;
     const task = await this.getTask(id);
     if (!task) {
       return { success: false, error: `Task "${id}" not found.` };
@@ -425,29 +383,11 @@ ${referencesSection}
     // Auto-convert "completed" to "pending_review" for review workflow
     const actualStatus = status === "completed" ? "pending_review" : status;
 
-    // Build review_report when completing a task
-    const review_report: ReviewReport | null =
-      status === "completed" && changes && why && references_reason !== undefined
-        ? {
-            changes,
-            why,
-            references_used: references_used ?? null,
-            references_reason: references_reason ?? "",
-          }
-        : task.review_report;
-
-    // Append review report as markdown to content when completing
-    const updatedContent =
-      status === "completed" && review_report
-        ? this.appendReviewReportToContent({ originalContent: task.content, report: review_report })
-        : task.content;
-
     const updatedTask: Task = {
       ...task,
       status: actualStatus,
       output: output ?? task.output,
-      review_report,
-      content: updatedContent,
+      task_output: task_output ?? task.task_output,
       updated: new Date().toISOString(),
     };
 

@@ -8,8 +8,10 @@
   ],
   "scripts": {
     "build": "pnpm -r build",
-    "test": "pnpm -r test",
+    "typecheck": "pnpm -r --parallel exec tsc --noEmit",
     "lint": "eslint packages/*/src/**/*.ts",
+    "test": "pnpm -r test",
+    "coverage": "pnpm -r --parallel exec vitest run --coverage",
     "dev": "pnpm -r --parallel dev",
     "changeset": "changeset",
     "version": "changeset version",

@@ -1,15 +1,88 @@
-import type {
-  PlanActionHandler,
-  PlanActionParams,
-  PlanActionContext,
-  ToolResult,
-} from "../../../types/index.js";
+import { z } from "zod";
+import type { PlanActionContext, ToolResult, PlanRawParams } from "../../../types/index.js";
 
-export class AddHandler implements PlanActionHandler {
-  async execute(params: {
-    actionParams: PlanActionParams;
-    context: PlanActionContext;
-  }): Promise<ToolResult> {
+const SUBTASK_PHASES = [
+  { suffix: "research", title: "事前調査", description: "調査・分析フェーズ" },
+  { suffix: "implement", title: "設計・実装", description: "設計・実装フェーズ" },
+  { suffix: "verify", title: "検証", description: "テスト・検証フェーズ" },
+  { suffix: "fix", title: "FB修正", description: "フィードバック対応フェーズ" },
+] as const;
+
+const paramsSchema = z.object({
+  id: z.string().describe("Unique task identifier"),
+  title: z.string().describe("Task title"),
+  content: z.string().describe("Task description/work content"),
+  parent: z
+    .string()
+    .optional()
+    .default("")
+    .describe("Parent task ID (empty for root tasks)"),
+  dependencies: z
+    .array(z.string())
+    .describe("Array of dependent task IDs (can be empty [])"),
+  dependency_reason: z
+    .string()
+    .optional()
+    .default("")
+    .describe("Why this task depends on others (required if dependencies exist)"),
+  prerequisites: z.string().describe("What is needed before starting"),
+  completion_criteria: z.string().describe("What defines completion"),
+  deliverables: z
+    .array(z.string())
+    .describe("Array of expected outputs/artifacts (can be empty [])"),
+  is_parallelizable: z.boolean().describe("Can run in parallel with other tasks?"),
+  references: z
+    .array(z.string())
+    .describe("Array of document IDs (can be empty [])"),
+});
+
+/**
+ * AddHandler: Create a new task (root or subtask)
+ */
+export class AddHandler {
+  readonly action = "add";
+
+  readonly help = `# plan add
+
+Add a new task to the plan.
+
+## Usage
+\`\`\`
+plan(action: "add", id: "<task-id>", title: "<title>", content: "<description>", ...)
+\`\`\`
+
+## Parameters
+- **id** (required): Unique task identifier
+- **title** (required): Task title
+- **content** (required): Task description/work content
+- **parent** (optional): Parent task ID (empty for root tasks)
+- **dependencies** (required): Array of dependent task IDs (can be empty [])
+- **dependency_reason** (optional): Why this task depends on others (required if dependencies exist)
+- **prerequisites** (required): What is needed before starting
+- **completion_criteria** (required): What defines completion
+- **deliverables** (required): Array of expected outputs/artifacts (can be empty [])
+- **is_parallelizable** (required): Can run in parallel with other tasks?
+- **references** (required): Array of document IDs (can be empty [])
+
+## Notes
+- Root tasks (no parent) automatically get 4 phase subtasks created
+- Subtasks must have content and completion_criteria filled in before starting
+`;
+
+  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
+    const parseResult = paramsSchema.safeParse(params.rawParams);
+    if (!parseResult.success) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${parseResult.error.errors.map((e) => e.message).join(", ")}\n\n${this.help}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     const {
       id,
       title,
@@ -22,41 +95,8 @@ export class AddHandler implements PlanActionHandler {
       deliverables,
       is_parallelizable,
       references,
-    } = params.actionParams;
+    } = parseResult.data;
     const { planReader, planReporter } = params.context;
-
-    // Validate all required fields are present
-    if (
-      !id ||
-      !title ||
-      !content ||
-      dependencies === undefined ||
-      prerequisites === undefined ||
-      completion_criteria === undefined ||
-      deliverables === undefined ||
-      is_parallelizable === undefined ||
-      references === undefined
-    ) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: All fields are required for add action:
-- id: task identifier (string)
-- title: task title (string)
-- content: task description/work content (string)
-- dependencies: array of dependent task IDs (can be empty [])
-- dependency_reason: why this task depends on others (string, can be empty if no dependencies)
-- prerequisites: what is needed before starting (string)
-- completion_criteria: what defines completion (string)
-- deliverables: array of expected outputs/artifacts (can be empty [])
-- is_parallelizable: can run in parallel? (boolean)
-- references: array of document IDs (can be empty [])`,
-          },
-        ],
-        isError: true,
-      };
-    }
 
     // Validate dependency_reason is provided when there are dependencies
     if (dependencies.length > 0 && !dependency_reason) {
@@ -72,32 +112,8 @@ Please explain why this task depends on: ${dependencies.join(", ")}`,
       };
     }
 
-    // Validate that deliverables include test-related items
-    const testKeywords = ["test", "テスト", "spec", "検証"];
-    const hasTestDeliverable = deliverables.some((d) =>
-      testKeywords.some((keyword) => d.toLowerCase().includes(keyword))
-    );
-    if (!hasTestDeliverable) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: deliverables must include test-related items.
-
-Your deliverables: ${deliverables.length > 0 ? deliverables.join(", ") : "(empty)"}
-
-Please add at least one test-related deliverable, e.g.:
-- "unit tests for X"
-- "integration tests"
-- "test coverage for new functions"
-- "テストコード"
-
-This ensures all implementations are verified before completion.`,
-          },
-        ],
-        isError: true,
-      };
-    }
+    // Check if this is a root task (no parent) - requires auto-subtasks
+    const isRootTask = !parent;
 
     const result = await planReader.addTask({
       id,
@@ -120,6 +136,39 @@ This ensures all implementations are verified before completion.`,
       };
     }
 
+    // Auto-create 4 phase subtasks for root tasks
+    const createdSubtasks: string[] = [];
+    if (isRootTask) {
+      let prevSubtaskId: string | null = null;
+
+      for (const phase of SUBTASK_PHASES) {
+        const subtaskId = `${id}__${phase.suffix}`;
+        const subtaskDeps = prevSubtaskId ? [prevSubtaskId] : [];
+        const subtaskDepReason = prevSubtaskId
+          ? `前フェーズ完了後に実行`
+          : "";
+
+        const subtaskResult = await planReader.addTask({
+          id: subtaskId,
+          title: `${phase.title}`,
+          content: "", // Empty - must be filled before starting
+          parent: id,
+          dependencies: subtaskDeps,
+          dependency_reason: subtaskDepReason,
+          prerequisites: "",
+          completion_criteria: "", // Empty - must be filled before starting
+          deliverables: [],
+          is_parallelizable: false,
+          references: [],
+        });
+
+        if (subtaskResult.success) {
+          createdSubtasks.push(subtaskId);
+        }
+        prevSubtaskId = subtaskId;
+      }
+    }
+
     // Update markdown files
     await planReporter.updateAll();
 
@@ -131,19 +180,39 @@ This ensures all implementations are verified before completion.`,
 
     const parentInfo = parent ? `\nParent: ${parent}` : "";
 
+    // Different message for root vs subtask
+    if (isRootTask) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Task "${id}" created with 4 phase subtasks.
+Path: ${result.path}
+Dependencies: ${depsInfo}
+Deliverables: ${delivsInfo}
+
+## Subtasks Created (must be fleshed out before starting)
+${createdSubtasks.map((s) => `- ${s}`).join("\n")}
+
+**Next Step:** Update each subtask with content and completion_criteria:
+\`\`\`
+plan(action: "update", id: "${id}__research",
+  content: "<what to investigate>",
+  completion_criteria: "<how to know research is done>")
+\`\`\``,
+          },
+        ],
+      };
+    }
+
     return {
       content: [
         {
           type: "text" as const,
-          text: `Task "${id}" created successfully.
+          text: `Subtask "${id}" created successfully.
 Path: ${result.path}${parentInfo}
 Dependencies: ${depsInfo}
-Deliverables: ${delivsInfo}
-Parallelizable: ${is_parallelizable}
-Completion Criteria: ${completion_criteria}
-
-💡 Consider: Does this task need verification subtasks (build check, test run, review)?
-   Add them with: plan(action: "add", parent: "${id}", ...)`,
+Completion Criteria: ${completion_criteria || "(not set - update before starting)"}`,
         },
       ],
     };

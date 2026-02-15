@@ -1,16 +1,46 @@
+import { z } from "zod";
 import type {
-  PlanActionHandler,
-  PlanActionParams,
   PlanActionContext,
   ToolResult,
   TaskSummary,
+  PlanRawParams,
 } from "../../../types/index.js";
 
-export class ListHandler implements PlanActionHandler {
-  async execute(params: {
-    actionParams: PlanActionParams;
-    context: PlanActionContext;
-  }): Promise<ToolResult> {
+const paramsSchema = z.object({});
+
+/**
+ * ListHandler: Display all tasks with status summary
+ */
+export class ListHandler {
+  readonly action = "list";
+
+  readonly help = `# plan list
+
+List all tasks with status summary.
+
+## Usage
+\`\`\`
+plan(action: "list")
+\`\`\`
+
+## Parameters
+None required.
+
+## Notes
+- Shows task summary grouped by status
+- Highlights tasks pending review
+- Shows ready-to-start and blocked tasks
+`;
+
+  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
+    const parseResult = paramsSchema.safeParse(params.rawParams);
+    if (!parseResult.success) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
+        isError: true,
+      };
+    }
+
     const { planReader } = params.context;
     const tasks: TaskSummary[] = await planReader.listTasks();
 
