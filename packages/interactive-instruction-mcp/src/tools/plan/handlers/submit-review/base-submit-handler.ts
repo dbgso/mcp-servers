@@ -12,26 +12,26 @@ import type {
  */
 export const baseParamsSchema = z.object({
   id: z.string(),
-  output_what: z.string().describe("何をしたのか"),
-  output_why: z.string().describe("なぜこれで十分なのか"),
-  output_how: z.string().describe("どうやって調べた/実装したのか"),
-  blockers: z.array(z.string()).describe("遭遇した障害・ブロッカー（空配列可）"),
-  risks: z.array(z.string()).describe("リスク・懸念事項（空配列可）"),
-  references_used: z.array(z.string()).min(1).describe("参照したドキュメント（必須、prompts/{task-id}を含む）"),
-  references_reason: z.string().describe("参照した理由・どのように活用したか"),
+  output_what: z.string().describe("What was done"),
+  output_why: z.string().describe("Why this is sufficient"),
+  output_how: z.string().describe("How it was done/investigated"),
+  blockers: z.array(z.string()).describe("Encountered blockers (can be empty [])"),
+  risks: z.array(z.string()).describe("Risks and concerns (can be empty [])"),
+  references_used: z.array(z.string()).min(1).describe("Referenced documents (required, must include prompts/{task-id})"),
+  references_reason: z.string().describe("Why these references were used and how they helped"),
 });
 
 export type BaseSubmitParams = z.infer<typeof baseParamsSchema>;
 
 /**
- * Task phase suffixes
+ * Task phase suffixes (PDCA cycle)
  */
-export const TASK_PHASES = ["research", "implement", "verify", "fix"] as const;
+export const TASK_PHASES = ["plan", "do", "check", "act"] as const;
 export type TaskPhase = (typeof TASK_PHASES)[number];
 
 /**
  * Extract task phase from task ID
- * e.g., "feature-x__research" -> "research"
+ * e.g., "feature-x__plan" -> "plan"
  */
 export function getTaskPhase(taskId: string): TaskPhase | null {
   for (const phase of TASK_PHASES) {
@@ -176,28 +176,28 @@ export abstract class BaseSubmitHandler implements PlanActionHandler {
           type: "text" as const,
           text: `Task "${id}" submitted for review.
 
-Status: in_progress → pending_review
+Status: in_progress -> pending_review
 
 ## Output Summary
 
-### What (何をしたか)
+### What
 ${output_what}
 
-### Why (なぜこれで十分か)
+### Why
 ${output_why}
 
-### How (どのように行ったか)
+### How
 ${output_how}
 
-### Blockers (遭遇した障害)
-${blockers.length > 0 ? blockers.map((b) => `- ${b}`).join("\n") : "なし"}
+### Blockers
+${blockers.length > 0 ? blockers.map((b) => `- ${b}`).join("\n") : "None"}
 
-### Risks (リスク・懸念事項)
-${risks.length > 0 ? risks.map((r) => `- ${r}`).join("\n") : "なし"}
+### Risks
+${risks.length > 0 ? risks.map((r) => `- ${r}`).join("\n") : "None"}
 
-### References (参照ドキュメント)
+### References
 ${references_used.map((r) => `- ${r}`).join("\n")}
-**理由**: ${references_reason}
+**Reason**: ${references_reason}
 
 ${phaseOutput}
 

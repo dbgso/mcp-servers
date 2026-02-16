@@ -509,7 +509,11 @@ ${task.content}`;
     return children;
   }
 
-  async deleteTask(id: string): Promise<{ success: boolean; error?: string }> {
+  async deleteTask(params: {
+    id: string;
+    force?: boolean;
+  }): Promise<{ success: boolean; error?: string; deleted?: string[]; pendingDeletion?: string[] }> {
+    const { id, force = false } = params;
     const task = await this.getTask(id);
     if (!task) {
       return { success: false, error: `Task "${id}" not found.` };
@@ -517,18 +521,104 @@ ${task.content}`;
 
     // Check if other tasks depend on this
     const dependents = await this.getDependents(id);
-    if (dependents.length > 0) {
+    if (dependents.length > 0 && !force) {
       return {
         success: false,
         error: `Cannot delete: other tasks depend on this. Dependents: ${dependents.join(", ")}`,
       };
     }
 
+    // force: true always requires approval via approve tool
+    if (force) {
+      const allDependents = await this.getAllDependents(id);
+      const toDelete = [...allDependents, id];
+      await this.createPendingDeletion({ taskId: id, targets: toDelete });
+      return { success: true, pendingDeletion: toDelete };
+    }
+
+    // Direct delete (no dependents, no force)
     const filePath = this.idToPath(id);
     await fs.unlink(filePath);
     this.invalidateCache();
 
-    return { success: true };
+    return { success: true, deleted: [id] };
+  }
+
+  /**
+   * Create a pending deletion record that requires approval
+   */
+  async createPendingDeletion(params: {
+    taskId: string;
+    targets: string[];
+  }): Promise<void> {
+    const { taskId, targets } = params;
+    const pendingDir = path.join(this.directory, "_pending_deletions");
+    await fs.mkdir(pendingDir, { recursive: true });
+    const filePath = path.join(pendingDir, `${taskId}.json`);
+    await fs.writeFile(filePath, JSON.stringify({ taskId, targets, createdAt: new Date().toISOString() }), "utf-8");
+  }
+
+  /**
+   * Get pending deletion for a task
+   */
+  async getPendingDeletion(taskId: string): Promise<{ taskId: string; targets: string[] } | null> {
+    const filePath = path.join(this.directory, "_pending_deletions", `${taskId}.json`);
+    try {
+      const content = await fs.readFile(filePath, "utf-8");
+      return JSON.parse(content);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Execute a pending deletion (called after approval)
+   */
+  async executePendingDeletion(taskId: string): Promise<{ success: boolean; error?: string; deleted?: string[] }> {
+    const pending = await this.getPendingDeletion(taskId);
+    if (!pending) {
+      return { success: false, error: `No pending deletion found for task "${taskId}".` };
+    }
+
+    const deleted: string[] = [];
+    for (const targetId of pending.targets) {
+      const targetPath = this.idToPath(targetId);
+      try {
+        await fs.unlink(targetPath);
+        deleted.push(targetId);
+      } catch {
+        // Task might already be deleted
+      }
+    }
+
+    // Remove pending deletion record
+    const pendingPath = path.join(this.directory, "_pending_deletions", `${taskId}.json`);
+    try {
+      await fs.unlink(pendingPath);
+    } catch {
+      // Ignore
+    }
+
+    this.invalidateCache();
+    return { success: true, deleted };
+  }
+
+  /**
+   * Cancel a pending deletion
+   */
+  async cancelPendingDeletion(taskId: string): Promise<{ success: boolean; error?: string }> {
+    const pending = await this.getPendingDeletion(taskId);
+    if (!pending) {
+      return { success: false, error: `No pending deletion found for task "${taskId}".` };
+    }
+
+    const pendingPath = path.join(this.directory, "_pending_deletions", `${taskId}.json`);
+    try {
+      await fs.unlink(pendingPath);
+      return { success: true };
+    } catch {
+      return { success: false, error: `Failed to cancel pending deletion for task "${taskId}".` };
+    }
   }
 
   async clearAllTasks(): Promise<{
@@ -629,6 +719,54 @@ ${task.content}`;
     }
 
     return dependents;
+  }
+
+  /**
+   * Get child task IDs (tasks where parent equals this taskId)
+   */
+  private async getChildren(taskId: string): Promise<string[]> {
+    const tasks = await this.loadCache();
+    const children: string[] = [];
+
+    for (const [id, task] of tasks) {
+      if (task.parent === taskId) {
+        children.push(id);
+      }
+    }
+
+    return children;
+  }
+
+  /**
+   * Get all tasks that depend on the given task, recursively.
+   * Includes both:
+   * - Tasks that have this task in their `dependencies` array
+   * - Tasks that have this task as their `parent`
+   * Returns tasks in order suitable for deletion (leaf nodes first).
+   */
+  async getAllDependents(taskId: string): Promise<string[]> {
+    const visited = new Set<string>();
+    const result: string[] = [];
+
+    const collectDependents = async (id: string): Promise<void> => {
+      // Get tasks that depend on this task via dependencies field
+      const dependents = await this.getDependents(id);
+      // Get child tasks via parent field
+      const children = await this.getChildren(id);
+      // Combine both
+      const allRelated = [...new Set([...dependents, ...children])];
+
+      for (const relatedId of allRelated) {
+        if (!visited.has(relatedId)) {
+          visited.add(relatedId);
+          await collectDependents(relatedId);
+          result.push(relatedId);
+        }
+      }
+    };
+
+    await collectDependents(taskId);
+    return result;
   }
 
   private async getIncompleteDependencies(taskId: string): Promise<string[]> {

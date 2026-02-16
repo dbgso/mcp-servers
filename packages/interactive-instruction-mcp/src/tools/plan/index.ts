@@ -18,10 +18,10 @@ import {
   SkipHandler,
   BlockHandler,
   InterpretHandler,
-  ResearchSubmitHandler,
-  ImplementSubmitHandler,
-  VerifySubmitHandler,
-  FixSubmitHandler,
+  PlanSubmitHandler,
+  DoSubmitHandler,
+  CheckSubmitHandler,
+  ActSubmitHandler,
 } from "./handlers/index.js";
 
 const handlers: PlanActionHandler[] = [
@@ -36,10 +36,10 @@ const handlers: PlanActionHandler[] = [
   new ClearHandler(),
   new GraphHandler(),
   new StartHandler(),
-  new ResearchSubmitHandler(),
-  new ImplementSubmitHandler(),
-  new VerifySubmitHandler(),
-  new FixSubmitHandler(),
+  new PlanSubmitHandler(),
+  new DoSubmitHandler(),
+  new CheckSubmitHandler(),
+  new ActSubmitHandler(),
   new RequestChangesHandler(),
   new SkipHandler(),
   new BlockHandler(),
@@ -51,133 +51,80 @@ function resolveHandler(action: string): PlanActionHandler | undefined {
 
 const getPlanHelp = (planDir: string) => `# Plan Tool
 
-Temporary task planning for current work session. Tasks are stored in OS temp directory.
+Task planning for current work session.
 
 **Storage Path:** \`${planDir}\`
 
-## IMPORTANT: Required Fields for Add
+## Quick Start
 
-When creating a task, ALL fields are required to force careful planning:
+1. **Create tasks**: \`plan(action: "add", ...)\`
+2. **Start task**: \`plan(action: "start", id: "<id>", prompt: "...")\`
+3. **Follow the guided workflow** (shown when task is started)
+
+## Required Fields for Add
+
 - **id**: Unique task identifier
 - **title**: Human-readable task title
-- **content**: Detailed task description/work content
-- **parent**: Parent task ID for subtasks (use "" for root tasks)
-- **dependencies**: Array of task IDs this depends on (use [] for no dependencies)
-- **dependency_reason**: Why this task depends on others (required if dependencies is not empty)
-- **prerequisites**: What is needed before starting this task
-- **completion_criteria**: What defines this task as complete
-- **deliverables**: Array of expected outputs/artifacts (e.g., ["design doc", "test results"])
-- **is_parallelizable**: Can this task run in parallel with others?
-- **references**: Array of document IDs to reference (use [] for none). Run \`help()\` to list available documents.
-
-## Subtasks (Parent-Child)
-
-Use \`parent\` to create subtasks. Parent task cannot be completed until all subtasks are done.
-
-Example: Break down "implement-feature" into verification steps:
-\`\`\`
-plan(action: "add", id: "impl-code", parent: "implement-feature", ...)
-plan(action: "add", id: "build-check", parent: "implement-feature", ...)
-plan(action: "add", id: "test-run", parent: "implement-feature", ...)
-\`\`\`
-Now "implement-feature" cannot be approved until impl-code, build-check, and test-run are all completed.
-
-## IMPORTANT: Review Workflow
-
-Use dedicated state transition actions:
-
-1. **Start work**: \`plan(action: "start", id: "<id>")\`
-2. **Submit for review** (use phase-specific action):
-   - Research: \`plan(action: "submit_research", id: "<id>__research", findings: "...", sources: [...])\`
-   - Implement: \`plan(action: "submit_implement", id: "<id>__implement", changes: [...], design_decisions: "...")\`
-   - Verify: \`plan(action: "submit_verify", id: "<id>__verify", test_target: "...", test_results: "...", coverage: "...")\`
-   - Fix: \`plan(action: "submit_fix", id: "<id>__fix", changes: [...], feedback_addressed: "...")\`
-3. **User approves**: \`approve(target: "task", id: "<id>")\` → Task becomes "completed"
-4. **Or user requests changes**: \`plan(action: "request_changes", id: "<id>", comment: "<feedback>")\`
-
-**Note:** The \`approve\` tool is separate and for human reviewers only. Do NOT call approve - wait for user approval.
-
-## Task Statuses
-- \`pending\`: Task not started (ready if no incomplete dependencies)
-- \`in_progress\`: Currently working on
-- \`pending_review\`: Work done, waiting for user approval
-- \`completed\`: Task approved and finished
-- \`blocked\`: Waiting on dependencies (automatically calculated on list)
-- \`skipped\`: Task skipped/not needed
+- **content**: Task description
+- **parent**: Parent task ID (use "" for root tasks)
+- **dependencies**: Array of task IDs (use [] for none)
+- **dependency_reason**: Why depends (required if dependencies exist)
+- **prerequisites**: What is needed before starting
+- **completion_criteria**: What defines completion
+- **deliverables**: Array of outputs (can be [])
+- **is_parallelizable**: Can run in parallel?
+- **references**: Array of doc IDs (can be [])
 
 ## Actions
 
-### Basic Actions
 - \`plan()\` - Show this help
-- \`plan(action: "list")\` - List all tasks with status and dependencies
+- \`plan(action: "list")\` - List all tasks
 - \`plan(action: "read", id: "<id>")\` - Read task detail
-- \`plan(action: "read_output", id: "<id>")\` - Read task output (what/why/how)
-- \`plan(action: "add", ...)\` - Create new task (auto-creates 4 subtasks)
-- \`plan(action: "update", id: "<id>", ...)\` - Update task fields
+- \`plan(action: "add", ...)\` - Create new task
+- \`plan(action: "start", id: "<id>", prompt: "...")\` - Start task
+- \`plan(action: "update", id: "<id>", ...)\` - Update task
 - \`plan(action: "delete", id: "<id>")\` - Delete task
-- \`plan(action: "clear")\` - Clear all tasks
+- \`plan(action: "skip", id: "<id>", reason: "...")\` - Skip task
 - \`plan(action: "graph")\` - Show dependency graph
 
-### State Transitions (Recommended)
-- \`plan(action: "start", id: "<id>")\` - Start task (pending → in_progress)
-- \`plan(action: "submit_research", ...)\` - Submit research task for review
-- \`plan(action: "submit_implement", ...)\` - Submit implementation task for review
-- \`plan(action: "submit_verify", ...)\` - Submit verification task for review
-- \`plan(action: "submit_fix", ...)\` - Submit fix task for review
-- \`plan(action: "request_changes", id: "<id>", comment: "<feedback>")\` - Request changes (pending_review → in_progress)
-- \`plan(action: "skip", id: "<id>", reason: "<why>")\` - Skip task (any → skipped)
-- \`plan(action: "block", id: "<id>", reason: "<why>")\` - Block task (any → blocked)
+## Example: Bug Fix
 
-### Common Fields for All submit_* Actions
-- \`output_what\`: 何をしたのか (What was done)
-- \`output_why\`: なぜこれで十分なのか (Why this is sufficient)
-- \`output_how\`: どうやって調べた/実装したのか (How it was done)
-- \`blockers\`: 遭遇した障害 (Array, can be empty)
-- \`risks\`: リスク・懸念事項 (Array, can be empty)
-- \`references_used\`: Array of doc IDs (required, must include prompts/<task-id>)
-- \`references_reason\`: Why referenced or why not needed
-
-### Phase-Specific Required Fields
-- **submit_research**: \`findings\`, \`sources\`
-- **submit_implement**: \`changes\`, \`design_decisions\`
-- **submit_verify**: \`test_target\`, \`test_results\`, \`coverage\`
-- **submit_fix**: \`changes\`, \`feedback_addressed\`
-
-## Example
+Create separate tasks for each phase:
 
 \`\`\`
 plan(action: "add",
-  id: "setup-project",
-  title: "Set up project structure",
-  content: "Create directories and initial files for the new feature",
-  dependencies: [],
-  dependency_reason: "",
-  prerequisites: "Node.js 18+ installed, pnpm available",
-  completion_criteria: "pnpm install succeeds and pnpm build passes",
-  deliverables: ["package.json", "tsconfig.json", "src/ directory"],
-  is_parallelizable: false,
-  references: ["coding-style", "project-setup"])
-\`\`\`
+  id: "fix-bug__research",
+  title: "Investigate the bug",
+  content: "Find root cause",
+  dependencies: [], ...)
 
-\`\`\`
 plan(action: "add",
-  id: "implement-api",
-  title: "Implement API endpoints",
-  content: "Create REST endpoints for user management",
-  dependencies: ["setup-project"],
-  dependency_reason: "Project structure must exist before adding API code",
-  prerequisites: "Database schema defined",
-  completion_criteria: "All endpoints return correct responses, tests pass",
-  deliverables: ["API endpoints", "integration tests", "API documentation"],
-  is_parallelizable: true,
-  references: ["api-design"])
+  id: "fix-bug__implement",
+  title: "Apply the fix",
+  content: "Implement solution",
+  dependencies: ["fix-bug__research"],
+  dependency_reason: "Need to know cause before fixing", ...)
+
+plan(action: "add",
+  id: "fix-bug__test",
+  title: "Verify the fix",
+  content: "Test the solution",
+  dependencies: ["fix-bug__implement"],
+  dependency_reason: "Need fix before testing", ...)
 \`\`\`
 
-## Tips
+Then start each task in order:
+\`\`\`
+plan(action: "start", id: "fix-bug__research", prompt: "<instructions>")
+\`\`\`
 
-1. **Before planning**: Run \`help()\` to see available documents for references
-2. **References**: Link to coding rules, design docs, specs (e.g., "coding-rules/typescript")
-3. **Parallelizable**: Mark tasks that don't share state and can run concurrently`;
+### When to decompose
+
+Split into multiple tasks when work involves:
+- Investigation/research before implementation
+- Multiple distinct deliverables
+- Verification that deserves its own cycle
+- Work that could be reviewed incrementally`;
 
 const TaskStatusSchema = z.enum([
   "pending",
@@ -207,12 +154,14 @@ export function registerPlanTool(params: {
         action: z
           .enum([
             "list", "read", "read_output", "add", "update", "delete", "feedback", "interpret", "clear", "graph",
-            // Dedicated state transitions
-            "start", "submit_research", "submit_implement", "submit_verify", "submit_fix", "request_changes", "skip", "block"
+            // Dedicated state transitions (PDCA)
+            "start", "submit_plan", "submit_do", "submit_check", "submit_act", "request_changes", "skip", "block"
           ])
           .optional()
-          .describe("Action to perform. Omit to show help. State transitions: start (pending→in_progress), submit_* (in_progress→pending_review), request_changes (pending_review→in_progress), skip/block (any→skipped/blocked)"),
+          .describe("Action to perform. Omit to show help. State transitions: start (pending->in_progress), submit_* (in_progress->pending_review), request_changes (pending_review->in_progress), skip/block (any->skipped/blocked)"),
         id: z.string().optional().describe("Task ID"),
+        force: z.boolean().optional().describe("Force cascade delete - deletes all dependent tasks (for delete action)"),
+        cancel: z.boolean().optional().describe("Cancel a pending deletion (for delete action)"),
         title: z.string().optional().describe("Task title (required for add)"),
         content: z
           .string()
@@ -258,19 +207,19 @@ export function registerPlanTool(params: {
           .string()
           .optional()
           .describe(
-            "何をしたのか - What was done (required for submit_review)"
+            "What was done (required for submit_review)"
           ),
         output_why: z
           .string()
           .optional()
           .describe(
-            "なぜこれで十分なのか - Why this is sufficient (required for submit_review)"
+            "Why this is sufficient (required for submit_review)"
           ),
         output_how: z
           .string()
           .optional()
           .describe(
-            "どうやって調べた/実装したのか - How it was done/investigated (required for submit_review)"
+            "How it was done/investigated (required for submit_review)"
           ),
         reason: z
           .string()
@@ -350,53 +299,55 @@ export function registerPlanTool(params: {
         blockers: z
           .array(z.string())
           .optional()
-          .describe("遭遇した障害・ブロッカー (required for submit_*, can be empty [])"),
+          .describe("Encountered blockers (required for submit_*, can be empty [])"),
         risks: z
           .array(z.string())
           .optional()
-          .describe("リスク・懸念事項 (required for submit_*, can be empty [])"),
-        // submit_research specific
+          .describe("Risks and concerns (required for submit_*, can be empty [])"),
+        // submit_plan specific
         findings: z
           .string()
           .optional()
-          .describe("調査結果・発見事項 (required for submit_research)"),
+          .describe("Research findings and discoveries (required for submit_plan)"),
         sources: z
           .array(z.string())
           .optional()
-          .describe("調査したソース - URL、ファイルパスなど (required for submit_research)"),
-        // submit_implement specific
+          .describe("Sources investigated - URLs, file paths, etc. (required for submit_plan)"),
+        // submit_do specific
         design_decisions: z
           .string()
           .optional()
-          .describe("設計判断・なぜこの実装を選んだか (required for submit_implement)"),
-        // submit_verify specific
+          .describe("Design decisions - why this implementation was chosen (required for submit_do)"),
+        // submit_check specific
         test_target: z
           .string()
           .optional()
-          .describe("テスト対象・何をテストしたか (required for submit_verify)"),
+          .describe("Test target - what was tested (required for submit_check)"),
         test_results: z
           .string()
           .optional()
-          .describe("テスト結果・成功/失敗の詳細 (required for submit_verify)"),
+          .describe("Test results - success/failure details (required for submit_check)"),
         coverage: z
           .string()
           .optional()
-          .describe("網羅性・どの程度カバーしたか (required for submit_verify)"),
-        // submit_fix specific
+          .describe("Coverage - how much was covered (required for submit_check)"),
+        // submit_act specific
         feedback_addressed: z
           .string()
           .optional()
-          .describe("対応したフィードバックの内容 (required for submit_fix)"),
+          .describe("What feedback was addressed (required for submit_act)"),
         // start action specific
         prompt: z
           .string()
           .optional()
-          .describe("依頼内容・指示 (required for start action, saved to prompts/{task-id}.md)"),
+          .describe("Instructions/request content (required for start action, saved to prompts/{task-id}.md)"),
       },
     },
     async ({
       action,
       id,
+      force,
+      cancel,
       title,
       content,
       parent,
@@ -458,7 +409,7 @@ export function registerPlanTool(params: {
 
       // Pass all params - handler validates what it needs
       const rawParams: PlanRawParams = {
-        id, title, content, parent, dependencies, dependency_reason,
+        id, force, cancel, title, content, parent, dependencies, dependency_reason,
         prerequisites, completion_criteria, deliverables, output,
         output_what, output_why, output_how, reason, is_parallelizable, parallelizable_units, references,
         status, comment, changes, why, references_used, references_reason,

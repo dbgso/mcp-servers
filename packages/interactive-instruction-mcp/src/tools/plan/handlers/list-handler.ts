@@ -80,21 +80,21 @@ None required.
 
     // Pending Review section with full details
     if (byStatus.pending_review.length > 0) {
-      output += "## ⚠️ Pending Review (承認待ち)\n\n";
-      output += "以下のタスクはユーザーの承認を待っています。内容を確認して承認または差し戻してください。\n\n";
+      output += "## Pending Review\n\n";
+      output += "The following tasks are waiting for user approval. Review and approve or request changes.\n\n";
 
       for (const t of byStatus.pending_review) {
         const task = await planReader.getTask(t.id);
         if (task) {
           output += `### ${t.id}: ${t.title}\n\n`;
-          output += `**What (何をしたか)**\n`;
-          output += `- 成果物: ${task.deliverables.length > 0 ? task.deliverables.join(", ") : "なし"}\n`;
-          output += `- 結果: ${task.output || "(未記入)"}\n\n`;
-          output += `**Why (判断基準)**\n`;
-          output += `- 完了条件: ${task.completion_criteria || "(未設定)"}\n\n`;
-          output += `**How (次のアクション)**\n`;
-          output += `- 承認: \`plan(action: "approve", id: "${t.id}")\`\n`;
-          output += `- 差し戻し: \`plan(action: "status", id: "${t.id}", status: "in_progress")\`\n\n`;
+          output += `**What**\n`;
+          output += `- Deliverables: ${task.deliverables.length > 0 ? task.deliverables.join(", ") : "none"}\n`;
+          output += `- Result: ${task.output || "(not recorded)"}\n\n`;
+          output += `**Why**\n`;
+          output += `- Completion criteria: ${task.completion_criteria || "(not set)"}\n\n`;
+          output += `**How**\n`;
+          output += `- Approve: \`plan(action: "approve", id: "${t.id}")\`\n`;
+          output += `- Request changes: \`plan(action: "status", id: "${t.id}", status: "in_progress")\`\n\n`;
         }
       }
     }

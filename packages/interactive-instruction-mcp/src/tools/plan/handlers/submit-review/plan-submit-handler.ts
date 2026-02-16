@@ -2,25 +2,25 @@ import { z } from "zod";
 import type { PlanRawParams } from "../../../../types/index.js";
 import { BaseSubmitHandler, baseParamsSchema } from "./base-submit-handler.js";
 
-const researchParamsSchema = baseParamsSchema.extend({
-  findings: z.string().describe("調査結果・発見事項"),
-  sources: z.array(z.string()).describe("調査したソース（URL、ファイルパスなど）"),
+const planParamsSchema = baseParamsSchema.extend({
+  findings: z.string().describe("Research findings and discoveries"),
+  sources: z.array(z.string()).describe("Sources investigated (URLs, file paths, etc.)"),
 });
 
 /**
- * ResearchSubmitHandler: Submit research phase tasks for review
+ * PlanSubmitHandler: Submit plan phase tasks for review
  */
-export class ResearchSubmitHandler extends BaseSubmitHandler {
-  readonly action = "submit_research";
-  readonly phase = "research" as const;
+export class PlanSubmitHandler extends BaseSubmitHandler {
+  readonly action = "submit_plan";
+  readonly phase = "plan" as const;
 
-  readonly help = `# plan submit_research
+  readonly help = `# plan submit_plan
 
-Submit a research task for user review.
+Submit a plan task for user review.
 
 ## Usage
 \`\`\`
-plan(action: "submit_research", id: "<task-id>",
+plan(action: "submit_plan", id: "<task-id>",
   output_what: "<what was investigated>",
   output_why: "<why this is sufficient>",
   output_how: "<how it was investigated>",
@@ -33,7 +33,7 @@ plan(action: "submit_research", id: "<task-id>",
 \`\`\`
 
 ## Parameters
-- **id** (required): Task ID (must end with __research)
+- **id** (required): Task ID (must end with __plan)
 - **output_what** (required): What was investigated
 - **output_why** (required): Why this is sufficient
 - **output_how** (required): How it was investigated
@@ -46,7 +46,7 @@ plan(action: "submit_research", id: "<task-id>",
 `;
 
   protected validatePhaseFields(params: { rawParams: PlanRawParams }): string | null {
-    const result = researchParamsSchema.safeParse(params.rawParams);
+    const result = planParamsSchema.safeParse(params.rawParams);
     if (!result.success) {
       const errors = result.error.errors
         .filter((e) => e.path[0] === "findings" || e.path[0] === "sources")
@@ -59,7 +59,7 @@ plan(action: "submit_research", id: "<task-id>",
   }
 
   protected getPhaseData(params: { rawParams: PlanRawParams }): Record<string, unknown> {
-    const result = researchParamsSchema.safeParse(params.rawParams);
+    const result = planParamsSchema.safeParse(params.rawParams);
     if (!result.success) return {};
     return {
       findings: result.data.findings,
@@ -68,13 +68,13 @@ plan(action: "submit_research", id: "<task-id>",
   }
 
   protected formatPhaseOutput(params: { rawParams: PlanRawParams }): string {
-    const result = researchParamsSchema.safeParse(params.rawParams);
+    const result = planParamsSchema.safeParse(params.rawParams);
     if (!result.success) return "";
     const { findings, sources } = result.data;
-    return `### Findings (調査結果)
+    return `### Findings
 ${findings}
 
-### Sources (調査ソース)
+### Sources
 ${sources.map((s) => `- ${s}`).join("\n")}`;
   }
 }

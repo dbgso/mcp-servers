@@ -43,7 +43,7 @@ _No output recorded._
 
 ---
 
-承認: \`approve(target: "task", id: "${task.id}")\`
+Approve: \`approve(target: "task", id: "${task.id}")\`
 
 ---
 
@@ -59,22 +59,22 @@ _No output recorded._
     // Format references section
     const referencesSection = (() => {
       if (!output.references_used || output.references_used.length === 0) {
-        return `- **参照なし**\n- **理由**: ${output.references_reason || "(未記入)"}`;
+        return `- **No references**\n- **Reason**: ${output.references_reason || "(not recorded)"}`;
       }
-      return `- **参照**: ${output.references_used.join(", ")}\n- **理由**: ${output.references_reason || "(未記入)"}`;
+      return `- **References**: ${output.references_used.join(", ")}\n- **Reason**: ${output.references_reason || "(not recorded)"}`;
     })();
 
     return `## ${task.id}: ${task.title}
 
 ### Phase: ${output.phase}
 
-### What (何をしたか)
+### What
 ${output.what}
 
-### Why (なぜこれで十分か)
+### Why
 ${output.why}
 
-### How (どのように行ったか)
+### How
 ${output.how}
 
 ${phaseSection}
@@ -86,9 +86,9 @@ ${referencesSection}
 
 ---
 
-**Completion criteria**: ${task.completion_criteria || "(未設定)"}
+**Completion criteria**: ${task.completion_criteria || "(not set)"}
 
-承認: \`approve(target: "task", id: "${task.id}")\`
+Approve: \`approve(target: "task", id: "${task.id}")\`
 
 ---
 
@@ -97,36 +97,36 @@ ${referencesSection}
 
   private formatPhaseSection(output: TaskOutput): string {
     switch (output.phase) {
-      case "research":
-        return `### Findings (調査結果)
-${output.findings || "(未記入)"}
+      case "plan":
+        return `### Findings
+${output.findings || "(not recorded)"}
 
-### Sources (調査ソース)
-${output.sources?.map((s) => `- ${s}`).join("\n") || "- (なし)"}`;
+### Sources
+${output.sources?.map((s) => `- ${s}`).join("\n") || "- (none)"}`;
 
-      case "implement":
-        return `### Changes (ファイル変更)
+      case "do":
+        return `### Changes
 ${this.formatChangesTable(output.changes)}
 
-### Design Decisions (設計判断)
-${output.design_decisions || "(未記入)"}`;
+### Design Decisions
+${output.design_decisions || "(not recorded)"}`;
 
-      case "verify":
-        return `### Test Target (テスト対象)
-${output.test_target || "(未記入)"}
+      case "check":
+        return `### Test Target
+${output.test_target || "(not recorded)"}
 
-### Test Results (テスト結果)
-${output.test_results || "(未記入)"}
+### Test Results
+${output.test_results || "(not recorded)"}
 
-### Coverage (網羅性)
-${output.coverage || "(未記入)"}`;
+### Coverage
+${output.coverage || "(not recorded)"}`;
 
-      case "fix":
-        return `### Changes (ファイル変更)
+      case "act":
+        return `### Changes
 ${this.formatChangesTable(output.changes)}
 
-### Feedback Addressed (対応したフィードバック)
-${output.feedback_addressed || "(未記入)"}`;
+### Feedback Addressed
+${output.feedback_addressed || "(not recorded)"}`;
 
       default:
         return "";
@@ -146,15 +146,15 @@ ${output.feedback_addressed || "(未記入)"}`;
   private formatBlockersRisks(output: TaskOutput): string {
     const blockers = output.blockers?.length
       ? output.blockers.map((b) => `- ${b}`).join("\n")
-      : "- なし";
+      : "- None";
     const risks = output.risks?.length
       ? output.risks.map((r) => `- ${r}`).join("\n")
-      : "- なし";
+      : "- None";
 
-    return `### Blockers (遭遇した障害)
+    return `### Blockers
 ${blockers}
 
-### Risks (リスク・懸念事項)
+### Risks
 ${risks}`;
   }
 
@@ -215,12 +215,12 @@ ${risks}`;
     lines.push("```");
     lines.push("");
     lines.push("## Legend");
-    lines.push("- ✓ completed");
-    lines.push("- ⏳ pending_review");
-    lines.push("- ● in_progress");
-    lines.push("- ○ pending/ready");
-    lines.push("- ◇ blocked");
-    lines.push("- ⊘ skipped");
+    lines.push("- completed");
+    lines.push("- pending_review");
+    lines.push("- in_progress");
+    lines.push("- pending/ready");
+    lines.push("- blocked");
+    lines.push("- skipped");
     lines.push("- `[ ]` sequential");
     lines.push("- `([ ])` parallelizable");
     lines.push("- `-->` dependency");
@@ -234,17 +234,17 @@ ${risks}`;
   private getStatusIcon(status: string): string {
     switch (status) {
       case "completed":
-        return "✓";
+        return "[done]";
       case "pending_review":
-        return "⏳";
+        return "[review]";
       case "in_progress":
-        return "●";
+        return "[wip]";
       case "blocked":
-        return "◇";
+        return "[blocked]";
       case "skipped":
-        return "⊘";
+        return "[skip]";
       default:
-        return "○";
+        return "[pending]";
     }
   }
 

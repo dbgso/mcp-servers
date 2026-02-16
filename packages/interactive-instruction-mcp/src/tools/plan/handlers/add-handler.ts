@@ -1,13 +1,6 @@
 import { z } from "zod";
 import type { PlanActionContext, ToolResult, PlanRawParams } from "../../../types/index.js";
 
-const SUBTASK_PHASES = [
-  { suffix: "research", title: "事前調査", description: "調査・分析フェーズ" },
-  { suffix: "implement", title: "設計・実装", description: "設計・実装フェーズ" },
-  { suffix: "verify", title: "検証", description: "テスト・検証フェーズ" },
-  { suffix: "fix", title: "FB修正", description: "フィードバック対応フェーズ" },
-] as const;
-
 const paramsSchema = z.object({
   id: z.string().describe("Unique task identifier"),
   title: z.string().describe("Task title"),
@@ -70,8 +63,8 @@ plan(action: "add", id: "<task-id>", title: "<title>", content: "<description>",
 - **references** (required): Array of document IDs (can be empty [])
 
 ## Notes
-- Root tasks (no parent) automatically get 4 phase subtasks created
-- Subtasks must have content and completion_criteria filled in before starting
+- When a task is started, 4 PDCA phase subtasks are automatically created
+- PDCA phases: plan, do, check, act
 `;
 
   async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
@@ -118,9 +111,6 @@ Please explain why this task depends on: ${dependencies.join(", ")}`,
       };
     }
 
-    // Check if this is a root task (no parent) - requires auto-subtasks
-    const isRootTask = !parent;
-
     const result = await planReader.addTask({
       id,
       title,
@@ -143,39 +133,6 @@ Please explain why this task depends on: ${dependencies.join(", ")}`,
       };
     }
 
-    // Auto-create 4 phase subtasks for root tasks
-    const createdSubtasks: string[] = [];
-    if (isRootTask) {
-      let prevSubtaskId: string | null = null;
-
-      for (const phase of SUBTASK_PHASES) {
-        const subtaskId = `${id}__${phase.suffix}`;
-        const subtaskDeps = prevSubtaskId ? [prevSubtaskId] : [];
-        const subtaskDepReason = prevSubtaskId
-          ? `前フェーズ完了後に実行`
-          : "";
-
-        const subtaskResult = await planReader.addTask({
-          id: subtaskId,
-          title: `${phase.title}`,
-          content: "", // Empty - must be filled before starting
-          parent: id,
-          dependencies: subtaskDeps,
-          dependency_reason: subtaskDepReason,
-          prerequisites: "",
-          completion_criteria: "", // Empty - must be filled before starting
-          deliverables: [],
-          is_parallelizable: false,
-          references: [],
-        });
-
-        if (subtaskResult.success) {
-          createdSubtasks.push(subtaskId);
-        }
-        prevSubtaskId = subtaskId;
-      }
-    }
-
     // Update markdown files
     await planReporter.updateAll();
 
@@ -187,39 +144,19 @@ Please explain why this task depends on: ${dependencies.join(", ")}`,
 
     const parentInfo = parent ? `\nParent: ${parent}` : "";
 
-    // Different message for root vs subtask
-    if (isRootTask) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Task "${id}" created with 4 phase subtasks.
-Path: ${result.path}
-Dependencies: ${depsInfo}
-Deliverables: ${delivsInfo}
-
-## Subtasks Created (must be fleshed out before starting)
-${createdSubtasks.map((s) => `- ${s}`).join("\n")}
-
-**Next Step:** Update each subtask with content and completion_criteria:
-\`\`\`
-plan(action: "update", id: "${id}__research",
-  content: "<what to investigate>",
-  completion_criteria: "<how to know research is done>")
-\`\`\``,
-          },
-        ],
-      };
-    }
-
     return {
       content: [
         {
           type: "text" as const,
-          text: `Subtask "${id}" created successfully.
+          text: `Task "${id}" created.
 Path: ${result.path}${parentInfo}
 Dependencies: ${depsInfo}
-Completion Criteria: ${completion_criteria || "(not set - update before starting)"}`,
+Deliverables: ${delivsInfo}
+
+**Next Step:** Start the task:
+\`\`\`
+plan(action: "start", id: "${id}", prompt: "<instructions>")
+\`\`\``,
         },
       ],
     };

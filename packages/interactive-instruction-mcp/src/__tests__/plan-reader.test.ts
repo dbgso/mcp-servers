@@ -15,11 +15,7 @@ describe("PlanReader", () => {
 
   afterEach(async () => {
     try {
-      const files = await fs.readdir(tempDir);
-      for (const file of files) {
-        await fs.unlink(path.join(tempDir, file));
-      }
-      await fs.rmdir(tempDir);
+      await fs.rm(tempDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
     }
@@ -213,7 +209,7 @@ describe("PlanReader", () => {
         references: [],
       });
 
-      const result = await reader.deleteTask("task-1");
+      const result = await reader.deleteTask({ id: "task-1" });
       expect(result.success).toBe(true);
 
       const task = await reader.getTask("task-1");
@@ -248,10 +244,366 @@ describe("PlanReader", () => {
         references: [],
       });
 
-      const result = await reader.deleteTask("parent-task");
+      const result = await reader.deleteTask({ id: "parent-task" });
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("depend on this");
+    });
+
+    it("should create pending deletion with force: true", async () => {
+      // Create chain: task-a -> task-b -> task-c
+      await reader.addTask({
+        id: "task-a",
+        title: "Task A",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.addTask({
+        id: "task-b",
+        title: "Task B",
+        content: "",
+        parent: "",
+        dependencies: ["task-a"],
+        dependency_reason: "Depends on A",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.addTask({
+        id: "task-c",
+        title: "Task C",
+        content: "",
+        parent: "",
+        dependencies: ["task-b"],
+        dependency_reason: "Depends on B",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // force: true creates pending deletion, doesn't delete immediately
+      const result = await reader.deleteTask({ id: "task-a", force: true });
+
+      expect(result.success).toBe(true);
+      expect(result.pendingDeletion).toContain("task-a");
+      expect(result.pendingDeletion).toContain("task-b");
+      expect(result.pendingDeletion).toContain("task-c");
+      expect(result.pendingDeletion).toHaveLength(3);
+
+      // Tasks still exist (pending approval)
+      expect(await reader.getTask("task-a")).not.toBeNull();
+      expect(await reader.getTask("task-b")).not.toBeNull();
+      expect(await reader.getTask("task-c")).not.toBeNull();
+
+      // Get pending deletion
+      const pending = await reader.getPendingDeletion("task-a");
+      expect(pending).not.toBeNull();
+      expect(pending?.targets).toHaveLength(3);
+
+      // Execute pending deletion (simulates approval)
+      const execResult = await reader.executePendingDeletion("task-a");
+      expect(execResult.success).toBe(true);
+      expect(execResult.deleted).toHaveLength(3);
+
+      // Now tasks are deleted
+      expect(await reader.getTask("task-a")).toBeNull();
+      expect(await reader.getTask("task-b")).toBeNull();
+      expect(await reader.getTask("task-c")).toBeNull();
+    });
+
+    it("should create pending deletion with force: true even without dependents", async () => {
+      await reader.addTask({
+        id: "standalone",
+        title: "Standalone Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // force: true always creates pending deletion (requires approval)
+      const result = await reader.deleteTask({ id: "standalone", force: true });
+
+      expect(result.success).toBe(true);
+      expect(result.pendingDeletion).toEqual(["standalone"]);
+      // Task still exists until approved
+      expect(await reader.getTask("standalone")).not.toBeNull();
+
+      // Execute pending deletion (simulates approval)
+      const execResult = await reader.executePendingDeletion("standalone");
+      expect(execResult.success).toBe(true);
+      expect(await reader.getTask("standalone")).toBeNull();
+    });
+
+    it("should return null for non-existent pending deletion", async () => {
+      const pending = await reader.getPendingDeletion("non-existent");
+      expect(pending).toBeNull();
+    });
+
+    it("should fail executePendingDeletion when no pending deletion exists", async () => {
+      const result = await reader.executePendingDeletion("non-existent");
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("No pending deletion found");
+    });
+
+    it("should cancel pending deletion", async () => {
+      await reader.addTask({
+        id: "task-to-cancel",
+        title: "Task to Cancel",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Create pending deletion
+      const deleteResult = await reader.deleteTask({ id: "task-to-cancel", force: true });
+      expect(deleteResult.success).toBe(true);
+      expect(deleteResult.pendingDeletion).toContain("task-to-cancel");
+
+      // Pending deletion exists
+      const pending = await reader.getPendingDeletion("task-to-cancel");
+      expect(pending).not.toBeNull();
+
+      // Cancel it
+      const cancelResult = await reader.cancelPendingDeletion("task-to-cancel");
+      expect(cancelResult.success).toBe(true);
+
+      // Pending deletion no longer exists
+      const pendingAfter = await reader.getPendingDeletion("task-to-cancel");
+      expect(pendingAfter).toBeNull();
+
+      // Task still exists
+      const task = await reader.getTask("task-to-cancel");
+      expect(task).not.toBeNull();
+    });
+
+    it("should fail cancelPendingDeletion when no pending deletion exists", async () => {
+      const result = await reader.cancelPendingDeletion("non-existent");
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("No pending deletion found");
+    });
+
+    it("should handle diamond dependency pattern with pending deletion", async () => {
+      // Create diamond: root -> left, root -> right, left -> bottom, right -> bottom
+      await reader.addTask({
+        id: "root",
+        title: "Root",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.addTask({
+        id: "left",
+        title: "Left",
+        content: "",
+        parent: "",
+        dependencies: ["root"],
+        dependency_reason: "Depends on root",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.addTask({
+        id: "right",
+        title: "Right",
+        content: "",
+        parent: "",
+        dependencies: ["root"],
+        dependency_reason: "Depends on root",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.addTask({
+        id: "bottom",
+        title: "Bottom",
+        content: "",
+        parent: "",
+        dependencies: ["left", "right"],
+        dependency_reason: "Depends on left and right",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Create pending deletion
+      const result = await reader.deleteTask({ id: "root", force: true });
+
+      expect(result.success).toBe(true);
+      expect(result.pendingDeletion).toHaveLength(4);
+      expect(result.pendingDeletion).toContain("root");
+      expect(result.pendingDeletion).toContain("left");
+      expect(result.pendingDeletion).toContain("right");
+      expect(result.pendingDeletion).toContain("bottom");
+
+      // Execute deletion
+      const execResult = await reader.executePendingDeletion("root");
+      expect(execResult.success).toBe(true);
+      expect(execResult.deleted).toHaveLength(4);
+    });
+
+    it("should include child tasks (via parent field) in cascade delete", async () => {
+      // Create parent with children using parent field (not dependencies)
+      await reader.addTask({
+        id: "parent-task",
+        title: "Parent Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.addTask({
+        id: "child-1",
+        title: "Child 1",
+        content: "",
+        parent: "parent-task",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.addTask({
+        id: "child-2",
+        title: "Child 2",
+        content: "",
+        parent: "parent-task",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.addTask({
+        id: "grandchild",
+        title: "Grandchild",
+        content: "",
+        parent: "child-1",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Cascade delete should include parent and all descendants
+      const result = await reader.deleteTask({ id: "parent-task", force: true });
+
+      expect(result.success).toBe(true);
+      expect(result.pendingDeletion).toHaveLength(4);
+      expect(result.pendingDeletion).toContain("parent-task");
+      expect(result.pendingDeletion).toContain("child-1");
+      expect(result.pendingDeletion).toContain("child-2");
+      expect(result.pendingDeletion).toContain("grandchild");
+
+      // Execute deletion
+      const execResult = await reader.executePendingDeletion("parent-task");
+      expect(execResult.success).toBe(true);
+      expect(execResult.deleted).toHaveLength(4);
+
+      // All tasks should be deleted
+      expect(await reader.getTask("parent-task")).toBeNull();
+      expect(await reader.getTask("child-1")).toBeNull();
+      expect(await reader.getTask("child-2")).toBeNull();
+      expect(await reader.getTask("grandchild")).toBeNull();
+    });
+
+    it("should include both children and dependents in cascade delete", async () => {
+      // Create mixed relationships: parent field + dependencies
+      await reader.addTask({
+        id: "root-task",
+        title: "Root Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      // Child via parent field
+      await reader.addTask({
+        id: "child-via-parent",
+        title: "Child via Parent",
+        content: "",
+        parent: "root-task",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      // Dependent via dependencies field
+      await reader.addTask({
+        id: "dependent-task",
+        title: "Dependent Task",
+        content: "",
+        parent: "",
+        dependencies: ["root-task"],
+        dependency_reason: "Depends on root",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      const result = await reader.deleteTask({ id: "root-task", force: true });
+
+      expect(result.success).toBe(true);
+      expect(result.pendingDeletion).toHaveLength(3);
+      expect(result.pendingDeletion).toContain("root-task");
+      expect(result.pendingDeletion).toContain("child-via-parent");
+      expect(result.pendingDeletion).toContain("dependent-task");
     });
   });
 
@@ -1113,7 +1465,7 @@ describe("PlanReader", () => {
             result = await reader.approveTask("non-existent");
             break;
           case "deleteTask":
-            result = await reader.deleteTask("non-existent");
+            result = await reader.deleteTask({ id: "non-existent" });
             break;
           default:
             throw new Error(`Unknown operation: ${operation}`);

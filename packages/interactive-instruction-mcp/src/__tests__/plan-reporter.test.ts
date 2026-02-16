@@ -57,18 +57,18 @@ describe("PlanReporter", () => {
         id: "test-task",
         status: "pending_review",
         task_output: {
-          what: "テストを追加した",
-          why: "完了条件を満たす",
-          how: "手動でテストを作成",
+          what: "Added tests",
+          why: "Meets completion criteria",
+          how: "Manual test creation",
           blockers: [],
           risks: [],
-          phase: "implement",
+          phase: "do",
           changes: [
-            { file: "src/test.ts", lines: "1-10", description: "テスト追加" },
+            { file: "src/test.ts", lines: "1-10", description: "Added test" },
           ],
-          design_decisions: "シンプルな設計",
+          design_decisions: "Simple design",
           references_used: [],
-          references_reason: "参照不要",
+          references_reason: "No references needed",
         },
       });
 
@@ -83,7 +83,7 @@ describe("PlanReporter", () => {
       expect(content).toContain("src/test.ts");
       expect(content).toContain("1-10");
       expect(content).toContain("Tests pass");
-      expect(content).toContain("完了条件を満たす");
+      expect(content).toContain("Meets completion criteria");
     });
 
     it("should not include completed tasks", async () => {
@@ -104,7 +104,7 @@ describe("PlanReporter", () => {
       await planReader.updateStatus({
         id: "completed-task",
         status: "completed",
-        output: "src/completed.ts:1-10 完了.",
+        output: "src/completed.ts:1-10 Complete.",
       });
 
       // Approve to make it completed
@@ -219,7 +219,7 @@ describe("PlanReporter", () => {
       await planReader.updateStatus({
         id: "done-task",
         status: "completed",
-        output: "src/done.ts:1-10 完了.",
+        output: "src/done.ts:1-10 Complete.",
       });
       await planReader.approveTask("done-task");
 
@@ -229,8 +229,8 @@ describe("PlanReporter", () => {
         path.join(testDir, "GRAPH.md"),
         "utf-8"
       );
-      expect(content).toContain("○"); // pending
-      expect(content).toContain("✓"); // completed
+      expect(content).toContain("[pending]"); // pending
+      expect(content).toContain("[done]"); // completed
     });
   });
 
@@ -266,12 +266,12 @@ describe("PlanReporter", () => {
     });
   });
 
-  describe("formatPhaseSection - research phase", () => {
-    it("should format research phase with findings and sources", async () => {
+  describe("formatPhaseSection - plan phase", () => {
+    it("should format plan phase with findings and sources", async () => {
       await planReader.addTask({
-        id: "research-task",
-        title: "Research Task",
-        content: "Research content",
+        id: "plan-task",
+        title: "Plan Task",
+        content: "Plan content",
         parent: "",
         dependencies: [],
         dependency_reason: "",
@@ -283,7 +283,7 @@ describe("PlanReporter", () => {
       });
 
       await planReader.updateStatus({
-        id: "research-task",
+        id: "plan-task",
         status: "pending_review",
         task_output: {
           what: "Researched the topic",
@@ -291,7 +291,7 @@ describe("PlanReporter", () => {
           how: "Manual research",
           blockers: [],
           risks: [],
-          phase: "research",
+          phase: "plan",
           findings: "Found important information",
           sources: ["https://example.com", "docs/reference.md"],
           references_used: ["doc-1"],
@@ -312,10 +312,10 @@ describe("PlanReporter", () => {
       expect(content).toContain("docs/reference.md");
     });
 
-    it("should format research phase with empty findings and sources", async () => {
+    it("should format plan phase with empty findings and sources", async () => {
       await planReader.addTask({
-        id: "empty-research",
-        title: "Empty Research",
+        id: "empty-plan",
+        title: "Empty Plan",
         content: "",
         parent: "",
         dependencies: [],
@@ -328,7 +328,7 @@ describe("PlanReporter", () => {
       });
 
       await planReader.updateStatus({
-        id: "empty-research",
+        id: "empty-plan",
         status: "pending_review",
         task_output: {
           what: "Did research",
@@ -336,7 +336,7 @@ describe("PlanReporter", () => {
           how: "Manual",
           blockers: [],
           risks: [],
-          phase: "research",
+          phase: "plan",
           references_used: [],
           references_reason: "No references needed",
         },
@@ -348,16 +348,16 @@ describe("PlanReporter", () => {
         path.join(testDir, "PENDING_REVIEW.md"),
         "utf-8"
       );
-      expect(content).toContain("(なし)");
+      expect(content).toContain("(none)");
     });
   });
 
-  describe("formatPhaseSection - verify phase", () => {
-    it("should format verify phase with test results", async () => {
+  describe("formatPhaseSection - check phase", () => {
+    it("should format check phase with test results", async () => {
       await planReader.addTask({
-        id: "verify-task",
-        title: "Verify Task",
-        content: "Verify content",
+        id: "check-task",
+        title: "Check Task",
+        content: "Check content",
         parent: "",
         dependencies: [],
         dependency_reason: "",
@@ -369,7 +369,7 @@ describe("PlanReporter", () => {
       });
 
       await planReader.updateStatus({
-        id: "verify-task",
+        id: "check-task",
         status: "pending_review",
         task_output: {
           what: "Verified the implementation",
@@ -377,7 +377,7 @@ describe("PlanReporter", () => {
           how: "Ran test suite",
           blockers: [],
           risks: [],
-          phase: "verify",
+          phase: "check",
           test_target: "src/services/*.ts",
           test_results: "All 50 tests passed",
           coverage: "95% coverage achieved",
@@ -401,12 +401,12 @@ describe("PlanReporter", () => {
     });
   });
 
-  describe("formatPhaseSection - fix phase", () => {
-    it("should format fix phase with feedback addressed", async () => {
+  describe("formatPhaseSection - act phase", () => {
+    it("should format act phase with feedback addressed", async () => {
       await planReader.addTask({
-        id: "fix-task",
-        title: "Fix Task",
-        content: "Fix content",
+        id: "act-task",
+        title: "Act Task",
+        content: "Act content",
         parent: "",
         dependencies: [],
         dependency_reason: "",
@@ -418,7 +418,7 @@ describe("PlanReporter", () => {
       });
 
       await planReader.updateStatus({
-        id: "fix-task",
+        id: "act-task",
         status: "pending_review",
         task_output: {
           what: "Fixed the issues",
@@ -426,7 +426,7 @@ describe("PlanReporter", () => {
           how: "Manual fixes",
           blockers: [],
           risks: [],
-          phase: "fix",
+          phase: "act",
           changes: [
             { file: "src/fix.ts", lines: "10-20", description: "Fixed bug" },
           ],
@@ -473,7 +473,7 @@ describe("PlanReporter", () => {
           how: "Manual",
           blockers: ["API rate limit hit", "Missing credentials"],
           risks: ["Performance degradation", "Security concern"],
-          phase: "implement",
+          phase: "do",
           changes: [],
           design_decisions: "Simple design",
           references_used: [],
@@ -502,10 +502,10 @@ describe("PlanReporter", () => {
     };
 
     const statusIconStyleTestCases: StatusIconStyleTestCase[] = [
-      { status: "blocked", icon: "◇", style: "fill:#FFB6C1" },
-      { status: "skipped", icon: "⊘", style: "fill:#D3D3D3" },
-      { status: "in_progress", icon: "●", style: "fill:#87CEEB" },
-      { status: "pending_review", icon: "⏳", style: "fill:#DDA0DD" },
+      { status: "blocked", icon: "[blocked]", style: "fill:#FFB6C1" },
+      { status: "skipped", icon: "[skip]", style: "fill:#D3D3D3" },
+      { status: "in_progress", icon: "[wip]", style: "fill:#87CEEB" },
+      { status: "pending_review", icon: "[review]", style: "fill:#DDA0DD" },
     ];
 
     it.each(statusIconStyleTestCases)(
@@ -620,7 +620,7 @@ Task content`;
               how: "Manual",
               blockers: [],
               risks: [],
-              phase: "implement",
+              phase: "do",
               changes: [],
               design_decisions: "",
               references_used: [],
@@ -722,7 +722,7 @@ Content`;
           how: "Manual",
           blockers: [],
           risks: [],
-          phase: "implement",
+          phase: "do",
           changes: [],
           design_decisions: "No changes needed",
           references_used: [],
@@ -831,7 +831,7 @@ Content`;
           how: "Manual",
           blockers: [],
           risks: [],
-          phase: "implement",
+          phase: "do",
           changes: [],
           design_decisions: "",
           references_used: ["doc-1", "doc-2"],
@@ -873,7 +873,7 @@ Content`;
           how: "Manual",
           blockers: [],
           risks: [],
-          phase: "implement",
+          phase: "do",
           changes: [],
           design_decisions: "",
           references_used: ["doc-1"],
@@ -888,7 +888,7 @@ Content`;
         "utf-8"
       );
       expect(content).toContain("doc-1");
-      expect(content).toContain("(未記入)");
+      expect(content).toContain("(not recorded)");
     });
   });
 
@@ -958,15 +958,15 @@ Content`;
 
     const emptyFieldTestCases: EmptyFieldTestCase[] = [
       {
-        phase: "verify",
-        taskId: "empty-verify-task",
+        phase: "check",
+        taskId: "empty-check-task",
         taskOutput: {
           what: "Verified",
           why: "Done",
           how: "Manual",
           blockers: [],
           risks: [],
-          phase: "verify",
+          phase: "check",
           test_target: "",
           test_results: "",
           coverage: "",
@@ -975,15 +975,15 @@ Content`;
         },
       },
       {
-        phase: "fix",
-        taskId: "empty-fix-task",
+        phase: "act",
+        taskId: "empty-act-task",
         taskOutput: {
           what: "Fixed",
           why: "Done",
           how: "Manual",
           blockers: [],
           risks: [],
-          phase: "fix",
+          phase: "act",
           changes: [],
           feedback_addressed: "",
           references_used: [],
@@ -991,15 +991,15 @@ Content`;
         },
       },
       {
-        phase: "research",
-        taskId: "empty-research-task",
+        phase: "plan",
+        taskId: "empty-plan-task",
         taskOutput: {
           what: "Researched",
           why: "Done",
           how: "Manual",
           blockers: [],
           risks: [],
-          phase: "research",
+          phase: "plan",
           findings: "",
           sources: [],
           references_used: [],
@@ -1037,7 +1037,7 @@ Content`;
           path.join(testDir, "PENDING_REVIEW.md"),
           "utf-8"
         );
-        expect(content).toContain("(未記入)");
+        expect(content).toContain("(not recorded)");
       }
     );
   });
@@ -1068,7 +1068,7 @@ Content`;
           how: "Manual",
           blockers: [],
           risks: [],
-          phase: "implement",
+          phase: "do",
           changes: [],
           design_decisions: "",
           references_used: [],

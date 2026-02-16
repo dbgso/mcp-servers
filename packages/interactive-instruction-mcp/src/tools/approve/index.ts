@@ -41,6 +41,31 @@ async function approveTask(params: {
   };
 }
 
+async function approveDeletion(params: {
+  planReader: PlanReader;
+  planReporter: PlanReporter;
+  taskId: string;
+}): Promise<{ success: boolean; message: string }> {
+  const { planReader, planReporter, taskId } = params;
+
+  const pending = await planReader.getPendingDeletion(taskId);
+  if (!pending) {
+    return { success: false, message: `Error: No pending deletion found for task "${taskId}".` };
+  }
+
+  const result = await planReader.executePendingDeletion(taskId);
+  if (!result.success) {
+    return { success: false, message: `Error: ${result.error}` };
+  }
+
+  await planReporter.updateAll();
+
+  return {
+    success: true,
+    message: `Cascade deleted ${result.deleted?.length ?? 0} tasks:\n${result.deleted?.map(t => `- ${t}`).join("\n") ?? ""}`,
+  };
+}
+
 async function approveFeedback(params: {
   feedbackReader: FeedbackReader;
   taskId: string;
@@ -88,7 +113,7 @@ export function registerApproveTool(params: {
   server.registerTool(
     "approve",
     {
-      description: `Approve tasks or feedback. This tool is for human reviewers only - agents should NOT use this tool.
+      description: `Approve tasks, feedback, or deletions. This tool is for human reviewers only - agents should NOT use this tool.
 
 **For tasks:**
 \`approve(target: "task", task_id: "<id>")\` - Approve a pending_review task
@@ -96,12 +121,15 @@ export function registerApproveTool(params: {
 **For feedback:**
 \`approve(target: "feedback", task_id: "<id>", feedback_id: "<id>")\` - Confirm AI's interpretation is correct
 
+**For deletions:**
+\`approve(target: "deletion", task_id: "<id>")\` - Approve cascade deletion
+
 To view feedback before approving, use:
 \`plan(action: "feedback", id: "<task-id>", feedback_id: "<fb-id>")\``,
       inputSchema: {
         target: z
-          .enum(["task", "feedback"])
-          .describe("What to approve: 'task' for pending_review tasks, 'feedback' for draft feedback"),
+          .enum(["task", "feedback", "deletion"])
+          .describe("What to approve: 'task' for pending_review tasks, 'feedback' for draft feedback, 'deletion' for cascade delete"),
         task_id: z.string().describe("Task ID"),
         feedback_id: z
           .string()
@@ -166,12 +194,24 @@ To view feedback before approving, use:
         });
       }
 
+      // Handle deletion approval
+      if (target === "deletion") {
+        const result = await approveDeletion({ planReader, planReporter, taskId: task_id });
+        return wrapResponse({
+          result: {
+            content: [{ type: "text" as const, text: result.message }],
+            isError: !result.success,
+          },
+          config,
+        });
+      }
+
       return wrapResponse({
         result: {
           content: [
             {
               type: "text" as const,
-              text: `Error: Invalid target "${target}". Use 'task' or 'feedback'.`,
+              text: `Error: Invalid target "${target}". Use 'task', 'feedback', or 'deletion'.`,
             },
           ],
           isError: true,

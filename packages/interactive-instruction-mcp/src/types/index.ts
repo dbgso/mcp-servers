@@ -89,26 +89,26 @@ export interface FileChange {
   description: string;
 }
 
-// TaskOutput: フェーズ別の成果物報告
-// 共通フィールド + フェーズ別フィールドを含む
+// TaskOutput: Phase-specific output reports
+// Contains common fields + phase-specific fields
 export interface TaskOutput {
-  what: string;        // 何をしたのか
-  why: string;         // なぜこれで十分なのか
-  how: string;         // どうやって調べた/実装したのか
-  blockers: string[];  // 遭遇した障害
-  risks: string[];     // リスク・懸念事項
-  phase: string;       // research | implement | verify | fix
-  // フェーズ別フィールド（オプショナル）
-  findings?: string;           // research: 調査結果
-  sources?: string[];          // research: 調査ソース
-  changes?: FileChange[];      // implement/fix: ファイル変更
-  design_decisions?: string;   // implement: 設計判断
-  test_target?: string;        // verify: テスト対象
-  test_results?: string;       // verify: テスト結果
-  coverage?: string;           // verify: 網羅性
-  feedback_addressed?: string; // fix: 対応したフィードバック
-  references_used: string[];   // 参照したドキュメント（必須）
-  references_reason: string;   // 参照理由（必須）
+  what: string;        // What was done
+  why: string;         // Why this is sufficient
+  how: string;         // How it was done/investigated
+  blockers: string[];  // Encountered blockers
+  risks: string[];     // Risks and concerns
+  phase: string;       // plan | do | check | act (PDCA)
+  // Phase-specific fields (optional)
+  findings?: string;           // plan: Research findings
+  sources?: string[];          // plan: Research sources
+  changes?: FileChange[];      // do/act: File changes
+  design_decisions?: string;   // do: Design decisions
+  test_target?: string;        // check: Test target
+  test_results?: string;       // check: Test results
+  coverage?: string;           // check: Test coverage
+  feedback_addressed?: string; // act: Addressed feedback
+  references_used: string[];   // Referenced documents (required)
+  references_reason: string;   // Reason for references (required)
 }
 
 export interface TaskMetadata {
@@ -302,7 +302,13 @@ export interface PlanReader {
     comment: string;
     decision: FeedbackDecision;
   }): Promise<{ success: boolean; error?: string }>;
-  deleteTask(id: string): Promise<{ success: boolean; error?: string }>;
+  deleteTask(params: {
+    id: string;
+    force?: boolean;
+  }): Promise<{ success: boolean; error?: string; deleted?: string[]; pendingDeletion?: string[] }>;
+  getPendingDeletion(taskId: string): Promise<{ taskId: string; targets: string[] } | null>;
+  executePendingDeletion(taskId: string): Promise<{ success: boolean; error?: string; deleted?: string[] }>;
+  cancelPendingDeletion(taskId: string): Promise<{ success: boolean; error?: string }>;
   clearAllTasks(): Promise<{ success: boolean; error?: string; count?: number }>;
   validateDependencies(params: {
     taskId: string;
