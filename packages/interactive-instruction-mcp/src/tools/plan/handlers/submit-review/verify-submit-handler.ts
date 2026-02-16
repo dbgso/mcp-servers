@@ -28,7 +28,7 @@ plan(action: "submit_verify", id: "<task-id>",
   blockers: ["<blocker1>", ...] | [],
   risks: ["<risk1>", ...] | [],
   test_target: "<what was tested>",
-  test_results: "<test results>",
+  test_results: "<test results with code blocks>",
   coverage: "<coverage details>",
   references_used: ["prompts/<task-id>", "<ref1>", ...],
   references_reason: "<why these references>")
@@ -42,10 +42,32 @@ plan(action: "submit_verify", id: "<task-id>",
 - **blockers** (required): Encountered blockers (can be empty [])
 - **risks** (required): Risks and concerns (can be empty [])
 - **test_target** (required): What was tested
-- **test_results** (required): Test results (pass/fail, details)
+- **test_results** (required): Test results with commands and output in code blocks
 - **coverage** (required): Coverage details (how much was covered)
 - **references_used** (required): Array of references (must include prompts/<task-id>)
 - **references_reason** (required): Why these references were used
+
+## Example test_results format
+\`\`\`
+**typecheck:**
+\\\`\\\`\\\`
+$ pnpm typecheck
+> tsc --noEmit
+(no errors)
+\\\`\\\`\\\`
+
+**test:**
+\\\`\\\`\\\`
+$ pnpm test
+✓ 207 tests passed
+\\\`\\\`\\\`
+
+**grep check:**
+\\\`\\\`\\\`
+$ grep -r "output_content" src/
+(no matches)
+\\\`\\\`\\\`
+\`\`\`
 `;
 
   protected validatePhaseFields(params: { rawParams: PlanRawParams }): string | null {

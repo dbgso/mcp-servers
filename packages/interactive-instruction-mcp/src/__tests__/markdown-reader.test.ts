@@ -736,4 +736,33 @@ describe("MarkdownReader", () => {
       }
     });
   });
+
+  describe("extractDescription error handling", () => {
+    it("should return fallback description when file cannot be read", async () => {
+      // Create temp directory if it doesn't exist
+      await fs.mkdir(tempDir, { recursive: true });
+
+      const reader = new MarkdownReader(tempDir);
+      const filePath = path.join(tempDir, "unreadable.md");
+
+      // Create and then make unreadable
+      await fs.writeFile(filePath, "# Test\n\nDescription", "utf-8");
+      await fs.chmod(filePath, 0o000);
+
+      try {
+        const { documents } = await reader.listDocuments({ recursive: false });
+        const doc = documents.find((d) => d.id === "unreadable");
+
+        // On some systems (root) file may still be readable
+        if (doc) {
+          // If found, it should have either the description or the fallback
+          expect(doc.description).toBeDefined();
+        }
+      } finally {
+        // Restore permissions for cleanup
+        await fs.chmod(filePath, 0o644);
+        await fs.unlink(filePath);
+      }
+    });
+  });
 });

@@ -1544,4 +1544,71 @@ Content`;
       expect(task?.feedback).toEqual([]);
     });
   });
+
+  // ===================
+  // parallelizable_units parsing tests
+  // ===================
+  describe("parallelizable_units parsing", () => {
+    it("should handle invalid JSON in parallelizable_units", async () => {
+      const taskContent = `---
+id: invalid-parallel-task
+title: Invalid Parallel Task
+status: pending
+parent: ""
+dependencies: "[]"
+dependency_reason: ""
+prerequisites: ""
+completion_criteria: ""
+deliverables: "[]"
+output: ""
+is_parallelizable: true
+parallelizable_units: "not valid json"
+references: "[]"
+feedback: ""
+created: ${new Date().toISOString()}
+updated: ${new Date().toISOString()}
+---
+
+Content`;
+
+      await fs.writeFile(path.join(tempDir, "invalid-parallel-task.md"), taskContent, "utf-8");
+      reader.invalidateCache();
+
+      const task = await reader.getTask("invalid-parallel-task");
+      expect(task).not.toBeNull();
+      expect(task?.parallelizable_units).toBeUndefined();
+    });
+
+    it("should handle already parsed array in parallelizable_units", async () => {
+      // Use inline array format that parseYamlValue will convert to string[]
+      const taskContent = `---
+id: array-parallel-task
+title: Array Parallel Task
+status: pending
+parent: ""
+dependencies: []
+dependency_reason: ""
+prerequisites: ""
+completion_criteria: ""
+deliverables: []
+output: ""
+is_parallelizable: true
+parallelizable_units: [task-a, task-b]
+references: []
+feedback: ""
+created: ${new Date().toISOString()}
+updated: ${new Date().toISOString()}
+---
+
+Content`;
+
+      await fs.writeFile(path.join(tempDir, "array-parallel-task.md"), taskContent, "utf-8");
+      reader.invalidateCache();
+
+      const task = await reader.getTask("array-parallel-task");
+      expect(task).not.toBeNull();
+      expect(task?.parallelizable_units).toEqual(["task-a", "task-b"]);
+    });
+  });
+
 });
