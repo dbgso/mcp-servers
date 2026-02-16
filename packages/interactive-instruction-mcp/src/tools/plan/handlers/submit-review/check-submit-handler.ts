@@ -2,26 +2,26 @@ import { z } from "zod";
 import type { PlanRawParams } from "../../../../types/index.js";
 import { BaseSubmitHandler, baseParamsSchema } from "./base-submit-handler.js";
 
-const verifyParamsSchema = baseParamsSchema.extend({
-  test_target: z.string().describe("テスト対象（何をテストしたか）"),
-  test_results: z.string().describe("テスト結果（成功/失敗、詳細）"),
-  coverage: z.string().describe("網羅性（どの程度カバーしたか）"),
+const checkParamsSchema = baseParamsSchema.extend({
+  test_target: z.string().describe("Test target - what was tested"),
+  test_results: z.string().describe("Test results - success/failure details"),
+  coverage: z.string().describe("Coverage - how much was covered"),
 });
 
 /**
- * VerifySubmitHandler: Submit verify phase tasks for review
+ * CheckSubmitHandler: Submit check phase tasks for review
  */
-export class VerifySubmitHandler extends BaseSubmitHandler {
-  readonly action = "submit_verify";
-  readonly phase = "verify" as const;
+export class CheckSubmitHandler extends BaseSubmitHandler {
+  readonly action = "submit_check";
+  readonly phase = "check" as const;
 
-  readonly help = `# plan submit_verify
+  readonly help = `# plan submit_check
 
 Submit a verification task for user review.
 
 ## Usage
 \`\`\`
-plan(action: "submit_verify", id: "<task-id>",
+plan(action: "submit_check", id: "<task-id>",
   output_what: "<what was verified>",
   output_why: "<why this is sufficient>",
   output_how: "<how it was verified>",
@@ -35,7 +35,7 @@ plan(action: "submit_verify", id: "<task-id>",
 \`\`\`
 
 ## Parameters
-- **id** (required): Task ID (must end with __verify)
+- **id** (required): Task ID (must end with __check)
 - **output_what** (required): What was verified
 - **output_why** (required): Why this is sufficient
 - **output_how** (required): How it was verified
@@ -71,7 +71,7 @@ $ grep -r "output_content" src/
 `;
 
   protected validatePhaseFields(params: { rawParams: PlanRawParams }): string | null {
-    const result = verifyParamsSchema.safeParse(params.rawParams);
+    const result = checkParamsSchema.safeParse(params.rawParams);
     if (!result.success) {
       const errors = result.error.errors
         .filter(
@@ -87,7 +87,7 @@ $ grep -r "output_content" src/
   }
 
   protected getPhaseData(params: { rawParams: PlanRawParams }): Record<string, unknown> {
-    const result = verifyParamsSchema.safeParse(params.rawParams);
+    const result = checkParamsSchema.safeParse(params.rawParams);
     if (!result.success) return {};
     return {
       test_target: result.data.test_target,
@@ -97,16 +97,16 @@ $ grep -r "output_content" src/
   }
 
   protected formatPhaseOutput(params: { rawParams: PlanRawParams }): string {
-    const result = verifyParamsSchema.safeParse(params.rawParams);
+    const result = checkParamsSchema.safeParse(params.rawParams);
     if (!result.success) return "";
     const { test_target, test_results, coverage } = result.data;
-    return `### Test Target (テスト対象)
+    return `### Test Target
 ${test_target}
 
-### Test Results (テスト結果)
+### Test Results
 ${test_results}
 
-### Coverage (網羅性)
+### Coverage
 ${coverage}`;
   }
 }

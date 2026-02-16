@@ -7,9 +7,16 @@ import type {
   PlanRawParams,
 } from "../../../types/index.js";
 
+const PDCA_PHASES = [
+  { suffix: "plan", title: "Plan" },
+  { suffix: "do", title: "Do" },
+  { suffix: "check", title: "Check" },
+  { suffix: "act", title: "Act" },
+] as const;
+
 const paramsSchema = z.object({
   id: z.string().describe("Task ID to start"),
-  prompt: z.string().describe("依頼内容・指示（必須）"),
+  prompt: z.string().describe("Instructions/request for this task"),
 });
 
 /**
@@ -20,21 +27,21 @@ export class StartHandler {
 
   readonly help = `# plan start
 
-Start a pending task.
+Start a pending task. Creates 4 PDCA subtasks automatically.
 
 ## Usage
 \`\`\`
-plan(action: "start", id: "<task-id>", prompt: "<依頼内容>")
+plan(action: "start", id: "<task-id>", prompt: "<instructions>")
 \`\`\`
 
 ## Parameters
 - **id** (required): Task ID to start
-- **prompt** (required): 依頼内容・指示（prompts/{task-id}.mdに保存される）
+- **prompt** (required): Instructions/request (saved to prompts/{task-id}.md)
 
 ## Notes
 - Only pending tasks can be started
-- Subtasks must have content and completion_criteria set before starting
-- promptは参照可能なファイルとして保存され、submit時にreferencesとして使用
+- Starting a task creates 4 PDCA subtasks: plan, do, check, act
+- Prompt is saved and used as reference during submit
 `;
 
   async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
@@ -84,6 +91,41 @@ plan(action: "start", id: "<task-id>", prompt: "<依頼内容>")
       }
     }
 
+    // Create PDCA subtasks for non-subtask (root-level tasks)
+    const isRootTask = !task.parent;
+    const createdSubtasks: string[] = [];
+
+    if (isRootTask) {
+      let prevSubtaskId: string | null = null;
+
+      for (const phase of PDCA_PHASES) {
+        const subtaskId = `${id}__${phase.suffix}`;
+        const subtaskDeps = prevSubtaskId ? [prevSubtaskId] : [];
+        const subtaskDepReason = prevSubtaskId
+          ? `Execute after previous phase completes`
+          : "";
+
+        const subtaskResult = await planReader.addTask({
+          id: subtaskId,
+          title: phase.title,
+          content: "",
+          parent: id,
+          dependencies: subtaskDeps,
+          dependency_reason: subtaskDepReason,
+          prerequisites: "",
+          completion_criteria: "",
+          deliverables: [],
+          is_parallelizable: false,
+          references: [],
+        });
+
+        if (subtaskResult.success) {
+          createdSubtasks.push(subtaskId);
+        }
+        prevSubtaskId = subtaskId;
+      }
+    }
+
     const result = await planReader.updateStatus({ id, status: "in_progress" });
     if (!result.success) {
       return {
@@ -101,7 +143,7 @@ task_id: ${id}
 created: ${new Date().toISOString()}
 ---
 
-# 依頼内容
+# Instructions
 
 ${prompt}
 `;
@@ -110,6 +152,36 @@ ${prompt}
     await planReporter.updateAll();
 
     const promptRef = `prompts/${id}`;
+
+    // Different response for root task vs subtask
+    if (isRootTask) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: `Task "${id}" started with 4 PDCA subtasks.
+
+Status: pending → in_progress
+
+**Completion criteria:** ${task.completion_criteria}
+**Expected deliverables:** ${task.deliverables.join(", ") || "none"}
+
+## PDCA Subtasks Created
+${createdSubtasks.map((s) => `- ${s}`).join("\n")}
+
+**Prompt saved:** ${promptRef}
+
+**Next Step:** Update and start the first subtask:
+\`\`\`
+plan(action: "update", id: "${id}__plan",
+  content: "<what to investigate>",
+  completion_criteria: "<how to know planning is done>")
+
+plan(action: "start", id: "${id}__plan", prompt: "<instructions>")
+\`\`\``,
+        }],
+      };
+    }
+
     return {
       content: [{
         type: "text" as const,

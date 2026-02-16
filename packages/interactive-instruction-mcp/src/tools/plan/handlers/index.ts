@@ -13,12 +13,12 @@ export { StartHandler } from "./start-handler.js";
 export { RequestChangesHandler } from "./request-changes-handler.js";
 export { SkipHandler } from "./skip-handler.js";
 export { BlockHandler } from "./block-handler.js";
-// Phase-specific submit handlers
+// Phase-specific submit handlers (PDCA)
 export {
-  ResearchSubmitHandler,
-  ImplementSubmitHandler,
-  VerifySubmitHandler,
-  FixSubmitHandler,
+  PlanSubmitHandler,
+  DoSubmitHandler,
+  CheckSubmitHandler,
+  ActSubmitHandler,
   getTaskPhase,
   TASK_PHASES,
 } from "./submit-review/index.js";

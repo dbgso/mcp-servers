@@ -8,25 +8,25 @@ const fileChangeSchema = z.object({
   description: z.string().describe("What was changed"),
 });
 
-const implementParamsSchema = baseParamsSchema.extend({
-  changes: z.array(fileChangeSchema).min(1).describe("ファイル変更（必須、最低1つ）"),
-  design_decisions: z.string().describe("設計判断・なぜこの実装を選んだか"),
+const doParamsSchema = baseParamsSchema.extend({
+  changes: z.array(fileChangeSchema).min(1).describe("File changes (required, at least 1)"),
+  design_decisions: z.string().describe("Design decisions - why this implementation was chosen"),
 });
 
 /**
- * ImplementSubmitHandler: Submit implement phase tasks for review
+ * DoSubmitHandler: Submit do phase tasks for review
  */
-export class ImplementSubmitHandler extends BaseSubmitHandler {
-  readonly action = "submit_implement";
-  readonly phase = "implement" as const;
+export class DoSubmitHandler extends BaseSubmitHandler {
+  readonly action = "submit_do";
+  readonly phase = "do" as const;
 
-  readonly help = `# plan submit_implement
+  readonly help = `# plan submit_do
 
 Submit an implementation task for user review.
 
 ## Usage
 \`\`\`
-plan(action: "submit_implement", id: "<task-id>",
+plan(action: "submit_do", id: "<task-id>",
   output_what: "<what was implemented>",
   output_why: "<why this is sufficient>",
   output_how: "<how it was implemented>",
@@ -39,7 +39,7 @@ plan(action: "submit_implement", id: "<task-id>",
 \`\`\`
 
 ## Parameters
-- **id** (required): Task ID (must end with __implement)
+- **id** (required): Task ID (must end with __do)
 - **output_what** (required): What was implemented
 - **output_why** (required): Why this is sufficient
 - **output_how** (required): How it was implemented
@@ -52,7 +52,7 @@ plan(action: "submit_implement", id: "<task-id>",
 `;
 
   protected validatePhaseFields(params: { rawParams: PlanRawParams }): string | null {
-    const result = implementParamsSchema.safeParse(params.rawParams);
+    const result = doParamsSchema.safeParse(params.rawParams);
     if (!result.success) {
       const errors = result.error.errors
         .filter((e) => e.path[0] === "changes" || e.path[0] === "design_decisions")
@@ -65,7 +65,7 @@ plan(action: "submit_implement", id: "<task-id>",
   }
 
   protected getPhaseData(params: { rawParams: PlanRawParams }): Record<string, unknown> {
-    const result = implementParamsSchema.safeParse(params.rawParams);
+    const result = doParamsSchema.safeParse(params.rawParams);
     if (!result.success) return {};
     return {
       changes: result.data.changes,
@@ -74,13 +74,13 @@ plan(action: "submit_implement", id: "<task-id>",
   }
 
   protected formatPhaseOutput(params: { rawParams: PlanRawParams }): string {
-    const result = implementParamsSchema.safeParse(params.rawParams);
+    const result = doParamsSchema.safeParse(params.rawParams);
     if (!result.success) return "";
     const { changes, design_decisions } = result.data;
-    return `### Changes (ファイル変更)
+    return `### Changes
 ${changes.map((c) => `- \`${c.file}\` (${c.lines}): ${c.description}`).join("\n")}
 
-### Design Decisions (設計判断)
+### Design Decisions
 ${design_decisions}`;
   }
 }

@@ -7,6 +7,8 @@ import type {
 
 const paramsSchema = z.object({
   id: z.string().describe("Task ID to delete"),
+  force: z.boolean().optional().describe("Force cascade delete (deletes all dependent tasks)"),
+  cancel: z.boolean().optional().describe("Cancel a pending deletion"),
 });
 
 /**
@@ -22,10 +24,19 @@ Delete a task from the plan.
 ## Usage
 \`\`\`
 plan(action: "delete", id: "<task-id>")
+plan(action: "delete", id: "<task-id>", force: true)  # cascade delete (requires approval)
+plan(action: "delete", id: "<task-id>", cancel: true)  # cancel pending deletion
 \`\`\`
 
 ## Parameters
 - **id** (required): Task ID to delete
+- **force** (optional): If true, creates pending deletion for all dependent tasks (requires approval)
+- **cancel** (optional): If true, cancels a pending deletion
+
+## Notes
+- Without force, deletion fails if other tasks depend on this task
+- With force: true, creates pending deletion that requires approval via approve tool
+- With cancel: true, cancels a pending deletion created by force: true
 `;
 
   async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
@@ -36,10 +47,24 @@ plan(action: "delete", id: "<task-id>")
         isError: true,
       };
     }
-    const { id } = parseResult.data;
+    const { id, force, cancel } = parseResult.data;
     const { planReader, planReporter } = params.context;
 
-    const result = await planReader.deleteTask(id);
+    // Handle cancel pending deletion
+    if (cancel) {
+      const cancelResult = await planReader.cancelPendingDeletion(id);
+      if (!cancelResult.success) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${cancelResult.error}` }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: "text" as const, text: `Pending deletion for task "${id}" cancelled.` }],
+      };
+    }
+
+    const result = await planReader.deleteTask({ id, force });
 
     if (!result.success) {
       return {
@@ -51,11 +76,43 @@ plan(action: "delete", id: "<task-id>")
     // Update markdown files
     await planReporter.updateAll();
 
+    // Pending deletion requires approval
+    if (result.pendingDeletion) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Cascade deletion pending approval.
+
+**${result.pendingDeletion.length} tasks will be deleted:**
+${result.pendingDeletion.map(t => `- ${t}`).join("\n")}
+
+To approve, run:
+\`\`\`
+approve(target: "deletion", task_id: "${id}")
+\`\`\``,
+          },
+        ],
+      };
+    }
+
+    const deletedList = result.deleted ?? [id];
+    if (deletedList.length === 1) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Task "${id}" deleted successfully.`,
+          },
+        ],
+      };
+    }
+
     return {
       content: [
         {
           type: "text" as const,
-          text: `Task "${id}" deleted successfully.`,
+          text: `Deleted ${deletedList.length} tasks:\n${deletedList.map(t => `- ${t}`).join("\n")}`,
         },
       ],
     };

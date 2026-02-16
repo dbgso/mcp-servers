@@ -8,25 +8,25 @@ const fileChangeSchema = z.object({
   description: z.string().describe("What was changed"),
 });
 
-const fixParamsSchema = baseParamsSchema.extend({
-  changes: z.array(fileChangeSchema).min(1).describe("ファイル変更（必須、最低1つ）"),
-  feedback_addressed: z.string().describe("対応したフィードバックの内容"),
+const actParamsSchema = baseParamsSchema.extend({
+  changes: z.array(fileChangeSchema).min(1).describe("File changes (required, at least 1)"),
+  feedback_addressed: z.string().describe("What feedback was addressed"),
 });
 
 /**
- * FixSubmitHandler: Submit fix phase tasks for review
+ * ActSubmitHandler: Submit act phase tasks for review
  */
-export class FixSubmitHandler extends BaseSubmitHandler {
-  readonly action = "submit_fix";
-  readonly phase = "fix" as const;
+export class ActSubmitHandler extends BaseSubmitHandler {
+  readonly action = "submit_act";
+  readonly phase = "act" as const;
 
-  readonly help = `# plan submit_fix
+  readonly help = `# plan submit_act
 
-Submit a fix task for user review.
+Submit an act task for user review.
 
 ## Usage
 \`\`\`
-plan(action: "submit_fix", id: "<task-id>",
+plan(action: "submit_act", id: "<task-id>",
   output_what: "<what was fixed>",
   output_why: "<why this is sufficient>",
   output_how: "<how it was fixed>",
@@ -39,7 +39,7 @@ plan(action: "submit_fix", id: "<task-id>",
 \`\`\`
 
 ## Parameters
-- **id** (required): Task ID (must end with __fix)
+- **id** (required): Task ID (must end with __act)
 - **output_what** (required): What was fixed
 - **output_why** (required): Why this is sufficient
 - **output_how** (required): How it was fixed
@@ -52,7 +52,7 @@ plan(action: "submit_fix", id: "<task-id>",
 `;
 
   protected validatePhaseFields(params: { rawParams: PlanRawParams }): string | null {
-    const result = fixParamsSchema.safeParse(params.rawParams);
+    const result = actParamsSchema.safeParse(params.rawParams);
     if (!result.success) {
       const errors = result.error.errors
         .filter((e) => e.path[0] === "changes" || e.path[0] === "feedback_addressed")
@@ -65,7 +65,7 @@ plan(action: "submit_fix", id: "<task-id>",
   }
 
   protected getPhaseData(params: { rawParams: PlanRawParams }): Record<string, unknown> {
-    const result = fixParamsSchema.safeParse(params.rawParams);
+    const result = actParamsSchema.safeParse(params.rawParams);
     if (!result.success) return {};
     return {
       changes: result.data.changes,
@@ -74,13 +74,13 @@ plan(action: "submit_fix", id: "<task-id>",
   }
 
   protected formatPhaseOutput(params: { rawParams: PlanRawParams }): string {
-    const result = fixParamsSchema.safeParse(params.rawParams);
+    const result = actParamsSchema.safeParse(params.rawParams);
     if (!result.success) return "";
     const { changes, feedback_addressed } = result.data;
-    return `### Changes (ファイル変更)
+    return `### Changes
 ${changes.map((c) => `- \`${c.file}\` (${c.lines}): ${c.description}`).join("\n")}
 
-### Feedback Addressed (対応したフィードバック)
+### Feedback Addressed
 ${feedback_addressed}`;
   }
 }
