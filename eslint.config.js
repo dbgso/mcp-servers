@@ -13,6 +13,7 @@ module.exports = [
       'node_modules/**',
       '**/node_modules/**',
       '**/dist/**',
+      '**/coverage/**',
       'eslint-rules/**',
       'eslint.config.js',
     ],

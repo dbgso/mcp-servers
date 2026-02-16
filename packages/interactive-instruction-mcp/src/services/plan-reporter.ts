@@ -172,7 +172,9 @@ ${risks}`;
     // Define nodes
     for (const task of tasks) {
       const icon = this.getStatusIcon(task.status);
-      const label = `${task.title} ${icon}`;
+      // Escape quotes in title and wrap in quotes for Mermaid compatibility
+      const escapedTitle = task.title.replace(/"/g, '\\"');
+      const label = `"${escapedTitle} ${icon}"`;
       const nodeShape = task.is_parallelizable
         ? `([${label}])`
         : `[${label}]`;

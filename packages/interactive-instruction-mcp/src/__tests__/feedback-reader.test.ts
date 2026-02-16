@@ -814,4 +814,31 @@ addressed_by: null
       expect(feedback?.timestamp).toBeDefined();
     });
   });
+
+  describe("createDraftFeedback error handling", () => {
+    it("should handle file system errors gracefully", async () => {
+      // Create a read-only directory to cause write failure
+      const readOnlyDir = path.join(testDir, "readonly-test");
+      await fs.mkdir(readOnlyDir, { recursive: true });
+      await fs.chmod(readOnlyDir, 0o444);
+
+      const readOnlyReader = new FeedbackReader(readOnlyDir);
+
+      try {
+        const result = await readOnlyReader.createDraftFeedback({
+          taskId: "test-task",
+          original: "Test comment",
+          decision: "adopted",
+        });
+
+        // On some systems (root) write may succeed
+        if (!result.success) {
+          expect(result.error).toContain("Failed to create feedback");
+        }
+      } finally {
+        await fs.chmod(readOnlyDir, 0o755);
+        await fs.rm(readOnlyDir, { recursive: true, force: true });
+      }
+    });
+  });
 });

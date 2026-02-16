@@ -802,7 +802,7 @@ Content`;
         path.join(testDir, "GRAPH.md"),
         "utf-8"
       );
-      expect(content).toContain("([Parallel");
+      expect(content).toContain('(["Parallel');
     });
   });
 
