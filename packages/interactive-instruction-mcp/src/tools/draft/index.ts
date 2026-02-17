@@ -80,7 +80,7 @@ export function registerDraftTool(params: {
     "draft",
     {
       description:
-        "Manage temporary documentation drafts. AI should freely use this to record any new information learned from user instructions. No permission needed - update drafts whenever you learn something new. Keep one topic per file for easy retrieval. IMPORTANT: New topic = new file (add), NOT update existing. Use hierarchy like 'coding__testing' to group related topics.",
+        "Manage temporary documentation drafts. AI should freely use this to record any new information learned from user instructions. No permission needed - update drafts whenever you learn something new. Keep one topic per file for easy retrieval. IMPORTANT: New topic = new file (add), NOT update existing. Use hierarchy like 'coding__testing' to group related topics. AFTER CREATING: You MUST explain the content to user and wait for approval before applying.",
       inputSchema: {
         action: z
           .enum(["list", "read", "add", "update", "delete", "rename"])

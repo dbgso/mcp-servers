@@ -44,8 +44,8 @@ export function createServer(params: {
   registerHelpTool({ server, reader, config });
   registerDraftTool({ server, reader, config });
   registerApplyTool({ server, reader, config });
-  registerPlanTool({ server, planReader, planReporter, feedbackReader, planDir, config });
-  registerApproveTool({ server, planReader, planReporter, feedbackReader, config });
+  registerPlanTool({ server, planReader, planReporter, feedbackReader, planDir, markdownDir, config });
+  registerApproveTool({ server, planReader, planReporter, feedbackReader, markdownDir, config });
 
   return server;
 }

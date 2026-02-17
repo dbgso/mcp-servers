@@ -56,6 +56,7 @@ export type ApplyActionHandler = ActionHandler<ApplyActionParams, ApplyActionCon
 export type TaskStatus =
   | "pending"
   | "in_progress"
+  | "self_review"
   | "pending_review"
   | "completed"
   | "blocked"
@@ -297,6 +298,7 @@ export interface PlanReader {
     task_output?: TaskOutput;
   }): Promise<{ success: boolean; error?: string; actualStatus?: TaskStatus }>;
   approveTask(id: string): Promise<{ success: boolean; error?: string }>;
+  confirmSelfReview(id: string): Promise<{ success: boolean; error?: string }>;
   addFeedback(params: {
     id: string;
     comment: string;

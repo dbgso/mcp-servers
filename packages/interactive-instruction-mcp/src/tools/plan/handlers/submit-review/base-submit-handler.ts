@@ -152,10 +152,10 @@ export abstract class BaseSubmitHandler implements PlanActionHandler {
       ...phaseData,
     };
 
-    // Update status to pending_review
+    // Update status to self_review (AI must confirm before user review)
     const result = await planReader.updateStatus({
       id,
-      status: "pending_review",
+      status: "completed", // Will be auto-converted to self_review
       task_output,
     });
 
@@ -174,9 +174,9 @@ export abstract class BaseSubmitHandler implements PlanActionHandler {
       content: [
         {
           type: "text" as const,
-          text: `Task "${id}" submitted for review.
+          text: `Task "${id}" ready for self-review.
 
-Status: in_progress -> pending_review
+Status: in_progress -> self_review
 
 ## Output Summary
 
@@ -203,11 +203,29 @@ ${phaseOutput}
 
 ---
 
-**Waiting for user approval.** User can:
-- \`approve(target: "task", id: "${id}")\` - Approve and complete
-- \`plan(action: "request_changes", id: "${id}", comment: "<feedback>")\` - Request changes`,
+## Self-Review Checklist
+
+**Review requirements:** \`help(id: "_mcp-interactive-instruction/plan/self-review/${this.phase}")\`
+
+**Before confirming, verify:**
+${this.getSelfReviewChecklist()}
+
+**If all requirements are met:**
+\`\`\`
+plan(action: "confirm", id: "${id}")
+\`\`\``,
         },
       ],
     };
+  }
+
+  /**
+   * Get self-review checklist for this phase
+   * Override in subclasses to provide phase-specific requirements
+   */
+  protected getSelfReviewChecklist(): string {
+    return `- [ ] Output includes specific evidence (commands executed, file contents)
+- [ ] All completion criteria are addressed
+- [ ] References are correctly cited`;
   }
 }
