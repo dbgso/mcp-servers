@@ -32,6 +32,19 @@ Requirements and examples for submitting check (verification) phase tasks. Verif
 - Links work
 - Examples are correct
 
+### 4. MCP Tool Changes
+
+**Verify:**
+- Unit tests pass
+- **MCP reconnect and live test** (REQUIRED)
+- Tool schema shows expected changes
+
+**MCP Live Testing Process:**
+1. Request user to reconnect MCP: "MCPを再接続してください"
+2. Use `MCPSearch` to verify tool schema has expected changes
+3. Actually call the tool to verify it works
+4. Document the actual tool response
+
 ---
 
 ## Evidence Format

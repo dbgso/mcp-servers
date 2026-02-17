@@ -17,7 +17,6 @@ import {
   StartHandler,
   ConfirmHandler,
   RequestChangesHandler,
-  SkipHandler,
   BlockHandler,
   InterpretHandler,
   PlanSubmitHandler,
@@ -45,7 +44,6 @@ function createHandlers(): PlanActionHandler[] {
     new CheckSubmitHandler(),
     new ActSubmitHandler(),
     new RequestChangesHandler(),
-    new SkipHandler(),
     new BlockHandler(),
   ];
 }
@@ -85,7 +83,7 @@ Task planning for current work session.
 - \`plan(action: "start", id: "<id>", prompt: "...")\` - Start task
 - \`plan(action: "update", id: "<id>", ...)\` - Update task
 - \`plan(action: "delete", id: "<id>")\` - Delete task
-- \`plan(action: "skip", id: "<id>", reason: "...")\` - Skip task
+- \`approve(target: "skip", task_id: "<id>", reason: "...")\` - Skip task (requires approval)
 - \`plan(action: "graph")\` - Show dependency graph
 
 ## Example: Bug Fix
@@ -162,10 +160,10 @@ export function registerPlanTool(params: {
           .enum([
             "list", "read", "read_output", "add", "update", "delete", "feedback", "interpret", "clear", "graph",
             // Dedicated state transitions (PDCA)
-            "start", "submit_plan", "submit_do", "submit_check", "submit_act", "confirm", "request_changes", "skip", "block",
+            "start", "submit_plan", "submit_do", "submit_check", "submit_act", "confirm", "request_changes", "block",
           ])
           .optional()
-          .describe("Action to perform. Omit to show help. State transitions: start (pending->in_progress), submit_* (in_progress->self_review), confirm (self_review->pending_review), request_changes (pending_review->in_progress), skip/block (any->skipped/blocked)"),
+          .describe("Action to perform. Omit to show help. State transitions: start (pending->in_progress), submit_* (in_progress->self_review), confirm (self_review->pending_review), request_changes (pending_review->in_progress), block (any->blocked). For skip, use approve tool."),
         id: z.string().optional().describe("Task ID"),
         force: z.boolean().optional().describe("Force cascade delete - deletes all dependent tasks (for delete action)"),
         cancel: z.boolean().optional().describe("Cancel a pending deletion (for delete action)"),
@@ -232,7 +230,7 @@ export function registerPlanTool(params: {
           .string()
           .optional()
           .describe(
-            "Reason for skip/block actions"
+            "Reason for block action"
           ),
         is_parallelizable: z
           .boolean()

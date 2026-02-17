@@ -124,6 +124,46 @@ async function skipTemplates(params: {
   }
 }
 
+async function skipTask(params: {
+  planReader: PlanReader;
+  planReporter: PlanReporter;
+  taskId: string;
+  reason: string;
+}): Promise<{ success: boolean; message: string }> {
+  const { planReader, planReporter, taskId, reason } = params;
+
+  const task = await planReader.getTask(taskId);
+  if (!task) {
+    return { success: false, message: `Error: Task "${taskId}" not found.` };
+  }
+
+  // Cannot skip completed tasks
+  if (task.status === "completed") {
+    return { success: false, message: `Error: Cannot skip a completed task.` };
+  }
+
+  const oldStatus = task.status;
+
+  // Update status to skipped with reason as output
+  const result = await planReader.updateStatus({
+    id: taskId,
+    status: "skipped",
+    output: reason,
+  });
+
+  if (!result.success) {
+    return { success: false, message: `Error: ${result.error}` };
+  }
+
+  // Update markdown files
+  await planReporter.updateAll();
+
+  return {
+    success: true,
+    message: `Task "${taskId}" skipped.\n\nStatus: ${oldStatus} → skipped\n\n**Reason:** ${reason}`,
+  };
+}
+
 async function approveFeedback(params: {
   feedbackReader: FeedbackReader;
   taskId: string;
@@ -183,6 +223,9 @@ export function registerApproveTool(params: {
 **For deletions:**
 \`approve(target: "deletion", task_id: "<id>")\` - Approve cascade deletion
 
+**For skipping tasks:**
+\`approve(target: "skip", task_id: "<id>", reason: "<why>")\` - Skip a task with reason
+
 **For template setup:**
 \`approve(target: "setup_templates")\` - Setup self-review templates
 \`approve(target: "skip_templates")\` - Skip template setup
@@ -191,16 +234,20 @@ To view feedback before approving, use:
 \`plan(action: "feedback", id: "<task-id>", feedback_id: "<fb-id>")\``,
       inputSchema: {
         target: z
-          .enum(["task", "feedback", "deletion", "setup_templates", "skip_templates"])
-          .describe("What to approve: 'task' for pending_review tasks, 'feedback' for draft feedback, 'deletion' for cascade delete, 'setup_templates' to setup templates, 'skip_templates' to skip setup"),
-        task_id: z.string().optional().describe("Task ID (required for task, feedback, deletion)"),
+          .enum(["task", "feedback", "deletion", "skip", "setup_templates", "skip_templates"])
+          .describe("What to approve: 'task' for pending_review tasks, 'feedback' for draft feedback, 'deletion' for cascade delete, 'skip' to skip a task, 'setup_templates' to setup templates, 'skip_templates' to skip setup"),
+        task_id: z.string().optional().describe("Task ID (required for task, feedback, deletion, skip)"),
         feedback_id: z
           .string()
           .optional()
           .describe("Feedback ID (required when target is 'feedback')"),
+        reason: z
+          .string()
+          .optional()
+          .describe("Reason for skipping (required when target is 'skip')"),
       },
     },
-    async ({ target, task_id, feedback_id }) => {
+    async ({ target, task_id, feedback_id, reason }) => {
       // Handle template setup targets first (don't require task_id)
       if (target === "setup_templates") {
         const result = await setupTemplates({ markdownDir });
@@ -292,12 +339,39 @@ To view feedback before approving, use:
         });
       }
 
+      // Handle skip
+      if (target === "skip") {
+        if (!reason) {
+          return wrapResponse({
+            result: {
+              content: [
+                {
+                  type: "text" as const,
+                  text: `Error: reason is required when target is 'skip'.`,
+                },
+              ],
+              isError: true,
+            },
+            config,
+          });
+        }
+
+        const result = await skipTask({ planReader, planReporter, taskId: task_id, reason });
+        return wrapResponse({
+          result: {
+            content: [{ type: "text" as const, text: result.message }],
+            isError: !result.success,
+          },
+          config,
+        });
+      }
+
       return wrapResponse({
         result: {
           content: [
             {
               type: "text" as const,
-              text: `Error: Invalid target "${target}". Use 'task', 'feedback', 'deletion', 'setup_templates', or 'skip_templates'.`,
+              text: `Error: Invalid target "${target}". Use 'task', 'feedback', 'deletion', 'skip', 'setup_templates', or 'skip_templates'.`,
             },
           ],
           isError: true,
