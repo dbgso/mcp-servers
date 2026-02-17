@@ -3,6 +3,7 @@ import { z } from "zod";
 import { wrapResponse } from "../../utils/response-wrapper.js";
 import type { ReminderConfig, PlanReporter, FeedbackReaderInterface, PlanActionContext, PlanRawParams, PlanActionHandler } from "../../types/index.js";
 import type { PlanReader } from "../../services/plan-reader.js";
+import { needsTemplateSetup } from "../../services/template-setup.js";
 import {
   AddHandler,
   UpdateHandler,
@@ -14,6 +15,7 @@ import {
   ClearHandler,
   GraphHandler,
   StartHandler,
+  ConfirmHandler,
   RequestChangesHandler,
   SkipHandler,
   BlockHandler,
@@ -24,29 +26,28 @@ import {
   ActSubmitHandler,
 } from "./handlers/index.js";
 
-const handlers: PlanActionHandler[] = [
-  new ListHandler(),
-  new ReadHandler(),
-  new ReadOutputHandler(),
-  new AddHandler(),
-  new UpdateHandler(),
-  new DeleteHandler(),
-  new FeedbackHandler(),
-  new InterpretHandler(),
-  new ClearHandler(),
-  new GraphHandler(),
-  new StartHandler(),
-  new PlanSubmitHandler(),
-  new DoSubmitHandler(),
-  new CheckSubmitHandler(),
-  new ActSubmitHandler(),
-  new RequestChangesHandler(),
-  new SkipHandler(),
-  new BlockHandler(),
-];
-
-function resolveHandler(action: string): PlanActionHandler | undefined {
-  return handlers.find((h) => h.action === action);
+function createHandlers(): PlanActionHandler[] {
+  return [
+    new ListHandler(),
+    new ReadHandler(),
+    new ReadOutputHandler(),
+    new AddHandler(),
+    new UpdateHandler(),
+    new DeleteHandler(),
+    new FeedbackHandler(),
+    new InterpretHandler(),
+    new ClearHandler(),
+    new GraphHandler(),
+    new StartHandler(),
+    new ConfirmHandler(),
+    new PlanSubmitHandler(),
+    new DoSubmitHandler(),
+    new CheckSubmitHandler(),
+    new ActSubmitHandler(),
+    new RequestChangesHandler(),
+    new SkipHandler(),
+    new BlockHandler(),
+  ];
 }
 
 const getPlanHelp = (planDir: string) => `# Plan Tool
@@ -141,9 +142,15 @@ export function registerPlanTool(params: {
   planReporter: PlanReporter;
   feedbackReader: FeedbackReaderInterface;
   planDir: string;
+  markdownDir: string;
   config: ReminderConfig;
 }): void {
-  const { server, planReader, planReporter, feedbackReader, planDir, config } = params;
+  const { server, planReader, planReporter, feedbackReader, planDir, markdownDir, config } = params;
+
+  const handlers = createHandlers();
+  const resolveHandler = (action: string): PlanActionHandler | undefined => {
+    return handlers.find((h) => h.action === action);
+  };
 
   server.registerTool(
     "plan",
@@ -155,10 +162,10 @@ export function registerPlanTool(params: {
           .enum([
             "list", "read", "read_output", "add", "update", "delete", "feedback", "interpret", "clear", "graph",
             // Dedicated state transitions (PDCA)
-            "start", "submit_plan", "submit_do", "submit_check", "submit_act", "request_changes", "skip", "block"
+            "start", "submit_plan", "submit_do", "submit_check", "submit_act", "confirm", "request_changes", "skip", "block",
           ])
           .optional()
-          .describe("Action to perform. Omit to show help. State transitions: start (pending->in_progress), submit_* (in_progress->pending_review), request_changes (pending_review->in_progress), skip/block (any->skipped/blocked)"),
+          .describe("Action to perform. Omit to show help. State transitions: start (pending->in_progress), submit_* (in_progress->self_review), confirm (self_review->pending_review), request_changes (pending_review->in_progress), skip/block (any->skipped/blocked)"),
         id: z.string().optional().describe("Task ID"),
         force: z.boolean().optional().describe("Force cascade delete - deletes all dependent tasks (for delete action)"),
         cancel: z.boolean().optional().describe("Cancel a pending deletion (for delete action)"),
@@ -385,9 +392,29 @@ export function registerPlanTool(params: {
       prompt,
     }) => {
       if (!action) {
+        // Check if template setup is needed
+        let templateSetupPrompt = "";
+        try {
+          const needsSetup = await needsTemplateSetup(markdownDir);
+          if (needsSetup) {
+            templateSetupPrompt = `
+
+---
+
+## Template Setup Available
+
+Self-review templates are available for this project. Would you like to set them up?
+
+- **Yes**: Run \`approve(target: "setup_templates")\` to copy templates
+- **No**: Run \`approve(target: "skip_templates")\` to skip and create empty directory`;
+          }
+        } catch {
+          // Ignore errors checking for template setup
+        }
+
         return wrapResponse({
           result: {
-            content: [{ type: "text" as const, text: getPlanHelp(planDir) }],
+            content: [{ type: "text" as const, text: getPlanHelp(planDir) + templateSetupPrompt }],
           },
           config,
         });

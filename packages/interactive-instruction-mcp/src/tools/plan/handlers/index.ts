@@ -10,6 +10,7 @@ export { ClearHandler } from "./clear-handler.js";
 export { GraphHandler } from "./graph-handler.js";
 // Dedicated state transition handlers
 export { StartHandler } from "./start-handler.js";
+export { ConfirmHandler } from "./confirm-handler.js";
 export { RequestChangesHandler } from "./request-changes-handler.js";
 export { SkipHandler } from "./skip-handler.js";
 export { BlockHandler } from "./block-handler.js";

@@ -32,7 +32,31 @@ export class AddHandler implements DraftActionHandler {
       content: [
         {
           type: "text" as const,
-          text: `Draft "${id}" created successfully.\nPath: ${result.path}\n\n[AI Action Required] Explain the created content to the user and confirm it matches their intent.`,
+          text: `Draft "${id}" created successfully.
+Path: ${result.path}
+
+---
+
+## [AI Action Required]
+
+**You MUST do the following before proceeding:**
+
+1. **Explain the content** - Summarize what this draft contains
+2. **Show the file path** - User needs to know where to review: \`${result.path}\`
+3. **Wait for user confirmation** - Do NOT apply until user reviews and approves
+
+**Example response:**
+\`\`\`
+Created draft for [topic].
+
+**Contents:**
+- [Key point 1]
+- [Key point 2]
+
+**File:** ${result.path}
+
+Please review and let me know if you want to apply this or make changes.
+\`\`\``,
         },
       ],
     };

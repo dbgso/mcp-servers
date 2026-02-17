@@ -221,6 +221,7 @@ describe("PlanReporter", () => {
         status: "completed",
         output: "src/done.ts:1-10 Complete.",
       });
+      await planReader.confirmSelfReview("done-task");
       await planReader.approveTask("done-task");
 
       await planReporter.updateGraphFile();

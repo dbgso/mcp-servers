@@ -1,9 +1,14 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { wrapResponse } from "../../utils/response-wrapper.js";
 import type { ReminderConfig, PlanReporter } from "../../types/index.js";
 import type { PlanReader } from "../../services/plan-reader.js";
 import type { FeedbackReader } from "../../services/feedback-reader.js";
+import { setupSelfReviewTemplates } from "../../services/template-setup.js";
+
+const PLAN_DIR_NAME = "_mcp-interactive-instruction/plan";
 
 async function approveTask(params: {
   planReader: PlanReader;
@@ -66,6 +71,59 @@ async function approveDeletion(params: {
   };
 }
 
+async function setupTemplates(params: {
+  markdownDir: string;
+}): Promise<{ success: boolean; message: string }> {
+  const { markdownDir } = params;
+
+  try {
+    const result = await setupSelfReviewTemplates(markdownDir);
+
+    if (result.action === "already_exists") {
+      return {
+        success: true,
+        message: `Self-review templates already exist at: ${result.path}`,
+      };
+    }
+
+    if (result.action === "copied_templates") {
+      return {
+        success: true,
+        message: `Self-review templates have been set up at: ${result.path}\n\nYou can now customize these templates to match your project's review workflow.`,
+      };
+    }
+
+    // created_empty - this shouldn't happen when user explicitly calls setup_templates
+    // but handle it gracefully
+    return {
+      success: true,
+      message: `Created plan directory at: ${result.path}\n\nNote: Template files were not found in the package. Directory structure has been created.`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, message: `Error setting up templates: ${message}` };
+  }
+}
+
+async function skipTemplates(params: {
+  markdownDir: string;
+}): Promise<{ success: boolean; message: string }> {
+  const { markdownDir } = params;
+  const planDirPath = path.join(markdownDir, PLAN_DIR_NAME);
+
+  try {
+    await fs.mkdir(planDirPath, { recursive: true });
+
+    return {
+      success: true,
+      message: `Created empty plan directory at: ${planDirPath}\n\nTemplate setup skipped. You can run \`approve(target: "setup_templates")\` later if you want to add templates.`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, message: `Error creating directory: ${message}` };
+  }
+}
+
 async function approveFeedback(params: {
   feedbackReader: FeedbackReader;
   taskId: string;
@@ -106,14 +164,15 @@ export function registerApproveTool(params: {
   planReader: PlanReader;
   planReporter: PlanReporter;
   feedbackReader: FeedbackReader;
+  markdownDir: string;
   config: ReminderConfig;
 }): void {
-  const { server, planReader, planReporter, feedbackReader, config } = params;
+  const { server, planReader, planReporter, feedbackReader, markdownDir, config } = params;
 
   server.registerTool(
     "approve",
     {
-      description: `Approve tasks, feedback, or deletions. This tool is for human reviewers only - agents should NOT use this tool.
+      description: `Approve tasks, feedback, deletions, or template setup. This tool is for human reviewers only - agents should NOT use this tool.
 
 **For tasks:**
 \`approve(target: "task", task_id: "<id>")\` - Approve a pending_review task
@@ -124,13 +183,17 @@ export function registerApproveTool(params: {
 **For deletions:**
 \`approve(target: "deletion", task_id: "<id>")\` - Approve cascade deletion
 
+**For template setup:**
+\`approve(target: "setup_templates")\` - Setup self-review templates
+\`approve(target: "skip_templates")\` - Skip template setup
+
 To view feedback before approving, use:
 \`plan(action: "feedback", id: "<task-id>", feedback_id: "<fb-id>")\``,
       inputSchema: {
         target: z
-          .enum(["task", "feedback", "deletion"])
-          .describe("What to approve: 'task' for pending_review tasks, 'feedback' for draft feedback, 'deletion' for cascade delete"),
-        task_id: z.string().describe("Task ID"),
+          .enum(["task", "feedback", "deletion", "setup_templates", "skip_templates"])
+          .describe("What to approve: 'task' for pending_review tasks, 'feedback' for draft feedback, 'deletion' for cascade delete, 'setup_templates' to setup templates, 'skip_templates' to skip setup"),
+        task_id: z.string().optional().describe("Task ID (required for task, feedback, deletion)"),
         feedback_id: z
           .string()
           .optional()
@@ -138,14 +201,37 @@ To view feedback before approving, use:
       },
     },
     async ({ target, task_id, feedback_id }) => {
-      // Validate task_id is provided
+      // Handle template setup targets first (don't require task_id)
+      if (target === "setup_templates") {
+        const result = await setupTemplates({ markdownDir });
+        return wrapResponse({
+          result: {
+            content: [{ type: "text" as const, text: result.message }],
+            isError: !result.success,
+          },
+          config,
+        });
+      }
+
+      if (target === "skip_templates") {
+        const result = await skipTemplates({ markdownDir });
+        return wrapResponse({
+          result: {
+            content: [{ type: "text" as const, text: result.message }],
+            isError: !result.success,
+          },
+          config,
+        });
+      }
+
+      // Validate task_id is provided for other targets
       if (!task_id) {
         return wrapResponse({
           result: {
             content: [
               {
                 type: "text" as const,
-                text: `Error: task_id is required.`,
+                text: `Error: task_id is required for target "${target}".`,
               },
             ],
             isError: true,
@@ -211,7 +297,7 @@ To view feedback before approving, use:
           content: [
             {
               type: "text" as const,
-              text: `Error: Invalid target "${target}". Use 'task', 'feedback', or 'deletion'.`,
+              text: `Error: Invalid target "${target}". Use 'task', 'feedback', 'deletion', 'setup_templates', or 'skip_templates'.`,
             },
           ],
           isError: true,

@@ -28,7 +28,7 @@ plan(action: "submit_check", id: "<task-id>",
   blockers: ["<blocker1>", ...] | [],
   risks: ["<risk1>", ...] | [],
   test_target: "<what was tested>",
-  test_results: "<test results with code blocks>",
+  test_results: "<test results - SEE REQUIREMENTS BELOW>",
   coverage: "<coverage details>",
   references_used: ["prompts/<task-id>", "<ref1>", ...],
   references_reason: "<why these references>")
@@ -42,30 +42,49 @@ plan(action: "submit_check", id: "<task-id>",
 - **blockers** (required): Encountered blockers (can be empty [])
 - **risks** (required): Risks and concerns (can be empty [])
 - **test_target** (required): What was tested
-- **test_results** (required): Test results with commands and output in code blocks
+- **test_results** (required): Test results - **MUST include evidence** (see below)
 - **coverage** (required): Coverage details (how much was covered)
 - **references_used** (required): Array of references (must include prompts/<task-id>)
 - **references_reason** (required): Why these references were used
 
-## Example test_results format
-\`\`\`
-**typecheck:**
-\\\`\\\`\\\`
-$ pnpm typecheck
-> tsc --noEmit
-(no errors)
-\\\`\\\`\\\`
+## IMPORTANT: test_results requirements
 
-**test:**
+**For test/command execution:**
+- Include the exact command executed
+- Include the actual output/result
+
+\`\`\`
+**Unit tests:**
 \\\`\\\`\\\`
 $ pnpm test
-✓ 207 tests passed
+✓ 220 tests passed
 \\\`\\\`\\\`
 
-**grep check:**
+**TypeScript check:**
 \\\`\\\`\\\`
-$ grep -r "output_content" src/
-(no matches)
+$ pnpm typecheck
+(no errors)
+\\\`\\\`\\\`
+\`\`\`
+
+**For code/file investigation:**
+- Include the file path and line numbers referenced
+- Include the relevant content found
+
+\`\`\`
+**Verified implementation in start-handler.ts:94-125:**
+\\\`\\\`\\\`typescript
+// Create PDCA subtasks for non-subtask (root-level tasks)
+for (const phase of PDCA_PHASES) {
+  const subtaskId = \\\`\\\${id}__\\\${phase.suffix}\\\`;
+  ...
+}
+\\\`\\\`\\\`
+
+**Verified add-handler.ts has no PDCA creation:**
+\\\`\\\`\\\`
+$ grep -n "PDCA" src/tools/plan/handlers/add-handler.ts
+66:- PDCA phases: plan, do, check, act  # comment only
 \\\`\\\`\\\`
 \`\`\`
 `;
@@ -108,5 +127,12 @@ ${test_results}
 
 ### Coverage
 ${coverage}`;
+  }
+
+  protected getSelfReviewChecklist(): string {
+    return `- [ ] **For test/command execution:** Included exact command AND actual output
+- [ ] **For code investigation:** Included file path, line numbers, AND content
+- [ ] Test results show pass/fail status with evidence
+- [ ] All completion criteria are verified with evidence`;
   }
 }

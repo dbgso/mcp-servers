@@ -403,8 +403,9 @@ ${task.content}`;
       }
     }
 
-    // Auto-convert "completed" to "pending_review" for review workflow
-    const actualStatus = status === "completed" ? "pending_review" : status;
+    // Auto-convert "completed" to "self_review" for self-review workflow
+    // AI must run "confirm" to proceed to pending_review
+    const actualStatus = status === "completed" ? "self_review" : status;
 
     const updatedTask: Task = {
       ...task,
@@ -449,6 +450,32 @@ ${task.content}`;
     const updatedTask: Task = {
       ...task,
       status: "completed",
+      updated: new Date().toISOString(),
+    };
+
+    const filePath = this.idToPath(id);
+    await fs.writeFile(filePath, this.serializeTask(updatedTask), "utf-8");
+    this.invalidateCache();
+
+    return { success: true };
+  }
+
+  async confirmSelfReview(id: string): Promise<{ success: boolean; error?: string }> {
+    const task = await this.getTask(id);
+    if (!task) {
+      return { success: false, error: `Task "${id}" not found.` };
+    }
+
+    if (task.status !== "self_review") {
+      return {
+        success: false,
+        error: `Task "${id}" is not in self_review. Current status: ${task.status}`,
+      };
+    }
+
+    const updatedTask: Task = {
+      ...task,
+      status: "pending_review",
       updated: new Date().toISOString(),
     };
 

@@ -877,7 +877,7 @@ describe("PlanReader", () => {
   });
 
   describe("updateStatus", () => {
-    it("should convert completed to pending_review", async () => {
+    it("should convert completed to self_review", async () => {
       await reader.addTask({
         id: "task-1",
         title: "Task",
@@ -899,10 +899,10 @@ describe("PlanReader", () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.actualStatus).toBe("pending_review");
+      expect(result.actualStatus).toBe("self_review");
 
       const task = await reader.getTask("task-1");
-      expect(task?.status).toBe("pending_review");
+      expect(task?.status).toBe("self_review");
     });
 
     it("should block starting task with incomplete dependencies", async () => {
@@ -963,6 +963,8 @@ describe("PlanReader", () => {
         status: "completed",
         output: "src/file.ts:1-10 完了.",
       });
+      // Confirm self-review to move to pending_review
+      await reader.confirmSelfReview("task-1");
 
       const result = await reader.approveTask("task-1");
 
@@ -1021,12 +1023,13 @@ describe("PlanReader", () => {
         references: [],
       });
 
-      // Set parent to pending_review
+      // Set parent to self_review then pending_review
       await reader.updateStatus({
         id: "parent",
         status: "completed",
         output: "src/parent.ts:1-20 完了.",
       });
+      await reader.confirmSelfReview("parent");
 
       // Try to approve parent - should fail
       const result = await reader.approveTask("parent");
@@ -1063,12 +1066,13 @@ describe("PlanReader", () => {
         references: [],
       });
 
-      // Complete child first
+      // Complete child first (self_review -> pending_review -> completed)
       await reader.updateStatus({
         id: "child",
         status: "completed",
         output: "src/child.ts:1-15 完了.",
       });
+      await reader.confirmSelfReview("child");
       await reader.approveTask("child");
 
       // Now complete parent
@@ -1077,6 +1081,7 @@ describe("PlanReader", () => {
         status: "completed",
         output: "src/parent.ts:1-20 完了.",
       });
+      await reader.confirmSelfReview("parent");
 
       const result = await reader.approveTask("parent");
 
@@ -1084,6 +1089,95 @@ describe("PlanReader", () => {
 
       const parent = await reader.getTask("parent");
       expect(parent?.status).toBe("completed");
+    });
+  });
+
+  describe("confirmSelfReview", () => {
+    it("should confirm self_review task and move to pending_review", async () => {
+      await reader.addTask({
+        id: "task-1",
+        title: "Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.updateStatus({
+        id: "task-1",
+        status: "completed",
+        output: "Done",
+      });
+
+      // Task should be in self_review after updateStatus with "completed"
+      let task = await reader.getTask("task-1");
+      expect(task?.status).toBe("self_review");
+
+      // Confirm self-review
+      const result = await reader.confirmSelfReview("task-1");
+
+      expect(result.success).toBe(true);
+
+      task = await reader.getTask("task-1");
+      expect(task?.status).toBe("pending_review");
+    });
+
+    it("should reject confirming non-self_review task", async () => {
+      await reader.addTask({
+        id: "task-1",
+        title: "Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Task is pending, not self_review
+      const result = await reader.confirmSelfReview("task-1");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("not in self_review");
+    });
+
+    it("should reject confirming in_progress task", async () => {
+      await reader.addTask({
+        id: "task-1",
+        title: "Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await reader.updateStatus({
+        id: "task-1",
+        status: "in_progress",
+      });
+
+      const result = await reader.confirmSelfReview("task-1");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("not in self_review");
+    });
+
+    it("should reject confirming non-existent task", async () => {
+      const result = await reader.confirmSelfReview("non-existent");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("not found");
     });
   });
 
@@ -1171,12 +1265,13 @@ describe("PlanReader", () => {
       let blocked = await reader.getBlockedTasks();
       expect(blocked.map((t) => t.id)).toContain("waiting-task");
 
-      // Complete the dependency
+      // Complete the dependency (self_review -> pending_review -> completed)
       await reader.updateStatus({
         id: "dep-task",
         status: "completed",
         output: "Done",
       });
+      await reader.confirmSelfReview("dep-task");
       await reader.approveTask("dep-task");
 
       // Now should be ready
@@ -1638,6 +1733,7 @@ describe("PlanReader", () => {
         status: "completed",
         output: "Done",
       });
+      await reader.confirmSelfReview("dep-complete");
       await reader.approveTask("dep-complete");
 
       // Create a task that depends on the completed dependency
