@@ -166,10 +166,11 @@ async function skipTask(params: {
 
 async function approveFeedback(params: {
   feedbackReader: FeedbackReader;
+  planReporter: PlanReporter;
   taskId: string;
   feedbackId: string;
 }): Promise<{ success: boolean; message: string }> {
-  const { feedbackReader, taskId, feedbackId } = params;
+  const { feedbackReader, planReporter, taskId, feedbackId } = params;
 
   const feedback = await feedbackReader.getFeedback(taskId, feedbackId);
 
@@ -192,6 +193,9 @@ async function approveFeedback(params: {
   if (!result.success) {
     return { success: false, message: `Error: ${result.error}` };
   }
+
+  // Update PENDING_REVIEW.md and GRAPH.md
+  await planReporter.updateAll();
 
   return {
     success: true,
@@ -317,7 +321,7 @@ To view feedback before approving, use:
           });
         }
 
-        const result = await approveFeedback({ feedbackReader, taskId: task_id, feedbackId: feedback_id });
+        const result = await approveFeedback({ feedbackReader, planReporter, taskId: task_id, feedbackId: feedback_id });
         return wrapResponse({
           result: {
             content: [{ type: "text" as const, text: result.message }],
