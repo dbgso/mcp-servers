@@ -154,8 +154,12 @@ export function registerPlanTool(params: {
     "plan",
     {
       description:
-        "Temporary task planning for current work session. Plan, track, and complete tasks with mandatory review workflow. Supports parent-child relationships for enforcing verification steps. Tasks are stored in OS temp directory and should be cleared when done.",
+        "Task planning with PDCA workflow. Use help() for details.",
       inputSchema: {
+        help: z
+          .boolean()
+          .optional()
+          .describe("Show help"),
         action: z
           .enum([
             "list", "read", "read_output", "add", "update", "delete", "feedback", "interpret", "clear", "graph",
@@ -163,7 +167,7 @@ export function registerPlanTool(params: {
             "start", "submit_plan", "submit_do", "submit_check", "submit_act", "confirm", "request_changes", "block",
           ])
           .optional()
-          .describe("Action to perform. Omit to show help. State transitions: start (pending->in_progress), submit_* (in_progress->self_review), confirm (self_review->pending_review), request_changes (pending_review->in_progress), block (any->blocked). For skip, use approve tool."),
+          .describe("Action to perform. Omit to show help."),
         id: z.string().optional().describe("Task ID"),
         force: z.boolean().optional().describe("Force cascade delete - deletes all dependent tasks (for delete action)"),
         cancel: z.boolean().optional().describe("Cancel a pending deletion (for delete action)"),
@@ -349,6 +353,7 @@ export function registerPlanTool(params: {
       },
     },
     async ({
+      help,
       action,
       id,
       force,
@@ -389,7 +394,7 @@ export function registerPlanTool(params: {
       feedback_addressed,
       prompt,
     }) => {
-      if (!action) {
+      if (help || !action) {
         // Check if template setup is needed
         let templateSetupPrompt = "";
         try {

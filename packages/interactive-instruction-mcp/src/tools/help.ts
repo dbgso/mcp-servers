@@ -15,7 +15,7 @@ export function registerHelpTool(params: {
     "help",
     {
       description:
-        "List markdown files or get content by ID. Without arguments, lists all available documents with summaries. With an ID, returns the full content of that document. Use this tool BEFORE starting any task to recall relevant instructions. When uncertain about a topic, check the summary list first to identify the relevant document, then load it to refresh your memory. This shows confirmed docs only - use 'draft' tool for temporary drafts.",
+        "List or read documentation. Call without args to list all docs. Call with id to read specific doc.",
       inputSchema: {
         id: z
           .string()

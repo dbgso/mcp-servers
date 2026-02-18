@@ -10,6 +10,32 @@ import { setupSelfReviewTemplates } from "../../services/template-setup.js";
 
 const PLAN_DIR_NAME = "_mcp-interactive-instruction/plan";
 
+const APPROVE_HELP = `# Approve Tool
+
+Human-only tool for approving AI work. AI should never call this tool.
+
+## Actions
+
+- \`approve(target: "task", task_id: "<id>")\` - Approve a pending_review task
+- \`approve(target: "feedback", task_id: "<id>", feedback_id: "<id>")\` - Confirm feedback interpretation
+- \`approve(target: "deletion", task_id: "<id>")\` - Approve cascade deletion
+- \`approve(target: "skip", task_id: "<id>", reason: "...")\` - Skip a task with reason
+- \`approve(target: "setup_templates")\` - Setup self-review templates
+- \`approve(target: "skip_templates")\` - Skip template setup
+
+## Workflow
+
+1. AI completes work and submits for review (pending_review status)
+2. Human reviews and calls \`approve(target: "task", task_id: "...")\`
+3. Task is marked as completed
+
+## Feedback Flow
+
+1. Human adds feedback via \`plan(action: "feedback", ...)\`
+2. AI interprets via \`plan(action: "interpret", ...)\`
+3. Human confirms via \`approve(target: "feedback", ...)\`
+4. AI addresses the feedback`;
+
 async function approveTask(params: {
   planReader: PlanReader;
   planReporter: PlanReporter;
@@ -216,30 +242,16 @@ export function registerApproveTool(params: {
   server.registerTool(
     "approve",
     {
-      description: `Approve tasks, feedback, deletions, or template setup. This tool is for human reviewers only - agents should NOT use this tool.
-
-**For tasks:**
-\`approve(target: "task", task_id: "<id>")\` - Approve a pending_review task
-
-**For feedback:**
-\`approve(target: "feedback", task_id: "<id>", feedback_id: "<id>")\` - Confirm AI's interpretation is correct
-
-**For deletions:**
-\`approve(target: "deletion", task_id: "<id>")\` - Approve cascade deletion
-
-**For skipping tasks:**
-\`approve(target: "skip", task_id: "<id>", reason: "<why>")\` - Skip a task with reason
-
-**For template setup:**
-\`approve(target: "setup_templates")\` - Setup self-review templates
-\`approve(target: "skip_templates")\` - Skip template setup
-
-To view feedback before approving, use:
-\`plan(action: "feedback", id: "<task-id>", feedback_id: "<fb-id>")\``,
+      description: `Approve tasks, feedback, deletions, or skip tasks. Human reviewers only. Use help() for details.`,
       inputSchema: {
+        help: z
+          .boolean()
+          .optional()
+          .describe("Show help"),
         target: z
           .enum(["task", "feedback", "deletion", "skip", "setup_templates", "skip_templates"])
-          .describe("What to approve: 'task' for pending_review tasks, 'feedback' for draft feedback, 'deletion' for cascade delete, 'skip' to skip a task, 'setup_templates' to setup templates, 'skip_templates' to skip setup"),
+          .optional()
+          .describe("What to approve"),
         task_id: z.string().optional().describe("Task ID (required for task, feedback, deletion, skip)"),
         feedback_id: z
           .string()
@@ -251,7 +263,17 @@ To view feedback before approving, use:
           .describe("Reason for skipping (required when target is 'skip')"),
       },
     },
-    async ({ target, task_id, feedback_id, reason }) => {
+    async ({ help, target, task_id, feedback_id, reason }) => {
+      // Show help when requested or no target provided
+      if (help || !target) {
+        return wrapResponse({
+          result: {
+            content: [{ type: "text" as const, text: APPROVE_HELP }],
+          },
+          config,
+        });
+      }
+
       // Handle template setup targets first (don't require task_id)
       if (target === "setup_templates") {
         const result = await setupTemplates({ markdownDir });
