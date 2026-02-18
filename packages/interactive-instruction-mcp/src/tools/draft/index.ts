@@ -58,7 +58,9 @@ draft(action: "add", id: "coding__testing", content: "# Testing Rules\\n\\nServi
 \`\`\`
 Note: This is a NEW topic, so use "add" not "update"!
 
-Drafts are stored under \`_mcp_drafts/\` directory. Use \`apply\` tool to promote to confirmed docs.`;
+Drafts are stored under \`_mcp_drafts/\` directory. Use \`apply\` tool to promote to confirmed docs.
+
+**[IMPORTANT]** After creating a draft, you MUST explain the content to the user and wait for their approval before applying.`;
 
 const actionHandlers: Record<string, DraftActionHandler> = {
   list: new ListHandler(),
@@ -80,8 +82,12 @@ export function registerDraftTool(params: {
     "draft",
     {
       description:
-        "Manage temporary documentation drafts. AI should freely use this to record any new information learned from user instructions. No permission needed - update drafts whenever you learn something new. Keep one topic per file for easy retrieval. IMPORTANT: New topic = new file (add), NOT update existing. Use hierarchy like 'coding__testing' to group related topics. AFTER CREATING: You MUST explain the content to user and wait for approval before applying.",
+        "Manage documentation drafts. Call without args for help.",
       inputSchema: {
+        help: z
+          .boolean()
+          .optional()
+          .describe("Show help"),
         action: z
           .enum(["list", "read", "add", "update", "delete", "rename"])
           .optional()
@@ -100,8 +106,8 @@ export function registerDraftTool(params: {
           .describe("New draft ID for rename action"),
       },
     },
-    async ({ action, id, content, newId }) => {
-      if (!action) {
+    async ({ help, action, id, content, newId }) => {
+      if (help || !action) {
         return wrapResponse({
           result: {
             content: [{ type: "text" as const, text: DRAFT_HELP }],
