@@ -37,8 +37,8 @@ export function createServer(params: {
   // Plan reader for task management (OS temp directory)
   const planDir = path.join(os.tmpdir(), "mcp-interactive-instruction-plan");
   const planReader = new PlanReader(planDir);
-  const planReporter = new PlanReporter(planDir, planReader);
   const feedbackReader = new FeedbackReader(planDir);
+  const planReporter = new PlanReporter(planDir, planReader, feedbackReader);
 
   registerDescriptionTool({ server, config });
   registerHelpTool({ server, reader, config });

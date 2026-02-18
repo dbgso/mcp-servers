@@ -154,5 +154,9 @@ describe("template-setup", () => {
       );
       expect(exampleContent).toContain("# Example");
     });
+
+    // Note: "created_empty" branch (lines 95-96) is a defensive fallback
+    // when templates are not bundled with package. This is not testable
+    // in normal circumstances as templates are always bundled.
   });
 });

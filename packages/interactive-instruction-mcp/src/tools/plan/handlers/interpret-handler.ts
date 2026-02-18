@@ -92,6 +92,10 @@ plan(action: "interpret", id: "<task-id>", feedback_id: "<feedback-id>", interpr
       };
     }
 
+    // Update PENDING_REVIEW.md to include this feedback
+    const { planReporter } = params.context;
+    await planReporter.updateAll();
+
     return {
       content: [
         {

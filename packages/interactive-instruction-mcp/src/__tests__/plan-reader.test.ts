@@ -2059,4 +2059,46 @@ Content`;
     });
   });
 
+  describe("error branches coverage", () => {
+    // Note: cancelPendingDeletion error branch (line 647) requires fs.unlink to fail
+    // after getPendingDeletion succeeds, which is difficult to simulate without mocking.
+    // ESM doesn't support vi.spyOn for built-in modules.
+
+    it("should handle clearAllTasks with error in fs operations", async () => {
+      // Create a corrupted directory structure
+      const corruptedDir = path.join(process.cwd(), "src/__tests__/temp-plan-corrupt");
+      await fs.mkdir(corruptedDir, { recursive: true });
+
+      const corruptedReader = new PlanReader(corruptedDir);
+
+      // Create a task
+      await corruptedReader.addTask({
+        id: "task-clear-error",
+        title: "Task Clear Error",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Replace the .md file with a directory to cause unlink to fail
+      const mdFile = path.join(corruptedDir, "task-clear-error.md");
+      await fs.unlink(mdFile);
+      await fs.mkdir(mdFile, { recursive: true });
+
+      const result = await corruptedReader.clearAllTasks();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Failed to clear tasks");
+
+      // Cleanup
+      await fs.rm(corruptedDir, { recursive: true, force: true });
+    });
+  });
+
 });
