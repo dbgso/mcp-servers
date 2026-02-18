@@ -4,17 +4,20 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { PlanReader } from "../services/plan-reader.js";
 import { PlanReporter } from "../services/plan-reporter.js";
+import { FeedbackReader } from "../services/feedback-reader.js";
 
 describe("PlanReporter", () => {
   let testDir: string;
   let planReader: PlanReader;
+  let feedbackReader: FeedbackReader;
   let planReporter: PlanReporter;
 
   beforeEach(async () => {
     testDir = path.join(os.tmpdir(), `plan-reporter-test-${Date.now()}`);
     await fs.mkdir(testDir, { recursive: true });
     planReader = new PlanReader(testDir);
-    planReporter = new PlanReporter(testDir, planReader);
+    feedbackReader = new FeedbackReader(testDir);
+    planReporter = new PlanReporter(testDir, planReader, feedbackReader);
   });
 
   afterEach(async () => {
@@ -1102,6 +1105,410 @@ Content`;
 
       // Restore original
       planReader.getTask = originalGetTask;
+    });
+  });
+
+  describe("pending feedback in PENDING_REVIEW.md", () => {
+    it("should include feedback with interpretation in PENDING_REVIEW.md", async () => {
+      // Create a task
+      await planReader.addTask({
+        id: "fb-test-task",
+        title: "Feedback Test Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Create draft feedback with interpretation
+      const fbResult = await feedbackReader.createDraftFeedback({
+        taskId: "fb-test-task",
+        original: "This needs improvement",
+        decision: "adopted",
+      });
+
+      await feedbackReader.addInterpretation({
+        taskId: "fb-test-task",
+        feedbackId: fbResult.feedbackId!,
+        interpretation: "Will add more tests",
+      });
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+      expect(content).toContain("# Pending Feedback");
+      expect(content).toContain(fbResult.feedbackId);
+      expect(content).toContain("fb-test-task");
+      expect(content).toContain("This needs improvement");
+      expect(content).toContain("Will add more tests");
+      expect(content).toContain('approve(target: "feedback"');
+    });
+
+    it("should not include feedback without interpretation", async () => {
+      await planReader.addTask({
+        id: "fb-no-interp-task",
+        title: "No Interp Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Create draft feedback WITHOUT interpretation
+      await feedbackReader.createDraftFeedback({
+        taskId: "fb-no-interp-task",
+        original: "Needs work",
+        decision: "adopted",
+      });
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+      expect(content).not.toContain("# Pending Feedback");
+      expect(content).not.toContain("Needs work");
+    });
+
+    it("should not include confirmed feedback", async () => {
+      await planReader.addTask({
+        id: "fb-confirmed-task",
+        title: "Confirmed Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      const fbResult = await feedbackReader.createDraftFeedback({
+        taskId: "fb-confirmed-task",
+        original: "Already confirmed",
+        decision: "adopted",
+      });
+
+      await feedbackReader.addInterpretation({
+        taskId: "fb-confirmed-task",
+        feedbackId: fbResult.feedbackId!,
+        interpretation: "Will fix",
+      });
+
+      // Confirm the feedback
+      await feedbackReader.confirmFeedback({
+        taskId: "fb-confirmed-task",
+        feedbackId: fbResult.feedbackId!,
+      });
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+      expect(content).not.toContain("# Pending Feedback");
+      expect(content).not.toContain("Already confirmed");
+    });
+
+    it("should work without feedbackReader (backward compatibility)", async () => {
+      // Create reporter without feedbackReader
+      const reporterWithoutFeedback = new PlanReporter(testDir, planReader);
+
+      await planReader.addTask({
+        id: "no-fb-task",
+        title: "No FB Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Should not throw
+      await reporterWithoutFeedback.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+      expect(content).toContain("# Pending Review Tasks");
+      expect(content).not.toContain("# Pending Feedback");
+    });
+
+    it("should show pending_review task without feedback (empty feedbackPart)", async () => {
+      // Create a task and set to pending_review
+      await planReader.addTask({
+        id: "fb-no-feedback-task",
+        title: "No Feedback Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Set to pending_review status
+      await planReader.updateStatus({
+        id: "fb-no-feedback-task",
+        status: "pending_review",
+        changes: [],
+        why: "Test",
+        references_used: null,
+        references_reason: "N/A",
+      });
+
+      // NO feedback created for this task
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+
+      // Should contain the task without feedback section
+      expect(content).toContain("fb-no-feedback-task");
+      expect(content).toContain("No Feedback Task");
+    });
+
+    it("should show pending_review task without output and without feedback (line 114)", async () => {
+      // Manually create task file with pending_review status but NO task_output
+      // PlanReader looks for .md files directly in testDir
+      const taskContent = `---
+id: no-output-task
+title: "Task Without Output"
+status: pending_review
+parent: ""
+dependencies: []
+dependency_reason: ""
+prerequisites: ""
+completion_criteria: ""
+deliverables: []
+output: ""
+task_output: "null"
+is_parallelizable: false
+parallelizable_units: ""
+references: []
+feedback: "[]"
+created: 2025-01-01T00:00:00.000Z
+updated: 2025-01-01T00:00:00.000Z
+---
+
+# Task content
+`;
+      await fs.writeFile(path.join(testDir, "no-output-task.md"), taskContent);
+
+      // Invalidate cache so PlanReader picks up the manually created file
+      planReader.invalidateCache();
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+
+      // Should contain "No output recorded" and no feedback section
+      expect(content).toContain("no-output-task");
+      expect(content).toContain("Task Without Output");
+      expect(content).toContain("No output recorded");
+    });
+
+    it("should show pending_review task without output but with feedback (line 114 true branch)", async () => {
+      // Manually create task file with pending_review status but NO task_output
+      const taskContent = `---
+id: no-output-with-fb
+title: "Task Without Output But With Feedback"
+status: pending_review
+parent: ""
+dependencies: []
+dependency_reason: ""
+prerequisites: ""
+completion_criteria: ""
+deliverables: []
+output: ""
+task_output: "null"
+is_parallelizable: false
+parallelizable_units: ""
+references: []
+feedback: "[]"
+created: 2025-01-01T00:00:00.000Z
+updated: 2025-01-01T00:00:00.000Z
+---
+
+# Task content
+`;
+      await fs.writeFile(path.join(testDir, "no-output-with-fb.md"), taskContent);
+
+      // Create feedback for this task (must be .md format with frontmatter)
+      const feedbackDir = path.join(testDir, "feedback", "no-output-with-fb");
+      await fs.mkdir(feedbackDir, { recursive: true });
+      const feedbackContent = `---
+id: fb-test-no-output
+task_id: no-output-with-fb
+original: "Test feedback"
+interpretation: "Test interpretation"
+decision: unset
+status: draft
+timestamp: ${new Date().toISOString()}
+addressed_by: null
+---
+`;
+      await fs.writeFile(
+        path.join(feedbackDir, "fb-test-no-output.md"),
+        feedbackContent
+      );
+
+      planReader.invalidateCache();
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+
+      // Should contain both "No output recorded" AND feedback section
+      expect(content).toContain("no-output-with-fb");
+      expect(content).toContain("No output recorded");
+      expect(content).toContain("Pending Feedback");
+      expect(content).toContain("Test feedback");
+    });
+
+    it("should show non-pending_review task with feedback using formatTaskWithFeedbackOnly", async () => {
+      // Create a completed task (not pending_review)
+      await planReader.addTask({
+        id: "fb-completed-task",
+        title: "Completed Task With Feedback",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Mark as completed (not pending_review)
+      await planReader.updateStatus({
+        id: "fb-completed-task",
+        status: "completed",
+        changes: [],
+        why: "Test",
+        references_used: null,
+        references_reason: "N/A",
+      });
+
+      // Create draft feedback with interpretation
+      const fb = await feedbackReader.createDraftFeedback({
+        taskId: "fb-completed-task",
+        original: "Completed task feedback",
+        decision: "adopted",
+      });
+      await feedbackReader.addInterpretation({
+        taskId: "fb-completed-task",
+        feedbackId: fb.feedbackId!,
+        interpretation: "Will review later",
+      });
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+
+      // Should contain the task with feedback message
+      expect(content).toContain("fb-completed-task");
+      expect(content).toContain("Task is not pending review, but has pending feedback");
+      expect(content).toContain("Completed task feedback");
+    });
+
+    it("should sort multiple feedback items by timestamp (newest first)", async () => {
+      // Create a task
+      await planReader.addTask({
+        id: "fb-multi-task",
+        title: "Multi Feedback Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      // Create first feedback (older)
+      const fb1 = await feedbackReader.createDraftFeedback({
+        taskId: "fb-multi-task",
+        original: "First feedback",
+        decision: "adopted",
+      });
+      await feedbackReader.addInterpretation({
+        taskId: "fb-multi-task",
+        feedbackId: fb1.feedbackId!,
+        interpretation: "First interpretation",
+      });
+
+      // Wait a bit to ensure different timestamps
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Create second feedback (newer)
+      const fb2 = await feedbackReader.createDraftFeedback({
+        taskId: "fb-multi-task",
+        original: "Second feedback",
+        decision: "adopted",
+      });
+      await feedbackReader.addInterpretation({
+        taskId: "fb-multi-task",
+        feedbackId: fb2.feedbackId!,
+        interpretation: "Second interpretation",
+      });
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+
+      // Both feedback items should be present
+      expect(content).toContain("First feedback");
+      expect(content).toContain("Second feedback");
+
+      // Second feedback (newer) should appear before first feedback (older)
+      const secondIndex = content.indexOf("Second feedback");
+      const firstIndex = content.indexOf("First feedback");
+      expect(secondIndex).toBeLessThan(firstIndex);
     });
   });
 });

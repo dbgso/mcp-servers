@@ -1,30 +1,48 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { Task, TaskOutput } from "../types/index.js";
+import type { Task, TaskOutput, FeedbackEntry } from "../types/index.js";
 import type { PlanReader } from "./plan-reader.js";
+import type { FeedbackReader } from "./feedback-reader.js";
 
 export class PlanReporter {
   private readonly directory: string;
   private readonly planReader: PlanReader;
+  private readonly feedbackReader: FeedbackReader | null;
 
-  constructor(directory: string, planReader: PlanReader) {
+  constructor(directory: string, planReader: PlanReader, feedbackReader?: FeedbackReader) {
     this.directory = directory;
     this.planReader = planReader;
+    this.feedbackReader = feedbackReader ?? null;
   }
 
   async updatePendingReviewFile(): Promise<void> {
     const tasks = await this.planReader.listTasks();
     const pendingReview = tasks.filter((t) => t.status === "pending_review");
 
+    // Get all pending feedback grouped by task
+    const feedbackByTask = await this.getFeedbackByTask(tasks.map(t => t.id));
+
     const contentParts: string[] = ["# Pending Review Tasks\n"];
 
-    if (pendingReview.length === 0) {
+    if (pendingReview.length === 0 && feedbackByTask.size === 0) {
       contentParts.push("_No tasks pending review._\n");
     } else {
+      // First, show pending_review tasks with their feedback
       for (const summary of pendingReview) {
         const task = await this.planReader.getTask(summary.id);
         if (task) {
-          contentParts.push(this.formatTaskReport(task));
+          const taskFeedback = feedbackByTask.get(task.id) ?? [];
+          contentParts.push(this.formatTaskReport(task, taskFeedback));
+          feedbackByTask.delete(task.id); // Remove so we don't show it again
+        }
+      }
+
+      // Then, show tasks that have pending feedback but are not pending_review
+      // Note: feedback.length is always > 0 because getFeedbackByTask only adds entries with feedback
+      for (const [taskId, feedback] of feedbackByTask) {
+        const task = await this.planReader.getTask(taskId);
+        if (task) {
+          contentParts.push(this.formatTaskWithFeedbackOnly(task, feedback));
         }
       }
     }
@@ -33,14 +51,72 @@ export class PlanReporter {
     await fs.writeFile(filePath, contentParts.join("\n"), "utf-8");
   }
 
-  private formatTaskReport(task: Task): string {
+  private async getFeedbackByTask(taskIds: string[]): Promise<Map<string, FeedbackEntry[]>> {
+    const result = new Map<string, FeedbackEntry[]>();
+
+    if (!this.feedbackReader) {
+      return result;
+    }
+
+    for (const taskId of taskIds) {
+      const drafts = await this.feedbackReader.getDraftFeedback(taskId);
+      // Only include drafts that have interpretation (ready for approval)
+      const readyForApproval = drafts.filter(fb => fb.interpretation !== null);
+      if (readyForApproval.length > 0) {
+        // Sort by timestamp (newest first)
+        readyForApproval.sort((a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        result.set(taskId, readyForApproval);
+      }
+    }
+
+    return result;
+  }
+
+  private formatFeedbackSection(feedbackList: FeedbackEntry[]): string {
+    if (feedbackList.length === 0) {
+      return "";
+    }
+
+    const items = feedbackList.map(fb => `#### ${fb.id}
+
+**Original:**
+${fb.original}
+
+**Interpretation:**
+${fb.interpretation}
+
+Approve: \`approve(target: "feedback", task_id: "${fb.task_id}", feedback_id: "${fb.id}")\``);
+
+    return `### Pending Feedback
+
+${items.join("\n\n")}`;
+  }
+
+  private formatTaskWithFeedbackOnly(task: Task, feedbackList: FeedbackEntry[]): string {
+    return `## ${task.id}: ${task.title}
+
+_Task is not pending review, but has pending feedback._
+
+${this.formatFeedbackSection(feedbackList)}
+
+---
+
+`;
+  }
+
+  private formatTaskReport(task: Task, feedbackList: FeedbackEntry[] = []): string {
     const output = task.task_output;
 
     if (!output) {
+      const feedbackSection = this.formatFeedbackSection(feedbackList);
+      const feedbackPart = feedbackSection ? `\n${feedbackSection}\n` : "";
+
       return `## ${task.id}: ${task.title}
 
 _No output recorded._
-
+${feedbackPart}
 ---
 
 Approve: \`approve(target: "task", id: "${task.id}")\`
@@ -64,6 +140,9 @@ Approve: \`approve(target: "task", id: "${task.id}")\`
       return `- **References**: ${output.references_used.join(", ")}\n- **Reason**: ${output.references_reason || "(not recorded)"}`;
     })();
 
+    const feedbackSection = this.formatFeedbackSection(feedbackList);
+    const feedbackPart = feedbackSection ? `\n${feedbackSection}\n` : "";
+
     return `## ${task.id}: ${task.title}
 
 ### Phase: ${output.phase}
@@ -83,7 +162,7 @@ ${blockersRisks}
 
 ### References
 ${referencesSection}
-
+${feedbackPart}
 ---
 
 **Completion criteria**: ${task.completion_criteria || "(not set)"}
