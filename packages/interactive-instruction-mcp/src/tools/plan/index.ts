@@ -125,9 +125,9 @@ Split into multiple tasks when work involves:
 - Verification that deserves its own cycle
 - Work that could be reviewed incrementally
 
-## PDCA Subtasks
+## PDCA Subtasks (Auto-Generated)
 
-When you start a task with \`plan(action: "start", ...)\`, PDCA subtasks are auto-created:
+When you start a task with \`plan(action: "start", ...)\`, PDCA subtasks are **automatically created**:
 
 - \`<task-id>__plan\` - Research & planning
 - \`<task-id>__do\` - Implementation
@@ -138,11 +138,40 @@ Each phase has specific submit actions:
 - \`submit_plan\` - Submit research findings
 - \`submit_do\` - Submit implementation
 - \`submit_check\` - Submit verification results
-- \`submit_act\` - Submit feedback response`;
+- \`submit_act\` - Submit feedback response
+
+### Nested Task Structure
+
+For complex work, create nested tasks that each follow the PDCA cycle:
+
+\`\`\`
+fix-xxx                          # Parent task
+├── fix-xxx__investigation       # Subtask 1 (when started, gets PDCA phases)
+│   ├── fix-xxx__investigation__plan
+│   ├── fix-xxx__investigation__do
+│   ├── fix-xxx__investigation__check
+│   └── fix-xxx__investigation__act
+├── fix-xxx__implementation      # Subtask 2 (when started, gets PDCA phases)
+│   ├── fix-xxx__implementation__plan
+│   ├── fix-xxx__implementation__do
+│   ├── fix-xxx__implementation__check
+│   └── fix-xxx__implementation__act
+└── fix-xxx__testing             # Subtask 3 (when started, gets PDCA phases)
+    ├── fix-xxx__testing__plan
+    ├── fix-xxx__testing__do
+    ├── fix-xxx__testing__check
+    └── fix-xxx__testing__act
+\`\`\`
+
+**The PDCA phases are universal** - they apply to any type of task:
+- Investigation tasks: Plan what to look for, Do the research, Check findings, Act on insights
+- Implementation tasks: Plan approach, Do coding, Check it works, Act on feedback
+- Testing tasks: Plan test cases, Do testing, Check coverage, Act on failures`;
 
 const TaskStatusSchema = z.enum([
   "pending",
   "in_progress",
+  "self_review",
   "pending_review",
   "completed",
   "blocked",

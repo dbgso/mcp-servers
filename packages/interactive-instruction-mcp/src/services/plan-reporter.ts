@@ -295,6 +295,7 @@ ${risks}`;
     lines.push("");
     lines.push("## Legend");
     lines.push("- completed");
+    lines.push("- self_review");
     lines.push("- pending_review");
     lines.push("- in_progress");
     lines.push("- pending/ready");
@@ -314,6 +315,8 @@ ${risks}`;
     switch (status) {
       case "completed":
         return "[done]";
+      case "self_review":
+        return "[self-review]";
       case "pending_review":
         return "[review]";
       case "in_progress":
@@ -331,6 +334,8 @@ ${risks}`;
     switch (status) {
       case "completed":
         return "fill:#90EE90,stroke:#228B22";
+      case "self_review":
+        return "fill:#FFD700,stroke:#B8860B"; // Gold for self-review (AI reviewing)
       case "pending_review":
         return "fill:#DDA0DD,stroke:#8B008B";
       case "in_progress":
