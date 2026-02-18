@@ -12,6 +12,7 @@ import type {
  */
 export const baseParamsSchema = z.object({
   id: z.string(),
+  self_review_ref: z.string().describe("Self-review help ID that was read before submitting"),
   output_what: z.string().describe("What was done"),
   output_why: z.string().describe("Why this is sufficient"),
   output_how: z.string().describe("How it was done/investigated"),
@@ -84,6 +85,26 @@ export abstract class BaseSubmitHandler implements PlanActionHandler {
           {
             type: "text" as const,
             text: `Error: ${baseResult.error.errors.map((e) => e.message).join(", ")}\n\n${this.help}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Validate self_review_ref matches expected pattern
+    const expectedRef = `_mcp-interactive-instruction__plan__self-review__${this.phase}`;
+    if (baseResult.data.self_review_ref !== expectedRef) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: Invalid self_review_ref. Expected "${expectedRef}".
+
+You must read the self-review requirements before submitting:
+\`help(id: "${expectedRef}")\`
+
+Then include the ID in your submission:
+\`self_review_ref: "${expectedRef}"\``,
           },
         ],
         isError: true,

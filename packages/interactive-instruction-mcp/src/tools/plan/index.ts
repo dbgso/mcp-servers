@@ -123,7 +123,22 @@ Split into multiple tasks when work involves:
 - Investigation/research before implementation
 - Multiple distinct deliverables
 - Verification that deserves its own cycle
-- Work that could be reviewed incrementally`;
+- Work that could be reviewed incrementally
+
+## PDCA Subtasks
+
+When you start a task with \`plan(action: "start", ...)\`, PDCA subtasks are auto-created:
+
+- \`<task-id>__plan\` - Research & planning
+- \`<task-id>__do\` - Implementation
+- \`<task-id>__check\` - Verification
+- \`<task-id>__act\` - Feedback & improvements
+
+Each phase has specific submit actions:
+- \`submit_plan\` - Submit research findings
+- \`submit_do\` - Submit implementation
+- \`submit_check\` - Submit verification results
+- \`submit_act\` - Submit feedback response`;
 
 const TaskStatusSchema = z.enum([
   "pending",
@@ -305,6 +320,10 @@ export function registerPlanTool(params: {
             "AI's detailed interpretation of feedback - action items to address it (required for interpret action)"
           ),
         // Common fields for all submit_* actions
+        self_review_ref: z
+          .string()
+          .optional()
+          .describe("Self-review help ID that was read (required for submit_*, e.g., '_mcp-interactive-instruction__plan__self-review__do')"),
         blockers: z
           .array(z.string())
           .optional()
@@ -383,6 +402,7 @@ export function registerPlanTool(params: {
       references_reason,
       feedback_id,
       interpretation,
+      self_review_ref,
       blockers,
       risks,
       findings,
@@ -444,7 +464,7 @@ Self-review templates are available for this project. Would you like to set them
         output_what, output_why, output_how, reason, is_parallelizable, parallelizable_units, references,
         status, comment, changes, why, references_used, references_reason,
         feedback_id, interpretation,
-        blockers, risks, findings, sources, design_decisions,
+        self_review_ref, blockers, risks, findings, sources, design_decisions,
         test_target, test_results, coverage, feedback_addressed, prompt,
       };
 
