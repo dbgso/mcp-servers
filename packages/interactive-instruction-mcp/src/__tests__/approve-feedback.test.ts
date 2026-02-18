@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { PlanReader } from "../services/plan-reader.js";
@@ -99,29 +99,37 @@ describe("approveFeedback updateAll integration", () => {
       references: [],
     });
 
-    // Create multiple feedbacks
+    // Create multiple feedbacks with delay to ensure different timestamps
     const fb1 = await feedbackReader.createDraftFeedback({
       taskId: "task-with-fb",
       original: "Feedback 1",
       decision: "adopted",
     });
+    expect(fb1.success).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
     const fb2 = await feedbackReader.createDraftFeedback({
       taskId: "task-with-fb",
       original: "Feedback 2",
       decision: "adopted",
     });
+    expect(fb2.success).toBe(true);
 
     // Add interpretations
-    await feedbackReader.addInterpretation({
+    const interp1 = await feedbackReader.addInterpretation({
       taskId: "task-with-fb",
       feedbackId: fb1.feedbackId ?? "",
       interpretation: "Interp 1",
     });
-    await feedbackReader.addInterpretation({
+    expect(interp1.success).toBe(true);
+
+    const interp2 = await feedbackReader.addInterpretation({
       taskId: "task-with-fb",
       feedbackId: fb2.feedbackId ?? "",
       interpretation: "Interp 2",
     });
+    expect(interp2.success).toBe(true);
 
     // Generate PENDING_REVIEW.md
     await planReporter.updateAll();
