@@ -42,7 +42,10 @@ None required.
       };
     }
 
-    const { planReader } = params.context;
+    const { planReader, planReporter } = params.context;
+
+    // Update markdown files to ensure they're in sync
+    await planReporter.updateAll();
     const tasks: TaskSummary[] = await planReader.listTasks();
 
     if (tasks.length === 0) {
