@@ -52,6 +52,23 @@ export interface ApplyActionContext {
 
 export type ApplyActionHandler = ActionHandler<ApplyActionParams, ApplyActionContext>;
 
+// Approve tool types
+export interface ApproveActionParams {
+  task_id?: string;
+  feedback_id?: string;
+  reason?: string;
+}
+
+export interface ApproveActionContext {
+  planReader: PlanReader;
+  planReporter: PlanReporter;
+  feedbackReader: FeedbackReaderInterface;
+  markdownDir: string;
+  config: ReminderConfig;
+}
+
+export type ApproveActionHandler = ActionHandler<ApproveActionParams, ApproveActionContext>;
+
 // Plan tool types
 export type TaskStatus =
   | "pending"

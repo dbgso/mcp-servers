@@ -509,6 +509,7 @@ describe("PlanReporter", () => {
       { status: "blocked", icon: "[blocked]", style: "fill:#FFB6C1" },
       { status: "skipped", icon: "[skip]", style: "fill:#D3D3D3" },
       { status: "in_progress", icon: "[wip]", style: "fill:#87CEEB" },
+      { status: "self_review", icon: "[self-review]", style: "fill:#FFD700" },
       { status: "pending_review", icon: "[review]", style: "fill:#DDA0DD" },
     ];
 
@@ -601,6 +602,34 @@ Task content`;
             id: "progress-task",
             status: "in_progress",
           });
+        } else if (status === "self_review") {
+          // Create task file directly with self_review status
+          const selfReviewTaskContent = `---
+id: self-review-task
+title: "Self Review Task"
+status: self_review
+parent: ""
+dependencies: []
+dependency_reason: ""
+prerequisites: ""
+completion_criteria: ""
+deliverables: []
+output: ""
+task_output: "null"
+is_parallelizable: false
+references: []
+feedback: "[]"
+created: ${new Date().toISOString()}
+updated: ${new Date().toISOString()}
+---
+
+Task content`;
+          await fs.writeFile(
+            path.join(testDir, "self-review-task.md"),
+            selfReviewTaskContent,
+            "utf-8"
+          );
+          planReader.invalidateCache();
         } else if (status === "pending_review") {
           await planReader.addTask({
             id: "review-task",
