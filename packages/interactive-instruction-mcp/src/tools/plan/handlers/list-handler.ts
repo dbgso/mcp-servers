@@ -83,8 +83,12 @@ None required.
 
     // Pending Review section with full details
     if (byStatus.pending_review.length > 0) {
+      const { planDir } = params.context;
       output += "## Pending Review\n\n";
       output += "The following tasks are waiting for user approval. Review and approve or request changes.\n\n";
+      output += `**Review files:**\n`;
+      output += `- \`${planDir}/PENDING_REVIEW.md\` - Detailed task output for review\n`;
+      output += `- \`${planDir}/GRAPH.md\` - Task dependency graph\n\n`;
 
       for (const t of byStatus.pending_review) {
         const task = await planReader.getTask(t.id);

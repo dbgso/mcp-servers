@@ -27,6 +27,8 @@ This tool solves these problems by:
 | `help` | Browse/read confirmed documentation | - |
 | `draft` | CRUD for temporary docs (`_mcp_drafts/`) | AI can use freely |
 | `apply` | Promote drafts to confirmed docs | Requires user approval |
+| `plan` | Task planning with PDCA workflow | AI can use freely |
+| `approve` | Approve tasks, feedback, deletions, skip | Requires user approval |
 
 ### description
 
@@ -107,6 +109,94 @@ apply({ action: "promote", draftId: "temp-guide", targetId: "guides__setup" })
 → Moves _mcp_drafts/temp-guide.md to guides/setup.md
 ```
 
+### plan
+
+Task planning with PDCA (Plan-Do-Check-Act) workflow. Enables structured task management with dependency tracking.
+
+```
+# Show help
+plan()
+
+# List all tasks
+plan({ action: "list" })
+
+# Add a task
+plan({
+  action: "add",
+  id: "fix-bug",
+  title: "Fix login bug",
+  content: "Investigate and fix the login timeout issue",
+  parent: "",
+  dependencies: [],
+  prerequisites: "Access to logs",
+  completion_criteria: "Login works without timeout",
+  deliverables: ["Bug fix commit"],
+  is_parallelizable: false,
+  references: []
+})
+
+# Start a task (creates PDCA subtasks)
+plan({ action: "start", id: "fix-bug", prompt: "Fix the login timeout issue" })
+
+# Submit work for each PDCA phase
+plan({ action: "submit_plan", id: "fix-bug__plan", ... })
+plan({ action: "submit_do", id: "fix-bug__do", ... })
+plan({ action: "submit_check", id: "fix-bug__check", ... })
+plan({ action: "submit_act", id: "fix-bug__act", ... })
+
+# Confirm after self-review
+plan({ action: "confirm", id: "fix-bug__plan" })
+
+# View dependency graph
+plan({ action: "graph" })
+```
+
+**PDCA Workflow:**
+1. **Plan**: Research and planning phase
+2. **Do**: Implementation phase
+3. **Check**: Verification phase
+4. **Act**: Feedback and improvements phase
+
+Each phase requires self-review before user approval.
+
+**Generated Files:**
+
+The plan tool automatically generates and maintains these files in the plan directory:
+
+| File | Purpose |
+|------|---------|
+| `GRAPH.md` | Mermaid diagram showing task dependencies and status |
+| `PENDING_REVIEW.md` | List of tasks awaiting review with pending feedback |
+
+These files are updated automatically when task status changes. Open them in your IDE to visualize progress.
+
+### approve
+
+Approve tasks, feedback, deletions, or skip tasks. **Human reviewers only**.
+
+```
+# Show help
+approve()
+
+# Approve a completed task
+approve({ target: "task", task_id: "fix-bug__plan" })
+
+# Approve feedback
+approve({ target: "feedback", feedback_id: "fb-123", task_id: "fix-bug" })
+
+# Approve pending deletion
+approve({ target: "deletion", task_id: "old-task" })
+
+# Skip a task (with reason)
+approve({ target: "skip", task_id: "optional-task", reason: "Not needed" })
+
+# Setup self-review templates
+approve({ target: "setup_templates" })
+
+# Skip template setup
+approve({ target: "skip_templates" })
+```
+
 ## Installation
 
 ```bash
@@ -143,7 +233,7 @@ Or create `.mcp.json` in your project root:
   "mcpServers": {
     "docs": {
       "command": "npx",
-      "args": ["-y", "mcp-interactive-instruction", "./docs"]
+      "args": ["-y", "mcp-interactive-instruction", "./docs/mcp-interactive-instruction"]
     }
   }
 }
@@ -161,7 +251,7 @@ Optionally add flags to help AI remember to use the MCP tools:
       "args": [
         "-y",
         "mcp-interactive-instruction",
-        "./docs",
+        "./docs/mcp-interactive-instruction",
         "--remind-mcp",
         "--remind-organize",
         "--reminder", "Always check tests before committing"
@@ -188,7 +278,7 @@ Force AI to re-read a specific document before every task. This is useful for cr
   "args": [
     "-y",
     "mcp-interactive-instruction",
-    "./docs",
+    "./docs/mcp-interactive-instruction",
     "--topic-for-every-task", "topic-for-every-task",
     "--info-expires", "60"
   ]
@@ -231,7 +321,7 @@ Example with multiple custom reminders:
   "args": [
     "-y",
     "mcp-interactive-instruction",
-    "./docs",
+    "./docs/mcp-interactive-instruction",
     "--reminder", "Run tests after code changes",
     "--reminder", "Use Japanese for commit messages"
   ]

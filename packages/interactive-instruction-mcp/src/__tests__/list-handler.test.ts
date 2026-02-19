@@ -29,8 +29,8 @@ describe("ListHandler", () => {
       planReader: mockPlanReader,
       planReporter: mockPlanReporter,
       feedbackReader: {} as PlanActionContext["feedbackReader"],
-      markdownDir: "/tmp/test",
-      config: { enabled: false },
+      planDir: "/tmp/mcp-interactive-instruction-plan",
+      config: {} as PlanActionContext["config"],
     };
   });
 

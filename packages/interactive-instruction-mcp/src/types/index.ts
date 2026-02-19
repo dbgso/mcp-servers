@@ -64,6 +64,7 @@ export interface ApproveActionContext {
   planReporter: PlanReporter;
   feedbackReader: FeedbackReaderInterface;
   markdownDir: string;
+  planDir: string;
   config: ReminderConfig;
 }
 

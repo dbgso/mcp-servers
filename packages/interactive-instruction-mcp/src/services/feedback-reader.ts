@@ -35,7 +35,8 @@ export class FeedbackReader {
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
     ) {
-      return value.slice(1, -1);
+      // Unescape common escape sequences
+      return value.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t");
     }
 
     return value;

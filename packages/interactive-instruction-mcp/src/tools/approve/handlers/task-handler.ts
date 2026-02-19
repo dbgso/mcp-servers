@@ -61,16 +61,27 @@ export class TaskHandler implements ApproveActionHandler {
 
     // Show newly ready tasks
     const readyTasks = await planReader.getReadyTasks();
+    const pendingReviewTasks = (await planReader.listTasks()).filter(t => t.status === "pending_review");
+    const { planDir } = params.context;
+
     let additionalInfo = "";
     if (readyTasks.length > 0) {
       additionalInfo = `\n\nReady tasks: ${readyTasks.map((t) => t.id).join(", ")}`;
+    }
+
+    // Show review files if there are more pending review tasks
+    let reviewFilesInfo = "";
+    if (pendingReviewTasks.length > 0) {
+      reviewFilesInfo = `\n\n**More tasks pending review (${pendingReviewTasks.length}):**\n`;
+      reviewFilesInfo += `- \`${planDir}/PENDING_REVIEW.md\` - Detailed task output\n`;
+      reviewFilesInfo += `- \`${planDir}/GRAPH.md\` - Task dependency graph`;
     }
 
     return {
       content: [
         {
           type: "text" as const,
-          text: `Task "${task_id}" approved and marked as completed.\n\nOutput was: ${task.output}${additionalInfo}`,
+          text: `Task "${task_id}" approved and marked as completed.\n\nOutput was: ${task.output}${additionalInfo}${reviewFilesInfo}`,
         },
       ],
     };
