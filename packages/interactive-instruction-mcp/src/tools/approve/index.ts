@@ -54,9 +54,10 @@ export function registerApproveTool(params: {
   planReporter: PlanReporter;
   feedbackReader: FeedbackReader;
   markdownDir: string;
+  planDir: string;
   config: ReminderConfig;
 }): void {
-  const { server, planReader, planReporter, feedbackReader, markdownDir, config } = params;
+  const { server, planReader, planReporter, feedbackReader, markdownDir, planDir, config } = params;
 
   server.registerTool(
     "approve",
@@ -113,7 +114,7 @@ export function registerApproveTool(params: {
 
       const result = await handler.execute({
         actionParams: { task_id, feedback_id, reason },
-        context: { planReader, planReporter, feedbackReader, markdownDir, config },
+        context: { planReader, planReporter, feedbackReader, markdownDir, planDir, config },
       });
 
       return wrapResponse({ result, config });

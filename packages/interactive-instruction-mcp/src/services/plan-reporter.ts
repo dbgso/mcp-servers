@@ -113,9 +113,12 @@ ${this.formatFeedbackSection(feedbackList)}
       const feedbackSection = this.formatFeedbackSection(feedbackList);
       const feedbackPart = feedbackSection ? `\n${feedbackSection}\n` : "";
 
+      // Show task content even without output
+      const contentSection = task.content ? `### Content\n${task.content}\n` : "_No output recorded._\n";
+
       return `## ${task.id}: ${task.title}
 
-_No output recorded._
+${contentSection}
 ${feedbackPart}
 ---
 
@@ -143,11 +146,14 @@ Approve: \`approve(target: "task", id: "${task.id}")\`
     const feedbackSection = this.formatFeedbackSection(feedbackList);
     const feedbackPart = feedbackSection ? `\n${feedbackSection}\n` : "";
 
+    // Include task content if present
+    const contentSection = task.content ? `### Content\n${task.content}\n\n` : "";
+
     return `## ${task.id}: ${task.title}
 
 ### Phase: ${output.phase}
 
-### What
+${contentSection}### What
 ${output.what}
 
 ### Why

@@ -89,6 +89,53 @@ describe("PlanReporter", () => {
       expect(content).toContain("Meets completion criteria");
     });
 
+    it("should include task.content in PENDING_REVIEW.md when task_output exists", async () => {
+      const taskContent = "# Detailed Plan\n\nThis is the detailed content of the task.";
+      await planReader.addTask({
+        id: "content-test",
+        title: "Content Test Task",
+        content: taskContent,
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "None",
+        completion_criteria: "Done",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+
+      await planReader.updateStatus({
+        id: "content-test",
+        status: "pending_review",
+        task_output: {
+          what: "Did something",
+          why: "Because needed",
+          how: "By doing it",
+          phase: "plan",
+          blockers: [],
+          risks: [],
+          findings: "Found things",
+          sources: ["src/file.ts"],
+          references_used: [],
+          references_reason: "No refs",
+        },
+      });
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(
+        path.join(testDir, "PENDING_REVIEW.md"),
+        "utf-8"
+      );
+      // Both task.content AND task_output should be displayed
+      expect(content).toContain("### Content");
+      expect(content).toContain("# Detailed Plan");
+      expect(content).toContain("This is the detailed content of the task.");
+      expect(content).toContain("### What");
+      expect(content).toContain("Did something");
+    });
+
     it("should not include completed tasks", async () => {
       await planReader.addTask({
         id: "completed-task",
@@ -725,7 +772,8 @@ Content`;
         path.join(testDir, "PENDING_REVIEW.md"),
         "utf-8"
       );
-      expect(content).toContain("No output recorded");
+      expect(content).toContain("### Content");
+      expect(content).toContain("Content");
       expect(content).toContain(`approve(target: "task", id: "no-output-task")`);
     });
   });
@@ -1362,10 +1410,11 @@ updated: 2025-01-01T00:00:00.000Z
         "utf-8"
       );
 
-      // Should contain "No output recorded" and no feedback section
+      // Should contain task content and no feedback section
       expect(content).toContain("no-output-task");
       expect(content).toContain("Task Without Output");
-      expect(content).toContain("No output recorded");
+      expect(content).toContain("### Content");
+      expect(content).toContain("# Task content");
     });
 
     it("should show pending_review task without output but with feedback (line 114 true branch)", async () => {
@@ -1422,9 +1471,10 @@ addressed_by: null
         "utf-8"
       );
 
-      // Should contain both "No output recorded" AND feedback section
+      // Should contain task content AND feedback section
       expect(content).toContain("no-output-with-fb");
-      expect(content).toContain("No output recorded");
+      expect(content).toContain("### Content");
+      expect(content).toContain("# Task content");
       expect(content).toContain("Pending Feedback");
       expect(content).toContain("Test feedback");
     });
