@@ -1,11 +1,11 @@
 {
-  "name": "mcp-interactive-instruction",
-  "version": "1.2.0",
-  "description": "MCP server for interactive instruction documents - list, view, add, and update markdown files on demand",
+  "name": "interactive-pdca-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for PDCA task planning workflow - plan and approve tools",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mcp-interactive-instruction": "./dist/index.js"
+    "interactive-pdca-mcp": "./dist/index.js"
   },
   "files": [
     "dist",
@@ -24,9 +24,9 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
-    "markdown",
-    "instruction",
-    "documentation",
+    "pdca",
+    "task-planning",
+    "workflow",
     "claude",
     "ai",
     "llm"
@@ -36,11 +36,11 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dbgso/mcp-servers.git",
-    "directory": "packages/interactive-instruction-mcp"
+    "directory": "packages/interactive-pdca-mcp"
   },
-  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/interactive-instruction-mcp#readme",
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/interactive-pdca-mcp#readme",
   "bugs": {
-    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:mcp-interactive-instruction"
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:interactive-pdca-mcp"
   },
   "publishConfig": {
     "access": "public",
@@ -50,12 +50,12 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "1.26.0",
     "mcp-shared": "workspace:*",
-    "zod": "^3.25.0"
+    "zod": "3.25.76"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.0.18",
-    "vitest": "^4.0.18"
+    "@vitest/coverage-v8": "4.0.18",
+    "vitest": "4.0.18"
   }
 }

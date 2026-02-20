@@ -63,9 +63,10 @@ plan(action: "start", id: "<task-id>", prompt: "<instructions>")
       };
     }
 
-    if (task.status !== "pending") {
+    // Allow starting from pending or blocked status
+    if (task.status !== "pending" && task.status !== "blocked") {
       return {
-        content: [{ type: "text" as const, text: `Error: Cannot start task "${id}". Current status: ${task.status}\n\nOnly pending tasks can be started.` }],
+        content: [{ type: "text" as const, text: `Error: Cannot start task "${id}". Current status: ${task.status}\n\nOnly pending or blocked tasks can be started.` }],
         isError: true,
       };
     }
@@ -91,11 +92,13 @@ plan(action: "start", id: "<task-id>", prompt: "<instructions>")
       }
     }
 
-    // Create PDCA subtasks for non-subtask (root-level tasks)
-    const isRootTask = !task.parent;
+    // Create PDCA subtasks for non-PDCA-phase tasks
+    // PDCA phase tasks (ending with __plan, __do, __check, __act) should not get nested PDCA subtasks
+    const PDCA_SUFFIXES = ["__plan", "__do", "__check", "__act"];
+    const isPdcaPhaseTask = PDCA_SUFFIXES.some((suffix) => id.endsWith(suffix));
     const createdSubtasks: string[] = [];
 
-    if (isRootTask) {
+    if (!isPdcaPhaseTask) {
       let prevSubtaskId: string | null = null;
 
       for (const phase of PDCA_PHASES) {
@@ -153,8 +156,8 @@ ${prompt}
 
     const promptRef = `prompts/${id}`;
 
-    // Different response for root task vs subtask
-    if (isRootTask) {
+    // Different response for task with PDCA subtasks vs PDCA phase task
+    if (!isPdcaPhaseTask) {
       return {
         content: [{
           type: "text" as const,

@@ -54,6 +54,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
         version: 1.26.0(zod@3.25.76)
+      mcp-shared:
+        specifier: workspace:*
+        version: link:../mcp-shared
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -63,6 +66,25 @@ importers:
         version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2))
       vitest:
         specifier: ^4.0.18
+        version: 4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/interactive-pdca-mcp:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 1.26.0
+        version: 1.26.0(zod@3.25.76)
+      mcp-shared:
+        specifier: workspace:*
+        version: link:../mcp-shared
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: 4.0.18
+        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2))
+      vitest:
+        specifier: 4.0.18
         version: 4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/kroki-mcp:
@@ -82,6 +104,15 @@ importers:
         version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2))
       vitest:
         specifier: ^4.0.18
+        version: 4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/mcp-shared:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: 4.0.18
+        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2))
+      vitest:
+        specifier: 4.0.18
         version: 4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/traceable-chain-mcp:

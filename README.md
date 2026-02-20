@@ -7,8 +7,11 @@ A collection of Model Context Protocol (MCP) servers.
 | Package | Description |
 |---------|-------------|
 | [git-repo-explorer-mcp](./packages/git-repo-explorer-mcp) | Git repository explorer with worktree support |
-| [interactive-instruction-mcp](./packages/interactive-instruction-mcp) | Interactive instruction document management |
+| [interactive-instruction-mcp](./packages/interactive-instruction-mcp) | Interactive instruction document management (help, draft, apply) |
+| [interactive-pdca-mcp](./packages/interactive-pdca-mcp) | PDCA task planning workflow (plan, approve) |
 | [traceable-chain-mcp](./packages/traceable-chain-mcp) | Traceable document chains with enforced dependencies |
+| [kroki-mcp](./packages/kroki-mcp) | Diagram rendering via Kroki |
+| [mcp-shared](./packages/mcp-shared) | Shared types and utilities for MCP servers |
 
 ## Development
 
@@ -51,9 +54,17 @@ Add to your `.mcp.json`:
       "command": "npx",
       "args": ["interactive-instruction-mcp", "./docs"]
     },
+    "interactive-pdca-mcp": {
+      "command": "npx",
+      "args": ["interactive-pdca-mcp", "./docs"]
+    },
     "traceable-chain-mcp": {
       "command": "npx",
       "args": ["traceable-chain-mcp"]
+    },
+    "kroki-mcp": {
+      "command": "npx",
+      "args": ["kroki-mcp"]
     }
   }
 }

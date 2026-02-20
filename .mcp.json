@@ -8,6 +8,10 @@
       "command": "npx",
       "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./docs", "--remind-mcp", "--topic-for-every-task", "every-task"]
     },
+    "interactive-pdca-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-pdca-mcp/src/index.ts", "./docs", "--remind-mcp", "--topic-for-every-task", "every-task"]
+    },
     "traceable-chain-mcp": {
       "command": "npx",
       "args": ["tsx", "./packages/traceable-chain-mcp/src/index.ts"]

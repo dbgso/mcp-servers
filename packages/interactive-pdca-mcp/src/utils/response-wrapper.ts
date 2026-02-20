@@ -1,4 +1,10 @@
-import type { ReminderConfig, ToolResult } from "mcp-shared";
+import type { ReminderConfig } from "../types/index.js";
+
+interface ToolResult {
+  [x: string]: unknown;
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+}
 
 const MCP_REMINDER = `[Reminder] Always refer to this MCP to check for relevant documentation before starting any task. Use the 'help' tool to list available documents.`;
 
