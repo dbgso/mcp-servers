@@ -19,6 +19,14 @@
     "kroki-mcp": {
       "command": "npx",
       "args": ["tsx", "./packages/kroki-mcp/src/index.ts"]
+    },
+    "ast-file-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/ast-file-mcp/src/index.ts"]
+    },
+    "ast-typescript-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/ast-typescript-mcp/src/index.ts"]
     }
   }
 }
