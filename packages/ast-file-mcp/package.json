@@ -1,0 +1,61 @@
+{
+  "name": "ast-file-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for file AST read/write (Markdown, AsciiDoc)",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "ast-file-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "ast",
+    "markdown",
+    "asciidoc",
+    "remark",
+    "model-context-protocol"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/ast-file-mcp"
+  },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/ast-file-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:ast-file-mcp"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "mcp-shared": "workspace:*",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "unified": "^11.0.5",
+    "@asciidoctor/core": "^3.0.4",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/mdast": "^4.0.4",
+    "@vitest/coverage-v8": "^4.0.18",
+    "vitest": "^4.0.18"
+  }
+}
