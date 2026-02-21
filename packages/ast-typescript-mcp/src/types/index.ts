@@ -47,3 +47,28 @@ export interface TsQueryResult {
   query: TsQueryType;
   data: SourceFileStructure | DeclarationSummary[] | ImportSummary[] | ExportSummary[] | StatementStructures | null;
 }
+
+// Call Graph types
+export type CallNodeKind = "function" | "method" | "class" | "arrow" | "constructor";
+
+export interface CallGraphNode {
+  /** Symbol name */
+  name: string;
+  /** File path where the symbol is defined */
+  filePath: string;
+  /** Line number of the definition */
+  line: number;
+  /** Kind of the symbol */
+  kind: CallNodeKind;
+  /** Outgoing calls from this symbol */
+  calls: CallGraphNode[];
+}
+
+export interface CallGraphResult {
+  /** Root node of the call graph */
+  root: CallGraphNode;
+  /** Total number of nodes in the graph */
+  nodeCount: number;
+  /** Whether max depth was reached (graph may be incomplete) */
+  maxDepthReached: boolean;
+}

@@ -1,5 +1,5 @@
-import { Project, StructureKind, Node } from "ts-morph";
-import type { SourceFileStructure, StatementStructures, ProjectOptions } from "ts-morph";
+import { Project, StructureKind, Node, SyntaxKind } from "ts-morph";
+import type { SourceFileStructure, StatementStructures, ProjectOptions, SourceFile } from "ts-morph";
 import type {
   TsAstReadResult,
   TsQueryType,
@@ -12,6 +12,9 @@ import type {
   DefinitionLocation,
   FindReferencesResult,
   ReferenceLocation,
+  CallGraphNode,
+  CallGraphResult,
+  CallNodeKind,
 } from "../types/index.js";
 import { execSync } from "node:child_process";
 import { dirname } from "node:path";
@@ -604,4 +607,231 @@ export class TypeScriptHandler {
 
     return parentKind.toLowerCase();
   }
+
+  /**
+   * Get call graph starting from a symbol at the given position.
+   * Traces outgoing calls recursively up to maxDepth.
+   */
+  async getCallGraph(params: {
+    filePath: string;
+    line: number;
+    column: number;
+    maxDepth?: number;
+    includeExternal?: boolean;
+  }): Promise<CallGraphResult> {
+    const { filePath, line, column, maxDepth = 5, includeExternal = false } = params;
+    const project = this.getProjectForFile(filePath);
+    const sourceFile = project.addSourceFileAtPath(filePath);
+    const visited = new Set<string>();
+    let nodeCount = 0;
+    let maxDepthReached = false;
+
+    try {
+      const pos = sourceFile.compilerNode.getPositionOfLineAndCharacter(line - 1, column - 1);
+      const node = sourceFile.getDescendantAtPos(pos);
+
+      if (!node) {
+        return {
+          root: { name: "", filePath, line, kind: "function", calls: [] },
+          nodeCount: 0,
+          maxDepthReached: false,
+        };
+      }
+
+      // Find the containing function/method/class
+      const container = this.findCallableContainer(node);
+      if (!container) {
+        return {
+          root: { name: node.getText(), filePath, line, kind: "function", calls: [] },
+          nodeCount: 0,
+          maxDepthReached: false,
+        };
+      }
+
+      const rootNode = this.buildCallGraphNode({
+        project,
+        node: container,
+        visited,
+        depth: 0,
+        maxDepth,
+        includeExternal,
+        onNode: () => nodeCount++,
+        onMaxDepth: () => { maxDepthReached = true; },
+      });
+
+      return {
+        root: rootNode,
+        nodeCount,
+        maxDepthReached,
+      };
+    } finally {
+      project.removeSourceFile(sourceFile);
+    }
+  }
+
+  private findCallableContainer(node: Node): Node | null {
+    let current: Node | undefined = node;
+    while (current) {
+      if (
+        Node.isFunctionDeclaration(current) ||
+        Node.isMethodDeclaration(current) ||
+        Node.isArrowFunction(current) ||
+        Node.isFunctionExpression(current) ||
+        Node.isConstructorDeclaration(current) ||
+        Node.isClassDeclaration(current)
+      ) {
+        return current;
+      }
+      current = current.getParent();
+    }
+    return null;
+  }
+
+  private buildCallGraphNode(params: {
+    project: Project;
+    node: Node;
+    visited: Set<string>;
+    depth: number;
+    maxDepth: number;
+    includeExternal: boolean;
+    onNode: () => void;
+    onMaxDepth: () => void;
+  }): CallGraphNode {
+    const { project, node, visited, depth, maxDepth, includeExternal, onNode, onMaxDepth } = params;
+
+    const name = this.getNodeName(node);
+    const filePath = node.getSourceFile().getFilePath();
+    const line = node.getStartLineNumber();
+    const kind = this.getNodeKind(node);
+    const nodeKey = `${filePath}:${line}:${name}`;
+
+    onNode();
+
+    // Check for circular reference
+    if (visited.has(nodeKey)) {
+      return { name: `${name} (circular)`, filePath, line, kind, calls: [] };
+    }
+    visited.add(nodeKey);
+
+    // Check max depth
+    if (depth >= maxDepth) {
+      onMaxDepth();
+      return { name, filePath, line, kind, calls: [] };
+    }
+
+    const calls: CallGraphNode[] = [];
+
+    // Get all call expressions within this node
+    const callExpressions = node.getDescendantsOfKind(SyntaxKind.CallExpression);
+    const newExpressions = node.getDescendantsOfKind(SyntaxKind.NewExpression);
+
+    for (const callExpr of [...callExpressions, ...newExpressions]) {
+      const calledNode = this.resolveCallTarget(project, callExpr, includeExternal);
+      if (calledNode) {
+        const childNode = this.buildCallGraphNode({
+          project,
+          node: calledNode,
+          visited: new Set(visited), // Clone to allow different paths
+          depth: depth + 1,
+          maxDepth,
+          includeExternal,
+          onNode,
+          onMaxDepth,
+        });
+        // Avoid duplicate calls in the same function
+        if (!calls.some(c => c.filePath === childNode.filePath && c.line === childNode.line)) {
+          calls.push(childNode);
+        }
+      }
+    }
+
+    return { name, filePath, line, kind, calls };
+  }
+
+  private getNodeName(node: Node): string {
+    if (Node.isFunctionDeclaration(node) || Node.isMethodDeclaration(node)) {
+      return node.getName() ?? "(anonymous)";
+    }
+    if (Node.isClassDeclaration(node)) {
+      return node.getName() ?? "(anonymous class)";
+    }
+    if (Node.isConstructorDeclaration(node)) {
+      const parent = node.getParent();
+      if (Node.isClassDeclaration(parent)) {
+        return `${parent.getName() ?? "Class"}.constructor`;
+      }
+      return "constructor";
+    }
+    if (Node.isArrowFunction(node) || Node.isFunctionExpression(node)) {
+      const parent = node.getParent();
+      if (Node.isVariableDeclaration(parent)) {
+        return parent.getName();
+      }
+      if (Node.isPropertyAssignment(parent)) {
+        return parent.getName();
+      }
+      return "(arrow)";
+    }
+    return "(unknown)";
+  }
+
+  private getNodeKind(node: Node): CallNodeKind {
+    if (Node.isFunctionDeclaration(node) || Node.isFunctionExpression(node)) {
+      return "function";
+    }
+    if (Node.isMethodDeclaration(node)) {
+      return "method";
+    }
+    if (Node.isClassDeclaration(node)) {
+      return "class";
+    }
+    if (Node.isArrowFunction(node)) {
+      return "arrow";
+    }
+    if (Node.isConstructorDeclaration(node)) {
+      return "constructor";
+    }
+    return "function";
+  }
+
+  private resolveCallTarget(project: Project, callExpr: Node, includeExternal: boolean): Node | null {
+    try {
+      let expr: Node | undefined;
+
+      if (Node.isCallExpression(callExpr)) {
+        expr = callExpr.getExpression();
+      } else if (Node.isNewExpression(callExpr)) {
+        expr = callExpr.getExpression();
+      }
+
+      if (!expr) return null;
+
+      // Handle property access (obj.method())
+      if (Node.isPropertyAccessExpression(expr)) {
+        expr = expr.getNameNode();
+      }
+
+      if (!Node.isIdentifier(expr)) return null;
+
+      const defs = expr.getDefinitions();
+      if (defs.length === 0) return null;
+
+      const def = defs[0];
+      const defNode = def.getDeclarationNode();
+      if (!defNode) return null;
+
+      const defFilePath = defNode.getSourceFile().getFilePath();
+
+      // Skip external (node_modules) if not included
+      if (!includeExternal && defFilePath.includes("node_modules")) {
+        return null;
+      }
+
+      // Return the function/method/class declaration
+      return this.findCallableContainer(defNode) ?? defNode;
+    } catch {
+      return null;
+    }
+  }
+
 }

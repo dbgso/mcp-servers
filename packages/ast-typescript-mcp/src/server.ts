@@ -51,6 +51,14 @@ const FindReferencesSchema = z.object({
   column: z.number().describe("Column number of the symbol (1-based)"),
 });
 
+const CallGraphSchema = z.object({
+  file_path: z.string().describe("Absolute path to the TypeScript file"),
+  line: z.number().describe("Line number of the function/method (1-based)"),
+  column: z.number().describe("Column number (1-based)"),
+  max_depth: z.number().optional().default(5).describe("Maximum depth to traverse (default: 5)"),
+  include_external: z.boolean().optional().default(false).describe("Include calls to node_modules (default: false)"),
+});
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   const extensions = getSupportedExtensions();
   return {
@@ -143,6 +151,36 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             column: {
               type: "number",
               description: "Column number of the symbol (1-based)",
+            },
+          },
+          required: ["file_path", "line", "column"],
+        },
+      },
+      {
+        name: "call_graph",
+        description: "Generate a call graph starting from a function/method. Traces outgoing calls recursively and returns a graph structure with Mermaid visualization.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            file_path: {
+              type: "string",
+              description: "Absolute path to the TypeScript file",
+            },
+            line: {
+              type: "number",
+              description: "Line number of the function/method (1-based)",
+            },
+            column: {
+              type: "number",
+              description: "Column number (1-based)",
+            },
+            max_depth: {
+              type: "number",
+              description: "Maximum depth to traverse (default: 5)",
+            },
+            include_external: {
+              type: "boolean",
+              description: "Include calls to node_modules (default: false)",
             },
           },
           required: ["file_path", "line", "column"],
@@ -266,6 +304,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return jsonResponse(result);
     } catch (error) {
       return errorResponse(`Failed to find references: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (name === "call_graph") {
+    const parsed = CallGraphSchema.safeParse(args);
+    if (!parsed.success) {
+      return errorResponse(`Invalid arguments: ${parsed.error.message}`);
+    }
+
+    const { file_path, line, column, max_depth, include_external } = parsed.data;
+    const handler = getHandler(file_path);
+
+    if (!handler) {
+      const extensions = getSupportedExtensions();
+      return errorResponse(`Unsupported file type. Supported: ${extensions.join(", ")}`);
+    }
+
+    try {
+      const result = await handler.getCallGraph({
+        filePath: file_path,
+        line,
+        column,
+        maxDepth: max_depth,
+        includeExternal: include_external,
+      });
+      return jsonResponse(result);
+    } catch (error) {
+      return errorResponse(`Failed to generate call graph: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
