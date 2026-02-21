@@ -11,8 +11,9 @@ import {
   errorResponse,
   jsonResponse,
   formatMultiFileResponse,
+  paginate,
 } from "mcp-shared";
-import { getHandler, getSupportedExtensions, MarkdownHandler } from "./handlers/index.js";
+import { getHandler, getSupportedExtensions, MarkdownHandler, AsciidocHandler } from "./handlers/index.js";
 import type { QueryType, QueryResult } from "./types/index.js";
 
 const server = new Server(
@@ -37,6 +38,27 @@ const ReadSchema = z.object({
 const WriteSchema = z.object({
   file_path: z.string().describe("Absolute path to the file to write"),
   ast: z.unknown().describe("AST object to write"),
+});
+
+const GoToDefinitionSchema = z.object({
+  file_path: z.string().describe("Absolute path to the Markdown file"),
+  line: z.number().describe("Line number (1-based)"),
+  column: z.number().describe("Column number (1-based)"),
+});
+
+const CrawlSchema = z.object({
+  file_path: z.string().describe("Starting file path to crawl from"),
+  max_depth: z.number().optional().default(10).describe("Maximum depth to follow links (default: 10)"),
+  max_files: z.number().optional().describe("Maximum number of files to crawl. If not specified, crawls all reachable files."),
+  cursor: z.string().optional().describe("Pagination cursor from previous response"),
+  limit: z.number().optional().describe("Maximum files to return per page. If not specified, returns all files."),
+});
+
+const ReadDirectorySchema = z.object({
+  directory: z.string().describe("Directory path to search"),
+  pattern: z.string().optional().describe("File pattern (e.g., '*.md', '*.adoc'). If not specified, finds all supported files."),
+  cursor: z.string().optional().describe("Pagination cursor from previous response"),
+  limit: z.number().optional().describe("Maximum files to return per page. If not specified, returns all files."),
 });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -89,6 +111,84 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ["file_path", "ast"],
+        },
+      },
+      {
+        name: "go_to_definition",
+        description: "Go to definition: find where a link at the given position points to. For Markdown, resolves links to files and headings. Returns file path and line of the target.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            file_path: {
+              type: "string",
+              description: "Absolute path to the Markdown file",
+            },
+            line: {
+              type: "number",
+              description: "Line number (1-based)",
+            },
+            column: {
+              type: "number",
+              description: "Column number (1-based)",
+            },
+          },
+          required: ["file_path", "line", "column"],
+        },
+      },
+      {
+        name: "crawl",
+        description: "Crawl from a starting file, following links recursively. Returns headings and links for each discovered file. Useful for building a documentation map from a README or index file. Supports pagination with cursor/limit.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            file_path: {
+              type: "string",
+              description: "Starting file path to crawl from",
+            },
+            max_depth: {
+              type: "number",
+              description: "Maximum depth to follow links (default: 10)",
+            },
+            max_files: {
+              type: "number",
+              description: "Maximum number of files to crawl. If not specified, crawls all reachable files.",
+            },
+            cursor: {
+              type: "string",
+              description: "Pagination cursor from previous response",
+            },
+            limit: {
+              type: "number",
+              description: "Maximum files to return per page. If not specified, returns all files.",
+            },
+          },
+          required: ["file_path"],
+        },
+      },
+      {
+        name: "read_directory",
+        description: "Find and read all matching files in a directory. Returns headings and links for each file. Useful for getting an overview of all documentation in a folder. Supports pagination with cursor/limit.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            directory: {
+              type: "string",
+              description: "Directory path to search",
+            },
+            pattern: {
+              type: "string",
+              description: "File pattern (e.g., '*.md', '*.adoc'). If not specified, finds all supported files.",
+            },
+            cursor: {
+              type: "string",
+              description: "Pagination cursor from previous response",
+            },
+            limit: {
+              type: "number",
+              description: "Maximum files to return per page. If not specified, returns all files.",
+            },
+          },
+          required: ["directory"],
         },
       },
     ],
@@ -169,6 +269,133 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return jsonResponse({ success: true, filePath: file_path });
     } catch (error) {
       return errorResponse(`Failed to write file: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (name === "go_to_definition") {
+    const parsed = GoToDefinitionSchema.safeParse(args);
+    if (!parsed.success) {
+      return errorResponse(`Invalid arguments: ${parsed.error.message}`);
+    }
+
+    const { file_path, line, column } = parsed.data;
+    const handler = getHandler(file_path);
+
+    if (!handler) {
+      const extensions = getSupportedExtensions();
+      return errorResponse(`Unsupported file type. Supported: ${extensions.join(", ")}`);
+    }
+
+    if (!(handler instanceof MarkdownHandler)) {
+      return errorResponse(`go_to_definition is only supported for Markdown files`);
+    }
+
+    try {
+      const result = await handler.goToDefinition(file_path, line, column);
+      return jsonResponse(result);
+    } catch (error) {
+      return errorResponse(`Failed to get definition: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (name === "crawl") {
+    const parsed = CrawlSchema.safeParse(args);
+    if (!parsed.success) {
+      return errorResponse(`Invalid arguments: ${parsed.error.message}`);
+    }
+
+    const { file_path, max_depth, max_files, cursor, limit } = parsed.data;
+    const handler = getHandler(file_path);
+
+    if (!handler) {
+      const extensions = getSupportedExtensions();
+      return errorResponse(`Unsupported file type. Supported: ${extensions.join(", ")}`);
+    }
+
+    if (!(handler instanceof MarkdownHandler) && !(handler instanceof AsciidocHandler)) {
+      return errorResponse(`crawl is only supported for Markdown and AsciiDoc files`);
+    }
+
+    try {
+      const result = await handler.crawl(file_path, max_depth);
+
+      // Apply max_files limit if specified
+      let files = result.files;
+      if (max_files !== undefined && files.length > max_files) {
+        files = files.slice(0, max_files);
+      }
+
+      // Apply pagination
+      const paginatedFiles = paginate({ items: files, pagination: { cursor, limit } });
+
+      return jsonResponse({
+        startFile: result.startFile,
+        files: paginatedFiles.data,
+        total: paginatedFiles.total,
+        nextCursor: paginatedFiles.nextCursor,
+        hasMore: paginatedFiles.hasMore,
+        errors: result.errors,
+      });
+    } catch (error) {
+      return errorResponse(`Failed to crawl: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (name === "read_directory") {
+    const parsed = ReadDirectorySchema.safeParse(args);
+    if (!parsed.success) {
+      return errorResponse(`Invalid arguments: ${parsed.error.message}`);
+    }
+
+    const { directory, pattern, cursor, limit } = parsed.data;
+
+    try {
+      // Determine which handler(s) to use based on pattern
+      const mdHandler = new MarkdownHandler();
+      const adocHandler = new AsciidocHandler();
+
+      let files;
+      let errors: Array<{ filePath: string; error: string }> = [];
+
+      if (pattern) {
+        // If pattern specified, use the appropriate handler
+        const ext = pattern.replace("*.", "").toLowerCase();
+        if (mdHandler.extensions.includes(ext)) {
+          const result = await mdHandler.readDirectory(directory, pattern);
+          files = result.files;
+          errors = result.errors;
+        } else if (adocHandler.extensions.includes(ext)) {
+          const result = await adocHandler.readDirectory(directory, pattern);
+          files = result.files;
+          errors = result.errors;
+        } else {
+          return errorResponse(`Unsupported file pattern: ${pattern}`);
+        }
+      } else {
+        // No pattern - read both markdown and asciidoc files
+        const [mdResult, adocResult] = await Promise.all([
+          mdHandler.readDirectory(directory),
+          adocHandler.readDirectory(directory),
+        ]);
+
+        files = [...mdResult.files, ...adocResult.files].sort((a, b) =>
+          a.filePath.localeCompare(b.filePath)
+        );
+        errors = [...mdResult.errors, ...adocResult.errors];
+      }
+
+      // Apply pagination
+      const paginatedFiles = paginate({ items: files, pagination: { cursor, limit } });
+
+      return jsonResponse({
+        files: paginatedFiles.data,
+        total: paginatedFiles.total,
+        nextCursor: paginatedFiles.nextCursor,
+        hasMore: paginatedFiles.hasMore,
+        errors,
+      });
+    } catch (error) {
+      return errorResponse(`Failed to read directory: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
