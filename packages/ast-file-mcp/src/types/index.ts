@@ -1,5 +1,8 @@
 import type { Root as MdastRoot } from "mdast";
 
+// Re-export shared definition types
+export type { DefinitionLocation, GoToDefinitionResult } from "mcp-shared";
+
 export interface AstReadResult {
   filePath: string;
   fileType: "markdown" | "asciidoc";
@@ -59,4 +62,28 @@ export interface QueryResult {
   fileType: "markdown" | "asciidoc";
   query: QueryType;
   data: MdastRoot | AsciidocDocument | HeadingSummary[] | CodeBlockSummary[] | ListSummary[] | LinkSummary[];
+}
+
+// Directory/Crawl summary types (without line numbers for overview)
+export interface HeadingOverview {
+  depth: number;
+  text: string;
+}
+
+export interface LinkOverview {
+  url: string;
+  text: string;
+}
+
+export interface FileSummary {
+  filePath: string;
+  fileType: "markdown" | "asciidoc";
+  headings: HeadingOverview[];
+  links: LinkOverview[];
+}
+
+export interface CrawlResult {
+  startFile: string;
+  files: FileSummary[];
+  errors: Array<{ filePath: string; error: string }>;
 }
