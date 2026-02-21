@@ -39,6 +39,18 @@ const WriteSchema = z.object({
   structure: z.unknown().describe("SourceFileStructure object from ts-morph"),
 });
 
+const GoToDefinitionSchema = z.object({
+  file_path: z.string().describe("Absolute path to the TypeScript file"),
+  line: z.number().describe("Line number (1-based)"),
+  column: z.number().describe("Column number (1-based)"),
+});
+
+const FindReferencesSchema = z.object({
+  file_path: z.string().describe("Absolute path to the TypeScript file containing the symbol definition"),
+  line: z.number().describe("Line number of the symbol (1-based)"),
+  column: z.number().describe("Column number of the symbol (1-based)"),
+});
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   const extensions = getSupportedExtensions();
   return {
@@ -90,6 +102,50 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ["file_path", "structure"],
+        },
+      },
+      {
+        name: "go_to_definition",
+        description: "Go to definition: find where a symbol at the given position is defined. Returns file path, line, and column of the definition(s).",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            file_path: {
+              type: "string",
+              description: "Absolute path to the TypeScript file",
+            },
+            line: {
+              type: "number",
+              description: "Line number (1-based)",
+            },
+            column: {
+              type: "number",
+              description: "Column number (1-based)",
+            },
+          },
+          required: ["file_path", "line", "column"],
+        },
+      },
+      {
+        name: "find_references",
+        description: "Find all references to a symbol. Uses git grep for fast file search, then parses candidates to verify actual references. Returns file paths, lines, and context of each reference.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            file_path: {
+              type: "string",
+              description: "Absolute path to the TypeScript file containing the symbol",
+            },
+            line: {
+              type: "number",
+              description: "Line number of the symbol (1-based)",
+            },
+            column: {
+              type: "number",
+              description: "Column number of the symbol (1-based)",
+            },
+          },
+          required: ["file_path", "line", "column"],
         },
       },
     ],
@@ -166,6 +222,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return jsonResponse({ success: true, filePath: file_path });
     } catch (error) {
       return errorResponse(`Failed to write file: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (name === "go_to_definition") {
+    const parsed = GoToDefinitionSchema.safeParse(args);
+    if (!parsed.success) {
+      return errorResponse(`Invalid arguments: ${parsed.error.message}`);
+    }
+
+    const { file_path, line, column } = parsed.data;
+    const handler = getHandler(file_path);
+
+    if (!handler) {
+      const extensions = getSupportedExtensions();
+      return errorResponse(`Unsupported file type. Supported: ${extensions.join(", ")}`);
+    }
+
+    try {
+      const result = await handler.goToDefinition(file_path, line, column);
+      return jsonResponse(result);
+    } catch (error) {
+      return errorResponse(`Failed to get definition: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (name === "find_references") {
+    const parsed = FindReferencesSchema.safeParse(args);
+    if (!parsed.success) {
+      return errorResponse(`Invalid arguments: ${parsed.error.message}`);
+    }
+
+    const { file_path, line, column } = parsed.data;
+    const handler = getHandler(file_path);
+
+    if (!handler) {
+      const extensions = getSupportedExtensions();
+      return errorResponse(`Unsupported file type. Supported: ${extensions.join(", ")}`);
+    }
+
+    try {
+      const result = await handler.findReferences(file_path, line, column);
+      return jsonResponse(result);
+    } catch (error) {
+      return errorResponse(`Failed to find references: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

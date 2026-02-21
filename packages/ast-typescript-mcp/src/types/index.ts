@@ -1,5 +1,13 @@
 import type { SourceFileStructure, StatementStructures } from "ts-morph";
 
+// Re-export shared definition types
+export type {
+  DefinitionLocation,
+  GoToDefinitionResult,
+  ReferenceLocation,
+  FindReferencesResult,
+} from "mcp-shared";
+
 export interface TsAstReadResult {
   filePath: string;
   fileType: "typescript";
