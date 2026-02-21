@@ -12,10 +12,11 @@ export interface FileResult<T> {
 /**
  * Process multiple files in parallel
  */
-export async function processMultipleFiles<T>(
-  filePaths: string[],
-  processor: (filePath: string) => Promise<FileResult<T>>
-): Promise<FileResult<T>[]> {
+export async function processMultipleFiles<T>(params: {
+  filePaths: string[];
+  processor: (filePath: string) => Promise<FileResult<T>>;
+}): Promise<FileResult<T>[]> {
+  const { filePaths, processor } = params;
   return Promise.all(filePaths.map(processor));
 }
 
