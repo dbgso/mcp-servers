@@ -164,6 +164,9 @@ importers:
 
   packages/mcp-shared:
     devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.26.0
+        version: 1.26.0(zod@3.25.76)
       '@vitest/coverage-v8':
         specifier: 4.0.18
         version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.21.0)(yaml@2.8.2))
