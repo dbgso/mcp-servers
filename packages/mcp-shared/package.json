@@ -16,7 +16,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint src/"
   },
   "keywords": [
     "mcp",
@@ -38,7 +39,11 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.26.0",
+    "@types/node-notifier": "8.0.5",
     "@vitest/coverage-v8": "4.0.18",
     "vitest": "4.0.18"
+  },
+  "dependencies": {
+    "node-notifier": "10.0.1"
   }
 }

@@ -14,6 +14,8 @@ export interface DraftActionParams {
   id?: string;
   content?: string;
   newId?: string;
+  targetId?: string;
+  approvalToken?: string;
 }
 
 export interface DraftActionContext {

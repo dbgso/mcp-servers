@@ -10,6 +10,7 @@ import {
   UpdateHandler,
   DeleteHandler,
   RenameHandler,
+  ApproveHandler,
 } from "./handlers/index.js";
 
 const DRAFT_HELP = `# Draft Tool
@@ -44,6 +45,8 @@ coding__testing         ← About testing rules
 - \`draft(action: "update", id: "<id>", content: "<content>")\` - Update existing draft (same topic only!)
 - \`draft(action: "delete", id: "<id>")\` - Delete a draft
 - \`draft(action: "rename", id: "<oldId>", newId: "<newId>")\` - Rename/move a draft (safe reorganization)
+- \`draft(action: "approve", id: "<id>")\` - Request approval (sends notification with token)
+- \`draft(action: "approve", id: "<id>", approvalToken: "<token>")\` - Approve and promote with token
 
 ## Examples
 
@@ -69,6 +72,7 @@ const actionHandlers: Record<string, DraftActionHandler> = {
   update: new UpdateHandler(),
   delete: new DeleteHandler(),
   rename: new RenameHandler(),
+  approve: new ApproveHandler(),
 };
 
 export function registerDraftTool(params: {
@@ -89,7 +93,7 @@ export function registerDraftTool(params: {
           .optional()
           .describe("Show help"),
         action: z
-          .enum(["list", "read", "add", "update", "delete", "rename"])
+          .enum(["list", "read", "add", "update", "delete", "rename", "approve"])
           .optional()
           .describe("Action to perform. Omit to show help."),
         id: z
@@ -104,9 +108,17 @@ export function registerDraftTool(params: {
           .string()
           .optional()
           .describe("New draft ID for rename action"),
+        targetId: z
+          .string()
+          .optional()
+          .describe("Target ID for approve action (if different from draft ID)"),
+        approvalToken: z
+          .string()
+          .optional()
+          .describe("Approval token from desktop notification (for approve action)"),
       },
     },
-    async ({ help, action, id, content, newId }) => {
+    async ({ help, action, id, content, newId, targetId, approvalToken }) => {
       if (help || !action) {
         return wrapResponse({
           result: {
@@ -130,7 +142,7 @@ export function registerDraftTool(params: {
       }
 
       const result = await handler.execute({
-        actionParams: { id, content, newId },
+        actionParams: { id, content, newId, targetId, approvalToken },
         context: { reader, config },
       });
       return wrapResponse({ result, config });

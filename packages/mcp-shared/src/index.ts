@@ -30,18 +30,6 @@ export {
   formatMultiFileResponse,
 } from "./utils/multi-file.js";
 
-// Elicitation utilities
-export {
-  requestConfirmation,
-  confirm,
-  isElicitationAvailable,
-} from "./utils/elicitation.js";
-
-export type {
-  ElicitationResult,
-  ConfirmationOptions,
-} from "./utils/elicitation.js";
-
 // Pagination utilities
 export {
   encodeCursor,
@@ -53,3 +41,21 @@ export type {
   PaginationParams,
   PaginatedResponse,
 } from "./utils/pagination.js";
+
+// Approval utilities
+export {
+  requestApproval,
+  validateApproval,
+  clearApproval,
+  resendApprovalNotification,
+  getApprovalRejectionMessage,
+  getApprovalRequestedMessage,
+} from "./utils/approval.js";
+
+export type {
+  ApprovalRequest,
+  ApprovalOptions,
+  ApprovalResult,
+  PendingApproval,
+} from "./utils/approval.js";
+
