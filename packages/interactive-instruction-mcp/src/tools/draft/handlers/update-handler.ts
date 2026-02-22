@@ -1,5 +1,6 @@
 import type { ToolResult, DraftActionHandler, DraftActionParams, DraftActionContext } from "../../../types/index.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
+import { draftWorkflowManager } from "../../../workflows/draft-workflow.js";
 
 export class UpdateHandler implements DraftActionHandler {
   async execute(params: {
@@ -33,11 +34,33 @@ export class UpdateHandler implements DraftActionHandler {
         isError: true,
       };
     }
+
+    // Reset workflow to self_review (content changed, need re-review)
+    draftWorkflowManager.clear({ id });
+    const workflowResult = await draftWorkflowManager.trigger({
+      id,
+      triggerParams: { action: "submit", content },
+    });
+
+    const workflowStatus = workflowResult.ok
+      ? `\n**Workflow:** reset → ${workflowResult.to}`
+      : "";
+
     return {
       content: [
         {
           type: "text" as const,
-          text: `Draft "${id}" updated successfully.\nPath: ${result.path}\n\n[AI Action Required] Explain the updated content to the user and confirm it matches their intent.`,
+          text: `Draft "${id}" updated successfully.
+Path: ${result.path}${workflowStatus}
+
+---
+
+## Next: Approval Workflow
+
+1. \`draft(action: "approve", id: "${id}", notes: "<self-review>")\`
+2. Explain to user (see \`help(id: "_mcp-interactive-instruction__draft-approval")\`)
+3. \`draft(action: "approve", id: "${id}", confirmed: true)\`
+4. User provides token → applied`,
         },
       ],
     };

@@ -21,6 +21,8 @@ export interface ApprovalOptions {
   approvalDir?: string;
   /** Whether to show desktop notification (default: true) */
   notify?: boolean;
+  /** Skip file creation (for testing, default: false) */
+  skipFile?: boolean;
 }
 
 export interface PendingApproval {
@@ -61,7 +63,13 @@ export async function requestApproval(params: {
     timeoutMs = 5 * 60 * 1000, // 5 minutes
     approvalDir = DEFAULT_APPROVAL_DIR,
     notify = true,
+    skipFile = false,
   } = options;
+
+  // Check for test environment
+  const isTestEnv = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+  const shouldSkipFile = skipFile || isTestEnv;
+  const shouldNotify = notify && !isTestEnv;
 
   const token = generateToken();
   const now = Date.now();
@@ -80,9 +88,10 @@ export async function requestApproval(params: {
   };
   pendingApprovals.set(request.id, pending);
 
-  // Write file
-  await fs.mkdir(approvalDir, { recursive: true });
-  const content = `MCP Approval Required
+  // Write file (skip in test environment)
+  if (!shouldSkipFile) {
+    await fs.mkdir(approvalDir, { recursive: true });
+    const content = `MCP Approval Required
 =====================
 Operation: ${request.operation}
 Description: ${request.description}
@@ -90,10 +99,11 @@ Token: ${token}
 Expires: ${new Date(expiresAt).toLocaleTimeString()}
 ID: ${request.id}
 `;
-  await fs.writeFile(fallbackPath, content, "utf-8");
+    await fs.writeFile(fallbackPath, content, "utf-8");
+  }
 
-  // Send desktop notification
-  if (notify) {
+  // Send desktop notification (skip in test environment)
+  if (shouldNotify) {
     notifier.notify({
       title: `MCP Approval: ${request.operation}`,
       message: `Token: ${token}\n${request.description}\nFile: ${fallbackPath}`,
@@ -159,12 +169,16 @@ export function resendApprovalNotification(requestId: string): boolean {
     return false;
   }
 
-  notifier.notify({
-    title: `MCP Approval: ${pending.request.operation}`,
-    message: `Token: ${pending.token}\n${pending.request.description}\nFile: ${pending.fallbackPath}`,
-    sound: true,
-    wait: true,
-  });
+  // Skip notification in test environment
+  const isTestEnv = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+  if (!isTestEnv) {
+    notifier.notify({
+      title: `MCP Approval: ${pending.request.operation}`,
+      message: `Token: ${pending.token}\n${pending.request.description}\nFile: ${pending.fallbackPath}`,
+      sound: true,
+      wait: true,
+    });
+  }
 
   return true;
 }

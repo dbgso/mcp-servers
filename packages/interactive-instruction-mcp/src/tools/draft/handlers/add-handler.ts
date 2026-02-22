@@ -1,5 +1,6 @@
 import type { ToolResult, DraftActionHandler, DraftActionParams, DraftActionContext } from "../../../types/index.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
+import { draftWorkflowManager } from "../../../workflows/draft-workflow.js";
 
 export class AddHandler implements DraftActionHandler {
   async execute(params: {
@@ -28,35 +29,32 @@ export class AddHandler implements DraftActionHandler {
         isError: true,
       };
     }
+
+    // Initialize workflow and transition to self_review
+    const workflowResult = await draftWorkflowManager.trigger({
+      id,
+      triggerParams: { action: "submit", content },
+    });
+
+    const workflowStatus = workflowResult.ok
+      ? `\n**Workflow:** editing → ${workflowResult.to}`
+      : "";
+
     return {
       content: [
         {
           type: "text" as const,
           text: `Draft "${id}" created successfully.
-Path: ${result.path}
+Path: ${result.path}${workflowStatus}
 
 ---
 
-## [AI Action Required]
+## Next: Approval Workflow
 
-**You MUST do the following before proceeding:**
-
-1. **Explain the content** - Summarize what this draft contains
-2. **Show the file path** - User needs to know where to review: \`${result.path}\`
-3. **Wait for user confirmation** - Do NOT apply until user reviews and approves
-
-**Example response:**
-\`\`\`
-Created draft for [topic].
-
-**Contents:**
-- [Key point 1]
-- [Key point 2]
-
-**File:** ${result.path}
-
-Please review and let me know if you want to apply this or make changes.
-\`\`\``,
+1. \`draft(action: "approve", id: "${id}", notes: "<self-review>")\`
+2. Explain to user (see \`help(id: "_mcp-interactive-instruction__draft-approval")\`)
+3. \`draft(action: "approve", id: "${id}", confirmed: true)\`
+4. User provides token → applied`,
         },
       ],
     };

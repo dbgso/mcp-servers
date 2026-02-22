@@ -58,6 +58,13 @@ describe("MarkdownReader", () => {
         expected:
           "Available documents:\n\n**Categories:**\n- **git/** (3 docs)\n\n**Documents:**\n- **root**: Root doc",
       },
+      {
+        // Test case for documents.length === 0 but categories.length > 0
+        documents: [],
+        categories: [{ id: "git", docCount: 3 }],
+        expected:
+          "Available documents:\n\n**Categories:**\n- **git/** (3 docs)\n",
+      },
     ])(
       "formats documents and categories correctly",
       ({ documents, categories, expected }) => {
@@ -761,6 +768,27 @@ describe("MarkdownReader", () => {
       } finally {
         // Restore permissions for cleanup
         await fs.chmod(filePath, 0o644);
+        await fs.unlink(filePath);
+      }
+    });
+
+    it("should handle file without title (foundTitle = false branch)", async () => {
+      await fs.mkdir(tempDir, { recursive: true });
+
+      const reader = new MarkdownReader(tempDir);
+      const filePath = path.join(tempDir, "no-title.md");
+
+      // Create a file without a title (no # heading)
+      await fs.writeFile(filePath, "This is content without any title.\n\nSecond paragraph.", "utf-8");
+
+      try {
+        const { documents } = await reader.listDocuments({ recursive: false });
+        const doc = documents.find((d) => d.id === "no-title");
+
+        expect(doc).toBeDefined();
+        // Without a title, description should be empty or based on first paragraph
+        expect(doc!.description).toBeDefined();
+      } finally {
         await fs.unlink(filePath);
       }
     });
