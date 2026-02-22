@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
+import { ensureSystemDocs } from "./services/system-docs.js";
 import type { ReminderConfig } from "./types/index.js";
 
 function parseArgs(params: { args: string[] }): {
@@ -54,6 +55,9 @@ function parseArgs(params: { args: string[] }): {
 async function main() {
   const args = process.argv.slice(2);
   const { markdownDir, config } = parseArgs({ args });
+
+  // Ensure system documentation exists
+  await ensureSystemDocs({ docsDir: markdownDir });
 
   const server = createServer({ markdownDir, config });
   const transport = new StdioServerTransport();

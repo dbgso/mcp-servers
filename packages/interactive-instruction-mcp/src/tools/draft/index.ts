@@ -45,8 +45,19 @@ coding__testing         ← About testing rules
 - \`draft(action: "update", id: "<id>", content: "<content>")\` - Update existing draft (same topic only!)
 - \`draft(action: "delete", id: "<id>")\` - Delete a draft
 - \`draft(action: "rename", id: "<oldId>", newId: "<newId>")\` - Rename/move a draft (safe reorganization)
-- \`draft(action: "approve", id: "<id>")\` - Request approval (sends notification with token)
+- \`draft(action: "approve", id: "<id>", notes: "<self-review>")\` - Complete self-review, then explain to user
+- \`draft(action: "approve", id: "<id>", confirmed: true)\` - After user confirms explanation, show diff/summary and request approval
 - \`draft(action: "approve", id: "<id>", approvalToken: "<token>")\` - Approve and promote with token
+- \`draft(action: "approve", ids: "id1,id2,id3", approvalToken: "<token>")\` - Batch approve multiple drafts with single token
+
+## Approval Workflow
+
+Before a draft can be applied, the AI must:
+1. **Self-review** the content (provide \`notes\`)
+2. **Explain to user** what the draft contains **in your own words** (tool does NOT show content)
+3. **User confirms** they understand, then call with \`confirmed: true\`
+4. Tool shows diff/summary + sends notification
+5. **User approves** with the token from desktop notification
 
 ## Examples
 
@@ -100,6 +111,10 @@ export function registerDraftTool(params: {
           .string()
           .optional()
           .describe("Draft ID (without '_mcp_drafts__' prefix)"),
+        ids: z
+          .string()
+          .optional()
+          .describe("Comma-separated draft IDs for batch approve"),
         content: z
           .string()
           .optional()
@@ -116,9 +131,17 @@ export function registerDraftTool(params: {
           .string()
           .optional()
           .describe("Approval token from desktop notification (for approve action)"),
+        notes: z
+          .string()
+          .optional()
+          .describe("Self-review notes (required for approve action)"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Confirm user has seen AI's explanation (required after explaining to user)"),
       },
     },
-    async ({ help, action, id, content, newId, targetId, approvalToken }) => {
+    async ({ help, action, id, ids, content, newId, targetId, approvalToken, notes, confirmed }) => {
       if (help || !action) {
         return wrapResponse({
           result: {
@@ -142,7 +165,7 @@ export function registerDraftTool(params: {
       }
 
       const result = await handler.execute({
-        actionParams: { id, content, newId, targetId, approvalToken },
+        actionParams: { id, ids, content, newId, targetId, approvalToken, notes, confirmed },
         context: { reader, config },
       });
       return wrapResponse({ result, config });

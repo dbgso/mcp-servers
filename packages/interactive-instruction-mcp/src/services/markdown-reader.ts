@@ -46,6 +46,13 @@ export class MarkdownReader {
   }
 
   /**
+   * Get the file path for a document ID (public accessor)
+   */
+  getFilePath(id: string): string {
+    return this.idToPath(id);
+  }
+
+  /**
    * Convert file path to hierarchical ID
    * "git/workflow.md" -> "git__workflow"
    */

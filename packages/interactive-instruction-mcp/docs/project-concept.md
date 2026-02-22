@@ -13,7 +13,7 @@ This project enables AI agents to:
 
 - **Documentation Management**: Organize markdown files in a hierarchical structure
 - **Draft Workflow**: AI can freely create/update drafts without permission
-- **Apply Workflow**: Drafts require user approval before becoming confirmed docs
+- **Approval Workflow**: Drafts require user approval before becoming confirmed docs
 - **Caching**: Efficient caching for directory structures and content
 
 ## Design Philosophy

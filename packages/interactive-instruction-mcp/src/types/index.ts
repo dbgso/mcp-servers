@@ -12,10 +12,13 @@ export interface MarkdownSummary {
 // Draft tool types
 export interface DraftActionParams {
   id?: string;
+  ids?: string;
   content?: string;
   newId?: string;
   targetId?: string;
   approvalToken?: string;
+  notes?: string;
+  confirmed?: boolean;
 }
 
 export interface DraftActionContext {
