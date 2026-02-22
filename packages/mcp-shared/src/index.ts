@@ -59,3 +59,54 @@ export type {
   PendingApproval,
 } from "./utils/approval.js";
 
+// Diff utilities
+export {
+  diffStructures,
+} from "./utils/diff.js";
+
+export type {
+  DiffableItem,
+  DiffChange,
+  DiffResult,
+  DiffOptions,
+} from "./utils/diff.js";
+
+// Workflow utilities
+export {
+  defineWorkflow,
+  createWorkflowInstance,
+  loadWorkflowInstance,
+  isSerializedWorkflowState,
+  fieldRequired,
+  fieldMinLength,
+  stateVisited,
+  customValidator,
+} from "./utils/workflow.js";
+
+export type {
+  PreconditionValidator,
+  TransitionResult,
+  TransitionDefinition,
+  WorkflowDefinition,
+  WorkflowInstance,
+  WorkflowInstanceOptions,
+  SerializedWorkflowState,
+  LoadWorkflowResult,
+  WorkflowManagerOptions,
+  WorkflowStatus,
+  TriggerResult,
+} from "./utils/workflow.js";
+
+export { WorkflowManager } from "./utils/workflow.js";
+
+// Tool abstractions
+export type {
+  ToolHandler,
+  ToolResponse,
+  ToolDefinition,
+} from "./tools/index.js";
+
+export {
+  BaseToolHandler,
+  ToolRegistry,
+} from "./tools/index.js";
