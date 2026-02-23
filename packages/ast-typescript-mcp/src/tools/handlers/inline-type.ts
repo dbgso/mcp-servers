@@ -4,18 +4,19 @@ import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 
-const GoToDefinitionSchema = z.object({
+const InlineTypeSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file"),
   line: z.number().describe("Line number (1-based)"),
   column: z.number().describe("Column number (1-based)"),
 });
 
-type GoToDefinitionArgs = z.infer<typeof GoToDefinitionSchema>;
+type InlineTypeArgs = z.infer<typeof InlineTypeSchema>;
 
-export class GoToDefinitionHandler extends BaseToolHandler<GoToDefinitionArgs> {
-  readonly name = "go_to_definition";
-  readonly description = "Go to definition: find where a symbol at the given position is defined. Returns file path, line, and column of the definition(s).";
-  readonly schema = GoToDefinitionSchema;
+export class InlineTypeHandler extends BaseToolHandler<InlineTypeArgs> {
+  readonly name = "inline_type";
+  readonly description =
+    "Expand and inline the type at the given position. Returns both the original type alias name and the fully expanded type definition. Note: Primitive type aliases (e.g., type int = number) may not expand due to TypeScript compiler optimization.";
+  readonly schema = InlineTypeSchema;
 
   readonly inputSchema = {
     type: "object" as const,
@@ -36,16 +37,22 @@ export class GoToDefinitionHandler extends BaseToolHandler<GoToDefinitionArgs> {
     required: ["file_path", "line", "column"],
   };
 
-  protected async doExecute(args: GoToDefinitionArgs): Promise<ToolResponse> {
+  protected async doExecute(args: InlineTypeArgs): Promise<ToolResponse> {
     const { file_path, line, column } = args;
     const handler = getHandler(file_path);
 
     if (!handler) {
       const extensions = getSupportedExtensions();
-      return errorResponse(`Unsupported file type. Supported: ${extensions.join(", ")}`);
+      return errorResponse(
+        `Unsupported file type. Supported: ${extensions.join(", ")}`
+      );
     }
 
-    const result = await handler.goToDefinition({ filePath: file_path, line: line, column: column });
+    const result = await handler.inlineType({
+      filePath: file_path,
+      line,
+      column,
+    });
     return jsonResponse(result);
   }
 }

@@ -120,7 +120,7 @@ export class PackageDependentsHandler extends BaseToolHandler<DependentsArgs> {
       );
     }
 
-    const dependents = getDependentPackages(package_name, graph);
+    const dependents = getDependentPackages({ packageName: package_name, graph });
 
     // Get full package info for dependents
     const dependentPackages = graph.packages.filter((p) =>

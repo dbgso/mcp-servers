@@ -90,7 +90,7 @@ describe("Monorepo Dependency Graph", () => {
       const workspace = await detectWorkspace(MONOREPO_ROOT);
       const graph = buildMonorepoGraph(workspace!);
 
-      const dependents = getDependentPackages("mcp-shared", graph);
+      const dependents = getDependentPackages({ packageName: "mcp-shared", graph });
 
       // Multiple packages should depend on mcp-shared
       expect(dependents.length).toBeGreaterThan(0);
@@ -103,7 +103,7 @@ describe("Monorepo Dependency Graph", () => {
 
       // Find a leaf package (one that nothing depends on)
       // Usually specific MCP packages are leaves
-      const dependents = getDependentPackages("ast-typescript-mcp", graph);
+      const dependents = getDependentPackages({ packageName: "ast-typescript-mcp", graph });
 
       // This might have dependents or not, just verify it works
       expect(Array.isArray(dependents)).toBe(true);
@@ -115,7 +115,7 @@ describe("Monorepo Dependency Graph", () => {
       const workspace = await detectWorkspace(MONOREPO_ROOT);
       const graph = buildMonorepoGraph(workspace!);
 
-      const deps = getPackageDependencies("ast-typescript-mcp", graph);
+      const deps = getPackageDependencies({ packageName: "ast-typescript-mcp", graph });
 
       expect(deps).toContain("mcp-shared");
     });
@@ -124,15 +124,15 @@ describe("Monorepo Dependency Graph", () => {
   describe("findPackageForFile", () => {
     it("should find package for a file path", async () => {
       const workspace = await detectWorkspace(MONOREPO_ROOT);
-      const packages = parseAllPackages(
-        workspace!.packageDirs,
-        workspace!.rootDir
-      );
+      const packages = parseAllPackages({
+        packageDirs: workspace!.packageDirs,
+        rootDir: workspace!.rootDir
+      });
 
-      const pkg = findPackageForFile(
-        `${MONOREPO_ROOT}/packages/ast-typescript-mcp/src/handlers/typescript.ts`,
+      const pkg = findPackageForFile({
+        filePath: `${MONOREPO_ROOT}/packages/ast-typescript-mcp/src/handlers/typescript.ts`,
         packages
-      );
+      });
 
       expect(pkg).not.toBeNull();
       expect(pkg!.name).toBe("ast-typescript-mcp");
@@ -140,12 +140,12 @@ describe("Monorepo Dependency Graph", () => {
 
     it("should return null for file outside packages", async () => {
       const workspace = await detectWorkspace(MONOREPO_ROOT);
-      const packages = parseAllPackages(
-        workspace!.packageDirs,
-        workspace!.rootDir
-      );
+      const packages = parseAllPackages({
+        packageDirs: workspace!.packageDirs,
+        rootDir: workspace!.rootDir
+      });
 
-      const pkg = findPackageForFile("/tmp/some-file.ts", packages);
+      const pkg = findPackageForFile({ filePath: "/tmp/some-file.ts", packages });
 
       expect(pkg).toBeNull();
     });
@@ -162,12 +162,7 @@ describe("Monorepo Dependency Graph", () => {
       // Find the line/column for 'jsonResponse' export
       // This is a utility that is used by all dependent packages
       const result = await handler.findReferences(
-        mcpSharedFile,
-        // Line number for 'jsonResponse' in the exports
-        // We need to find the actual position - let's search for any exported function
-        1, // Will get adjusted
-        1, // Will get adjusted
-        { scopeToDependents: true }
+        { filePath: mcpSharedFile, line: 1, column: 1, options: { scopeToDependents: true } }
       );
 
       // The result should include references from dependent packages
@@ -183,14 +178,11 @@ describe("Monorepo Dependency Graph", () => {
       const filePath = `${MONOREPO_ROOT}/packages/ast-typescript-mcp/src/handlers/typescript.ts`;
 
       // Get references without scoping
-      const unscopedResult = await handler.findReferences(filePath, 56, 14);
+      const unscopedResult = await handler.findReferences({ filePath: filePath, line: 56, column: 14 });
 
       // Get references with scoping
       const scopedResult = await handler.findReferences(
-        filePath,
-        56, // Line for "export class TypeScriptHandler"
-        14, // Column for "TypeScriptHandler"
-        { scopeToDependents: true }
+        { filePath: filePath, line: 56, column: 14, options: { scopeToDependents: true } }
       );
 
       // Scoped should have <= unscoped references

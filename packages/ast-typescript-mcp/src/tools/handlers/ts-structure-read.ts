@@ -29,7 +29,7 @@ async function processFile(
   try {
     // If query is not full, or if name/kind filters are specified, use query method
     if (query !== "full" || options.name || options.kind) {
-      const result = await handler.query(filePath, query as TsQueryType, options);
+      const result = await handler.query({ filePath: filePath, queryType: query as TsQueryType, options: options });
       return { filePath, result };
     }
 

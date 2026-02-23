@@ -54,9 +54,9 @@ export class FindReferencesHandler extends BaseToolHandler<FindReferencesArgs> {
       return errorResponse(`Unsupported file type. Supported: ${extensions.join(", ")}`);
     }
 
-    const result = await handler.findReferences(file_path, line, column, {
+    const result = await handler.findReferences({ filePath: file_path, line: line, column: column, options: {
       scopeToDependents: scope_to_dependents,
-    });
+    } });
     return jsonResponse(result);
   }
 }
