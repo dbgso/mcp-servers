@@ -2,6 +2,7 @@ import { ToolRegistry } from "mcp-shared";
 import {
   AstReadHandler,
   AstWriteHandler,
+  AstReorderSectionsHandler,
   GoToDefinitionHandler,
   CrawlHandler,
   ReadDirectoryHandler,
@@ -10,6 +11,9 @@ import {
   DiffStructureHandler,
   StructuredWriteHandler,
   TopicIndexHandler,
+  StructureAnalysisHandler,
+  FindBacklinksHandler,
+  LintDocumentHandler,
 } from "./handlers/index.js";
 
 export { ToolRegistry };
@@ -22,6 +26,7 @@ function createToolRegistry(): ToolRegistry {
 
   registry.register(new AstReadHandler());
   registry.register(new AstWriteHandler());
+  registry.register(new AstReorderSectionsHandler());
   registry.register(new GoToDefinitionHandler());
   registry.register(new CrawlHandler());
   registry.register(new ReadDirectoryHandler());
@@ -30,6 +35,9 @@ function createToolRegistry(): ToolRegistry {
   registry.register(new DiffStructureHandler());
   registry.register(new StructuredWriteHandler());
   registry.register(new TopicIndexHandler());
+  registry.register(new StructureAnalysisHandler());
+  registry.register(new FindBacklinksHandler());
+  registry.register(new LintDocumentHandler());
 
   return registry;
 }

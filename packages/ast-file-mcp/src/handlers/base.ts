@@ -1,4 +1,4 @@
-import type { FileHandler, AstReadResult, HeadingSummary, LinkSummary, FileSummary, CrawlResult, QueryType, QueryResult, LinkCheckResult, DiffStructureParams, DiffStructureResult } from "../types/index.js";
+import type { FileHandler, AstReadResult, HeadingSummary, LinkSummary, FileSummary, CrawlResult, QueryType, QueryResult, LinkCheckResult, DiffStructureParams, DiffStructureResult, SectionResult, WriteSectionsParams, ReorderSectionsParams } from "../types/index.js";
 import type { GoToDefinitionResult } from "mcp-shared";
 
 export abstract class BaseHandler implements FileHandler {
@@ -76,6 +76,55 @@ export abstract class BaseHandler implements FileHandler {
     line: number;
     column: number;
   }): Promise<GoToDefinitionResult>;
+
+  /**
+   * Extract sections as independent manipulable units.
+   * Returns preamble (content before first section) and sections array.
+   */
+  abstract getSections(params: { filePath: string; level?: number }): Promise<SectionResult>;
+
+  /**
+   * Write document from sections array.
+   * Allows flexible composition of sections in any order.
+   */
+  abstract writeSections(params: WriteSectionsParams): Promise<void>;
+
+  /**
+   * Reorder sections by title.
+   * Convenience method built on getSections() and writeSections().
+   */
+  async reorderSections(params: ReorderSectionsParams): Promise<void> {
+    const { preamble, sections, title, docAttributes } = await this.getSections({
+      filePath: params.filePath,
+      level: params.level,
+    });
+
+    // Create a map for quick lookup
+    const sectionMap = new Map(sections.map(s => [s.title, s]));
+
+    // Build ordered sections
+    const ordered = [];
+    for (const t of params.order) {
+      const section = sectionMap.get(t);
+      if (section) {
+        ordered.push(section);
+        sectionMap.delete(t);
+      }
+    }
+
+    // Append remaining sections not in the order list
+    for (const section of sectionMap.values()) {
+      ordered.push(section);
+    }
+
+    await this.writeSections({
+      filePath: params.targetPath ?? params.filePath,
+      preamble,
+      sections: ordered,
+      title,
+      docAttributes,
+    });
+  }
 
   canHandle(filePath: string): boolean {
     const ext = filePath.split(".").pop()?.toLowerCase() ?? "";

@@ -24,7 +24,11 @@ import type {
   LinkCheckItem,
   DiffStructureParams,
   DiffStructureResult,
+  SectionResult,
+  Section,
+  WriteSectionsParams,
 } from "../types/index.js";
+import type { RootContent } from "mdast";
 
 export class MarkdownHandler extends BaseHandler {
   readonly extensions = ["md", "markdown"];
@@ -907,6 +911,78 @@ export class MarkdownHandler extends BaseHandler {
       modified: diffResult.modified,
       summary: diffResult.summary,
     };
+  }
+
+  // ============================================================
+  // Section Manipulation Methods
+  // ============================================================
+
+  /**
+   * Extract sections as independent manipulable units.
+   * Returns preamble (content before first section) and sections array.
+   */
+  async getSections(params: { filePath: string; level?: number }): Promise<SectionResult<RootContent>> {
+    const { filePath, level = 1 } = params;
+    const content = await readFile(filePath, "utf-8");
+    const processor = unified().use(remarkParse);
+    const ast = processor.parse(content) as MdastRoot;
+
+    const preamble: RootContent[] = [];
+    const sections: Section<RootContent>[] = [];
+    let currentSection: Section<RootContent> | null = null;
+
+    for (const node of ast.children) {
+      if (node.type === "heading" && node.depth === level) {
+        // Start a new section
+        if (currentSection) {
+          sections.push(currentSection);
+        }
+        currentSection = {
+          title: this.extractText(node),
+          level: node.depth,
+          content: [node],
+        };
+      } else if (currentSection) {
+        // Add to current section
+        currentSection.content.push(node);
+      } else {
+        // Content before first heading goes to preamble
+        preamble.push(node);
+      }
+    }
+
+    // Don't forget the last section
+    if (currentSection) {
+      sections.push(currentSection);
+    }
+
+    return { preamble, sections };
+  }
+
+  /**
+   * Write document from sections array.
+   * Allows flexible composition of sections in any order.
+   */
+  async writeSections(params: WriteSectionsParams<RootContent>): Promise<void> {
+    const { filePath, preamble = [], sections } = params;
+
+    // Reconstruct AST from sections
+    const children: RootContent[] = [];
+
+    // Add preamble if present
+    children.push(...preamble);
+
+    // Add sections
+    for (const section of sections) {
+      children.push(...section.content);
+    }
+
+    const ast: MdastRoot = {
+      type: "root",
+      children,
+    };
+
+    await this.write({ filePath, ast });
   }
 
   // ============================================================

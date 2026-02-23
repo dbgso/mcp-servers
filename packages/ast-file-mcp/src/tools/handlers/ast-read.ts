@@ -16,17 +16,18 @@ const ReadSchema = z.object({
       "Absolute path(s) to the file(s) to read. Can be a single path or array of paths."
     ),
   query: z
-    .enum(["full", "headings", "code_blocks", "lists", "links"])
+    .enum(["full", "headings", "code_blocks", "lists", "links", "sections"])
     .optional()
     .default("full")
     .describe(
-      "Query type: full (default), headings, code_blocks, lists, links"
+      "Query type: full (entire AST), headings (heading list), code_blocks, lists, links, sections (lightweight section titles for reordering)"
     ),
   heading: z
     .string()
     .optional()
     .describe("Get plain text content under specific section heading (works with Markdown and AsciiDoc)"),
   depth: z.number().optional().describe("Max heading depth for headings query"),
+  level: z.number().optional().describe("Section level for sections query (default: 1 for AsciiDoc ==, 2 for Markdown ##)"),
 });
 
 type ReadArgs = z.infer<typeof ReadSchema>;
@@ -38,11 +39,23 @@ interface SectionResult {
   content: string;
 }
 
+interface SectionSummary {
+  title: string;
+  level: number;
+}
+
+interface SectionsQueryResult {
+  filePath: string;
+  fileType: "markdown" | "asciidoc";
+  query: "sections";
+  sections: SectionSummary[];
+}
+
 async function processFile(params: {
   filePath: string;
   query: string;
-  options: { heading?: string; depth?: number };
-}): Promise<FileResult<QueryResult | SectionResult>> {
+  options: { heading?: string; depth?: number; level?: number };
+}): Promise<FileResult<QueryResult | SectionResult | SectionsQueryResult>> {
   const { filePath, query, options } = params;
   const handler = getHandler(filePath);
 
@@ -102,6 +115,23 @@ async function processFile(params: {
       };
     }
 
+    // Sections query: lightweight section info for reordering
+    if (query === "sections") {
+      // Default level: 1 for AsciiDoc (==), 2 for Markdown (##)
+      const defaultLevel = handler.fileType === "asciidoc" ? 1 : 2;
+      const level = options.level ?? defaultLevel;
+      const { sections } = await handler.getSections({ filePath, level });
+      return {
+        filePath,
+        result: {
+          filePath,
+          fileType: handler.fileType as "markdown" | "asciidoc",
+          query: "sections" as const,
+          sections: sections.map((s) => ({ title: s.title, level: s.level })),
+        },
+      };
+    }
+
     // Polymorphism: use handler.query() for all remaining query types
     // Each handler implements supported queries and throws for unsupported ones
     const result = await handler.query({
@@ -124,7 +154,7 @@ export class AstReadHandler extends BaseToolHandler<ReadArgs> {
 
   get description(): string {
     const extensions = getSupportedExtensions();
-    return `Read file(s) and return AST or query specific elements. Supports multiple files. Supported extensions: ${extensions.join(", ")}. Query options: full (entire AST), headings (list of headings), code_blocks (list of code blocks), lists (list of lists), links (list of links). Use 'heading' parameter to get plain text content under a specific section heading (works with both Markdown and AsciiDoc).`;
+    return `Read file(s) and return AST or query specific elements. Supports multiple files. Supported extensions: ${extensions.join(", ")}. Query options: full (entire AST), headings, code_blocks, lists, links, sections (lightweight section titles for reordering). Use 'heading' parameter to get plain text content under a specific section heading.`;
   }
 
   readonly inputSchema = {
@@ -143,8 +173,8 @@ export class AstReadHandler extends BaseToolHandler<ReadArgs> {
       },
       query: {
         type: "string",
-        enum: ["full", "headings", "code_blocks", "lists", "links"],
-        description: "Query type: full (default), headings, code_blocks, lists, links",
+        enum: ["full", "headings", "code_blocks", "lists", "links", "sections"],
+        description: "Query type: full (entire AST), headings, code_blocks, lists, links, sections (lightweight section titles for reordering)",
       },
       heading: {
         type: "string",
@@ -154,17 +184,21 @@ export class AstReadHandler extends BaseToolHandler<ReadArgs> {
         type: "number",
         description: "Max heading depth for headings query",
       },
+      level: {
+        type: "number",
+        description: "Section level for sections query (default: 1 for AsciiDoc ==, 2 for Markdown ##)",
+      },
     },
     required: ["file_path"],
   };
 
   protected async doExecute(args: ReadArgs): Promise<ToolResponse> {
-    const { file_path, query, heading, depth } = args;
+    const { file_path, query, heading, depth, level } = args;
     const filePaths = Array.isArray(file_path) ? file_path : [file_path];
 
     const results = await Promise.all(
       filePaths.map((fp) =>
-        processFile({ filePath: fp, query, options: { heading, depth } })
+        processFile({ filePath: fp, query, options: { heading, depth, level } })
       )
     );
 

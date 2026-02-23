@@ -1,5 +1,6 @@
 export { AstReadHandler } from "./ast-read.js";
 export { AstWriteHandler } from "./ast-write.js";
+export { AstReorderSectionsHandler } from "./ast-reorder-sections.js";
 export { GoToDefinitionHandler } from "./go-to-definition.js";
 export { CrawlHandler } from "./crawl.js";
 export { ReadDirectoryHandler } from "./read-directory.js";
@@ -8,3 +9,6 @@ export { LinkCheckHandler } from "./link-check.js";
 export { DiffStructureHandler } from "./diff-structure.js";
 export { StructuredWriteHandler } from "./structured-write.js";
 export { TopicIndexHandler } from "./topic-index.js";
+export { StructureAnalysisHandler } from "./structure-analysis.js";
+export { FindBacklinksHandler } from "./find-backlinks.js";
+export { LintDocumentHandler } from "./lint-document.js";

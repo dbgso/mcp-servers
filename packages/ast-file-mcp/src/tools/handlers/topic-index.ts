@@ -130,7 +130,7 @@ export class TopicIndexHandler extends BaseToolHandler<TopicIndexArgs> {
         }
 
         // Generate anchor from heading text
-        const anchor = this.generateAnchor(heading.text, file.fileType);
+        const anchor = this.generateAnchor({ text: heading.text, fileType: file.fileType });
 
         topics.push({
           text: heading.text,
@@ -168,7 +168,8 @@ export class TopicIndexHandler extends BaseToolHandler<TopicIndexArgs> {
     });
   }
 
-  private generateAnchor(text: string, fileType: "markdown" | "asciidoc"): string {
+  private generateAnchor(params: { text: string; fileType: "markdown" | "asciidoc" }): string {
+    const { text, fileType } = params;
     if (fileType === "markdown") {
       // GitHub-flavored markdown anchor generation
       return text
