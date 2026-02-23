@@ -14,7 +14,7 @@ export class FeedbackReader {
     return path.join(this.baseDir, taskId);
   }
 
-  private getFeedbackPath(taskId: string, feedbackId: string): string {
+  private getFeedbackPath({ taskId, feedbackId }: { taskId: string; feedbackId: string }): string {
     return path.join(this.getTaskFeedbackDir(taskId), `${feedbackId}.md`);
   }
 
@@ -128,7 +128,7 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
         addressed_by: null,
       };
 
-      const filePath = this.getFeedbackPath(taskId, feedbackId);
+      const filePath = this.getFeedbackPath({ taskId: taskId, feedbackId: feedbackId });
       await fs.writeFile(filePath, this.serializeFeedback(entry), "utf-8");
 
       return { success: true, feedbackId };
@@ -140,8 +140,8 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
     }
   }
 
-  async getFeedback(taskId: string, feedbackId: string): Promise<FeedbackEntry | null> {
-    const filePath = this.getFeedbackPath(taskId, feedbackId);
+  async getFeedback({ taskId, feedbackId }: { taskId: string; feedbackId: string }): Promise<FeedbackEntry | null> {
+    const filePath = this.getFeedbackPath({ taskId: taskId, feedbackId: feedbackId });
 
     try {
       const content = await fs.readFile(filePath, "utf-8");
@@ -197,7 +197,7 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
     interpretation: string;
   }): Promise<{ success: boolean; error?: string }> {
     const { taskId, feedbackId, interpretation } = params;
-    const entry = await this.getFeedback(taskId, feedbackId);
+    const entry = await this.getFeedback({ taskId: taskId, feedbackId: feedbackId });
 
     if (!entry) {
       return { success: false, error: `Feedback "${feedbackId}" not found.` };
@@ -212,7 +212,7 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
       interpretation,
     };
 
-    const filePath = this.getFeedbackPath(taskId, feedbackId);
+    const filePath = this.getFeedbackPath({ taskId: taskId, feedbackId: feedbackId });
     await fs.writeFile(filePath, this.serializeFeedback(updatedEntry), "utf-8");
 
     return { success: true };
@@ -223,7 +223,7 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
     feedbackId: string;
   }): Promise<{ success: boolean; error?: string }> {
     const { taskId, feedbackId } = params;
-    const entry = await this.getFeedback(taskId, feedbackId);
+    const entry = await this.getFeedback({ taskId: taskId, feedbackId: feedbackId });
 
     if (!entry) {
       return { success: false, error: `Feedback "${feedbackId}" not found.` };
@@ -242,7 +242,7 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
       status: "confirmed",
     };
 
-    const filePath = this.getFeedbackPath(taskId, feedbackId);
+    const filePath = this.getFeedbackPath({ taskId: taskId, feedbackId: feedbackId });
     await fs.writeFile(filePath, this.serializeFeedback(updatedEntry), "utf-8");
 
     return { success: true };
@@ -254,7 +254,7 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
     addressedBy: string;
   }): Promise<{ success: boolean; error?: string }> {
     const { taskId, feedbackId, addressedBy } = params;
-    const entry = await this.getFeedback(taskId, feedbackId);
+    const entry = await this.getFeedback({ taskId: taskId, feedbackId: feedbackId });
 
     if (!entry) {
       return { success: false, error: `Feedback "${feedbackId}" not found.` };
@@ -269,7 +269,7 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
       addressed_by: addressedBy,
     };
 
-    const filePath = this.getFeedbackPath(taskId, feedbackId);
+    const filePath = this.getFeedbackPath({ taskId: taskId, feedbackId: feedbackId });
     await fs.writeFile(filePath, this.serializeFeedback(updatedEntry), "utf-8");
 
     return { success: true };
@@ -280,7 +280,7 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
     feedbackId: string;
   }): Promise<{ success: boolean; error?: string }> {
     const { taskId, feedbackId } = params;
-    const filePath = this.getFeedbackPath(taskId, feedbackId);
+    const filePath = this.getFeedbackPath({ taskId: taskId, feedbackId: feedbackId });
 
     try {
       await fs.unlink(filePath);

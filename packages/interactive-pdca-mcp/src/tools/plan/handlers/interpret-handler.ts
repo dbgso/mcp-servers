@@ -41,7 +41,7 @@ plan(action: "interpret", id: "<task-id>", feedback_id: "<feedback-id>", interpr
     const { feedbackReader } = context;
 
     // Get the feedback to validate it exists
-    const feedback = await feedbackReader.getFeedback(id, feedback_id);
+    const feedback = await feedbackReader.getFeedback({ taskId: id, feedbackId: feedback_id });
 
     if (!feedback) {
       return {

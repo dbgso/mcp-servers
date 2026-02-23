@@ -23,7 +23,7 @@ function getTemplatesDir(): string {
 /**
  * Recursively copy a directory
  */
-async function copyDirectory(src: string, dest: string): Promise<void> {
+async function copyDirectory({ src, dest }: { src: string; dest: string }): Promise<void> {
   await fs.mkdir(dest, { recursive: true });
   const entries = await fs.readdir(src, { withFileTypes: true });
 
@@ -32,7 +32,7 @@ async function copyDirectory(src: string, dest: string): Promise<void> {
     const destPath = path.join(dest, entry.name);
 
     if (entry.isDirectory()) {
-      await copyDirectory(srcPath, destPath);
+      await copyDirectory({ src: srcPath, dest: destPath });
     } else {
       await fs.copyFile(srcPath, destPath);
     }
@@ -87,7 +87,7 @@ export async function setupSelfReviewTemplates(
 
   // Copy templates if they exist in the package
   if (await directoryExists(templateSrcPath)) {
-    await copyDirectory(templateSrcPath, selfReviewPath);
+    await copyDirectory({ src: templateSrcPath, dest: selfReviewPath });
     return { action: "copied_templates", path: selfReviewPath };
   }
 

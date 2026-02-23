@@ -23,6 +23,7 @@ import {
   TransformCallSiteHandler,
   MonorepoGraphHandler,
   PackageDependentsHandler,
+  BatchExecuteHandler,
 } from "./handlers/index.js";
 
 // Re-export ToolRegistry from mcp-shared
@@ -57,6 +58,7 @@ function createToolRegistry(): ToolRegistry {
   registry.register(new TransformCallSiteHandler());
   registry.register(new MonorepoGraphHandler());
   registry.register(new PackageDependentsHandler());
+  registry.register(new BatchExecuteHandler());
 
   return registry;
 }
