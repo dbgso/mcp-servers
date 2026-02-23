@@ -8,6 +8,11 @@ const FindReferencesSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file containing the symbol definition"),
   line: z.number().describe("Line number of the symbol (1-based)"),
   column: z.number().describe("Column number of the symbol (1-based)"),
+  scope_to_dependents: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Only search in packages that depend on the target package (monorepo optimization)"),
 });
 
 type FindReferencesArgs = z.infer<typeof FindReferencesSchema>;
@@ -32,12 +37,16 @@ export class FindReferencesHandler extends BaseToolHandler<FindReferencesArgs> {
         type: "number",
         description: "Column number of the symbol (1-based)",
       },
+      scope_to_dependents: {
+        type: "boolean",
+        description: "Only search in packages that depend on the target package (monorepo optimization)",
+      },
     },
     required: ["file_path", "line", "column"],
   };
 
   protected async doExecute(args: FindReferencesArgs): Promise<ToolResponse> {
-    const { file_path, line, column } = args;
+    const { file_path, line, column, scope_to_dependents } = args;
     const handler = getHandler(file_path);
 
     if (!handler) {
@@ -45,7 +54,9 @@ export class FindReferencesHandler extends BaseToolHandler<FindReferencesArgs> {
       return errorResponse(`Unsupported file type. Supported: ${extensions.join(", ")}`);
     }
 
-    const result = await handler.findReferences(file_path, line, column);
+    const result = await handler.findReferences(file_path, line, column, {
+      scopeToDependents: scope_to_dependents,
+    });
     return jsonResponse(result);
   }
 }
