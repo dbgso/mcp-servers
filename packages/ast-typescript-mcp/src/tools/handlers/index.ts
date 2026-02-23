@@ -21,3 +21,7 @@ export { TransformSignatureHandler } from "./transform-signature.js";
 export { TransformCallSiteHandler } from "./transform-call-site.js";
 export { MonorepoGraphHandler, PackageDependentsHandler } from "./monorepo-graph.js";
 export { BatchExecuteHandler } from "./batch-execute.js";
+export { FindBlocksHandler } from "./find-blocks.js";
+export { RemoveNodesHandler } from "./remove-nodes.js";
+export { RemoveUnusedImportsHandler } from "./remove-unused-imports.js";
+export { QueryAstHandler } from "./query-ast.js";
