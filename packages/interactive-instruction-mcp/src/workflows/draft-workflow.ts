@@ -35,6 +35,8 @@ export interface DraftContext {
   content: string;
   selfReviewNotes?: string;
   approvalToken?: string;
+  /** Timestamp when draft was confirmed (transitioned to pending_approval) */
+  confirmedAt?: number;
 }
 
 // Parameters for triggering transitions
@@ -95,7 +97,9 @@ const draftWorkflowDefinition: WorkflowDefinition<DraftState, DraftContext, Draf
           message: "Must confirm user has seen explanation (action: 'confirm', confirmed: true)",
         }),
       ],
-      action: async () => {
+      action: async (ctx) => {
+        // Record when this draft was confirmed for consecutive approval detection
+        ctx.confirmedAt = Date.now();
         return { nextState: "pending_approval" };
       },
     },
