@@ -42,7 +42,7 @@ export interface MonorepoGraph {
  * Build monorepo dependency graph from workspace info.
  */
 export function buildMonorepoGraph(workspace: WorkspaceInfo): MonorepoGraph {
-  const packages = parseAllPackages(workspace.packageDirs, workspace.rootDir);
+  const packages = parseAllPackages({ packageDirs: workspace.packageDirs, rootDir: workspace.rootDir });
   const packageMap = buildPackageMap(packages);
   const internalNames = new Set(packages.map((p) => p.name));
 
@@ -79,7 +79,7 @@ export function buildMonorepoGraph(workspace: WorkspaceInfo): MonorepoGraph {
   }
 
   // Detect cycles using Tarjan's algorithm
-  const cycles = detectCycles(nodes, edges);
+  const cycles = detectCycles({ nodes: nodes, edges: edges });
 
   return {
     workspaceType: workspace.type,
@@ -94,8 +94,7 @@ export function buildMonorepoGraph(workspace: WorkspaceInfo): MonorepoGraph {
  * Get packages that depend on a given package (reverse dependencies).
  */
 export function getDependentPackages(
-  packageName: string,
-  graph: MonorepoGraph
+  { packageName, graph }: { packageName: string; graph: MonorepoGraph }
 ): string[] {
   return graph.edges
     .filter((edge) => edge.to === packageName)
@@ -106,8 +105,7 @@ export function getDependentPackages(
  * Get packages that a given package depends on.
  */
 export function getPackageDependencies(
-  packageName: string,
-  graph: MonorepoGraph
+  { packageName, graph }: { packageName: string; graph: MonorepoGraph }
 ): string[] {
   return graph.edges
     .filter((edge) => edge.from === packageName)
@@ -117,7 +115,7 @@ export function getPackageDependencies(
 /**
  * Detect cycles using Tarjan's strongly connected components algorithm.
  */
-function detectCycles(nodes: PackageNode[], edges: PackageEdge[]): string[][] {
+function detectCycles({ nodes, edges }: { nodes: PackageNode[]; edges: PackageEdge[] }): string[][] {
   const graph = new Map<string, string[]>();
 
   // Build adjacency list

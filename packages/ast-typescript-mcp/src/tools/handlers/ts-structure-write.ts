@@ -41,7 +41,7 @@ export class TsStructureWriteHandler extends BaseToolHandler<WriteArgs> {
       return errorResponse(`Unsupported file type. Supported: ${extensions.join(", ")}`);
     }
 
-    await handler.write(file_path, structure as SourceFileStructure);
+    await handler.write({ filePath: file_path, structure: structure as SourceFileStructure });
     return jsonResponse({ success: true, filePath: file_path });
   }
 }

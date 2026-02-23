@@ -195,12 +195,24 @@ export class TypeScriptHandler {
 
     for (const cls of sourceFile.getClasses()) {
       if (!kindFilter || kindFilter === "class") {
+        const methods = cls.getMethods().map(m => ({
+          name: m.getName(),
+          line: m.getStartLineNumber(),
+          column: m.getStart() - sourceFile.compilerNode.getLineStarts()[m.getStartLineNumber() - 1] + 1,
+          params: m.getParameters().map(p => ({
+            name: p.getName(),
+            type: p.getType().getText(),
+            optional: p.isOptional(),
+          })),
+          signature: m.getText().split(")")[0] + ")",
+        }));
         summaries.push({
           kind: "class",
           name: cls.getName() ?? "(anonymous)",
           exported: cls.isExported(),
           line: cls.getStartLineNumber(),
           members: cls.getMembers().length,
+          methods,
         });
       }
     }
@@ -212,6 +224,13 @@ export class TypeScriptHandler {
           name: fn.getName() ?? "(anonymous)",
           exported: fn.isExported(),
           line: fn.getStartLineNumber(),
+          column: fn.getStart() - sourceFile.compilerNode.getLineStarts()[fn.getStartLineNumber() - 1] + 1,
+          params: fn.getParameters().map(p => ({
+            name: p.getName(),
+            type: p.getType().getText(),
+            optional: p.isOptional(),
+          })),
+          signature: fn.getText().split(")")[0] + ")",
         });
       }
     }
@@ -352,9 +371,7 @@ export class TypeScriptHandler {
   }
 
   async goToDefinition(
-    filePath: string,
-    line: number,
-    column: number
+    { filePath, line, column }: { filePath: string; line: number; column: number }
   ): Promise<GoToDefinitionResult> {
     const project = this.getProjectForFile(filePath);
     const sourceFile = project.addSourceFileAtPath(filePath);
@@ -451,10 +468,7 @@ export class TypeScriptHandler {
   }
 
   async findReferences(
-    filePath: string,
-    line: number,
-    column: number,
-    options?: { scopeToDependents?: boolean }
+    { filePath, line, column, options }: { filePath: string; line: number; column: number; options?: { scopeToDependents?: boolean } }
   ): Promise<FindReferencesResult> {
     const project = this.getProjectForFile(filePath);
     const sourceFile = project.addSourceFileAtPath(filePath);
@@ -489,15 +503,15 @@ export class TypeScriptHandler {
       }
 
       // Use git grep to find candidate files
-      let candidateFiles = this.gitGrep(gitRoot, symbolName);
+      let candidateFiles = this.gitGrep({ gitRoot, symbolName });
 
       // If scope_to_dependents is enabled, filter to only dependent packages
       if (options?.scopeToDependents) {
-        const scopedFiles = await this.filterToDependentPackages(
-          filePath,
+        const scopedFiles = await this.filterToDependentPackages({
+          targetFilePath: filePath,
           candidateFiles,
           gitRoot
-        );
+        });
         if (scopedFiles) {
           candidateFiles = scopedFiles;
         }
@@ -508,13 +522,13 @@ export class TypeScriptHandler {
       // Parse each candidate file and find actual references
       for (const candidatePath of candidateFiles) {
         try {
-          const refs = await this.findReferencesInFile(
+          const refs = await this.findReferencesInFile({
             project,
-            candidatePath,
+            filePath: candidatePath,
             symbolName,
-            filePath,
-            candidatePath === filePath ? { line, column } : undefined
-          );
+            definitionFilePath: filePath,
+            skipPosition: candidatePath === filePath ? { line, column } : undefined
+          });
           references.push(...refs);
         } catch {
           // Skip files that can't be parsed
@@ -538,9 +552,7 @@ export class TypeScriptHandler {
    * Returns null if monorepo detection fails (fallback to all files).
    */
   private async filterToDependentPackages(
-    targetFilePath: string,
-    candidateFiles: string[],
-    gitRoot: string
+    { targetFilePath, candidateFiles, gitRoot }: { targetFilePath: string; candidateFiles: string[]; gitRoot: string }
   ): Promise<string[] | null> {
     // Detect workspace
     const workspace = await detectWorkspace(gitRoot);
@@ -549,17 +561,17 @@ export class TypeScriptHandler {
     }
 
     // Parse all packages
-    const packages = parseAllPackages(workspace.packageDirs, workspace.rootDir);
+    const packages = parseAllPackages({ packageDirs: workspace.packageDirs, rootDir: workspace.rootDir });
 
     // Find which package the target file belongs to
-    const targetPackage = findPackageForFile(targetFilePath, packages);
+    const targetPackage = findPackageForFile({ filePath: targetFilePath, packages });
     if (!targetPackage) {
       return null; // File not in any package, search all files
     }
 
     // Build dependency graph and get dependent packages
     const graph = buildMonorepoGraph(workspace);
-    const dependentNames = getDependentPackages(targetPackage.name, graph);
+    const dependentNames = getDependentPackages({ packageName: targetPackage.name, graph });
 
     // Include the target package itself
     const allowedPackages = new Set([targetPackage.name, ...dependentNames]);
@@ -587,7 +599,7 @@ export class TypeScriptHandler {
     }
   }
 
-  private gitGrep(gitRoot: string, symbolName: string): string[] {
+  private gitGrep({ gitRoot, symbolName }: { gitRoot: string; symbolName: string }): string[] {
     try {
       // Search for the symbol in TypeScript files
       const result = execSync(
@@ -610,11 +622,7 @@ export class TypeScriptHandler {
   }
 
   private async findReferencesInFile(
-    project: Project,
-    filePath: string,
-    symbolName: string,
-    definitionFilePath: string,
-    skipPosition?: { line: number; column: number }
+    { project, filePath, symbolName, definitionFilePath, skipPosition }: { project: Project; filePath: string; symbolName: string; definitionFilePath: string; skipPosition?: { line: number; column: number } }
   ): Promise<ReferenceLocation[]> {
     const references: ReferenceLocation[] = [];
     let sourceFile = project.getSourceFile(filePath);
@@ -839,7 +847,7 @@ export class TypeScriptHandler {
     const newExpressions = node.getDescendantsOfKind(SyntaxKind.NewExpression);
 
     for (const callExpr of [...callExpressions, ...newExpressions]) {
-      const calledNode = this.resolveCallTarget(project, callExpr, includeExternal);
+      const calledNode = this.resolveCallTarget({ project, callExpr, includeExternal });
       if (calledNode) {
         const childNode = this.buildCallGraphNode({
           project,
@@ -907,7 +915,7 @@ export class TypeScriptHandler {
     return "function";
   }
 
-  private resolveCallTarget(project: Project, callExpr: Node, includeExternal: boolean): Node | null {
+  private resolveCallTarget({ project, callExpr, includeExternal }: { project: Project; callExpr: Node; includeExternal: boolean }): Node | null {
     try {
       let expr: Node | undefined;
 
@@ -1102,7 +1110,7 @@ export class TypeScriptHandler {
     // Get ancestors (what this type extends/implements)
     const shouldTraverseAncestors = direction === "ancestors" || direction === "both";
     if (shouldTraverseAncestors) {
-      const ancestors = this.getTypeAncestors(project, node, includeExternal);
+      const ancestors = this.getTypeAncestors({ project: project, node: node, includeExternal: includeExternal });
       for (const { node: ancestorNode, relation: ancestorRelation } of ancestors) {
         const childNode = this.buildTypeHierarchyNode({
           project,
@@ -1123,7 +1131,7 @@ export class TypeScriptHandler {
     // Get descendants (types that extend/implement this type)
     const shouldTraverseDescendants = direction === "descendants" || direction === "both";
     if (shouldTraverseDescendants) {
-      const descendants = this.getTypeDescendants(project, node, includeExternal);
+      const descendants = this.getTypeDescendants({ project: project, node: node, includeExternal: includeExternal });
       for (const { node: descendantNode, relation: descendantRelation } of descendants) {
         const childNode = this.buildTypeHierarchyNode({
           project,
@@ -1173,9 +1181,7 @@ export class TypeScriptHandler {
    * Get ancestors (base classes and implemented interfaces) of a type.
    */
   private getTypeAncestors(
-    project: Project,
-    node: Node,
-    includeExternal: boolean
+    { project, node, includeExternal }: { project: Project; node: Node; includeExternal: boolean }
   ): Array<{ node: Node; relation: TypeHierarchyRelation }> {
     const result: Array<{ node: Node; relation: TypeHierarchyRelation }> = [];
 
@@ -1245,9 +1251,7 @@ export class TypeScriptHandler {
    * Get descendants (derived classes and implementors) of a type.
    */
   private getTypeDescendants(
-    project: Project,
-    node: Node,
-    includeExternal: boolean
+    { project, node, includeExternal }: { project: Project; node: Node; includeExternal: boolean }
   ): Array<{ node: Node; relation: TypeHierarchyRelation }> {
     const result: Array<{ node: Node; relation: TypeHierarchyRelation }> = [];
 
@@ -1385,7 +1389,7 @@ export class TypeScriptHandler {
     const { directory, pattern = "**/*.{ts,tsx,mts,cts}", includeExternal = false } = params;
 
     // Find all matching files using find command
-    const files = this.findFilesWithPattern(directory, pattern);
+    const files = this.findFilesWithPattern({ directory: directory, pattern: pattern });
 
     // Build adjacency list for all modules
     const adjacencyList = new Map<string, Set<string>>();
@@ -1407,11 +1411,11 @@ export class TypeScriptHandler {
         // Process regular imports
         const imports = this.getImports(sourceFile);
         for (const imp of imports) {
-          this.addDependencyEdge(filePath, imp.module, {
+          this.addDependencyEdge({ fromFile: filePath, moduleSpecifier: imp.module, importInfo: {
             defaultImport: imp.defaultImport,
             namespaceImport: imp.namespaceImport,
             namedImports: imp.namedImports,
-          }, includeExternal, nodesMap, adjacencyList, edges);
+          }, includeExternal: includeExternal, nodesMap: nodesMap, adjacencyList: adjacencyList, edges: edges });
         }
 
         // Process re-exports (export { ... } from "...")
@@ -1420,9 +1424,9 @@ export class TypeScriptHandler {
           if (!moduleSpecifier) continue; // Skip re-exports without module specifier
 
           const namedExports = exp.getNamedExports().map((n) => n.getName());
-          this.addDependencyEdge(filePath, moduleSpecifier, {
+          this.addDependencyEdge({ fromFile: filePath, moduleSpecifier: moduleSpecifier, importInfo: {
             namedImports: namedExports,
-          }, includeExternal, nodesMap, adjacencyList, edges);
+          }, includeExternal: includeExternal, nodesMap: nodesMap, adjacencyList: adjacencyList, edges: edges });
         }
 
         project.removeSourceFile(sourceFile);
@@ -1445,19 +1449,9 @@ export class TypeScriptHandler {
    * Add a dependency edge for an import or re-export.
    */
   private addDependencyEdge(
-    fromFile: string,
-    moduleSpecifier: string,
-    importInfo: {
-      defaultImport?: string;
-      namespaceImport?: string;
-      namedImports?: string[];
-    },
-    includeExternal: boolean,
-    nodesMap: Map<string, DependencyNode>,
-    adjacencyList: Map<string, Set<string>>,
-    edges: DependencyEdge[]
+    { fromFile, moduleSpecifier, importInfo, includeExternal, nodesMap, adjacencyList, edges }: { fromFile: string; moduleSpecifier: string; importInfo: { defaultImport?: string; namespaceImport?: string; namedImports?: string[] }; includeExternal: boolean; nodesMap: Map<string, DependencyNode>; adjacencyList: Map<string, Set<string>>; edges: DependencyEdge[] }
   ): void {
-    const resolvedPath = this.resolveImportPath(fromFile, moduleSpecifier, includeExternal);
+    const resolvedPath = this.resolveImportPath({ fromFile: fromFile, moduleSpecifier: moduleSpecifier, includeExternal: includeExternal });
     if (!resolvedPath) return;
 
     const isExternal = resolvedPath.includes("node_modules");
@@ -1518,7 +1512,7 @@ export class TypeScriptHandler {
    * Find files matching a glob-like pattern using find command.
    * Supports patterns like "**\/*.{ts,tsx,mts,cts}" or "**\/filename.ts"
    */
-  private findFilesWithPattern(directory: string, pattern: string): string[] {
+  private findFilesWithPattern({ directory, pattern }: { directory: string; pattern: string }): string[] {
     try {
       // Convert glob pattern to find command arguments
       // For the common case of **/*.{ts,tsx,mts,cts}, we use find with -name
@@ -1561,9 +1555,7 @@ export class TypeScriptHandler {
    * Resolve an import module specifier to an absolute file path.
    */
   private resolveImportPath(
-    fromFile: string,
-    moduleSpecifier: string,
-    includeExternal: boolean
+    { fromFile, moduleSpecifier, includeExternal }: { fromFile: string; moduleSpecifier: string; includeExternal: boolean }
   ): string | null {
     // Skip external modules if not resolving them
     if (!moduleSpecifier.startsWith(".") && !moduleSpecifier.startsWith("/")) {
@@ -1743,7 +1735,7 @@ export class TypeScriptHandler {
       }
 
       // Find all candidate files using git grep
-      const candidateFiles = this.gitGrep(gitRoot, oldName);
+      const candidateFiles = this.gitGrep({ gitRoot: gitRoot, symbolName: oldName });
 
       // Add all candidate files to the project
       for (const candidatePath of candidateFiles) {
@@ -1758,7 +1750,7 @@ export class TypeScriptHandler {
       }
 
       // Collect all rename locations before performing the rename
-      const locations = this.collectRenameLocations(project, node, oldName, filePath);
+      const locations = this.collectRenameLocations({ project: project, node: node, oldName: oldName, definitionFilePath: filePath });
       const modifiedFilesSet = new Set<string>();
       for (const loc of locations) {
         modifiedFilesSet.add(loc.filePath);
@@ -1864,10 +1856,7 @@ export class TypeScriptHandler {
    * Collect all locations that will be affected by the rename.
    */
   private collectRenameLocations(
-    project: Project,
-    node: Node,
-    oldName: string,
-    definitionFilePath: string
+    { project, node, oldName, definitionFilePath }: { project: Project; node: Node; oldName: string; definitionFilePath: string }
   ): RenameLocation[] {
     const locations: RenameLocation[] = [];
 
@@ -1977,16 +1966,13 @@ export class TypeScriptHandler {
 
         // Check unused exports
         const unusedExports = await this.findUnusedExports(
-          project,
-          sourceFile,
-          filesToAnalyze,
-          entryPointPatterns
+          { project: project, sourceFile: sourceFile, allFiles: filesToAnalyze, entryPointPatterns: entryPointPatterns }
         );
         exportsChecked += unusedExports.checked;
         deadSymbols.push(...unusedExports.dead);
 
         // Check unused private members
-        const unusedPrivates = this.findUnusedPrivateMembers(sourceFile, filePath);
+        const unusedPrivates = this.findUnusedPrivateMembers({ sourceFile: sourceFile, filePath: filePath });
         privateMembersChecked += unusedPrivates.checked;
         deadSymbols.push(...unusedPrivates.dead);
       } catch {
@@ -2064,10 +2050,7 @@ export class TypeScriptHandler {
    * Find unused exports in a source file.
    */
   private async findUnusedExports(
-    project: Project,
-    sourceFile: SourceFile,
-    allFiles: string[],
-    entryPointPatterns: string[]
+    { project, sourceFile, allFiles, entryPointPatterns }: { project: Project; sourceFile: SourceFile; allFiles: string[]; entryPointPatterns: string[] }
   ): Promise<{ dead: DeadCodeSymbol[]; checked: number }> {
     const dead: DeadCodeSymbol[] = [];
     const filePath = sourceFile.getFilePath();
@@ -2096,10 +2079,7 @@ export class TypeScriptHandler {
 
       // Find references to this export in other files
       const hasExternalReference = await this.hasExternalReferences(
-        project,
-        filePath,
-        exp.name,
-        allFiles
+        { project: project, definitionFilePath: filePath, symbolName: exp.name, allFiles: allFiles }
       );
 
       if (!hasExternalReference) {
@@ -2120,10 +2100,7 @@ export class TypeScriptHandler {
    * Check if a symbol has references in other files.
    */
   private async hasExternalReferences(
-    project: Project,
-    definitionFilePath: string,
-    symbolName: string,
-    allFiles: string[]
+    { project, definitionFilePath, symbolName, allFiles }: { project: Project; definitionFilePath: string; symbolName: string; allFiles: string[] }
   ): Promise<boolean> {
     // Use git grep for fast initial search
     const gitRoot = this.findGitRoot(definitionFilePath);
@@ -2131,7 +2108,7 @@ export class TypeScriptHandler {
       return false;
     }
 
-    const candidateFiles = this.gitGrep(gitRoot, symbolName);
+    const candidateFiles = this.gitGrep({ gitRoot: gitRoot, symbolName: symbolName });
 
     // Check each candidate file
     for (const candidatePath of candidateFiles) {
@@ -2213,8 +2190,7 @@ export class TypeScriptHandler {
    * Find unused private members in classes.
    */
   private findUnusedPrivateMembers(
-    sourceFile: SourceFile,
-    filePath: string
+    { sourceFile, filePath }: { sourceFile: SourceFile; filePath: string }
   ): { dead: DeadCodeSymbol[]; checked: number } {
     const dead: DeadCodeSymbol[] = [];
     let checked = 0;
@@ -2256,7 +2232,7 @@ export class TypeScriptHandler {
 
       // Check each private member for usage within the class
       for (const member of privateMembers) {
-        const isUsed = this.isPrivateMemberUsed(cls, member.name, member.node);
+        const isUsed = this.isPrivateMemberUsed({ cls: cls, memberName: member.name, memberNode: member.node });
 
         if (!isUsed) {
           dead.push({
@@ -2276,7 +2252,7 @@ export class TypeScriptHandler {
   /**
    * Check if a private member is used within its class.
    */
-  private isPrivateMemberUsed(cls: Node, memberName: string, memberNode: Node): boolean {
+  private isPrivateMemberUsed({ cls, memberName, memberNode }: { cls: Node; memberName: string; memberNode: Node }): boolean {
     // Get all identifiers in the class
     for (const identifier of cls.getDescendantsOfKind(SyntaxKind.Identifier)) {
       // Skip the declaration itself
@@ -2533,7 +2509,7 @@ export class TypeScriptHandler {
       const importsAfter = this.getImports(sourceFile);
 
       // Calculate diff
-      const addedImports = this.diffImports(importsBefore, importsAfter);
+      const addedImports = this.diffImports({ before: importsBefore, after: importsAfter });
 
       // Save only if not dry run
       if (!dryRun) {
@@ -2556,8 +2532,7 @@ export class TypeScriptHandler {
    * Calculate the difference between two import lists.
    */
   private diffImports(
-    before: ImportSummary[],
-    after: ImportSummary[]
+    { before, after }: { before: ImportSummary[]; after: ImportSummary[] }
   ): AddedImport[] {
     const addedImports: AddedImport[] = [];
 

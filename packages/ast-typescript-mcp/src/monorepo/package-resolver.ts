@@ -34,7 +34,7 @@ export interface PackageJson {
 /**
  * Parse package.json and extract package info.
  */
-export function parsePackage(packageDir: string, rootDir: string): PackageInfo | null {
+export function parsePackage({ packageDir, rootDir }: { packageDir: string; rootDir: string }): PackageInfo | null {
   try {
     const packageJsonPath = join(packageDir, "package.json");
     const content = readFileSync(packageJsonPath, "utf-8");
@@ -61,13 +61,12 @@ export function parsePackage(packageDir: string, rootDir: string): PackageInfo |
  * Parse all packages in a workspace.
  */
 export function parseAllPackages(
-  packageDirs: string[],
-  rootDir: string
+  { packageDirs, rootDir }: { packageDirs: string[]; rootDir: string }
 ): PackageInfo[] {
   const packages: PackageInfo[] = [];
 
   for (const dir of packageDirs) {
-    const pkg = parsePackage(dir, rootDir);
+    const pkg = parsePackage({ packageDir: dir, rootDir: rootDir });
     if (pkg) {
       packages.push(pkg);
     }
@@ -91,8 +90,7 @@ export function buildPackageMap(packages: PackageInfo[]): Map<string, PackageInf
  * Find the package that contains a given file path.
  */
 export function findPackageForFile(
-  filePath: string,
-  packages: PackageInfo[]
+  { filePath, packages }: { filePath: string; packages: PackageInfo[] }
 ): PackageInfo | null {
   // Sort by path length descending to find the most specific match
   const sorted = [...packages].sort((a, b) => b.path.length - a.path.length);

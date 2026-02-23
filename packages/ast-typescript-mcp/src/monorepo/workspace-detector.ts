@@ -26,7 +26,7 @@ export async function detectWorkspace(startDir: string): Promise<WorkspaceInfo |
     const pnpmWorkspacePath = join(currentDir, "pnpm-workspace.yaml");
     if (existsSync(pnpmWorkspacePath)) {
       const patterns = parsePnpmWorkspace(pnpmWorkspacePath);
-      const packageDirs = await resolvePackageDirs(currentDir, patterns);
+      const packageDirs = await resolvePackageDirs({ rootDir: currentDir, patterns: patterns });
       return {
         type: "pnpm",
         rootDir: currentDir,
@@ -39,7 +39,7 @@ export async function detectWorkspace(startDir: string): Promise<WorkspaceInfo |
     if (existsSync(packageJsonPath)) {
       const patterns = parseNpmWorkspace(packageJsonPath);
       if (patterns.length > 0) {
-        const packageDirs = await resolvePackageDirs(currentDir, patterns);
+        const packageDirs = await resolvePackageDirs({ rootDir: currentDir, patterns: patterns });
         // Determine if yarn or npm based on lock file
         const type: WorkspaceType = existsSync(join(currentDir, "yarn.lock"))
           ? "yarn"
@@ -105,8 +105,7 @@ function parseNpmWorkspace(filePath: string): string[] {
  * Only includes directories that contain a package.json.
  */
 async function resolvePackageDirs(
-  rootDir: string,
-  patterns: string[]
+  { rootDir, patterns }: { rootDir: string; patterns: string[] }
 ): Promise<string[]> {
   const packageDirs: string[] = [];
 
