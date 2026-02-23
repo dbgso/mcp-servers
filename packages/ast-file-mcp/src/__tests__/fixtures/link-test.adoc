@@ -1,0 +1,19 @@
+= Link Test Document
+
+This document tests various link types for link_check.
+
+== Valid Links
+
+* xref:docs/guide.adoc[Local file]
+* xref:sample.adoc[Same directory]
+* <<valid-links,Section anchor>>
+
+== Broken Links
+
+* xref:missing-file.adoc[Missing file]
+* <<nonexistent-section,Missing anchor>>
+
+== External Links
+
+* link:https://github.com[GitHub]
+* link:https://example.com[Example]

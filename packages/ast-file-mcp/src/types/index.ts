@@ -12,6 +12,7 @@ export interface AstReadResult {
 export interface AsciidocDocument {
   type: "asciidoc";
   title?: string;
+  docAttributes?: string[];
   blocks: AsciidocBlock[];
 }
 
@@ -20,13 +21,23 @@ export interface AsciidocBlock {
   content?: string;
   lines?: string[];
   blocks?: AsciidocBlock[];
+  // Extended fields for serialization
+  level?: number;
+  title?: string;
+  style?: string;
+  attributes?: Record<string, string>;
+  // For list items
+  marker?: string;
+  text?: string;
+  // Raw source (preserves markers)
+  source?: string;
 }
 
 export interface FileHandler {
   readonly extensions: string[];
   readonly fileType: string;
   read(filePath: string): Promise<AstReadResult>;
-  write?(filePath: string, ast: unknown): Promise<void>;
+  write?(params: { filePath: string; ast: unknown }): Promise<void>;
 }
 
 // Query result types
@@ -86,4 +97,37 @@ export interface CrawlResult {
   startFile: string;
   files: FileSummary[];
   errors: Array<{ filePath: string; error: string }>;
+}
+
+// Link check types
+export interface LinkCheckItem {
+  url: string;
+  text: string;
+  line: number;
+  reason?: string;
+}
+
+export interface LinkCheckResult {
+  filePath: string;
+  valid: LinkCheckItem[];
+  broken: LinkCheckItem[];
+  skipped: LinkCheckItem[];
+}
+
+// Placeholder types for diff-structure feature (not yet implemented in mcp-shared)
+// These are added to satisfy imports that may be auto-generated
+export interface DiffStructureParams {
+  filePathA: string;
+  filePathB: string;
+  level?: "summary" | "detailed";
+}
+
+export interface DiffStructureResult {
+  filePathA: string;
+  filePathB: string;
+  fileType: "markdown" | "asciidoc";
+  added: unknown[];
+  removed: unknown[];
+  modified: unknown[];
+  summary: string;
 }
