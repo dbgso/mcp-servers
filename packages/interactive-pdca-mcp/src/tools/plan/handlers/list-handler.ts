@@ -1,19 +1,20 @@
 import { z } from "zod";
+import { BaseActionHandler } from "mcp-shared";
 import type {
   PlanActionContext,
-  PlanRawParams,
   TaskSummary,
-  ToolResult,
 } from "../../../types/index.js";
 import { formatParallel } from "./format-utils.js";
 
-const paramsSchema = z.object({});
+const listSchema = z.object({});
+type ListArgs = z.infer<typeof listSchema>;
 
 /**
  * ListHandler: Display all tasks with status summary
  */
-export class ListHandler {
+export class ListHandler extends BaseActionHandler<ListArgs, PlanActionContext> {
   readonly action = "list";
+  readonly schema = listSchema;
 
   readonly help = `# plan list
 
@@ -33,16 +34,8 @@ None required.
 - Shows ready-to-start and blocked tasks
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-
-    const { planReader, planReporter } = params.context;
+  protected async doExecute(_args: ListArgs, context: PlanActionContext) {
+    const { planReader, planReporter } = context;
 
     // Update markdown files to ensure they're in sync
     await planReporter.updateAll();
@@ -83,7 +76,7 @@ None required.
 
     // Pending Review section with full details
     if (byStatus.pending_review.length > 0) {
-      const { planDir } = params.context;
+      const { planDir } = context;
       output += "## Pending Review\n\n";
       output += "The following tasks are waiting for user approval. Review and approve or request changes.\n\n";
       output += `**Review files:**\n`;

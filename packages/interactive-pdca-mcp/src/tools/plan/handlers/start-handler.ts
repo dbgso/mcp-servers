@@ -1,11 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { z } from "zod";
-import type {
-  PlanActionContext,
-  ToolResult,
-  PlanRawParams,
-} from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 
 const PDCA_PHASES = [
   { suffix: "plan", title: "Plan" },
@@ -14,16 +11,18 @@ const PDCA_PHASES = [
   { suffix: "act", title: "Act" },
 ] as const;
 
-const paramsSchema = z.object({
+const startSchema = z.object({
   id: z.string().describe("Task ID to start"),
   prompt: z.string().describe("Instructions/request for this task"),
 });
+type StartArgs = z.infer<typeof startSchema>;
 
 /**
  * StartHandler: pending → in_progress transition
  */
-export class StartHandler {
+export class StartHandler extends BaseActionHandler<StartArgs, PlanActionContext> {
   readonly action = "start";
+  readonly schema = startSchema;
 
   readonly help = `# plan start
 
@@ -44,16 +43,9 @@ plan(action: "start", id: "<task-id>", prompt: "<instructions>")
 - Prompt is saved and used as reference during submit
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-    const { id, prompt } = parseResult.data;
-    const { planReader, planReporter, planDir } = params.context;
+  protected async doExecute(args: StartArgs, context: PlanActionContext) {
+    const { id, prompt } = args;
+    const { planReader, planReporter, planDir } = context;
 
     const task = await planReader.getTask(id);
     if (!task) {

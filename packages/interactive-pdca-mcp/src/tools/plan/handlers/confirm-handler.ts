@@ -1,19 +1,18 @@
 import { z } from "zod";
-import type {
-  PlanActionContext,
-  ToolResult,
-  PlanRawParams,
-} from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 
-const paramsSchema = z.object({
+const confirmSchema = z.object({
   id: z.string().describe("Task ID to confirm"),
 });
+type ConfirmArgs = z.infer<typeof confirmSchema>;
 
 /**
  * ConfirmHandler: Confirm self-review is complete and submit for user review
  */
-export class ConfirmHandler {
+export class ConfirmHandler extends BaseActionHandler<ConfirmArgs, PlanActionContext> {
   readonly action = "confirm";
+  readonly schema = confirmSchema;
 
   readonly help = `# plan confirm
 
@@ -33,16 +32,9 @@ plan(action: "confirm", id: "<task-id>")
 - Use this after verifying your submission meets all requirements
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-    const { id } = parseResult.data;
-    const { planReader, planReporter } = params.context;
+  protected async doExecute(args: ConfirmArgs, context: PlanActionContext) {
+    const { id } = args;
+    const { planReader, planReporter } = context;
 
     const result = await planReader.confirmSelfReview(id);
 

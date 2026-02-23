@@ -1,14 +1,12 @@
 import { z } from "zod";
-import type {
-  PlanActionContext,
-  ToolResult,
-  PlanRawParams,
-} from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 
-const paramsSchema = z.object({
+const requestChangesSchema = z.object({
   id: z.string().describe("Task ID"),
   comment: z.string().describe("Feedback comment"),
 });
+type RequestChangesArgs = z.infer<typeof requestChangesSchema>;
 
 /**
  * RequestChangesHandler: pending_review → in_progress transition
@@ -16,8 +14,9 @@ const paramsSchema = z.object({
  * Requires:
  * - comment: feedback/reason for requesting changes
  */
-export class RequestChangesHandler {
+export class RequestChangesHandler extends BaseActionHandler<RequestChangesArgs, PlanActionContext> {
   readonly action = "request_changes";
+  readonly schema = requestChangesSchema;
 
   readonly help = `# plan request_changes
 
@@ -38,16 +37,9 @@ plan(action: "request_changes", id: "<task-id>", comment: "<feedback>")
 - Transitions task status back to in_progress
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-    const { id, comment } = parseResult.data;
-    const { planReader, planReporter, feedbackReader } = params.context;
+  protected async doExecute(args: RequestChangesArgs, context: PlanActionContext) {
+    const { id, comment } = args;
+    const { planReader, planReporter, feedbackReader } = context;
 
     const task = await planReader.getTask(id);
     if (!task) {

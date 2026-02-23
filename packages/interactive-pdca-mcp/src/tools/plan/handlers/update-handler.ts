@@ -1,7 +1,8 @@
 import { z } from "zod";
-import type { PlanActionContext, ToolResult, PlanRawParams } from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 
-const paramsSchema = z.object({
+const updateSchema = z.object({
   id: z.string().describe("Task ID to update"),
   title: z.string().optional().describe("New task title"),
   content: z.string().optional().describe("Task description/work content"),
@@ -34,12 +35,14 @@ const paramsSchema = z.object({
     .optional()
     .describe("Array of document IDs for reference"),
 });
+type UpdateArgs = z.infer<typeof updateSchema>;
 
 /**
  * UpdateHandler: Update task properties
  */
-export class UpdateHandler {
+export class UpdateHandler extends BaseActionHandler<UpdateArgs, PlanActionContext> {
   readonly action = "update";
+  readonly schema = updateSchema;
 
   readonly help = `# plan update
 
@@ -67,20 +70,7 @@ plan(action: "update", id: "<task-id>", title?: "...", content?: "...", ...)
 - When adding dependencies, dependency_reason is required
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: ${parseResult.error.errors.map((e) => e.message).join(", ")}\n\n${this.help}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
+  protected async doExecute(args: UpdateArgs, context: PlanActionContext) {
     const {
       id,
       title,
@@ -92,7 +82,7 @@ plan(action: "update", id: "<task-id>", title?: "...", content?: "...", ...)
       is_parallelizable,
       parallelizable_units,
       references,
-    } = parseResult.data;
+    } = args;
 
     // Check if at least one field to update is provided
     if (
@@ -117,7 +107,7 @@ plan(action: "update", id: "<task-id>", title?: "...", content?: "...", ...)
       };
     }
 
-    const { planReader } = params.context;
+    const { planReader } = context;
 
     // Validate dependency_reason when updating dependencies
     if (

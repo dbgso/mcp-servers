@@ -26,11 +26,22 @@ Human-only tool for approving AI work. AI should never call this tool.
 - \`approve(target: "setup_templates")\` - Setup self-review templates
 - \`approve(target: "skip_templates")\` - Skip template setup
 
+## Approval Flow (with notifications)
+
+Task approval and skip actions require a two-step approval process:
+
+1. Call \`approve(target: "task", task_id: "...")\` - sends desktop notification
+2. Copy token from notification or fallback file
+3. Call \`approve(target: "task", task_id: "...", approvalToken: "<token>")\`
+
+This ensures intentional human approval with notification.
+
 ## Workflow
 
 1. AI completes work and submits for review (pending_review status)
 2. Human reviews and calls \`approve(target: "task", task_id: "...")\`
-3. Task is marked as completed
+3. System sends notification, human provides approvalToken
+4. Task is marked as completed
 
 ## Feedback Flow
 
@@ -81,9 +92,13 @@ export function registerApproveTool(params: {
           .string()
           .optional()
           .describe("Reason for skipping (required when target is 'skip')"),
+        approvalToken: z
+          .string()
+          .optional()
+          .describe("Approval token from desktop notification (required for task/skip after initial request)"),
       },
     },
-    async ({ help, target, task_id, feedback_id, reason }) => {
+    async ({ help, target, task_id, feedback_id, reason, approvalToken }) => {
       // Show help when requested or no target provided
       if (help || !target) {
         return wrapResponse({
@@ -113,7 +128,7 @@ export function registerApproveTool(params: {
       }
 
       const result = await handler.execute({
-        actionParams: { task_id, feedback_id, reason },
+        actionParams: { task_id, feedback_id, reason, approvalToken },
         context: { planReader, planReporter, feedbackReader, markdownDir, planDir, config },
       });
 

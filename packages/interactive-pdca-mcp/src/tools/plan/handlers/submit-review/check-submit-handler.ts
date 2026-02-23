@@ -89,8 +89,8 @@ $ grep -n "PDCA" src/tools/plan/handlers/add-handler.ts
 \`\`\`
 `;
 
-  protected validatePhaseFields(params: { rawParams: PlanRawParams }): string | null {
-    const result = checkParamsSchema.safeParse(params.rawParams);
+  protected validatePhaseFields(rawParams: PlanRawParams): string | null {
+    const result = checkParamsSchema.safeParse(rawParams);
     if (!result.success) {
       const errors = result.error.errors
         .filter(
@@ -105,8 +105,8 @@ $ grep -n "PDCA" src/tools/plan/handlers/add-handler.ts
     return null;
   }
 
-  protected getPhaseData(params: { rawParams: PlanRawParams }): Record<string, unknown> {
-    const result = checkParamsSchema.safeParse(params.rawParams);
+  protected getPhaseData(rawParams: PlanRawParams): Record<string, unknown> {
+    const result = checkParamsSchema.safeParse(rawParams);
     if (!result.success) return {};
     return {
       test_target: result.data.test_target,
@@ -115,8 +115,8 @@ $ grep -n "PDCA" src/tools/plan/handlers/add-handler.ts
     };
   }
 
-  protected formatPhaseOutput(params: { rawParams: PlanRawParams }): string {
-    const result = checkParamsSchema.safeParse(params.rawParams);
+  protected formatPhaseOutput(rawParams: PlanRawParams): string {
+    const result = checkParamsSchema.safeParse(rawParams);
     if (!result.success) return "";
     const { test_target, test_results, coverage } = result.data;
     return `### Test Target

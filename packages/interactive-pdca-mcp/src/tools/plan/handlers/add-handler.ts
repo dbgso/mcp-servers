@@ -1,7 +1,8 @@
 import { z } from "zod";
-import type { PlanActionContext, ToolResult, PlanRawParams } from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 
-const paramsSchema = z.object({
+const addSchema = z.object({
   id: z.string().describe("Unique task identifier"),
   title: z.string().describe("Task title"),
   content: z.string().describe("Task description/work content"),
@@ -32,12 +33,14 @@ const paramsSchema = z.object({
     .array(z.string())
     .describe("Array of document IDs (can be empty [])"),
 });
+type AddArgs = z.infer<typeof addSchema>;
 
 /**
  * AddHandler: Create a new task (root or subtask)
  */
-export class AddHandler {
+export class AddHandler extends BaseActionHandler<AddArgs, PlanActionContext> {
   readonly action = "add";
+  readonly schema = addSchema;
 
   readonly help = `# plan add
 
@@ -67,20 +70,7 @@ plan(action: "add", id: "<task-id>", title: "<title>", content: "<description>",
 - PDCA phases: plan, do, check, act
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: ${parseResult.error.errors.map((e) => e.message).join(", ")}\n\n${this.help}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
+  protected async doExecute(args: AddArgs, context: PlanActionContext) {
     const {
       id,
       title,
@@ -94,8 +84,8 @@ plan(action: "add", id: "<task-id>", title: "<title>", content: "<description>",
       is_parallelizable,
       parallelizable_units,
       references,
-    } = parseResult.data;
-    const { planReader, planReporter } = params.context;
+    } = args;
+    const { planReader, planReporter } = context;
 
     // Validate dependency_reason is provided when there are dependencies
     if (dependencies.length > 0 && !dependency_reason) {

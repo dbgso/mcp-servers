@@ -104,9 +104,13 @@ export type {
   ToolHandler,
   ToolResponse,
   ToolDefinition,
+  ZodLikeSchema,
+  RegistrableActionHandler,
 } from "./tools/index.js";
 
 export {
   BaseToolHandler,
   ToolRegistry,
+  BaseActionHandler,
+  ActionRegistry,
 } from "./tools/index.js";

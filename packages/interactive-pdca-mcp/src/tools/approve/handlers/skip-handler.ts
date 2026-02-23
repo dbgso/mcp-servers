@@ -1,3 +1,7 @@
+import {
+  requestApproval,
+  validateApproval,
+} from "mcp-shared";
 import type {
   ToolResult,
   ApproveActionHandler,
@@ -10,7 +14,7 @@ export class SkipHandler implements ApproveActionHandler {
     actionParams: ApproveActionParams;
     context: ApproveActionContext;
   }): Promise<ToolResult> {
-    const { task_id, reason } = params.actionParams;
+    const { task_id, reason, approvalToken } = params.actionParams;
     const { planReader, planReporter } = params.context;
 
     // Validate task_id is provided
@@ -63,6 +67,57 @@ export class SkipHandler implements ApproveActionHandler {
         ],
         isError: true,
       };
+    }
+
+    // Handle approval flow (skip in test environment)
+    const isTestEnv = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+    const approvalRequestId = `pdca-skip-${task_id}`;
+
+    if (!isTestEnv && !approvalToken) {
+      // Request approval - send notification
+      const { fallbackPath } = await requestApproval({
+        request: {
+          id: approvalRequestId,
+          operation: "Skip Task",
+          description: `Skip task "${task_id}" (${task.title})\nReason: ${reason}`,
+        },
+      });
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `# Approval Requested
+
+A desktop notification has been sent with the approval token.
+
+If you missed the notification, check: ${fallbackPath}
+
+To skip, call:
+\`approve(target: "skip", task_id: "${task_id}", reason: "${reason}", approvalToken: "<token>")\``,
+          },
+        ],
+      };
+    }
+
+    // Validate approval token (skip in test environment)
+    if (!isTestEnv && approvalToken) {
+      const approvalResult = validateApproval({
+        requestId: approvalRequestId,
+        providedToken: approvalToken,
+      });
+
+      if (!approvalResult.valid) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error: Invalid approval token - ${approvalResult.reason}`,
+            },
+          ],
+          isError: true,
+        };
+      }
     }
 
     const oldStatus = task.status;

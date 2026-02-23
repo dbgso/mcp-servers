@@ -1,20 +1,19 @@
 import { z } from "zod";
-import type {
-  PlanActionContext,
-  ToolResult,
-  PlanRawParams,
-} from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 import { formatParallel } from "./format-utils.js";
 
-const paramsSchema = z.object({
+const readSchema = z.object({
   id: z.string().describe("Task ID to read"),
 });
+type ReadArgs = z.infer<typeof readSchema>;
 
 /**
  * ReadHandler: Read task details
  */
-export class ReadHandler {
+export class ReadHandler extends BaseActionHandler<ReadArgs, PlanActionContext> {
   readonly action = "read";
+  readonly schema = readSchema;
 
   readonly help = `# plan read
 
@@ -32,17 +31,9 @@ plan(action: "read", id: "<task-id>")
 - Returns all task details including feedback history
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-
-    const { id } = parseResult.data;
-    const { planReader } = params.context;
+  protected async doExecute(args: ReadArgs, context: PlanActionContext) {
+    const { id } = args;
+    const { planReader } = context;
 
     const task = await planReader.getTask(id);
     if (!task) {
