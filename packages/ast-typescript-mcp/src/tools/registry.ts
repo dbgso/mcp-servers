@@ -24,6 +24,10 @@ import {
   MonorepoGraphHandler,
   PackageDependentsHandler,
   BatchExecuteHandler,
+  FindBlocksHandler,
+  RemoveNodesHandler,
+  RemoveUnusedImportsHandler,
+  QueryAstHandler,
 } from "./handlers/index.js";
 
 // Re-export ToolRegistry from mcp-shared
@@ -59,6 +63,10 @@ function createToolRegistry(): ToolRegistry {
   registry.register(new MonorepoGraphHandler());
   registry.register(new PackageDependentsHandler());
   registry.register(new BatchExecuteHandler());
+  registry.register(new FindBlocksHandler());
+  registry.register(new RemoveNodesHandler());
+  registry.register(new RemoveUnusedImportsHandler());
+  registry.register(new QueryAstHandler());
 
   return registry;
 }
