@@ -39,7 +39,7 @@ export class FeedbackHandler implements ApproveActionHandler {
       };
     }
 
-    const feedback = await feedbackReader.getFeedback(task_id, feedback_id);
+    const feedback = await feedbackReader.getFeedback({ taskId: task_id, feedbackId: feedback_id });
 
     // Validate feedback exists
     if (!feedback) {

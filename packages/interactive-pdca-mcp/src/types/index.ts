@@ -180,7 +180,7 @@ export interface FeedbackReaderInterface {
     original: string;
     decision: FeedbackDecision;
   }): Promise<{ success: boolean; error?: string; feedbackId?: string }>;
-  getFeedback(taskId: string, feedbackId: string): Promise<FeedbackEntry | null>;
+  getFeedback({ taskId, feedbackId }: { taskId: string; feedbackId: string }): Promise<FeedbackEntry | null>;
   listFeedback(taskId: string): Promise<FeedbackEntry[]>;
   getUnaddressedFeedback(taskId: string): Promise<FeedbackEntry[]>;
   getDraftFeedback(taskId: string): Promise<FeedbackEntry[]>;

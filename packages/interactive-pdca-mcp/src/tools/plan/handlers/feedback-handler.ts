@@ -148,7 +148,7 @@ plan(action: "feedback", id: "task-001", feedback_id: "fb-001")
     feedbackReader: PlanActionContext["feedbackReader"];
   }) {
     const { taskId, feedbackId, feedbackReader } = params;
-    const feedback = await feedbackReader.getFeedback(taskId, feedbackId);
+    const feedback = await feedbackReader.getFeedback({ taskId: taskId, feedbackId: feedbackId });
 
     if (!feedback) {
       return {
