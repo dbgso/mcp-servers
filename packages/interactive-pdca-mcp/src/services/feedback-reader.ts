@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { FeedbackEntry, FeedbackDecision, FeedbackStatus } from "../types/index.js";
+import { getErrorMessage } from "mcp-shared";
 
 export class FeedbackReader {
   private readonly baseDir: string;
@@ -135,7 +136,7 @@ addressed_by: ${entry.addressed_by ? escapeYaml(entry.addressed_by) : "null"}
     } catch (error) {
       return {
         success: false,
-        error: `Failed to create feedback: ${error instanceof Error ? error.message : "unknown error"}`,
+        error: `Failed to create feedback: ${getErrorMessage(error)}`,
       };
     }
   }

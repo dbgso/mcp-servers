@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
 import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse } from "../types.js";
 import {
@@ -61,7 +61,7 @@ export class GoToDefinitionHandler extends BaseToolHandler<GoToDefinitionArgs> {
       return jsonResponse(result);
     } catch (error) {
       return errorResponse(
-        error instanceof Error ? error.message : String(error)
+        getErrorMessage(error)
       );
     }
   }

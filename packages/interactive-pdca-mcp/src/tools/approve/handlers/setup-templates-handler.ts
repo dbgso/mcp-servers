@@ -5,6 +5,7 @@ import type {
   ApproveActionContext,
 } from "../../../types/index.js";
 import { setupSelfReviewTemplates } from "../../../services/template-setup.js";
+import { getErrorMessage } from "mcp-shared";
 
 export class SetupTemplatesHandler implements ApproveActionHandler {
   async execute(params: {
@@ -51,7 +52,7 @@ export class SetupTemplatesHandler implements ApproveActionHandler {
         ],
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       return {
         content: [
           {

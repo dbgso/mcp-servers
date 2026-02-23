@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
 import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse, BatchChange, BatchOperationResult } from "../types.js";
 import { Project } from "ts-morph";
@@ -218,7 +218,7 @@ export class BatchExecuteHandler extends BaseToolHandler<BatchExecuteArgs> {
           tool: op.tool,
           filePath,
           success: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         });
         if (stop_on_error) break;
       }
@@ -291,7 +291,7 @@ export class BatchExecuteHandler extends BaseToolHandler<BatchExecuteArgs> {
             tool: transform.tool,
             filePath: transform.filePath,
             success: false,
-            error: error instanceof Error ? error.message : String(error),
+            error: getErrorMessage(error),
           });
           if (stop_on_error) break;
         }
@@ -303,7 +303,7 @@ export class BatchExecuteHandler extends BaseToolHandler<BatchExecuteArgs> {
           await project.save();
         } catch (error) {
           return errorResponse(
-            `Failed to save changes: ${error instanceof Error ? error.message : String(error)}`
+            `Failed to save changes: ${getErrorMessage(error)}`
           );
         }
       }

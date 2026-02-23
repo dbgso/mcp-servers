@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { FileResult } from "mcp-shared";
-import { formatMultiFileResponse } from "mcp-shared";
+import { formatMultiFileResponse, getErrorMessage } from "mcp-shared";
 import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
@@ -44,7 +44,7 @@ async function processFile(
       },
     };
   } catch (error) {
-    return { filePath, error: error instanceof Error ? error.message : String(error) };
+    return { filePath, error: getErrorMessage(error) };
   }
 }
 

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { writeFile } from "node:fs/promises";
 import { getAllTools, getTool } from "./diagrams/registry.js";
 import { describeOperation } from "./operations/describe-ops.js";
+import { getErrorMessage } from "mcp-shared";
 
 const server = new Server(
   {
@@ -190,7 +191,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     } catch (error) {
       return {
-        content: [{ type: "text", text: `Failed to render diagram: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [{ type: "text", text: `Failed to render diagram: ${getErrorMessage(error)}` }],
         isError: true,
       };
     }

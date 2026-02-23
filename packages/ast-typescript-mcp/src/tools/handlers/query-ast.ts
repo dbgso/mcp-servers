@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
 import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse } from "../types.js";
 import { Project, Node, SyntaxKind } from "ts-morph";
@@ -234,7 +234,7 @@ export class QueryAstHandler extends BaseToolHandler<QueryAstArgs> {
       return jsonResponse(result);
     } catch (error) {
       return errorResponse(
-        `query_ast failed: ${error instanceof Error ? error.message : String(error)}`
+        `query_ast failed: ${getErrorMessage(error)}`
       );
     }
   }

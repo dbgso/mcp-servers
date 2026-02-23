@@ -8,6 +8,7 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { allOperations, getOperation, getOperationsByCategory } from "./operations/registry.js";
 import { resolveRepo } from "./git-repo-manager.js";
+import { getErrorMessage } from "mcp-shared";
 
 const server = new Server(
   {
@@ -190,7 +191,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return result;
     } catch (error) {
       return {
-        content: [{ type: "text", text: `Error executing git ${operation}: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [{ type: "text", text: `Error executing git ${operation}: ${getErrorMessage(error)}` }],
         isError: true,
       };
     }

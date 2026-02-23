@@ -50,7 +50,7 @@ import { glob } from "glob";
 import { dirname, join, resolve } from "node:path";
 import type { Config, ExtendedOptions } from "../config.js";
 import { findTsConfig, resolveToSourcePath } from "../config.js";
-import { diffStructures, type DiffableItem } from "mcp-shared";
+import { diffStructures, type DiffableItem, getErrorMessage } from "mcp-shared";
 import { getQueryPresetRegistry, BaseQueryPresetHandler } from "./query-presets/index.js";
 import {
   detectWorkspace,
@@ -2502,7 +2502,7 @@ export class TypeScriptHandler {
         sourceFile.fixMissingImports();
       } catch (e) {
         // Known issue: empty named imports can cause errors
-        warnings.push(`fixMissingImports warning: ${e instanceof Error ? e.message : String(e)}`);
+        warnings.push(`fixMissingImports warning: ${getErrorMessage(e)}`);
       }
 
       // Get imports after

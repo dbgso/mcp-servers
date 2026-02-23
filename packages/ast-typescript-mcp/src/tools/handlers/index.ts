@@ -10,13 +10,12 @@ export { DependencyGraphHandler } from "./dependency-graph.js";
 export { RenameSymbolHandler } from "./rename-symbol.js";
 export { DeadCodeHandler } from "./dead-code.js";
 export { QueryGraphHandler } from "./query-graph.js";
-export { TsCodemodHandler } from "./ts-codemod.js";
-export { TsCodemodDescribeHandler } from "./ts-codemod-describe.js";
+// ts_codemod removed - use transform_ast instead
 export { TypeCheckHandler } from "./type-check.js";
 export { AutoImportHandler } from "./auto-import.js";
 export { InlineTypeHandler } from "./inline-type.js";
 export { ExtractCommonInterfaceHandler } from "./extract-common-interface.js";
-export { AstTransformHandler } from "./ast-transform.js";
+export { TransformAstHandler } from "./transform-ast.js";
 export { TransformSignatureHandler } from "./transform-signature.js";
 export { TransformCallSiteHandler } from "./transform-call-site.js";
 export { MonorepoGraphHandler, PackageDependentsHandler } from "./monorepo-graph.js";

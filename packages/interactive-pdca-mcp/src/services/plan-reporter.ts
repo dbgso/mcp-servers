@@ -32,7 +32,7 @@ export class PlanReporter {
         const task = await this.planReader.getTask(summary.id);
         if (task) {
           const taskFeedback = feedbackByTask.get(task.id) ?? [];
-          contentParts.push(this.formatTaskReport(task, taskFeedback));
+          contentParts.push(this.formatTaskReport({ task: task, feedbackList: taskFeedback }));
           feedbackByTask.delete(task.id); // Remove so we don't show it again
         }
       }
@@ -42,7 +42,7 @@ export class PlanReporter {
       for (const [taskId, feedback] of feedbackByTask) {
         const task = await this.planReader.getTask(taskId);
         if (task) {
-          contentParts.push(this.formatTaskWithFeedbackOnly(task, feedback));
+          contentParts.push(this.formatTaskWithFeedbackOnly({ task: task, feedbackList: feedback }));
         }
       }
     }
@@ -74,8 +74,8 @@ export class PlanReporter {
     return result;
   }
 
-  private formatFeedbackSection(feedbackList: FeedbackEntry[]): string {
-    if (feedbackList.length === 0) {
+  private formatFeedbackSection(feedbackList?: FeedbackEntry[]): string {
+    if (!feedbackList || feedbackList.length === 0) {
       return "";
     }
 
@@ -94,7 +94,7 @@ Approve: \`approve(target: "feedback", task_id: "${fb.task_id}", feedback_id: "$
 ${items.join("\n\n")}`;
   }
 
-  private formatTaskWithFeedbackOnly(task: Task, feedbackList: FeedbackEntry[]): string {
+  private formatTaskWithFeedbackOnly({ task, feedbackList }: { task: Task; feedbackList: FeedbackEntry[] }): string {
     return `## ${task.id}: ${task.title}
 
 _Task is not pending review, but has pending feedback._
@@ -106,7 +106,7 @@ ${this.formatFeedbackSection(feedbackList)}
 `;
   }
 
-  private formatTaskReport(task: Task, feedbackList: FeedbackEntry[] = []): string {
+  private formatTaskReport({ task, feedbackList }: { task: Task; feedbackList?: FeedbackEntry[] }): string {
     const output = task.task_output;
 
     if (!output) {

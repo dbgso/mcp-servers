@@ -7,6 +7,7 @@ import { Project } from "ts-morph";
 import type { ClassDeclaration } from "ts-morph";
 import { glob } from "glob";
 import { resolve } from "node:path";
+import { getErrorMessage } from "mcp-shared";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -164,7 +165,7 @@ export async function classToObject(options: ClassToObjectOptions): Promise<Clas
           result.errors.push({
             filePath,
             className,
-            error: error instanceof Error ? error.message : String(error),
+            error: getErrorMessage(error),
           });
         }
       }
@@ -175,7 +176,7 @@ export async function classToObject(options: ClassToObjectOptions): Promise<Clas
     } catch (error) {
       result.errors.push({
         filePath,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
     }
   }

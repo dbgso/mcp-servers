@@ -17,7 +17,7 @@ export class ApproveHandler implements DraftActionHandler {
     actionParams: DraftActionParams;
     context: DraftActionContext;
   }): Promise<ToolResult> {
-    const { id, ids, targetId, approvalToken, notes, confirmed } = params.actionParams;
+    const { id, ids, targetId, approvalToken, notes, confirmed, force } = params.actionParams;
     const { reader } = params.context;
 
     // Batch approval mode
@@ -55,6 +55,7 @@ export class ApproveHandler implements DraftActionHandler {
       targetId,
       notes,
       confirmed,
+      force,
       currentState,
       reader,
     });
@@ -65,10 +66,11 @@ export class ApproveHandler implements DraftActionHandler {
     targetId?: string;
     notes?: string;
     confirmed?: boolean;
+    force?: boolean;
     currentState: DraftState;
     reader: DraftActionContext["reader"];
   }): Promise<ToolResult> {
-    const { id, targetId, notes, confirmed, currentState, reader } = params;
+    const { id, targetId, notes, confirmed, force, currentState, reader } = params;
 
     // self_review state: need notes to proceed
     if (currentState === "self_review") {
@@ -141,6 +143,38 @@ draft(action: "approve", id: "${id}", confirmed: true)
           }],
           isError: true,
         };
+      }
+
+      // Check if there are other drafts in user_reviewing state (skip if force: true)
+      if (!force) {
+        const otherUserReviewing = await this.getOtherDraftsInState({
+          currentId: id,
+          state: "user_reviewing",
+        });
+
+        if (otherUserReviewing.length > 0) {
+        const allIds = [id, ...otherUserReviewing];
+        return {
+          content: [{
+            type: "text" as const,
+            text: `# Warning: Multiple drafts ready for approval
+
+You are approving "${id}" individually, but there are other drafts also in \`user_reviewing\` state:
+${otherUserReviewing.map((otherId) => `- ${otherId}`).join("\n")}
+
+**Recommended:** Use batch approval to confirm all at once with a single token:
+\`\`\`
+draft(action: "approve", ids: "${allIds.join(",")}", confirmed: true)
+\`\`\`
+
+If you want to proceed with just "${id}", call again with \`force: true\`:
+\`\`\`
+draft(action: "approve", id: "${id}", confirmed: true, force: true)
+\`\`\``,
+          }],
+          isError: true,
+        };
+        }
       }
 
       // User confirmed - transition to pending_approval
@@ -558,6 +592,20 @@ draft(action: "approve", ids: "${idList.join(",")}", approvalToken: "<token>")
 \`\`\``,
       }],
     };
+  }
+
+  /**
+   * Get other drafts in a specific state (excluding current draft)
+   */
+  private async getOtherDraftsInState(params: {
+    currentId: string;
+    state: DraftState;
+  }): Promise<string[]> {
+    const { currentId, state } = params;
+    const allStatuses = await draftWorkflowManager.listAll();
+    return allStatuses
+      .filter((status) => status.id !== currentId && status.state === state)
+      .map((status) => status.id);
   }
 
   private async handleApprovalWithToken(params: {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
 import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
@@ -214,8 +214,10 @@ export class LintDocumentHandler extends BaseToolHandler<LintDocumentArgs> {
     }
 
     try {
-      // Get headings and code blocks for analysis
+      // Get headings for analysis
       const headings = await handler.getHeadingsFromFile({ filePath: file_path });
+
+      // Get code blocks (supported for both Markdown and AsciiDoc)
       const codeBlocksResult = await handler.query({
         filePath: file_path,
         queryType: "code_blocks",
@@ -279,7 +281,7 @@ export class LintDocumentHandler extends BaseToolHandler<LintDocumentArgs> {
       return jsonResponse(result);
     } catch (error) {
       return errorResponse(
-        `Failed to lint document: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to lint document: ${getErrorMessage(error)}`
       );
     }
   }

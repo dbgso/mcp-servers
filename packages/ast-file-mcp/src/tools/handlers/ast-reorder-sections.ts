@@ -2,6 +2,7 @@ import { z } from "zod";
 import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
+import { getErrorMessage } from "mcp-shared";
 
 const ReorderSectionsSchema = z.object({
   file_path: z.string().describe("Absolute path to the source file"),
@@ -84,7 +85,7 @@ export class AstReorderSectionsHandler extends BaseToolHandler<ReorderSectionsAr
       return {
         content: [{
           type: "text",
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error: ${getErrorMessage(error)}`,
         }],
         isError: true,
       };

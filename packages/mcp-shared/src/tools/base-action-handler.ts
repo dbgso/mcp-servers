@@ -1,5 +1,6 @@
 import { errorResponse } from "../utils/mcp-response.js";
 import type { ToolResponse, ZodLikeSchema } from "./types.js";
+import { getErrorMessage } from "../utils/error.js";
 
 /**
  * Base class for action handlers within a single MCP tool.
@@ -40,11 +41,11 @@ export abstract class BaseActionHandler<TArgs = unknown, TContext = unknown> {
    * Execute the action with raw parameters.
    * Parses arguments using the schema and delegates to doExecute.
    */
-  async execute(rawParams: unknown, context: TContext): Promise<ToolResponse> {
+  async execute({ rawParams, context }: { rawParams: unknown; context: TContext }): Promise<ToolResponse> {
     const parsed = this.schema.safeParse(rawParams);
     if (!parsed.success) {
       return errorResponse(
-        `Error: ${parsed.error.message}\n\n${this.help}`
+        `Error: [${this.action}] ${parsed.error.message}\n\n${this.help}`
       );
     }
 
@@ -52,7 +53,7 @@ export abstract class BaseActionHandler<TArgs = unknown, TContext = unknown> {
       return await this.doExecute(parsed.data, context);
     } catch (error) {
       return errorResponse(
-        `Failed to execute ${this.action}: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to execute ${this.action}: ${getErrorMessage(error)}`
       );
     }
   }

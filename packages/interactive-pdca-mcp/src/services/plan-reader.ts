@@ -9,6 +9,7 @@ import type {
   FeedbackDecision,
   PlanReader as IPlanReader,
 } from "../types/index.js";
+import { getErrorMessage } from "mcp-shared";
 
 export class PlanReader implements IPlanReader {
   private readonly directory: string;
@@ -668,7 +669,7 @@ ${task.content}`;
     } catch (error) {
       return {
         success: false,
-        error: `Failed to clear tasks: ${error instanceof Error ? error.message : "unknown error"}`,
+        error: `Failed to clear tasks: ${getErrorMessage(error)}`,
       };
     }
   }

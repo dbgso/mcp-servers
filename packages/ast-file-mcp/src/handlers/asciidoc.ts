@@ -3,13 +3,14 @@ import { existsSync } from "node:fs";
 import { resolve, dirname, join, extname } from "node:path";
 import Asciidoctor from "@asciidoctor/core";
 import { BaseHandler } from "./base.js";
-import { diffStructures, type DiffableItem, type GoToDefinitionResult } from "mcp-shared";
+import { diffStructures, type DiffableItem, type GoToDefinitionResult, getErrorMessage } from "mcp-shared";
 import type {
   AstReadResult,
   AsciidocDocument,
   AsciidocBlock,
   HeadingSummary,
   LinkSummary,
+  CodeBlockSummary,
   HeadingOverview,
   LinkOverview,
   FileSummary,
@@ -132,8 +133,8 @@ export class AsciidocHandler extends BaseHandler {
 
   /**
    * Query specific elements from a file.
-   * Polymorphic method - supports headings, links, full.
-   * code_blocks and lists are not supported for AsciiDoc (Markdown-specific).
+   * Polymorphic method - supports headings, links, code_blocks, full.
+   * lists are not supported for AsciiDoc (Markdown-specific).
    */
   async query(params: {
     filePath: string;
@@ -142,8 +143,8 @@ export class AsciidocHandler extends BaseHandler {
   }): Promise<QueryResult> {
     const { filePath, queryType, options } = params;
 
-    // code_blocks and lists are Markdown-specific
-    if (queryType === "code_blocks" || queryType === "lists") {
+    // lists are Markdown-specific
+    if (queryType === "lists") {
       throw new Error(`Query type "${queryType}" is not supported for AsciiDoc files`);
     }
 
@@ -182,6 +183,15 @@ export class AsciidocHandler extends BaseHandler {
           fileType: "asciidoc",
           query: "links",
           data: links,
+        };
+      }
+      case "code_blocks": {
+        const codeBlocks = await this.getCodeBlocksFromFile(filePath);
+        return {
+          filePath,
+          fileType: "asciidoc",
+          query: "code_blocks",
+          data: codeBlocks,
         };
       }
       default: {
@@ -705,8 +715,47 @@ export class AsciidocHandler extends BaseHandler {
   async getHeadingsFromFile(params: { filePath: string; maxDepth?: number }): Promise<HeadingSummary[]> {
     const { filePath, maxDepth } = params;
     const content = await readFile(filePath, "utf-8");
-    const doc = asciidoctor.load(content);
-    return this.getHeadings({ doc, maxDepth });
+
+    // Parse headings directly from source for accurate line numbers
+    // Asciidoctor.js getLineNumber() returns undefined for most sections
+    return this.parseHeadingsFromSource({ content, maxDepth });
+  }
+
+  /**
+   * Parse headings directly from AsciiDoc source for accurate line numbers.
+   * AsciiDoc heading format: = Title (h1), == Section (h2), === Subsection (h3), etc.
+   */
+  private parseHeadingsFromSource(params: { content: string; maxDepth?: number }): HeadingSummary[] {
+    const { content, maxDepth } = params;
+    const lines = content.split("\n");
+    const headings: HeadingSummary[] = [];
+
+    // Regex to match AsciiDoc section headings: = Title, == Section, etc.
+    // Must be at start of line, followed by space and title text
+    const headingRegex = /^(=+)\s+(.+)$/;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const match = line.match(headingRegex);
+
+      if (match) {
+        const equalSigns = match[1];
+        const text = match[2].trim();
+        // = is depth 1, == is depth 2, etc.
+        const depth = equalSigns.length;
+
+        // Skip if depth exceeds maxDepth
+        if (maxDepth && depth > maxDepth) continue;
+
+        headings.push({
+          depth,
+          text,
+          line: i + 1, // 1-based line number
+        });
+      }
+    }
+
+    return headings;
   }
 
   /**
@@ -755,6 +804,80 @@ export class AsciidocHandler extends BaseHandler {
     const content = await readFile(filePath, "utf-8");
     const doc = asciidoctor.load(content);
     return this.getLinks(doc);
+  }
+
+  /**
+   * Get code blocks from a file.
+   * Extracts [source,lang] blocks (listing blocks with style="source").
+   */
+  async getCodeBlocksFromFile(filePath: string): Promise<CodeBlockSummary[]> {
+    const content = await readFile(filePath, "utf-8");
+    const lines = content.split("\n");
+    const codeBlocks: CodeBlockSummary[] = [];
+
+    // Parse using regex to get accurate line numbers
+    // [source,lang] followed by ---- block
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+
+      // Check for [source,lang] or [source] attribute
+      const sourceMatch = line.match(/^\[source(?:,\s*(\w+))?\]/);
+      if (sourceMatch) {
+        const lang = sourceMatch[1] ?? null;
+
+        // Look for ---- on the next line
+        if (i + 1 < lines.length && lines[i + 1].trim() === "----") {
+          const startLine = i + 1; // Line number of ----
+          const contentLines: string[] = [];
+          let j = i + 2;
+
+          // Collect content until closing ----
+          while (j < lines.length && lines[j].trim() !== "----") {
+            contentLines.push(lines[j]);
+            j++;
+          }
+
+          codeBlocks.push({
+            lang,
+            value: contentLines.join("\n"),
+            line: startLine + 1, // 1-based line number
+          });
+
+          i = j + 1; // Skip past closing ----
+          continue;
+        }
+      }
+
+      // Also check for bare ---- blocks (listing without [source])
+      if (line.trim() === "----" && (i === 0 || !lines[i - 1].match(/^\[source/))) {
+        const startLine = i;
+        const contentLines: string[] = [];
+        let j = i + 1;
+
+        // Collect content until closing ----
+        while (j < lines.length && lines[j].trim() !== "----") {
+          contentLines.push(lines[j]);
+          j++;
+        }
+
+        // Only add if we found a closing delimiter
+        if (j < lines.length) {
+          codeBlocks.push({
+            lang: null,
+            value: contentLines.join("\n"),
+            line: startLine + 1, // 1-based line number
+          });
+        }
+
+        i = j + 1;
+        continue;
+      }
+
+      i++;
+    }
+
+    return codeBlocks;
   }
 
   /**
@@ -868,7 +991,7 @@ export class AsciidocHandler extends BaseHandler {
       } catch (error) {
         errors.push({
           filePath: normalizedPath,
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         });
       }
     };
@@ -947,7 +1070,7 @@ export class AsciidocHandler extends BaseHandler {
       } catch (error) {
         errors.push({
           filePath,
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         });
       }
     }
@@ -1026,11 +1149,12 @@ export class AsciidocHandler extends BaseHandler {
       return this.checkExternalUrl({ url, timeout });
     }
 
-    // Anchor reference (inline xref without file: <<anchor>>)
+    // Anchor or cross-file reference (inline xref without file extension: <<anchor>> or <<other-file>>)
     // These don't start with #, they're just IDs
     if (!url.includes("/") && !url.includes(".")) {
-      // Looks like an anchor reference
       const anchorId = url;
+
+      // 1. Check if it's an anchor in the same file
       const headingSlug = headings.find((h) => this.toSlug(h.text) === anchorId);
       if (headingSlug) {
         return { status: "valid" };
@@ -1040,6 +1164,14 @@ export class AsciidocHandler extends BaseHandler {
       if (headingMatch) {
         return { status: "valid" };
       }
+
+      // 2. Check if it's a cross-file reference (<<other-file>> -> other-file.adoc)
+      const sourceDir = dirname(filePath);
+      const potentialFile = resolve(sourceDir, anchorId + ".adoc");
+      if (existsSync(potentialFile)) {
+        return { status: "valid" };
+      }
+
       return { status: "broken", reason: `anchor "${anchorId}" not found` };
     }
 
@@ -1118,7 +1250,7 @@ export class AsciidocHandler extends BaseHandler {
       if (error instanceof Error && error.name === "AbortError") {
         return { status: "broken", reason: "timeout" };
       }
-      return { status: "broken", reason: error instanceof Error ? error.message : "unknown error" };
+      return { status: "broken", reason: getErrorMessage(error) };
     }
   }
 
