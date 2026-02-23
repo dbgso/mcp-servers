@@ -131,3 +131,124 @@ export interface DiffStructureResult {
   modified: unknown[];
   summary: string;
 }
+
+// Section manipulation types
+export interface Section<T = unknown> {
+  title: string;
+  level: number;
+  content: T[];
+}
+
+export interface SectionResult<T = unknown> {
+  preamble: T[];
+  sections: Section<T>[];
+  title?: string;
+  docAttributes?: string[];
+}
+
+export interface WriteSectionsParams<T = unknown> {
+  filePath: string;
+  preamble?: T[];
+  sections: Section<T>[];
+  docAttributes?: string[];
+  title?: string;
+}
+
+export interface ReorderSectionsParams {
+  filePath: string;
+  targetPath?: string;
+  order: string[];
+  level?: number;
+}
+
+// Structure Analysis Types
+export interface FileMetrics {
+  wordCount: number;
+  headingCount: number;
+  maxDepth: number;
+  linkCount: number;
+}
+
+export interface SectionBreakdown {
+  title: string;
+  level: number;
+  wordCount: number;
+  line?: number;
+}
+
+export type StructureWarningType = "large_section" | "empty_section" | "heading_skip";
+
+export interface StructureWarning {
+  type: StructureWarningType;
+  message: string;
+  location?: {
+    line?: number;
+    section?: string;
+  };
+}
+
+export interface FileAnalysis {
+  filePath: string;
+  fileType: "markdown" | "asciidoc";
+  metrics: FileMetrics;
+  sections: SectionBreakdown[];
+  warnings: StructureWarning[];
+}
+
+export interface DirectoryAnalysis {
+  directory: string;
+  aggregateMetrics: FileMetrics;
+  fileCount: number;
+  files: FileAnalysis[];
+  warnings: StructureWarning[];
+}
+
+export type StructureAnalysisResult = FileAnalysis | DirectoryAnalysis;
+
+// Backlink types
+export interface Backlink {
+  sourceFile: string;
+  sourceLine: number;
+  linkText: string;
+  linkUrl: string;
+  context?: string;
+}
+
+export interface FindBacklinksResult {
+  targetFile: string;
+  targetSection?: string;
+  backlinks: Backlink[];
+  summary: {
+    totalBacklinks: number;
+    sourceFiles: number;
+  };
+}
+
+// Lint document types
+export type LintRuleId =
+  | "heading-hierarchy"
+  | "empty-section"
+  | "code-no-language"
+  | "duplicate-heading"
+  | "missing-title";
+
+export type LintSeverity = "error" | "warning";
+
+export interface LintIssue {
+  ruleId: LintRuleId;
+  severity: LintSeverity;
+  message: string;
+  line?: number;
+  section?: string;
+  suggestion?: string;
+}
+
+export interface LintDocumentResult {
+  filePath: string;
+  issues: LintIssue[];
+  summary: {
+    errors: number;
+    warnings: number;
+    total: number;
+  };
+}

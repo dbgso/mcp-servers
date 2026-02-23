@@ -10,6 +10,9 @@ import { ReadDirectoryHandler } from "../tools/handlers/read-directory.js";
 import { TopicIndexHandler } from "../tools/handlers/topic-index.js";
 import { AstReadHandler } from "../tools/handlers/ast-read.js";
 import { GoToDefinitionHandler } from "../tools/handlers/go-to-definition.js";
+import { StructureAnalysisHandler } from "../tools/handlers/structure-analysis.js";
+import { FindBacklinksHandler } from "../tools/handlers/find-backlinks.js";
+import { LintDocumentHandler } from "../tools/handlers/lint-document.js";
 
 const FIXTURES_DIR = join(import.meta.dirname, "fixtures");
 
@@ -733,7 +736,7 @@ describe("Integration Tests", () => {
 
       // External links should be in broken array
       const brokenExternal = result.broken.filter((l) => l.url.startsWith("http"));
-      // We may or may not have external links in the fixture
+      expect(brokenExternal.length).toBeGreaterThanOrEqual(0);
       expect(result.broken).toBeDefined();
 
       vi.unstubAllGlobals();
@@ -1074,6 +1077,20 @@ describe("Integration Tests", () => {
       expect(content).toContain("----");
     });
 
+    it("should preserve code block content in round-trip", async () => {
+      const sourcePath = join(FIXTURES_DIR, "sample.adoc");
+      const targetPath = join(tempDir, "sample-code-content.adoc");
+
+      const readResult = await handler.read(sourcePath);
+      await handler.write({ filePath: targetPath, ast: readResult.ast });
+
+      const content = await readFile(targetPath, "utf-8");
+      // Verify actual code content is preserved, not just markers
+      expect(content).toContain("npm install sample-package");
+      expect(content).toContain("import { sample } from 'sample-package'");
+      expect(content).toContain("console.log(result)");
+    });
+
     it("should preserve list items", async () => {
       const sourcePath = join(FIXTURES_DIR, "sample.adoc");
       const targetPath = join(tempDir, "sample-list.adoc");
@@ -1126,6 +1143,286 @@ describe("Integration Tests", () => {
       // Block count may differ slightly due to serialization (e.g., preamble handling)
       // Check that key sections are preserved
       expect(ast2.blocks.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("AsciidocHandler - Section Reorder", () => {
+    let handler: AsciidocHandler;
+    let tempDir: string;
+
+    beforeAll(async () => {
+      handler = new AsciidocHandler();
+      tempDir = await mkdtemp(join(tmpdir(), "ast-file-mcp-reorder-"));
+    });
+
+    afterAll(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
+    it("should reorder sections by title", async () => {
+      const sourcePath = join(FIXTURES_DIR, "sample.adoc");
+      const targetPath = join(tempDir, "reordered.adoc");
+
+      // Original order: Installation, Usage, Links, See Also
+      // New order: Links, Installation, Usage, See Also
+      await handler.reorderSections({
+        filePath: sourcePath,
+        targetPath,
+        order: ["Links", "Installation", "Usage", "See Also"],
+      });
+
+      const content = await readFile(targetPath, "utf-8");
+      const linksPos = content.indexOf("== Links");
+      const installPos = content.indexOf("== Installation");
+      const usagePos = content.indexOf("== Usage");
+
+      // Links should come before Installation
+      expect(linksPos).toBeLessThan(installPos);
+      // Installation should come before Usage
+      expect(installPos).toBeLessThan(usagePos);
+    });
+
+    it("should preserve section content after reorder", async () => {
+      const sourcePath = join(FIXTURES_DIR, "sample.adoc");
+      const targetPath = join(tempDir, "reordered-content.adoc");
+
+      await handler.reorderSections({
+        filePath: sourcePath,
+        targetPath,
+        order: ["Usage", "Installation"],
+      });
+
+      const content = await readFile(targetPath, "utf-8");
+      // Content from Installation section should still be present
+      expect(content).toContain("npm install sample-package");
+      // Content from Usage section should still be present
+      expect(content).toContain("import { sample }");
+    });
+
+    it("should keep unlisted sections at the end", async () => {
+      const sourcePath = join(FIXTURES_DIR, "sample.adoc");
+      const targetPath = join(tempDir, "partial-reorder.adoc");
+
+      // Only specify some sections - others should be appended at the end
+      await handler.reorderSections({
+        filePath: sourcePath,
+        targetPath,
+        order: ["Usage"],
+      });
+
+      const content = await readFile(targetPath, "utf-8");
+      const usagePos = content.indexOf("== Usage");
+      const installPos = content.indexOf("== Installation");
+
+      // Usage should come first (specified), Installation after (unspecified)
+      expect(usagePos).toBeLessThan(installPos);
+    });
+
+    it("should preserve document title and attributes after reorder", async () => {
+      const sourcePath = join(FIXTURES_DIR, "sample.adoc");
+      const targetPath = join(tempDir, "reordered-with-attrs.adoc");
+
+      await handler.reorderSections({
+        filePath: sourcePath,
+        targetPath,
+        order: ["Links", "Installation"],
+      });
+
+      const content = await readFile(targetPath, "utf-8");
+
+      // Document title should be preserved
+      expect(content).toContain("= Sample AsciiDoc Document");
+
+      // Document attributes should be preserved
+      expect(content).toContain(":toc:");
+      expect(content).toContain(":sectnums:");
+
+      // Title should come before sections
+      const titlePos = content.indexOf("= Sample AsciiDoc Document");
+      const linksPos = content.indexOf("== Links");
+      expect(titlePos).toBeLessThan(linksPos);
+    });
+
+    it("should preserve AsciiDoc link syntax in list items", async () => {
+      const sourcePath = join(FIXTURES_DIR, "sample.adoc");
+      const targetPath = join(tempDir, "reordered-links.adoc");
+
+      await handler.reorderSections({
+        filePath: sourcePath,
+        targetPath,
+        order: ["Links"],
+      });
+
+      const content = await readFile(targetPath, "utf-8");
+
+      // AsciiDoc link macros should be preserved, not converted to HTML
+      expect(content).toContain("link:https://github.com/example/repo[GitHub Repository]");
+      expect(content).toContain("xref:docs/guide.adoc[Documentation Guide]");
+      expect(content).toContain("<<installation,Back to Installation>>");
+
+      // Should NOT contain HTML anchor tags
+      expect(content).not.toContain("<a href=");
+    });
+  });
+
+  describe("MarkdownHandler - Section Reorder", () => {
+    let handler: MarkdownHandler;
+    let tempDir: string;
+
+    beforeAll(async () => {
+      handler = new MarkdownHandler();
+      tempDir = await mkdtemp(join(tmpdir(), "ast-file-mcp-md-reorder-"));
+    });
+
+    afterAll(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
+    it("should reorder sections by title", async () => {
+      const sourcePath = join(FIXTURES_DIR, "sample.md");
+      const targetPath = join(tempDir, "reordered.md");
+
+      // Original order: Installation, Usage, Links, See Also
+      // New order: Links, Installation
+      // Note: Markdown ## headings are depth 2
+      await handler.reorderSections({
+        filePath: sourcePath,
+        targetPath,
+        order: ["Links", "Installation", "Usage", "See Also"],
+        level: 2,
+      });
+
+      const content = await readFile(targetPath, "utf-8");
+      const linksPos = content.indexOf("## Links");
+      const installPos = content.indexOf("## Installation");
+
+      // Links should come before Installation
+      expect(linksPos).toBeLessThan(installPos);
+    });
+
+    it("should preserve document title and preamble after reorder", async () => {
+      const sourcePath = join(FIXTURES_DIR, "sample.md");
+      const targetPath = join(tempDir, "reordered-with-title.md");
+
+      await handler.reorderSections({
+        filePath: sourcePath,
+        targetPath,
+        order: ["Links", "Installation"],
+        level: 2,
+      });
+
+      const content = await readFile(targetPath, "utf-8");
+
+      // Document title (# heading) should be preserved
+      expect(content).toContain("# Sample Document");
+
+      // Preamble content should be preserved
+      expect(content).toContain("This is a sample markdown document for testing.");
+
+      // Title should come before sections
+      const titlePos = content.indexOf("# Sample Document");
+      const linksPos = content.indexOf("## Links");
+      expect(titlePos).toBeLessThan(linksPos);
+    });
+  });
+
+  describe("Generic Section API", () => {
+    let mdHandler: MarkdownHandler;
+    let adocHandler: AsciidocHandler;
+    let tempDir: string;
+
+    beforeAll(async () => {
+      mdHandler = new MarkdownHandler();
+      adocHandler = new AsciidocHandler();
+      tempDir = await mkdtemp(join(tmpdir(), "ast-file-mcp-sections-"));
+    });
+
+    afterAll(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
+    it("should extract sections with getSections() for Markdown", async () => {
+      const { preamble, sections } = await mdHandler.getSections({
+        filePath: join(FIXTURES_DIR, "sample.md"),
+        level: 2,
+      });
+
+      // Preamble should contain content before first ## heading
+      expect(preamble.length).toBeGreaterThan(0);
+
+      // Should have 4 sections: Installation, Usage, Links, See Also
+      expect(sections.length).toBe(4);
+      expect(sections.map(s => s.title)).toEqual([
+        "Installation", "Usage", "Links", "See Also"
+      ]);
+    });
+
+    it("should extract sections with getSections() for AsciiDoc", async () => {
+      const { preamble, sections } = await adocHandler.getSections({
+        filePath: join(FIXTURES_DIR, "sample.adoc"),
+        level: 1,
+      });
+
+      // Preamble should contain content before first == heading
+      expect(preamble.length).toBeGreaterThan(0);
+
+      // Should have 4 sections: Installation, Usage, Links, See Also
+      expect(sections.length).toBe(4);
+      expect(sections.map(s => s.title)).toEqual([
+        "Installation", "Usage", "Links", "See Also"
+      ]);
+    });
+
+    it("should write sections with writeSections() for Markdown", async () => {
+      const targetPath = join(tempDir, "composed.md");
+
+      // Get sections and reorder them manually
+      const { preamble, sections } = await mdHandler.getSections({
+        filePath: join(FIXTURES_DIR, "sample.md"),
+        level: 2,
+      });
+
+      // Reverse the sections
+      const reversed = [...sections].reverse();
+
+      await mdHandler.writeSections({
+        filePath: targetPath,
+        preamble,
+        sections: reversed,
+      });
+
+      const content = await readFile(targetPath, "utf-8");
+
+      // See Also should now come first
+      const seeAlsoPos = content.indexOf("## See Also");
+      const linksPos = content.indexOf("## Links");
+      expect(seeAlsoPos).toBeLessThan(linksPos);
+    });
+
+    it("should allow filtering sections", async () => {
+      const targetPath = join(tempDir, "filtered.md");
+
+      const { preamble, sections } = await mdHandler.getSections({
+        filePath: join(FIXTURES_DIR, "sample.md"),
+        level: 2,
+      });
+
+      // Only keep Installation and Usage
+      const filtered = sections.filter(s =>
+        ["Installation", "Usage"].includes(s.title)
+      );
+
+      await mdHandler.writeSections({
+        filePath: targetPath,
+        preamble,
+        sections: filtered,
+      });
+
+      const content = await readFile(targetPath, "utf-8");
+      expect(content).toContain("## Installation");
+      expect(content).toContain("## Usage");
+      expect(content).not.toContain("## Links");
+      expect(content).not.toContain("## See Also");
     });
   });
 
@@ -2380,6 +2677,678 @@ xref:nonexistent.adoc[Link to nonexistent]
       expect(result.files.length).toBe(1);
       // Should have an error for the missing file
       expect(result.errors.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe("StructureAnalysisHandler", () => {
+    let handler: StructureAnalysisHandler;
+
+    beforeAll(() => {
+      handler = new StructureAnalysisHandler();
+    });
+
+    it("should analyze a single Markdown file", async () => {
+      const filePath = join(FIXTURES_DIR, "sample.md");
+      const result = await handler.execute({ file_path: filePath });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].type).toBe("text");
+
+      const data = JSON.parse(result.content[0].text);
+      expect(data.filePath).toBe(filePath);
+      expect(data.fileType).toBe("markdown");
+      expect(data.metrics).toBeDefined();
+      expect(data.metrics.wordCount).toBeGreaterThan(0);
+      expect(data.metrics.headingCount).toBeGreaterThan(0);
+      expect(data.metrics.linkCount).toBeGreaterThan(0);
+      expect(data.sections).toBeDefined();
+      expect(Array.isArray(data.sections)).toBe(true);
+    });
+
+    it("should analyze a single AsciiDoc file", async () => {
+      const filePath = join(FIXTURES_DIR, "sample.adoc");
+      const result = await handler.execute({ file_path: filePath });
+
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.content[0].text);
+      expect(data.filePath).toBe(filePath);
+      expect(data.fileType).toBe("asciidoc");
+      expect(data.metrics.headingCount).toBeGreaterThan(0);
+    });
+
+    it("should analyze a directory", async () => {
+      const result = await handler.execute({ file_path: FIXTURES_DIR });
+
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.content[0].text);
+      expect(data.directory).toBe(FIXTURES_DIR);
+      expect(data.fileCount).toBeGreaterThan(0);
+      expect(data.aggregateMetrics).toBeDefined();
+      expect(data.files).toBeDefined();
+      expect(Array.isArray(data.files)).toBe(true);
+    });
+
+    it("should filter by pattern in directory analysis", async () => {
+      const result = await handler.execute({
+        file_path: FIXTURES_DIR,
+        pattern: "*.md",
+      });
+
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.content[0].text);
+      expect(data.files.every((f: { fileType: string }) => f.fileType === "markdown")).toBe(true);
+    });
+
+    it("should detect large sections", async () => {
+      // Create a temporary file with a large section (>1500 words)
+      const tempDir = await mkdtemp(join(tmpdir(), "structure-test-"));
+      // 6 words x 300 = 1800 words, exceeds threshold of 1500
+      const largeContent = `# Large Document
+
+## Large Section
+
+${"Lorem ipsum dolor sit amet consectetur. ".repeat(300)}
+`;
+      const tempFile = join(tempDir, "large.md");
+      await writeFile(tempFile, largeContent);
+
+      try {
+        const result = await handler.execute({ file_path: tempFile });
+
+        expect(result.isError).toBeFalsy();
+        const data = JSON.parse(result.content[0].text);
+        expect(data.warnings).toBeDefined();
+        expect(
+          data.warnings.some((w: { type: string }) => w.type === "large_section")
+        ).toBe(true);
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("should detect heading hierarchy skips", async () => {
+      // Create a file with heading skip (h1 -> h3)
+      const tempDir = await mkdtemp(join(tmpdir(), "structure-test-"));
+      const skipContent = `# Title
+
+### Skipped H2
+
+Content here.
+`;
+      const tempFile = join(tempDir, "skip.md");
+      await writeFile(tempFile, skipContent);
+
+      try {
+        const result = await handler.execute({ file_path: tempFile });
+
+        expect(result.isError).toBeFalsy();
+        const data = JSON.parse(result.content[0].text);
+        expect(data.warnings).toBeDefined();
+        expect(
+          data.warnings.some((w: { type: string }) => w.type === "heading_skip")
+        ).toBe(true);
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("should detect empty sections", async () => {
+      // Create a file with empty section (heading directly followed by another heading at same level)
+      const tempDir = await mkdtemp(join(tmpdir(), "structure-test-"));
+      // Empty Section has no content between it and Another Section
+      const emptyContent = `# Title
+
+## Empty Section
+## Another Section
+
+This one has content.
+`;
+      const tempFile = join(tempDir, "empty-section.md");
+      await writeFile(tempFile, emptyContent);
+
+      try {
+        const result = await handler.execute({ file_path: tempFile });
+
+        expect(result.isError).toBeFalsy();
+        const data = JSON.parse(result.content[0].text);
+        expect(data.warnings).toBeDefined();
+        // The section "Empty Section" should have 0 words (only the heading line)
+        const emptyWarning = data.warnings.find(
+          (w: { type: string; location?: { section?: string } }) =>
+            w.type === "empty_section" && w.location?.section === "Empty Section"
+        );
+        expect(emptyWarning).toBeDefined();
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("should format output as tree", async () => {
+      const filePath = join(FIXTURES_DIR, "sample.md");
+      const result = await handler.execute({
+        file_path: filePath,
+        output_format: "tree",
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].type).toBe("text");
+      const text = result.content[0].text;
+      expect(text).toContain(filePath);
+      expect(text).toContain("Words:");
+      expect(text).toContain("Headings:");
+      expect(text).toContain("Sections:");
+    });
+
+    it("should format output as table", async () => {
+      const filePath = join(FIXTURES_DIR, "sample.md");
+      const result = await handler.execute({
+        file_path: filePath,
+        output_format: "table",
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].type).toBe("text");
+      const text = result.content[0].text;
+      expect(text).toContain("## File Summary");
+      expect(text).toContain("| Section | Level | Words |");
+    });
+
+    it("should exclude warnings when include_warnings is false", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "structure-test-"));
+      const skipContent = `# Title
+
+### Skipped H2
+
+Content here.
+`;
+      const tempFile = join(tempDir, "skip.md");
+      await writeFile(tempFile, skipContent);
+
+      try {
+        const result = await handler.execute({
+          file_path: tempFile,
+          include_warnings: false,
+        });
+
+        expect(result.isError).toBeFalsy();
+        const data = JSON.parse(result.content[0].text);
+        expect(data.warnings).toEqual([]);
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("should return error for non-existent path", async () => {
+      const result = await handler.execute({
+        file_path: "/nonexistent/path/file.md",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("not found");
+    });
+
+    it("should return error for unsupported file type", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "structure-test-"));
+      const tempFile = join(tempDir, "file.txt");
+      await writeFile(tempFile, "plain text");
+
+      try {
+        const result = await handler.execute({ file_path: tempFile });
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("Unsupported file type");
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("should include section line numbers", async () => {
+      const filePath = join(FIXTURES_DIR, "sample.md");
+      const result = await handler.execute({ file_path: filePath });
+
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.content[0].text);
+      // All sections should have line numbers
+      for (const section of data.sections) {
+        expect(section.line).toBeDefined();
+        expect(section.line).toBeGreaterThan(0);
+      }
+    });
+
+    it("should format directory analysis as table", async () => {
+      const result = await handler.execute({
+        file_path: FIXTURES_DIR,
+        output_format: "table",
+      });
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text;
+      expect(text).toContain("## Directory Summary");
+      expect(text).toContain("## Files");
+      expect(text).toContain("| File | Words | Headings | Links | Warnings |");
+    });
+
+    it("should format directory analysis as tree", async () => {
+      const result = await handler.execute({
+        file_path: FIXTURES_DIR,
+        output_format: "tree",
+      });
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text;
+      expect(text).toContain("Directory:");
+      expect(text).toContain("Files:");
+      expect(text).toContain("Total words:");
+    });
+  });
+  describe("FindBacklinksHandler", () => {
+    let handler: FindBacklinksHandler;
+    const BACKLINKS_DIR = join(FIXTURES_DIR, "backlinks");
+
+    beforeAll(() => {
+      handler = new FindBacklinksHandler();
+    });
+
+    it("should find backlinks from multiple source files", async () => {
+      const targetFile = join(BACKLINKS_DIR, "target.md");
+
+      const result = await handler.execute({
+        file_path: targetFile,
+        directory: BACKLINKS_DIR,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+      // Should find links from source1.md, source2.md, and subdir/nested-source.md
+      expect(parsed.targetFile).toBe(targetFile);
+      expect(parsed.backlinks.length).toBeGreaterThanOrEqual(6);
+      expect(parsed.summary.sourceFiles).toBeGreaterThanOrEqual(3);
+
+      // Verify specific backlinks exist
+      const sourceFiles = parsed.backlinks.map((b: { sourceFile: string }) => b.sourceFile);
+      expect(sourceFiles.some((f: string) => f.includes("source1.md"))).toBe(true);
+      expect(sourceFiles.some((f: string) => f.includes("source2.md"))).toBe(true);
+      expect(sourceFiles.some((f: string) => f.includes("nested-source.md"))).toBe(true);
+    });
+
+    it("should filter by section heading (anchor)", async () => {
+      const targetFile = join(BACKLINKS_DIR, "target.md");
+
+      const result = await handler.execute({
+        file_path: targetFile,
+        directory: BACKLINKS_DIR,
+        section_heading: "Getting Started",
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+      expect(parsed.targetSection).toBe("Getting Started");
+
+      // Should only include links with #getting-started anchor
+      for (const backlink of parsed.backlinks) {
+        expect(backlink.linkUrl.toLowerCase()).toContain("getting-started");
+      }
+
+      // source1.md and nested-source.md have links to #getting-started
+      expect(parsed.summary.sourceFiles).toBeGreaterThanOrEqual(2);
+    });
+
+    it("should handle relative path resolution", async () => {
+      const targetFile = join(BACKLINKS_DIR, "target.md");
+
+      const result = await handler.execute({
+        file_path: targetFile,
+        directory: BACKLINKS_DIR,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+      // Should find link from subdir/nested-source.md using ../target.md
+      const nestedBacklinks = parsed.backlinks.filter(
+        (b: { sourceFile: string }) => b.sourceFile.includes("nested-source.md")
+      );
+      expect(nestedBacklinks.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("should return empty backlinks when none found", async () => {
+      const isolatedFile = join(BACKLINKS_DIR, "isolated.md");
+
+      const result = await handler.execute({
+        file_path: isolatedFile,
+        directory: BACKLINKS_DIR,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+      expect(parsed.backlinks).toEqual([]);
+      expect(parsed.summary.totalBacklinks).toBe(0);
+      expect(parsed.summary.sourceFiles).toBe(0);
+    });
+
+    it("should exclude anchor links when include_anchors is false", async () => {
+      const targetFile = join(BACKLINKS_DIR, "target.md");
+
+      // First get all backlinks
+      const allResult = await handler.execute({
+        file_path: targetFile,
+        directory: BACKLINKS_DIR,
+        include_anchors: true,
+      });
+      const allParsed = JSON.parse((allResult.content[0] as { text: string }).text);
+
+      // Now get only file-level links
+      const noAnchorResult = await handler.execute({
+        file_path: targetFile,
+        directory: BACKLINKS_DIR,
+        include_anchors: false,
+      });
+      const noAnchorParsed = JSON.parse((noAnchorResult.content[0] as { text: string }).text);
+
+      // Should have fewer backlinks without anchors
+      expect(noAnchorParsed.backlinks.length).toBeLessThan(allParsed.backlinks.length);
+
+      // None of the remaining backlinks should have anchors
+      for (const backlink of noAnchorParsed.backlinks) {
+        expect(backlink.linkUrl).not.toContain("#");
+      }
+    });
+
+    it("should exclude self-references", async () => {
+      const targetFile = join(BACKLINKS_DIR, "target.md");
+
+      const result = await handler.execute({
+        file_path: targetFile,
+        directory: BACKLINKS_DIR,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+      // No backlink should come from the target file itself
+      const selfReferences = parsed.backlinks.filter(
+        (b: { sourceFile: string }) => b.sourceFile === targetFile
+      );
+      expect(selfReferences).toEqual([]);
+    });
+
+    it("should return error for nonexistent target file", async () => {
+      const result = await handler.execute({
+        file_path: join(BACKLINKS_DIR, "nonexistent.md"),
+        directory: BACKLINKS_DIR,
+      });
+
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain("Target file not found");
+    });
+
+    it("should return error for nonexistent directory", async () => {
+      const targetFile = join(BACKLINKS_DIR, "target.md");
+
+      const result = await handler.execute({
+        file_path: targetFile,
+        directory: "/nonexistent/directory",
+      });
+
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain("Directory not found");
+    });
+
+    it("should include context around the link", async () => {
+      const targetFile = join(BACKLINKS_DIR, "target.md");
+
+      const result = await handler.execute({
+        file_path: targetFile,
+        directory: BACKLINKS_DIR,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+      // At least some backlinks should have context
+      const backlinksWithContext = parsed.backlinks.filter(
+        (b: { context?: string }) => b.context && b.context.length > 0
+      );
+      expect(backlinksWithContext.length).toBeGreaterThan(0);
+    });
+
+    it("should include source line numbers", async () => {
+      const targetFile = join(BACKLINKS_DIR, "target.md");
+
+      const result = await handler.execute({
+        file_path: targetFile,
+        directory: BACKLINKS_DIR,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+      for (const backlink of parsed.backlinks) {
+        expect(typeof backlink.sourceLine).toBe("number");
+        expect(backlink.sourceLine).toBeGreaterThan(0);
+      }
+    });
+  });
+  describe("LintDocumentHandler", () => {
+    let handler: LintDocumentHandler;
+
+    beforeAll(() => {
+      handler = new LintDocumentHandler();
+    });
+
+    describe("heading-hierarchy rule", () => {
+      it("should detect heading level skips", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-issues.md");
+        const result = await handler.execute({ file_path: filePath, rules: ["heading-hierarchy"] });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        expect(parsed.summary.errors).toBeGreaterThan(0);
+        const hierarchyIssue = parsed.issues.find(
+          (i: { ruleId: string }) => i.ruleId === "heading-hierarchy"
+        );
+        expect(hierarchyIssue).toBeDefined();
+        expect(hierarchyIssue.severity).toBe("error");
+        expect(hierarchyIssue.message).toContain("Heading level skip");
+      });
+    });
+
+    describe("empty-section rule", () => {
+      it("should detect empty sections", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-issues.md");
+        const result = await handler.execute({ file_path: filePath, rules: ["empty-section"] });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        expect(parsed.summary.warnings).toBeGreaterThan(0);
+        const emptyIssue = parsed.issues.find(
+          (i: { ruleId: string }) => i.ruleId === "empty-section"
+        );
+        expect(emptyIssue).toBeDefined();
+        expect(emptyIssue.severity).toBe("warning");
+        expect(emptyIssue.message).toContain("Empty section");
+      });
+    });
+
+    describe("code-no-language rule", () => {
+      it("should detect code blocks without language", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-issues.md");
+        const result = await handler.execute({ file_path: filePath, rules: ["code-no-language"] });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        expect(parsed.summary.warnings).toBeGreaterThan(0);
+        const codeIssue = parsed.issues.find(
+          (i: { ruleId: string }) => i.ruleId === "code-no-language"
+        );
+        expect(codeIssue).toBeDefined();
+        expect(codeIssue.severity).toBe("warning");
+        expect(codeIssue.message).toContain("without language");
+      });
+    });
+
+    describe("duplicate-heading rule", () => {
+      it("should detect duplicate headings at same level", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-issues.md");
+        const result = await handler.execute({ file_path: filePath, rules: ["duplicate-heading"] });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        expect(parsed.summary.warnings).toBeGreaterThan(0);
+        const dupIssue = parsed.issues.find(
+          (i: { ruleId: string }) => i.ruleId === "duplicate-heading"
+        );
+        expect(dupIssue).toBeDefined();
+        expect(dupIssue.severity).toBe("warning");
+        expect(dupIssue.message).toContain("Duplicate heading");
+      });
+    });
+
+    describe("missing-title rule", () => {
+      it("should detect missing h1 title", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-no-title.md");
+        const result = await handler.execute({ file_path: filePath, rules: ["missing-title"] });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        expect(parsed.summary.warnings).toBe(1);
+        const titleIssue = parsed.issues.find(
+          (i: { ruleId: string }) => i.ruleId === "missing-title"
+        );
+        expect(titleIssue).toBeDefined();
+        expect(titleIssue.severity).toBe("warning");
+        expect(titleIssue.message).toContain("no h1 title");
+      });
+
+      it("should not flag documents with h1 title", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-clean.md");
+        const result = await handler.execute({ file_path: filePath, rules: ["missing-title"] });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        expect(parsed.summary.total).toBe(0);
+      });
+    });
+
+    describe("rules parameter", () => {
+      it("should run only specified rules", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-issues.md");
+        const result = await handler.execute({
+          file_path: filePath,
+          rules: ["heading-hierarchy"],
+        });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // Should only have heading-hierarchy issues
+        const otherRules = parsed.issues.filter(
+          (i: { ruleId: string }) => i.ruleId !== "heading-hierarchy"
+        );
+        expect(otherRules.length).toBe(0);
+      });
+
+      it("should run all rules by default", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-issues.md");
+        const result = await handler.execute({ file_path: filePath });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // Should have issues from multiple rules
+        const ruleIds = new Set(parsed.issues.map((i: { ruleId: string }) => i.ruleId));
+        expect(ruleIds.size).toBeGreaterThan(1);
+      });
+    });
+
+    describe("severity_filter parameter", () => {
+      it("should filter to only errors", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-issues.md");
+        const result = await handler.execute({
+          file_path: filePath,
+          severity_filter: "error",
+        });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // All issues should be errors
+        const warnings = parsed.issues.filter(
+          (i: { severity: string }) => i.severity === "warning"
+        );
+        expect(warnings.length).toBe(0);
+        expect(parsed.summary.warnings).toBe(0);
+      });
+
+      it("should filter to only warnings", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-issues.md");
+        const result = await handler.execute({
+          file_path: filePath,
+          severity_filter: "warning",
+        });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // All issues should be warnings
+        const errors = parsed.issues.filter(
+          (i: { severity: string }) => i.severity === "error"
+        );
+        expect(errors.length).toBe(0);
+        expect(parsed.summary.errors).toBe(0);
+      });
+    });
+
+    describe("clean document", () => {
+      it("should return no issues for clean document", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-clean.md");
+        const result = await handler.execute({ file_path: filePath });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        expect(parsed.summary.total).toBe(0);
+        expect(parsed.summary.errors).toBe(0);
+        expect(parsed.summary.warnings).toBe(0);
+        expect(parsed.issues).toHaveLength(0);
+      });
+    });
+
+    describe("issues sorting", () => {
+      it("should sort issues by line number", async () => {
+        const filePath = join(FIXTURES_DIR, "lint-issues.md");
+        const result = await handler.execute({ file_path: filePath });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // Issues with line numbers should be sorted
+        const issuesWithLine = parsed.issues.filter((i: { line?: number }) => i.line !== undefined);
+        for (let i = 1; i < issuesWithLine.length; i++) {
+          expect(issuesWithLine[i].line).toBeGreaterThanOrEqual(issuesWithLine[i - 1].line);
+        }
+      });
+    });
+
+    describe("error handling", () => {
+      it("should return error for unsupported file type", async () => {
+        const result = await handler.execute({ file_path: "/path/to/file.xyz" });
+
+        expect(result.isError).toBe(true);
+        const text = (result.content[0] as { text: string }).text;
+        expect(text).toContain("Unsupported file type");
+      });
     });
   });
 });

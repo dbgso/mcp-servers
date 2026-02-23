@@ -20,6 +20,9 @@ import type {
   DiffStructureResult,
   QueryType,
   QueryResult,
+  SectionResult,
+  Section,
+  WriteSectionsParams,
 } from "../types/index.js";
 
 const asciidoctor = Asciidoctor();
@@ -50,6 +53,7 @@ function preprocess(source: string): string {
   // Block comments: //// ... ////
   result = result.replace(
     /^(\/\/\/\/)$/gm,
+    // eslint-disable-next-line custom/single-params-object -- regex replace callback
     (match, _, offset) => {
       // Count how many //// we've seen before this one
       const before = result.slice(0, offset);
@@ -320,12 +324,20 @@ export class AsciidocHandler extends BaseHandler {
         }
       }
 
-      // Capture text for list items (getText returns rendered text)
-      const bWithText = b as { getText?(): string };
-      if (typeof bWithText.getText === "function") {
-        const text = bWithText.getText();
-        if (text) {
-          result.text = text;
+      // Capture text for list items
+      // For list items, prefer raw .text property over getText() method
+      // .text preserves raw AsciiDoc syntax (e.g., link:url[text])
+      // .getText() returns rendered HTML (e.g., <a href="url">text</a>)
+      const bWithTextProp = b as { text?: string };
+      if (typeof bWithTextProp.text === "string" && bWithTextProp.text) {
+        result.text = bWithTextProp.text;
+      } else {
+        const bWithText = b as { getText?(): string };
+        if (typeof bWithText.getText === "function") {
+          const text = bWithText.getText();
+          if (text) {
+            result.text = text;
+          }
         }
       }
 
@@ -440,8 +452,11 @@ export class AsciidocHandler extends BaseHandler {
           lines.push(`[source,${block.attributes.language}]`);
         }
         lines.push("----");
+        // Support both lines array and source string (from read)
         if (block.lines) {
           lines.push(block.lines.join("\n"));
+        } else if (block.source) {
+          lines.push(block.source);
         }
         lines.push("----");
         lines.push("");
@@ -450,8 +465,11 @@ export class AsciidocHandler extends BaseHandler {
       case "literal":
         // Literal block: ....\ntext\n....
         lines.push("....");
+        // Support both lines array and source string (from read)
         if (block.lines) {
           lines.push(block.lines.join("\n"));
+        } else if (block.source) {
+          lines.push(block.source);
         }
         lines.push("....");
         lines.push("");
@@ -463,7 +481,8 @@ export class AsciidocHandler extends BaseHandler {
           for (const item of block.blocks) {
             if (item.context === "list_item") {
               const marker = item.marker ?? "*";
-              const text = item.text ?? item.lines?.join(" ") ?? "";
+              // Prefer source (raw AsciiDoc) over text (rendered HTML)
+              const text = item.source ?? item.text ?? item.lines?.join(" ") ?? "";
               lines.push(`${marker} ${text}`);
             }
           }
@@ -477,7 +496,8 @@ export class AsciidocHandler extends BaseHandler {
           for (const item of block.blocks) {
             if (item.context === "list_item") {
               const marker = item.marker ?? ".";
-              const text = item.text ?? item.lines?.join(" ") ?? "";
+              // Prefer source (raw AsciiDoc) over text (rendered HTML)
+              const text = item.source ?? item.text ?? item.lines?.join(" ") ?? "";
               lines.push(`${marker} ${text}`);
             }
           }
@@ -1158,6 +1178,83 @@ export class AsciidocHandler extends BaseHandler {
     column: number;
   }): Promise<GoToDefinitionResult> {
     throw new Error("goToDefinition is not supported for AsciiDoc files");
+  }
+
+  // ============================================================
+  // Section Manipulation Methods
+  // ============================================================
+
+  /**
+   * Extract sections as independent manipulable units.
+   * Returns preamble (content before first section) and sections array.
+   */
+  async getSections(params: { filePath: string; level?: number }): Promise<SectionResult<AsciidocBlock>> {
+    const { filePath, level = 1 } = params;
+    const { ast } = await this.read(filePath);
+    const doc = ast as AsciidocDocument;
+
+    const preamble: AsciidocBlock[] = [];
+    const sections: Section<AsciidocBlock>[] = [];
+
+    for (const block of doc.blocks) {
+      if (block.context === "preamble") {
+        // Preamble content goes before sections
+        if (block.blocks) {
+          preamble.push(...block.blocks);
+        }
+      } else if (block.context === "section" && block.level === level) {
+        // Top-level section
+        sections.push({
+          title: block.title ?? "",
+          level: block.level,
+          content: [block],
+        });
+      } else {
+        // Content outside of sections goes to preamble
+        preamble.push(block);
+      }
+    }
+
+    return {
+      preamble,
+      sections,
+      title: doc.title,
+      docAttributes: doc.docAttributes,
+    };
+  }
+
+  /**
+   * Write document from sections array.
+   * Allows flexible composition of sections in any order.
+   */
+  async writeSections(params: WriteSectionsParams<AsciidocBlock>): Promise<void> {
+    const { filePath, preamble = [], sections, docAttributes, title } = params;
+
+    // Reconstruct AST from sections
+    const blocks: AsciidocBlock[] = [];
+
+    // Add preamble if present
+    if (preamble.length > 0) {
+      blocks.push({
+        context: "preamble",
+        blocks: preamble,
+      });
+    }
+
+    // Add sections
+    for (const section of sections) {
+      // Section content includes the section block itself
+      blocks.push(...section.content);
+    }
+
+    const doc: AsciidocDocument = {
+      type: "asciidoc",
+      title,
+      docAttributes,
+      blocks,
+    };
+
+    await this.write({ filePath, ast: doc });
   }
 
   // ============================================================
