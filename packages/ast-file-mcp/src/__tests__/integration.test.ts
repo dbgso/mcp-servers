@@ -2010,15 +2010,23 @@ describe("Integration Tests", () => {
       expect(Array.isArray(adocParsed.data)).toBe(true);
     });
 
-    it("should return error for code_blocks query on AsciiDoc", async () => {
+    it("should query code_blocks from AsciiDoc", async () => {
       const result = await handler.execute({
         file_path: join(FIXTURES_DIR, "sample.adoc"),
         query: "code_blocks",
       });
 
-      expect(result.isError).toBe(true);
-      const errorText = (result.content[0] as { text: string }).text;
-      expect(errorText).toContain("not supported for AsciiDoc");
+      expect(result.isError).toBeUndefined();
+      const parsed = JSON.parse((result.content[0] as { text: string }).text);
+      expect(parsed.query).toBe("code_blocks");
+      expect(Array.isArray(parsed.data)).toBe(true);
+
+      // sample.adoc has 2 code blocks: bash and typescript
+      expect(parsed.data.length).toBe(2);
+      expect(parsed.data[0].lang).toBe("bash");
+      expect(parsed.data[0].value).toContain("npm install");
+      expect(parsed.data[1].lang).toBe("typescript");
+      expect(parsed.data[1].value).toContain("import { sample }");
     });
 
     it("should return error for lists query on AsciiDoc", async () => {
@@ -3133,7 +3141,92 @@ Content here.
         expect(backlink.sourceLine).toBeGreaterThan(0);
       }
     });
+
+    describe("AsciiDoc xref support", () => {
+      let tempDir: string;
+
+      beforeAll(async () => {
+        tempDir = await mkdtemp(join(tmpdir(), "backlinks-xref-test-"));
+
+        // Create target file
+        const targetContent = `= Target Document
+
+== Section One
+
+Content here.
+`;
+        await writeFile(join(tempDir, "target.adoc"), targetContent);
+
+        // Create source file with xref links (Antora format)
+        const sourceContent = `= Source Document
+
+== Overview
+
+See xref:target.adoc[Target Document] for details.
+
+Also check xref:target.adoc#section-one[Section One].
+
+== More Links
+
+* xref:target.adoc[Link 1]
+* xref:other.adoc[Link to other]
+`;
+        await writeFile(join(tempDir, "source.adoc"), sourceContent);
+      });
+
+      afterAll(async () => {
+        await rm(tempDir, { recursive: true, force: true });
+      });
+
+      it("should find backlinks from AsciiDoc xref macros", async () => {
+        const targetFile = join(tempDir, "target.adoc");
+
+        const result = await handler.execute({
+          file_path: targetFile,
+          directory: tempDir,
+        });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // Should find xref links from source.adoc
+        expect(parsed.backlinks.length).toBeGreaterThanOrEqual(3);
+        expect(parsed.summary.sourceFiles).toBeGreaterThanOrEqual(1);
+
+        // Verify xref links were detected
+        const sourceBacklinks = parsed.backlinks.filter(
+          (b: { sourceFile: string }) => b.sourceFile.includes("source.adoc")
+        );
+        expect(sourceBacklinks.length).toBeGreaterThanOrEqual(3);
+      });
+
+      it("should match xref without extension to target with extension", async () => {
+        // Create source with xref that doesn't include .adoc extension
+        const sourceNoExtContent = `= Source No Extension
+
+xref:target[Target without extension]
+`;
+        await writeFile(join(tempDir, "source-no-ext.adoc"), sourceNoExtContent);
+
+        const targetFile = join(tempDir, "target.adoc");
+
+        const result = await handler.execute({
+          file_path: targetFile,
+          directory: tempDir,
+        });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // Should find the xref:target[] link
+        const noExtBacklinks = parsed.backlinks.filter(
+          (b: { sourceFile: string }) => b.sourceFile.includes("source-no-ext.adoc")
+        );
+        expect(noExtBacklinks.length).toBeGreaterThanOrEqual(1);
+      });
+    });
   });
+
   describe("LintDocumentHandler", () => {
     let handler: LintDocumentHandler;
 
@@ -3348,6 +3441,54 @@ Content here.
         expect(result.isError).toBe(true);
         const text = (result.content[0] as { text: string }).text;
         expect(text).toContain("Unsupported file type");
+      });
+    });
+
+    describe("AsciiDoc support", () => {
+      it("should lint AsciiDoc files without error", async () => {
+        const filePath = join(FIXTURES_DIR, "sample.adoc");
+        const result = await handler.execute({ file_path: filePath });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // Should return valid result structure
+        expect(parsed.filePath).toBe(filePath);
+        expect(parsed.issues).toBeDefined();
+        expect(parsed.summary).toBeDefined();
+        expect(typeof parsed.summary.errors).toBe("number");
+        expect(typeof parsed.summary.warnings).toBe("number");
+      });
+
+      it("should not find code-no-language issues when all blocks have language", async () => {
+        // sample.adoc has all code blocks with language specified
+        const filePath = join(FIXTURES_DIR, "sample.adoc");
+        const result = await handler.execute({
+          file_path: filePath,
+          rules: ["code-no-language"],
+        });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // Should not have any code-no-language issues (all blocks have language)
+        expect(parsed.issues).toHaveLength(0);
+      });
+
+      it("should detect code-no-language in AsciiDoc files", async () => {
+        // lint-code-test.adoc has a bare ---- block without [source,lang]
+        const filePath = join(FIXTURES_DIR, "lint-code-test.adoc");
+        const result = await handler.execute({
+          file_path: filePath,
+          rules: ["code-no-language"],
+        });
+
+        expect(result.isError).toBeFalsy();
+        const parsed = JSON.parse((result.content[0] as { text: string }).text);
+
+        // Should detect the unlanguaged code block
+        expect(parsed.issues.length).toBeGreaterThan(0);
+        expect(parsed.issues[0].ruleId).toBe("code-no-language");
       });
     });
   });
