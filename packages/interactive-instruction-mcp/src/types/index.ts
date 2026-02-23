@@ -25,6 +25,7 @@ export interface DraftActionParams {
   approvalToken?: string;
   notes?: string;
   confirmed?: boolean;
+  force?: boolean;
 }
 
 export interface DraftActionContext {

@@ -48,7 +48,14 @@ coding__testing         ← About testing rules
 - \`draft(action: "approve", id: "<id>", notes: "<self-review>")\` - Complete self-review, then explain to user
 - \`draft(action: "approve", id: "<id>", confirmed: true)\` - After user confirms explanation, show diff/summary and request approval
 - \`draft(action: "approve", id: "<id>", approvalToken: "<token>")\` - Approve and promote with token
+- \`draft(action: "approve", ids: "id1,id2,id3", confirmed: true)\` - **Batch confirm** multiple drafts (recommended when multiple ready)
 - \`draft(action: "approve", ids: "id1,id2,id3", approvalToken: "<token>")\` - Batch approve multiple drafts with single token
+
+## Consecutive Approval Warning
+
+When using \`confirmed: true\` with a single \`id\`, the tool checks if other drafts were confirmed within the last 10 seconds.
+If so, it will recommend using batch approval with \`ids\` to confirm multiple drafts together.
+Use \`force: true\` to skip this warning and proceed with single approval.
 
 ## Approval Workflow
 
@@ -139,9 +146,13 @@ export function registerDraftTool(params: {
           .boolean()
           .optional()
           .describe("Confirm user has seen AI's explanation (required after explaining to user)"),
+        force: z
+          .boolean()
+          .optional()
+          .describe("Skip warning when other drafts are also ready for approval"),
       },
     },
-    async ({ help, action, id, ids, content, newId, targetId, approvalToken, notes, confirmed }) => {
+    async ({ help, action, id, ids, content, newId, targetId, approvalToken, notes, confirmed, force }) => {
       if (help || !action) {
         return wrapResponse({
           result: {
@@ -165,7 +176,7 @@ export function registerDraftTool(params: {
       }
 
       const result = await handler.execute({
-        actionParams: { id, ids, content, newId, targetId, approvalToken, notes, confirmed },
+        actionParams: { id, ids, content, newId, targetId, approvalToken, notes, confirmed, force },
         context: { reader, config },
       });
       return wrapResponse({ result, config });

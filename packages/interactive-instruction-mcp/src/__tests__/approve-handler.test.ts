@@ -535,7 +535,7 @@ describe("ApproveHandler", () => {
       await createDraftAtState(id, "user_reviewing");
 
       const result = await approveHandler.execute({
-        actionParams: { id, confirmed: true },
+        actionParams: { id, confirmed: true, force: true },
         context,
       });
 
@@ -573,7 +573,7 @@ describe("ApproveHandler", () => {
       await createDraftAtState(id, "user_reviewing");
 
       const result = await approveHandler.execute({
-        actionParams: { id, confirmed: true },
+        actionParams: { id, confirmed: true, force: true },
         context,
       });
 
@@ -595,7 +595,7 @@ describe("ApproveHandler", () => {
       await createDraftAtState(id, "user_reviewing");
 
       const result = await approveHandler.execute({
-        actionParams: { id, confirmed: true },
+        actionParams: { id, confirmed: true, force: true },
         context,
       });
 
@@ -631,7 +631,7 @@ describe("ApproveHandler", () => {
       });
 
       const result = await approveHandler.execute({
-        actionParams: { id, confirmed: true },
+        actionParams: { id, confirmed: true, force: true },
         context,
       });
 
@@ -667,7 +667,7 @@ describe("ApproveHandler", () => {
       });
 
       const result = await approveHandler.execute({
-        actionParams: { id, confirmed: true },
+        actionParams: { id, confirmed: true, force: true },
         context,
       });
 
@@ -704,7 +704,7 @@ describe("ApproveHandler", () => {
       });
 
       const result = await approveHandler.execute({
-        actionParams: { id, confirmed: true },
+        actionParams: { id, confirmed: true, force: true },
         context,
       });
 

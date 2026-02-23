@@ -145,24 +145,24 @@ draft(action: "approve", id: "${id}", confirmed: true)
         };
       }
 
-      // Check if there are other drafts in user_reviewing state (skip if force: true)
+      // Check if there are other drafts recently confirmed (within 30 seconds) - skip if force: true
       if (!force) {
-        const otherUserReviewing = await this.getOtherDraftsInState({
+        const recentlyConfirmed = await this.getRecentlyConfirmedDrafts({
           currentId: id,
-          state: "user_reviewing",
+          withinMs: 10_000,
         });
 
-        if (otherUserReviewing.length > 0) {
-        const allIds = [id, ...otherUserReviewing];
+        if (recentlyConfirmed.length > 0) {
+        const allIds = [id, ...recentlyConfirmed];
         return {
           content: [{
             type: "text" as const,
-            text: `# Warning: Multiple drafts ready for approval
+            text: `# Warning: Consecutive approval requests detected
 
-You are approving "${id}" individually, but there are other drafts also in \`user_reviewing\` state:
-${otherUserReviewing.map((otherId) => `- ${otherId}`).join("\n")}
+You just confirmed "${recentlyConfirmed.join(", ")}" within the last 10 seconds.
+Now you're trying to confirm "${id}" separately.
 
-**Recommended:** Use batch approval to confirm all at once with a single token:
+**Recommended:** Use batch approval to confirm multiple drafts at once:
 \`\`\`
 draft(action: "approve", ids: "${allIds.join(",")}", confirmed: true)
 \`\`\`
@@ -595,16 +595,23 @@ draft(action: "approve", ids: "${idList.join(",")}", approvalToken: "<token>")
   }
 
   /**
-   * Get other drafts in a specific state (excluding current draft)
+   * Get other drafts that were recently confirmed (transitioned to pending_approval)
    */
-  private async getOtherDraftsInState(params: {
+  private async getRecentlyConfirmedDrafts(params: {
     currentId: string;
-    state: DraftState;
+    withinMs: number;
   }): Promise<string[]> {
-    const { currentId, state } = params;
+    const { currentId, withinMs } = params;
+    const now = Date.now();
     const allStatuses = await draftWorkflowManager.listAll();
     return allStatuses
-      .filter((status) => status.id !== currentId && status.state === state)
+      .filter((status) => {
+        if (status.id === currentId) return false;
+        if (status.state !== "pending_approval") return false;
+        const confirmedAt = status.context.confirmedAt;
+        if (!confirmedAt) return false;
+        return (now - confirmedAt) < withinMs;
+      })
       .map((status) => status.id);
   }
 
