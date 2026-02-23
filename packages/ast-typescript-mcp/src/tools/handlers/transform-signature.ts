@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
 import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse, BatchContext, BatchChange } from "../types.js";
 import { Project, Node } from "ts-morph";
+import { acquireFileLock, releaseFileLock } from "../../utils/file-lock.js";
 import type {
   FunctionDeclaration,
   MethodDeclaration,
@@ -120,6 +121,18 @@ export class TransformSignatureHandler extends BaseToolHandler<TransformSignatur
   protected async doExecute(args: TransformSignatureArgs): Promise<ToolResponse> {
     const { file_path, line, column, new_params, dry_run } = args;
 
+    // Acquire file lock to prevent parallel modifications
+    if (!dry_run) {
+      const lockResult = acquireFileLock({
+        filePath: file_path,
+        toolName: this.name,
+        line,
+      });
+      if (!lockResult.success) {
+        return errorResponse(lockResult.error ?? "Failed to acquire file lock");
+      }
+    }
+
     try {
       // Standalone execution: create own project and save immediately
       const project = new Project();
@@ -153,8 +166,13 @@ export class TransformSignatureHandler extends BaseToolHandler<TransformSignatur
       });
     } catch (error) {
       return errorResponse(
-        `transform_signature failed: ${error instanceof Error ? error.message : String(error)}`
+        `transform_signature failed: ${getErrorMessage(error)}`
       );
+    } finally {
+      // Release file lock
+      if (!dry_run) {
+        releaseFileLock({ filePath: file_path });
+      }
     }
   }
 

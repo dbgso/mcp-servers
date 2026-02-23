@@ -7,6 +7,12 @@ import type { ReminderConfig, ActionHandler } from "mcp-shared";
 export interface MarkdownSummary {
   id: string;
   description: string;
+  whenToUse?: string[];
+}
+
+export interface DocumentFrontmatter {
+  description?: string;
+  triggers?: string[];
 }
 
 // Draft tool types

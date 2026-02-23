@@ -6,6 +6,7 @@ import type {
   ApproveActionParams,
   ApproveActionContext,
 } from "../../../types/index.js";
+import { getErrorMessage } from "mcp-shared";
 
 const PLAN_DIR_NAME = "_mcp-interactive-instruction/plan";
 
@@ -29,7 +30,7 @@ export class SkipTemplatesHandler implements ApproveActionHandler {
         ],
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       return {
         content: [
           {

@@ -380,6 +380,143 @@ export interface QueryGraphResult {
   result: unknown;
 }
 
+// Find blocks types (ts_find_blocks)
+
+/** A call block (describe, it, test, etc.) */
+export interface CallBlock {
+  /** Block type (e.g., "describe", "it", "test") */
+  type: string;
+  /** Block name from first argument */
+  name: string;
+  /** File path */
+  filePath: string;
+  /** Start line number (1-based) */
+  startLine: number;
+  /** End line number (1-based) */
+  endLine: number;
+  /** Column number (1-based) */
+  column: number;
+  /** Nesting depth (0 = top level) */
+  depth: number;
+  /** Parent block name (if nested) */
+  parent?: string;
+  /** Nested child blocks */
+  children: CallBlock[];
+  /** Block source code (if include_source is true) */
+  source?: string;
+}
+
+/** Parameters for findBlocks */
+export interface FindBlocksParams {
+  /** File path(s) or glob pattern */
+  filePath: string | string[];
+  /** Block types to find (default: ["describe", "it", "test"]) */
+  blockTypes?: string[];
+  /** Regex pattern to filter block names */
+  namePattern?: string;
+  /** Include nested blocks in result (default: true) */
+  includeNested?: boolean;
+  /** Maximum nesting depth (default: 10) */
+  maxDepth?: number;
+  /** Include source code in result (default: false) */
+  includeSource?: boolean;
+}
+
+/** Result of findBlocks */
+export interface FindBlocksResult {
+  /** Found blocks (tree structure) */
+  blocks: CallBlock[];
+  /** Total number of blocks found */
+  totalCount: number;
+  /** Number of files searched */
+  filesSearched: number;
+  /** Count by block type */
+  byType: Record<string, number>;
+}
+
+// Remove nodes types (ts_remove_nodes)
+
+/** Target types for node removal */
+export type RemoveTargetType =
+  | "function"
+  | "class"
+  | "interface"
+  | "type"
+  | "enum"
+  | "variable"
+  | "call_block"
+  | "statement_at_line";
+
+/** Base target for named declarations */
+export interface RemoveNamedTarget {
+  type: "function" | "class" | "interface" | "type" | "enum" | "variable";
+  name: string;
+}
+
+/** Target for call expression blocks (describe, it, test, etc.) */
+export interface RemoveCallBlockTarget {
+  type: "call_block";
+  /** Call expression name (e.g., 'describe', 'it', 'test') */
+  call_name: string;
+  /** Exact match for first argument string */
+  first_arg?: string;
+  /** Regex pattern for first argument */
+  first_arg_pattern?: string;
+}
+
+/** Fallback target for statement at specific line */
+export interface RemoveStatementAtLineTarget {
+  type: "statement_at_line";
+  /** Line number (1-based) */
+  line: number;
+}
+
+/** Union type for all removal targets */
+export type RemoveTarget =
+  | RemoveNamedTarget
+  | RemoveCallBlockTarget
+  | RemoveStatementAtLineTarget;
+
+/** Result of a single node removal */
+export interface RemoveNodeResult {
+  /** Target specification that was matched */
+  target: RemoveTarget;
+  /** Whether removal was successful */
+  success: boolean;
+  /** Name of removed node (for display) */
+  nodeName: string;
+  /** Node kind (for display) */
+  nodeKind: string;
+  /** Start line before removal */
+  startLine: number;
+  /** End line before removal */
+  endLine: number;
+  /** Number of lines removed */
+  linesRemoved: number;
+  /** Source text preview of removed node (truncated) */
+  sourcePreview: string;
+  /** Error message if removal failed */
+  error?: string;
+}
+
+/** Result of ts_remove_nodes */
+export interface TsRemoveNodesResult {
+  /** File path */
+  filePath: string;
+  /** Whether this was a dry run */
+  dryRun: boolean;
+  /** Results for each target */
+  results: RemoveNodeResult[];
+  /** Total nodes removed */
+  removedCount: number;
+  /** Total nodes that failed */
+  failedCount: number;
+  /** Total lines removed */
+  totalLinesRemoved: number;
+  /** Summary of changes */
+  summary: string;
+}
+
 // Refactoring tools types
 
 /** Parameters for extract_common_interface */

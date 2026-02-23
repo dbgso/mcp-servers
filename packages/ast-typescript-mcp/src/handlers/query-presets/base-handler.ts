@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import type { QueryGraphPreset } from "../../types/index.js";
 import type { QueryPresetHandler, QueryPresetContext, QueryPresetResult } from "./types.js";
+import { getErrorMessage } from "mcp-shared";
 
 /**
  * Abstract base class for query preset handlers.
@@ -34,7 +35,7 @@ export abstract class BaseQueryPresetHandler implements QueryPresetHandler {
       });
       return JSON.parse(result);
     } catch (error) {
-      throw new Error(`jq query failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`jq query failed: ${getErrorMessage(error)}`);
     }
   }
 }

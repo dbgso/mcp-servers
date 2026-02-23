@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Operation } from "./types.js";
+import { getErrorMessage } from "mcp-shared";
 
 const createArgsSchema = z.object({
   type: z.string().describe("Document type"),
@@ -41,7 +42,7 @@ Examples:
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        content: [{ type: "text", text: getErrorMessage(error) }],
         isError: true,
       };
     }
@@ -88,7 +89,7 @@ Examples:
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        content: [{ type: "text", text: getErrorMessage(error) }],
         isError: true,
       };
     }
@@ -123,7 +124,7 @@ Examples:
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        content: [{ type: "text", text: getErrorMessage(error) }],
         isError: true,
       };
     }
@@ -165,7 +166,7 @@ Examples:
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        content: [{ type: "text", text: getErrorMessage(error) }],
         isError: true,
       };
     }

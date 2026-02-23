@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
 import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse } from "../types.js";
 import { classToObject } from "../../codemod/ast-transform.js";
@@ -173,7 +173,7 @@ export class AstTransformHandler extends BaseToolHandler<AstTransformArgs> {
         return jsonResponse(result);
       } catch (error) {
         return errorResponse(
-          `AST transform failed: ${error instanceof Error ? error.message : String(error)}`
+          `AST transform failed: ${getErrorMessage(error)}`
         );
       }
     }

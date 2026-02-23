@@ -1,5 +1,6 @@
 import { errorResponse } from "../utils/mcp-response.js";
 import type { ToolHandler, ToolResponse, ZodLikeSchema } from "./types.js";
+import { getErrorMessage } from "../utils/error.js";
 
 /**
  * Base class for tool handlers.
@@ -29,7 +30,7 @@ export abstract class BaseToolHandler<TArgs = unknown> implements ToolHandler<TA
       return await this.doExecute(parsed.data);
     } catch (error) {
       return errorResponse(
-        `Failed to execute ${this.name}: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to execute ${this.name}: ${getErrorMessage(error)}`
       );
     }
   }

@@ -25,6 +25,12 @@ export {
   jsonResponse,
 } from "./utils/mcp-response.js";
 
+// Error utilities
+export {
+  getErrorMessage,
+  wrapError,
+} from "./utils/error.js";
+
 export {
   processMultipleFiles,
   formatMultiFileResponse,

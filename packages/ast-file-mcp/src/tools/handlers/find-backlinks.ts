@@ -179,11 +179,8 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
       return { matches: false };
     }
 
-    // Resolve the link path relative to the source file
-    const resolvedLinkPath = pathPart ? resolve(dirname(sourceFile), pathPart) : null;
-
-    // Check if the resolved path matches the target
-    if (!resolvedLinkPath || resolvedLinkPath !== targetPath) {
+    // Check if resolved link matches target
+    if (!this.resolvedPathMatchesTarget({ pathPart, sourceFile, targetPath })) {
       return { matches: false };
     }
 
@@ -203,6 +200,71 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
     }
 
     return { matches: true };
+  }
+
+  /**
+   * Check if resolved link path matches the target file.
+   * Handles various link formats:
+   * - Relative paths: ../data-flow.adoc, ./data-flow.adoc
+   * - Same-directory: data-flow.adoc, data-flow (without extension)
+   * - Antora xref: xref:data-flow[], xref:module:page.adoc[]
+   */
+  private resolvedPathMatchesTarget(params: {
+    pathPart: string;
+    sourceFile: string;
+    targetPath: string;
+  }): boolean {
+    const { pathPart, sourceFile, targetPath } = params;
+
+    if (!pathPart) {
+      return false;
+    }
+
+    const sourceDir = dirname(sourceFile);
+    const targetBasename = targetPath.split("/").pop() ?? "";
+    const targetBasenameNoExt = targetBasename.replace(/\.(adoc|asciidoc|asc|md|markdown)$/, "");
+
+    // Handle Antora module prefix (e.g., "module:page" -> "page")
+    let cleanPath = pathPart;
+    if (pathPart.includes(":") && !pathPart.startsWith(".")) {
+      // Remove module prefix for same-module links
+      cleanPath = pathPart.split(":").pop() ?? pathPart;
+    }
+
+    // Try direct resolution first
+    const resolvedPath = resolve(sourceDir, cleanPath);
+    if (resolvedPath === targetPath) {
+      return true;
+    }
+
+    // Try with .adoc extension added
+    const resolvedWithAdoc = resolve(sourceDir, cleanPath + ".adoc");
+    if (resolvedWithAdoc === targetPath) {
+      return true;
+    }
+
+    // Try basename matching (for simple xref like "data-flow" matching "data-flow.adoc")
+    const linkBasename = cleanPath.split("/").pop() ?? "";
+    const linkBasenameNoExt = linkBasename.replace(/\.(adoc|asciidoc|asc|md|markdown)$/, "");
+
+    // Check if link is just a basename (no directory separators)
+    if (!cleanPath.includes("/") && !cleanPath.includes("..")) {
+      // Compare basenames (case-insensitive)
+      if (linkBasenameNoExt.toLowerCase() === targetBasenameNoExt.toLowerCase()) {
+        // Verify they're in the same directory or the link could resolve to target
+        const potentialPath = resolve(sourceDir, linkBasenameNoExt + ".adoc");
+        if (potentialPath === targetPath) {
+          return true;
+        }
+        // Also check if target is in a parent/sibling architecture folder
+        const potentialPathMd = resolve(sourceDir, linkBasenameNoExt + ".md");
+        if (potentialPathMd === targetPath) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   /**

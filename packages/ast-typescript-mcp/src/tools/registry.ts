@@ -12,13 +12,11 @@ import {
   RenameSymbolHandler,
   DeadCodeHandler,
   QueryGraphHandler,
-  TsCodemodHandler,
-  TsCodemodDescribeHandler,
   TypeCheckHandler,
   AutoImportHandler,
   InlineTypeHandler,
   ExtractCommonInterfaceHandler,
-  AstTransformHandler,
+  TransformAstHandler,
   TransformSignatureHandler,
   TransformCallSiteHandler,
   MonorepoGraphHandler,
@@ -51,13 +49,11 @@ function createToolRegistry(): ToolRegistry {
   registry.register(new RenameSymbolHandler());
   registry.register(new DeadCodeHandler());
   registry.register(new QueryGraphHandler());
-  registry.register(new TsCodemodHandler());
-  registry.register(new TsCodemodDescribeHandler());
   registry.register(new TypeCheckHandler());
   registry.register(new AutoImportHandler());
   registry.register(new InlineTypeHandler());
   registry.register(new ExtractCommonInterfaceHandler());
-  registry.register(new AstTransformHandler());
+  registry.register(new TransformAstHandler());
   registry.register(new TransformSignatureHandler());
   registry.register(new TransformCallSiteHandler());
   registry.register(new MonorepoGraphHandler());

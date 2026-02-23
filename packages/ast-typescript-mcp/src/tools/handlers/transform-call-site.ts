@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
 import { BaseToolHandler } from "../base-handler.js";
 import type { ToolResponse, BatchContext, BatchChange } from "../types.js";
 import { Project, Node } from "ts-morph";
 import type { SourceFile, CallExpression } from "ts-morph";
+import { acquireFileLock, releaseFileLock } from "../../utils/file-lock.js";
 
 const TransformCallSiteSchema = z.object({
   file_path: z.string().describe("File containing the call site"),
@@ -81,6 +82,18 @@ export class TransformCallSiteHandler extends BaseToolHandler<TransformCallSiteA
   protected async doExecute(args: TransformCallSiteArgs): Promise<ToolResponse> {
     const { file_path, line, column, param_names, dry_run } = args;
 
+    // Acquire file lock to prevent parallel modifications
+    if (!dry_run) {
+      const lockResult = acquireFileLock({
+        filePath: file_path,
+        toolName: this.name,
+        line,
+      });
+      if (!lockResult.success) {
+        return errorResponse(lockResult.error ?? "Failed to acquire file lock");
+      }
+    }
+
     try {
       // Standalone execution: create own project and save immediately
       const project = new Project();
@@ -123,8 +136,13 @@ export class TransformCallSiteHandler extends BaseToolHandler<TransformCallSiteA
       });
     } catch (error) {
       return errorResponse(
-        `transform_call_site failed: ${error instanceof Error ? error.message : String(error)}`
+        `transform_call_site failed: ${getErrorMessage(error)}`
       );
+    } finally {
+      // Release file lock
+      if (!dry_run) {
+        releaseFileLock({ filePath: file_path });
+      }
     }
   }
 

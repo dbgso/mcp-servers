@@ -70,7 +70,7 @@ function generateOverview(): string {
 /**
  * Generate detailed guidelines for a specific tool
  */
-function generateToolGuide(toolId: string, subDiagramId?: string): string {
+function generateToolGuide({ toolId, subDiagramId }: { toolId: string; subDiagramId?: string }): string {
   const tool = getTool(toolId);
   if (!tool) {
     return `Unknown tool: "${toolId}". Use kroki_describe() to see available tools.`;
@@ -113,7 +113,7 @@ function generateToolGuide(toolId: string, subDiagramId?: string): string {
           lines.push("");
           lines.push("## Best Practices");
           lines.push("");
-          lines.push(generateBestPractices(toolId, subDiagramId));
+          lines.push(generateBestPractices({ toolId: toolId, subDiagramId: subDiagramId }));
         } else {
           lines.push(`Unknown sub-diagram: "${subDiagramId}". Available: ${tool.subDiagrams.map(s => s.id).join(", ")}`);
         }
@@ -176,7 +176,7 @@ function generateToolGuide(toolId: string, subDiagramId?: string): string {
         lines.push("");
         lines.push("### Best Practices");
         lines.push("");
-        lines.push(generateBestPractices(toolId, subDiagramId));
+        lines.push(generateBestPractices({ toolId: toolId, subDiagramId: subDiagramId }));
       } else {
         lines.push(`Unknown sub-diagram: "${subDiagramId}". Available: ${tool.subDiagrams.map(s => s.id).join(", ")}`);
       }
@@ -199,7 +199,7 @@ function generateToolGuide(toolId: string, subDiagramId?: string): string {
       lines.push("");
       lines.push("## General Best Practices");
       lines.push("");
-      lines.push(generateBestPractices(toolId));
+      lines.push(generateBestPractices({ toolId: toolId }));
     }
   }
 
@@ -214,7 +214,7 @@ function generateToolGuide(toolId: string, subDiagramId?: string): string {
 /**
  * Generate best practices for a tool/sub-diagram
  */
-function generateBestPractices(toolId: string, subDiagramId?: string): string {
+function generateBestPractices({ toolId, subDiagramId }: { toolId: string; subDiagramId?: string }): string {
   const practices: Record<string, Record<string, string[]>> = {
     mermaid: {
       _general: [
@@ -324,7 +324,7 @@ With tool and subDiagram: Returns focused guide for that diagram type.`,
 
     let text: string;
     if (tool) {
-      text = generateToolGuide(tool, subDiagram);
+      text = generateToolGuide({ toolId: tool, subDiagramId: subDiagram });
     } else {
       text = generateOverview();
     }

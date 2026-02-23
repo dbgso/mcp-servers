@@ -7,7 +7,7 @@ import remarkStringify from "remark-stringify";
 import type { Root as MdastRoot, Heading, Code, List, Link, Text, ListItem } from "mdast";
 import type { GoToDefinitionResult, DefinitionLocation } from "mcp-shared";
 import { BaseHandler } from "./base.js";
-import { diffStructures, type DiffableItem } from "mcp-shared";
+import { diffStructures, getErrorMessage, type DiffableItem } from "mcp-shared";
 import type {
   AstReadResult,
   HeadingSummary,
@@ -582,7 +582,7 @@ export class MarkdownHandler extends BaseHandler {
       } catch (error) {
         errors.push({
           filePath: normalizedPath,
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         });
       }
     };
@@ -690,7 +690,7 @@ export class MarkdownHandler extends BaseHandler {
       } catch (error) {
         errors.push({
           filePath,
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         });
       }
     }
@@ -856,7 +856,7 @@ export class MarkdownHandler extends BaseHandler {
       if (error instanceof Error && error.name === "AbortError") {
         return { status: "broken", reason: "timeout" };
       }
-      return { status: "broken", reason: error instanceof Error ? error.message : "unknown error" };
+      return { status: "broken", reason: getErrorMessage(error) };
     }
   }
 
