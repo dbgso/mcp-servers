@@ -1,8 +1,6 @@
 import type { WorkspaceInfo } from "./workspace-detector.js";
 import {
   parseAllPackages,
-  buildPackageMap,
-  type PackageInfo,
 } from "./package-resolver.js";
 
 export interface PackageNode {
@@ -43,7 +41,6 @@ export interface MonorepoGraph {
  */
 export function buildMonorepoGraph(workspace: WorkspaceInfo): MonorepoGraph {
   const packages = parseAllPackages({ packageDirs: workspace.packageDirs, rootDir: workspace.rootDir });
-  const packageMap = buildPackageMap(packages);
   const internalNames = new Set(packages.map((p) => p.name));
 
   const nodes: PackageNode[] = packages.map((pkg) => ({
@@ -144,17 +141,22 @@ function detectCycles({ nodes, edges }: { nodes: PackageNode[]; edges: PackageEd
     for (const w of graph.get(v) ?? []) {
       if (!indices.has(w)) {
         strongconnect(w);
-        lowlinks.set(v, Math.min(lowlinks.get(v)!, lowlinks.get(w)!));
+        const vLowlink = lowlinks.get(v) ?? 0;
+        const wLowlink = lowlinks.get(w) ?? 0;
+        lowlinks.set(v, Math.min(vLowlink, wLowlink));
       } else if (onStack.has(w)) {
-        lowlinks.set(v, Math.min(lowlinks.get(v)!, indices.get(w)!));
+        const vLowlink = lowlinks.get(v) ?? 0;
+        const wIndex = indices.get(w) ?? 0;
+        lowlinks.set(v, Math.min(vLowlink, wIndex));
       }
     }
 
     if (lowlinks.get(v) === indices.get(v)) {
       const scc: string[] = [];
-      let w: string;
+      let w: string | undefined;
       do {
-        w = stack.pop()!;
+        w = stack.pop();
+        if (w === undefined) break;
         onStack.delete(w);
         scc.push(w);
       } while (w !== v);

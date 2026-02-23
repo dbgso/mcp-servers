@@ -1026,7 +1026,7 @@ export class MarkdownHandler extends BaseHandler {
     const { items, options } = params;
     const ordered = options?.ordered ?? false;
     return items
-      // eslint-disable-next-line custom/single-params-object -- array callback
+       
       .map((item, i) => (ordered ? `${i + 1}. ${item}` : `- ${item}`))
       .join("\n");
   }

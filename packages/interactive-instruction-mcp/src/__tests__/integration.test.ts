@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import type { ReminderConfig, DraftActionContext, ApplyActionContext } from "../types/index.js";
-import { DRAFT_PREFIX, DRAFT_DIR } from "../constants.js";
+import { DRAFT_DIR } from "../constants.js";
 
 // Draft handlers
 import {
