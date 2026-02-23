@@ -1,21 +1,20 @@
 import { z } from "zod";
-import type {
-  PlanActionContext,
-  ToolResult,
-  PlanRawParams,
-} from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 
-const paramsSchema = z.object({
+const deleteSchema = z.object({
   id: z.string().describe("Task ID to delete"),
   force: z.boolean().optional().describe("Force cascade delete (deletes all dependent tasks)"),
   cancel: z.boolean().optional().describe("Cancel a pending deletion"),
 });
+type DeleteArgs = z.infer<typeof deleteSchema>;
 
 /**
  * DeleteHandler: Remove a task from the plan
  */
-export class DeleteHandler {
+export class DeleteHandler extends BaseActionHandler<DeleteArgs, PlanActionContext> {
   readonly action = "delete";
+  readonly schema = deleteSchema;
 
   readonly help = `# plan delete
 
@@ -39,16 +38,9 @@ plan(action: "delete", id: "<task-id>", cancel: true)  # cancel pending deletion
 - With cancel: true, cancels a pending deletion created by force: true
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-    const { id, force, cancel } = parseResult.data;
-    const { planReader, planReporter } = params.context;
+  protected async doExecute(args: DeleteArgs, context: PlanActionContext) {
+    const { id, force, cancel } = args;
+    const { planReader, planReporter } = context;
 
     // Handle cancel pending deletion
     if (cancel) {

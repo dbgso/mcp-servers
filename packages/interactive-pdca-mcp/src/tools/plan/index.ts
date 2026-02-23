@@ -1,7 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { ActionRegistry } from "mcp-shared";
 import { wrapResponse } from "../../utils/response-wrapper.js";
-import type { ReminderConfig, PlanReporter, FeedbackReaderInterface, PlanActionContext, PlanRawParams, PlanActionHandler } from "../../types/index.js";
+import type { ReminderConfig, PlanReporter, FeedbackReaderInterface, PlanActionContext, PlanRawParams } from "../../types/index.js";
 import type { PlanReader } from "../../services/plan-reader.js";
 import { needsTemplateSetup } from "../../services/template-setup.js";
 import {
@@ -25,8 +26,9 @@ import {
   ActSubmitHandler,
 } from "./handlers/index.js";
 
-function createHandlers(): PlanActionHandler[] {
-  return [
+function createRegistry(): ActionRegistry<PlanActionContext> {
+  const registry = new ActionRegistry<PlanActionContext>();
+  registry.registerAll([
     new ListHandler(),
     new ReadHandler(),
     new ReadOutputHandler(),
@@ -45,7 +47,8 @@ function createHandlers(): PlanActionHandler[] {
     new ActSubmitHandler(),
     new RequestChangesHandler(),
     new BlockHandler(),
-  ];
+  ]);
+  return registry;
 }
 
 const getPlanHelp = (planDir: string) => `# Plan Tool
@@ -189,10 +192,7 @@ export function registerPlanTool(params: {
 }): void {
   const { server, planReader, planReporter, feedbackReader, planDir, markdownDir, config } = params;
 
-  const handlers = createHandlers();
-  const resolveHandler = (action: string): PlanActionHandler | undefined => {
-    return handlers.find((h) => h.action === action);
-  };
+  const registry = createRegistry();
 
   server.registerTool(
     "plan",
@@ -474,8 +474,8 @@ Self-review templates are available for this project. Would you like to set them
 
       const context: PlanActionContext = { planReader, planReporter, feedbackReader, config, planDir };
 
-      // Resolve handler by action name
-      const handler = resolveHandler(action);
+      // Resolve handler by action name using ActionRegistry
+      const handler = registry.getHandler(action);
       if (!handler) {
         return wrapResponse({
           result: {
@@ -497,7 +497,7 @@ Self-review templates are available for this project. Would you like to set them
         test_target, test_results, coverage, feedback_addressed, prompt,
       };
 
-      const result = await handler.execute({ rawParams, context });
+      const result = await handler.execute(rawParams, context);
       return wrapResponse({ result, config });
     }
   );

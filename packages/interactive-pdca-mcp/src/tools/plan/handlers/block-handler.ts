@@ -1,14 +1,12 @@
 import { z } from "zod";
-import type {
-  PlanActionContext,
-  ToolResult,
-  PlanRawParams,
-} from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 
-const paramsSchema = z.object({
+const blockSchema = z.object({
   id: z.string().describe("Task ID"),
   reason: z.string().describe("Reason for blocking"),
 });
+type BlockArgs = z.infer<typeof blockSchema>;
 
 /**
  * BlockHandler: any → blocked transition
@@ -16,8 +14,9 @@ const paramsSchema = z.object({
  * Requires:
  * - reason: why the task is blocked
  */
-export class BlockHandler {
+export class BlockHandler extends BaseActionHandler<BlockArgs, PlanActionContext> {
   readonly action = "block";
+  readonly schema = blockSchema;
 
   readonly help = `# plan block
 
@@ -37,16 +36,9 @@ plan(action: "block", id: "<task-id>", reason: "<reason>")
 - The reason will be stored in the task output
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-    const { id, reason } = parseResult.data;
-    const { planReader, planReporter } = params.context;
+  protected async doExecute(args: BlockArgs, context: PlanActionContext) {
+    const { id, reason } = args;
+    const { planReader, planReporter } = context;
 
     const task = await planReader.getTask(id);
     if (!task) {

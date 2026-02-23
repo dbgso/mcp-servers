@@ -1,17 +1,16 @@
 import { z } from "zod";
-import type {
-  PlanActionContext,
-  ToolResult,
-  PlanRawParams,
-} from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 
-const paramsSchema = z.object({});
+const clearSchema = z.object({});
+type ClearArgs = z.infer<typeof clearSchema>;
 
 /**
  * ClearHandler: Clear all tasks from the plan
  */
-export class ClearHandler {
+export class ClearHandler extends BaseActionHandler<ClearArgs, PlanActionContext> {
   readonly action = "clear";
+  readonly schema = clearSchema;
 
   readonly help = `# plan clear
 
@@ -30,16 +29,8 @@ None required.
 - This action cannot be undone
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-
-    const { planReader, planReporter } = params.context;
+  protected async doExecute(_args: ClearArgs, context: PlanActionContext) {
+    const { planReader, planReporter } = context;
 
     const tasks = await planReader.listTasks();
     if (tasks.length === 0) {

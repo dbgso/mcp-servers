@@ -55,30 +55,23 @@ export abstract class BaseSubmitHandler implements PlanActionHandler {
    * Validate phase-specific fields
    * @returns Error message if validation fails, null if valid
    */
-  protected abstract validatePhaseFields(params: {
-    rawParams: PlanRawParams;
-  }): string | null;
+  protected abstract validatePhaseFields(rawParams: PlanRawParams): string | null;
 
   /**
    * Get phase-specific data for storage
    */
-  protected abstract getPhaseData(params: {
-    rawParams: PlanRawParams;
-  }): Record<string, unknown>;
+  protected abstract getPhaseData(rawParams: PlanRawParams): Record<string, unknown>;
 
   /**
    * Format phase-specific output for response
    */
-  protected abstract formatPhaseOutput(params: {
-    rawParams: PlanRawParams;
-  }): string;
+  protected abstract formatPhaseOutput(rawParams: PlanRawParams): string;
 
-  async execute(params: {
-    rawParams: PlanRawParams;
-    context: PlanActionContext;
-  }): Promise<ToolResult> {
+  async execute(rawParams: unknown, context: PlanActionContext): Promise<ToolResult> {
+    const params = rawParams as PlanRawParams;
+
     // Validate base params
-    const baseResult = baseParamsSchema.safeParse(params.rawParams);
+    const baseResult = baseParamsSchema.safeParse(params);
     if (!baseResult.success) {
       return {
         content: [
@@ -122,7 +115,7 @@ Then include the ID in your submission:
 
     const { id, output_what, output_why, output_how, blockers, risks, references_used, references_reason } =
       baseResult.data;
-    const { planReader, planReporter } = params.context;
+    const { planReader, planReporter } = context;
 
     const task = await planReader.getTask(id);
     if (!task) {

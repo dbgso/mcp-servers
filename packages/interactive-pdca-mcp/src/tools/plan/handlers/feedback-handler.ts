@@ -1,18 +1,16 @@
 import { z } from "zod";
-import type {
-  PlanActionContext,
-  ToolResult,
-  FeedbackEntry,
-  PlanRawParams,
-} from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext, FeedbackEntry } from "../../../types/index.js";
 
-const paramsSchema = z.object({
+const feedbackSchema = z.object({
   id: z.string().describe("Task ID to view feedback for"),
   feedback_id: z.string().optional().describe("Feedback ID to show details"),
 });
+type FeedbackArgs = z.infer<typeof feedbackSchema>;
 
-export class FeedbackHandler {
+export class FeedbackHandler extends BaseActionHandler<FeedbackArgs, PlanActionContext> {
   readonly action = "feedback";
+  readonly schema = feedbackSchema;
 
   readonly help = `# plan feedback
 
@@ -43,16 +41,9 @@ plan(action: "feedback", id: "task-001", feedback_id: "fb-001")
 \`\`\`
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-    const { id, feedback_id } = parseResult.data;
-    const { feedbackReader, planReader } = params.context;
+  protected async doExecute(args: FeedbackArgs, context: PlanActionContext) {
+    const { id, feedback_id } = args;
+    const { feedbackReader, planReader } = context;
 
     // Validate task exists
     const task = await planReader.getTask(id);
@@ -81,7 +72,7 @@ plan(action: "feedback", id: "task-001", feedback_id: "fb-001")
     taskId: string;
     taskTitle: string;
     feedbackReader: PlanActionContext["feedbackReader"];
-  }): Promise<ToolResult> {
+  }) {
     const { taskId, taskTitle, feedbackReader } = params;
     const allFeedback = await feedbackReader.listFeedback(taskId);
 
@@ -155,7 +146,7 @@ plan(action: "feedback", id: "task-001", feedback_id: "fb-001")
     taskId: string;
     feedbackId: string;
     feedbackReader: PlanActionContext["feedbackReader"];
-  }): Promise<ToolResult> {
+  }) {
     const { taskId, feedbackId, feedbackReader } = params;
     const feedback = await feedbackReader.getFeedback(taskId, feedbackId);
 

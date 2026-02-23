@@ -157,10 +157,11 @@ export type FeedbackParams = BaseParams & {
 export type PlanRawParams = Record<string, unknown>;
 
 // Handler interface for plan actions
+// Compatible with RegistrableActionHandler from mcp-shared
 export interface PlanActionHandler {
   readonly action: string;
   readonly help: string;
-  execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<import("mcp-shared").ToolResult>;
+  execute(rawParams: unknown, context: PlanActionContext): Promise<import("mcp-shared").ToolResult>;
 }
 
 // Legacy: Used by state machine (TransitionContext) for status transitions
@@ -212,6 +213,7 @@ export interface ApproveActionParams {
   task_id?: string;
   feedback_id?: string;
   reason?: string;
+  approvalToken?: string;
 }
 
 export interface ApproveActionContext {

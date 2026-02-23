@@ -1,18 +1,16 @@
 import { z } from "zod";
-import type {
-  PlanActionContext,
-  ToolResult,
-  TaskSummary,
-  PlanRawParams,
-} from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext, TaskSummary } from "../../../types/index.js";
 
-const paramsSchema = z.object({});
+const graphSchema = z.object({});
+type GraphArgs = z.infer<typeof graphSchema>;
 
 /**
  * GraphHandler: Display task graph as Mermaid flowchart
  */
-export class GraphHandler {
+export class GraphHandler extends BaseActionHandler<GraphArgs, PlanActionContext> {
   readonly action = "graph";
+  readonly schema = graphSchema;
 
   readonly help = `# plan graph
 
@@ -32,15 +30,8 @@ None
 - Legend explaining symbols
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-    const { planReader } = params.context;
+  protected async doExecute(_args: GraphArgs, context: PlanActionContext) {
+    const { planReader } = context;
     const tasks: TaskSummary[] = await planReader.listTasks();
 
     if (tasks.length === 0) {

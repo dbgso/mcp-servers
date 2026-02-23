@@ -1,3 +1,7 @@
+import {
+  requestApproval,
+  validateApproval,
+} from "mcp-shared";
 import type {
   ToolResult,
   ApproveActionHandler,
@@ -10,7 +14,7 @@ export class TaskHandler implements ApproveActionHandler {
     actionParams: ApproveActionParams;
     context: ApproveActionContext;
   }): Promise<ToolResult> {
-    const { task_id } = params.actionParams;
+    const { task_id, approvalToken } = params.actionParams;
     const { planReader, planReporter } = params.context;
 
     // Validate task_id is provided
@@ -39,6 +43,57 @@ export class TaskHandler implements ApproveActionHandler {
         ],
         isError: true,
       };
+    }
+
+    // Handle approval flow (skip in test environment)
+    const isTestEnv = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+    const approvalRequestId = `pdca-approve-${task_id}`;
+
+    if (!isTestEnv && !approvalToken) {
+      // Request approval - send notification
+      const { fallbackPath } = await requestApproval({
+        request: {
+          id: approvalRequestId,
+          operation: "Approve Task",
+          description: `Approve task "${task_id}" (${task.title})`,
+        },
+      });
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `# Approval Requested
+
+A desktop notification has been sent with the approval token.
+
+If you missed the notification, check: ${fallbackPath}
+
+To approve, call:
+\`approve(target: "task", task_id: "${task_id}", approvalToken: "<token>")\``,
+          },
+        ],
+      };
+    }
+
+    // Validate approval token (skip in test environment)
+    if (!isTestEnv && approvalToken) {
+      const approvalResult = validateApproval({
+        requestId: approvalRequestId,
+        providedToken: approvalToken,
+      });
+
+      if (!approvalResult.valid) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error: Invalid approval token - ${approvalResult.reason}`,
+            },
+          ],
+          isError: true,
+        };
+      }
     }
 
     const result = await planReader.approveTask(task_id);

@@ -1,17 +1,20 @@
 import { z } from "zod";
-import type { PlanActionContext, ToolResult, PlanRawParams } from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
+import type { PlanActionContext } from "../../../types/index.js";
 
-const paramsSchema = z.object({
+const interpretSchema = z.object({
   id: z.string().describe("Task ID"),
   feedback_id: z.string().describe("Feedback ID"),
   interpretation: z.string().describe("AI interpretation of feedback"),
 });
+type InterpretArgs = z.infer<typeof interpretSchema>;
 
 /**
  * InterpretHandler: Add interpretation to feedback
  */
-export class InterpretHandler {
+export class InterpretHandler extends BaseActionHandler<InterpretArgs, PlanActionContext> {
   readonly action = "interpret";
+  readonly schema = interpretSchema;
 
   readonly help = `# plan interpret
 
@@ -33,22 +36,9 @@ plan(action: "interpret", id: "<task-id>", feedback_id: "<feedback-id>", interpr
 - After interpretation, present to user for approval
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: ${parseResult.error.errors.map((e) => e.message).join(", ")}\n\n${this.help}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    const { id, feedback_id, interpretation } = parseResult.data;
-    const { feedbackReader } = params.context;
+  protected async doExecute(args: InterpretArgs, context: PlanActionContext) {
+    const { id, feedback_id, interpretation } = args;
+    const { feedbackReader } = context;
 
     // Get the feedback to validate it exists
     const feedback = await feedbackReader.getFeedback(id, feedback_id);
@@ -93,7 +83,7 @@ plan(action: "interpret", id: "<task-id>", feedback_id: "<feedback-id>", interpr
     }
 
     // Update PENDING_REVIEW.md to include this feedback
-    const { planReporter } = params.context;
+    const { planReporter } = context;
     await planReporter.updateAll();
 
     return {

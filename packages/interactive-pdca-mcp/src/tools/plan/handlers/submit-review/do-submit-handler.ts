@@ -51,8 +51,8 @@ plan(action: "submit_do", id: "<task-id>",
 - **references_reason** (required): Why these references were used
 `;
 
-  protected validatePhaseFields(params: { rawParams: PlanRawParams }): string | null {
-    const result = doParamsSchema.safeParse(params.rawParams);
+  protected validatePhaseFields(rawParams: PlanRawParams): string | null {
+    const result = doParamsSchema.safeParse(rawParams);
     if (!result.success) {
       const errors = result.error.errors
         .filter((e) => e.path[0] === "changes" || e.path[0] === "design_decisions")
@@ -64,8 +64,8 @@ plan(action: "submit_do", id: "<task-id>",
     return null;
   }
 
-  protected getPhaseData(params: { rawParams: PlanRawParams }): Record<string, unknown> {
-    const result = doParamsSchema.safeParse(params.rawParams);
+  protected getPhaseData(rawParams: PlanRawParams): Record<string, unknown> {
+    const result = doParamsSchema.safeParse(rawParams);
     if (!result.success) return {};
     return {
       changes: result.data.changes,
@@ -73,8 +73,8 @@ plan(action: "submit_do", id: "<task-id>",
     };
   }
 
-  protected formatPhaseOutput(params: { rawParams: PlanRawParams }): string {
-    const result = doParamsSchema.safeParse(params.rawParams);
+  protected formatPhaseOutput(rawParams: PlanRawParams): string {
+    const result = doParamsSchema.safeParse(rawParams);
     if (!result.success) return "";
     const { changes, design_decisions } = result.data;
     return `### Changes
