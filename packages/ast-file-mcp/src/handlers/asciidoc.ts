@@ -53,7 +53,7 @@ function preprocess(source: string): string {
   // Block comments: //// ... ////
   result = result.replace(
     /^(\/\/\/\/)$/gm,
-    // eslint-disable-next-line custom/single-params-object -- regex replace callback
+     
     (match, _, offset) => {
       // Count how many //// we've seen before this one
       const before = result.slice(0, offset);

@@ -3,10 +3,10 @@
  * Unlike pattern-based codemod, this understands code structure.
  */
 
-import { Project, SyntaxKind, StructureKind } from "ts-morph";
-import type { ClassDeclaration, SourceFile } from "ts-morph";
+import { Project } from "ts-morph";
+import type { ClassDeclaration } from "ts-morph";
 import { glob } from "glob";
-import { resolve, basename, dirname } from "node:path";
+import { resolve } from "node:path";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -80,53 +80,6 @@ function toVariableName(className: string): string {
   const withoutHandler = className.replace(/Handler$/, "");
   const camelCase = withoutHandler.charAt(0).toLowerCase() + withoutHandler.slice(1);
   return camelCase + "Op";
-}
-
-function extractPropertyValue({ cls, propName }: { cls: ClassDeclaration; propName: string }): string | undefined {
-  const prop = cls.getProperty(propName);
-  if (!prop) return undefined;
-
-  const initializer = prop.getInitializer();
-  if (!initializer) return undefined;
-
-  return initializer.getText();
-}
-
-function extractMethodBody({ cls, methodName }: { cls: ClassDeclaration; methodName: string }): string | undefined {
-  const method = cls.getMethod(methodName);
-  if (!method) return undefined;
-
-  const body = method.getBody();
-  if (!body) return undefined;
-
-  // Get the body text without the outer braces
-  const bodyText = body.getText();
-  // Remove outer { } and trim
-  return bodyText.slice(1, -1).trim();
-}
-
-function getMethodParams({ cls, methodName }: { cls: ClassDeclaration; methodName: string }): string[] {
-  const method = cls.getMethod(methodName);
-  if (!method) return [];
-
-  return method.getParameters().map(p => {
-    const name = p.getName();
-    const type = p.getType().getText();
-    return `${name}: ${type}`;
-  });
-}
-
-function isMethodAsync({ cls, methodName }: { cls: ClassDeclaration; methodName: string }): boolean {
-  const method = cls.getMethod(methodName);
-  return method?.isAsync() ?? false;
-}
-
-function getMethodReturnType({ cls, methodName }: { cls: ClassDeclaration; methodName: string }): string | undefined {
-  const method = cls.getMethod(methodName);
-  if (!method) return undefined;
-
-  const returnType = method.getReturnType();
-  return returnType.getText();
 }
 
 // ─── Main Transform ──────────────────────────────────────────────────────────
@@ -244,7 +197,7 @@ interface TransformClassResult {
 }
 
 function transformClass({ cls, options }: { cls: ClassDeclaration; options: TransformClassOptions }): TransformClassResult {
-  const className = cls.getName()!;
+  const className = cls.getName() ?? "AnonymousClass";
   const variableName = toVariableName(className);
 
   // Get the type parameter from extends clause (e.g., BaseToolHandler<Args> -> Args)

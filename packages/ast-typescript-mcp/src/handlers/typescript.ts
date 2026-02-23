@@ -915,7 +915,7 @@ export class TypeScriptHandler {
     return "function";
   }
 
-  private resolveCallTarget({ project, callExpr, includeExternal }: { project: Project; callExpr: Node; includeExternal: boolean }): Node | null {
+  private resolveCallTarget({ callExpr, includeExternal }: { project: Project; callExpr: Node; includeExternal: boolean }): Node | null {
     try {
       let expr: Node | undefined;
 
@@ -1181,7 +1181,7 @@ export class TypeScriptHandler {
    * Get ancestors (base classes and implemented interfaces) of a type.
    */
   private getTypeAncestors(
-    { project, node, includeExternal }: { project: Project; node: Node; includeExternal: boolean }
+    { node, includeExternal }: { project: Project; node: Node; includeExternal: boolean }
   ): Array<{ node: Node; relation: TypeHierarchyRelation }> {
     const result: Array<{ node: Node; relation: TypeHierarchyRelation }> = [];
 
@@ -1251,7 +1251,7 @@ export class TypeScriptHandler {
    * Get descendants (derived classes and implementors) of a type.
    */
   private getTypeDescendants(
-    { project, node, includeExternal }: { project: Project; node: Node; includeExternal: boolean }
+    { node, includeExternal }: { project: Project; node: Node; includeExternal: boolean }
   ): Array<{ node: Node; relation: TypeHierarchyRelation }> {
     const result: Array<{ node: Node; relation: TypeHierarchyRelation }> = [];
 
