@@ -41,7 +41,8 @@ export abstract class BaseActionHandler<TArgs = unknown, TContext = unknown> {
    * Execute the action with raw parameters.
    * Parses arguments using the schema and delegates to doExecute.
    */
-  async execute(rawParams: unknown, context: TContext): Promise<ToolResponse> {
+  async execute(params: { rawParams: unknown; context: TContext }): Promise<ToolResponse> {
+    const { rawParams, context } = params;
     const parsed = this.schema.safeParse(rawParams);
     if (!parsed.success) {
       return errorResponse(
@@ -50,7 +51,7 @@ export abstract class BaseActionHandler<TArgs = unknown, TContext = unknown> {
     }
 
     try {
-      return await this.doExecute(parsed.data, context);
+      return await this.doExecute({ args: parsed.data, context });
     } catch (error) {
       return errorResponse(
         `Failed to execute ${this.action}: ${getErrorMessage(error)}`
@@ -61,5 +62,5 @@ export abstract class BaseActionHandler<TArgs = unknown, TContext = unknown> {
   /**
    * Implement the actual action logic with validated arguments.
    */
-  protected abstract doExecute(args: TArgs, context: TContext): Promise<ToolResponse>;
+  protected abstract doExecute(params: { args: TArgs; context: TContext }): Promise<ToolResponse>;
 }

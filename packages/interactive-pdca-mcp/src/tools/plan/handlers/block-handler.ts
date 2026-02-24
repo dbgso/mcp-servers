@@ -36,7 +36,8 @@ plan(action: "block", id: "<task-id>", reason: "<reason>")
 - The reason will be stored in the task output
 `;
 
-  protected async doExecute(args: BlockArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: BlockArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const { id, reason } = args;
     const { planReader, planReporter } = context;
 

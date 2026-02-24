@@ -30,7 +30,8 @@ None
 - Legend explaining symbols
 `;
 
-  protected async doExecute(_args: GraphArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: GraphArgs; context: PlanActionContext }) {
+    const { context } = params;
     const { planReader } = context;
     const tasks: TaskSummary[] = await planReader.listTasks();
 

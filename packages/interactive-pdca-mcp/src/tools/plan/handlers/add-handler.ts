@@ -70,7 +70,8 @@ plan(action: "add", id: "<task-id>", title: "<title>", content: "<description>",
 - PDCA phases: plan, do, check, act
 `;
 
-  protected async doExecute(args: AddArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: AddArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const {
       id,
       title,

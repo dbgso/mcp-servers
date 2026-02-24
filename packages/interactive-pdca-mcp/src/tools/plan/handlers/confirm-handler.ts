@@ -32,7 +32,8 @@ plan(action: "confirm", id: "<task-id>")
 - Use this after verifying your submission meets all requirements
 `;
 
-  protected async doExecute(args: ConfirmArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: ConfirmArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const { id } = args;
     const { planReader, planReporter } = context;
 

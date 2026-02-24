@@ -7,7 +7,7 @@ import type { ToolResponse } from "./types.js";
 export interface RegistrableActionHandler<TContext = unknown> {
   readonly action: string;
   readonly help: string;
-  execute(rawParams: unknown, context: TContext): Promise<ToolResponse>;
+  execute(params: { rawParams: unknown; context: TContext }): Promise<ToolResponse>;
 }
 
 /**

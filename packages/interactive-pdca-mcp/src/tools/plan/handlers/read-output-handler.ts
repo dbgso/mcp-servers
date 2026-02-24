@@ -30,7 +30,8 @@ plan(action: "read_output", id: "<task-id>")
 - Returns the task_output section with what/why/how details
 `;
 
-  protected async doExecute(args: ReadOutputArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: ReadOutputArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const { id } = args;
     const { planReader } = context;
 

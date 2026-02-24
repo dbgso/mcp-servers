@@ -41,7 +41,8 @@ plan(action: "feedback", id: "task-001", feedback_id: "fb-001")
 \`\`\`
 `;
 
-  protected async doExecute(args: FeedbackArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: FeedbackArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const { id, feedback_id } = args;
     const { feedbackReader, planReader } = context;
 
