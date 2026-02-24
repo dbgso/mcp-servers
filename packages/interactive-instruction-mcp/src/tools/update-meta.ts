@@ -16,7 +16,7 @@ export function registerUpdateMetaTool(params: {
     "update_meta",
     {
       description:
-        "Get a prompt to update document metadata (description and triggers/when_to_use). Returns current content and update instructions for AI to generate new metadata.",
+        "Get a prompt to update document metadata (description and whenToUse). Returns current content and update instructions for AI to generate new metadata.",
       inputSchema: {
         id: z
           .string()
@@ -43,14 +43,14 @@ export function registerUpdateMetaTool(params: {
 
       const frontmatter = parseFrontmatter(content);
       const currentDescription = frontmatter.description || "(Not set)";
-      const currentTriggers = frontmatter.triggers?.join("\n  - ") || "(Not set)";
+      const currentWhenToUse = frontmatter.whenToUse?.join("\n  - ") || "(Not set)";
 
       const prompt = `# Metadata Update Request for: ${id}
 
 ## Current Metadata
 - **description**: ${currentDescription}
-- **triggers (when to use)**:
-  - ${currentTriggers}
+- **whenToUse**:
+  - ${currentWhenToUse}
 
 ## Document Content
 \`\`\`markdown
@@ -65,7 +65,7 @@ Please analyze the document content above and generate updated metadata:
    - Write in third person
    - Keep it under 150 characters
 
-2. **triggers (when to use)**: List specific situations when this document should be referenced.
+2. **whenToUse**: List specific situations when this document should be referenced.
    - Use action-oriented phrases
    - Be specific about the context/trigger
    - Include 2-5 items
@@ -76,7 +76,7 @@ After analysis, call \`draft update\` with the updated frontmatter:
 \`\`\`markdown
 ---
 description: [Your new description here]
-triggers:
+whenToUse:
   - [Trigger 1]
   - [Trigger 2]
   - [Trigger 3]

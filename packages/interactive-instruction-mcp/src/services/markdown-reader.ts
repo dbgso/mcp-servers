@@ -8,6 +8,7 @@ import {
   ExistsValidator,
 } from "./validators.js";
 import { parseFrontmatter } from "../utils/frontmatter-parser.js";
+import { formatDocumentListItem } from "../utils/string-utils.js";
 
 export interface AddResult {
   success: boolean;
@@ -228,11 +229,11 @@ export class MarkdownReader {
         lines.push("**Documents:**");
       }
       for (const doc of documents) {
-        let docLine = `- **${doc.id}**: ${doc.description}`;
-        if (doc.whenToUse && doc.whenToUse.length > 0) {
-          docLine += `\n  - When to use: ${doc.whenToUse.join(", ")}`;
-        }
-        lines.push(docLine);
+        lines.push(formatDocumentListItem({
+          id: doc.id,
+          description: doc.description,
+          whenToUse: doc.whenToUse,
+        }));
       }
     }
 
@@ -449,7 +450,7 @@ export class MarkdownReader {
     if (frontmatter.description) {
       return {
         description: this.truncateDescription(frontmatter.description),
-        whenToUse: frontmatter.triggers,
+        whenToUse: frontmatter.whenToUse,
       };
     }
 

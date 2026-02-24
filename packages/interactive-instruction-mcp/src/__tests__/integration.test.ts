@@ -107,6 +107,8 @@ describe("Integration Tests", () => {
           actionParams: {
             id: "coding-style",
             content: "# Coding Style\n\nUse consistent formatting.",
+            description: "Coding style guidelines",
+            whenToUse: ["Writing new code"],
           },
           context: draftContext,
         });
@@ -121,13 +123,13 @@ describe("Integration Tests", () => {
       });
 
       it("should list drafts", async () => {
-        // Add some drafts (must include description paragraph)
+        // Add some drafts
         await draftAddHandler.execute({
-          actionParams: { id: "draft1", content: "# Draft 1\n\nFirst draft description." },
+          actionParams: { id: "draft1", content: "# Draft 1\n\nFirst draft description.", description: "First draft", whenToUse: ["Testing"] },
           context: draftContext,
         });
         await draftAddHandler.execute({
-          actionParams: { id: "draft2", content: "# Draft 2\n\nSecond draft description." },
+          actionParams: { id: "draft2", content: "# Draft 2\n\nSecond draft description.", description: "Second draft", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -143,7 +145,7 @@ describe("Integration Tests", () => {
 
       it("should read a draft", async () => {
         await draftAddHandler.execute({
-          actionParams: { id: "test-read", content: "# Test Content\n\nSome text here." },
+          actionParams: { id: "test-read", content: "# Test Content\n\nSome text here.", description: "Test content", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -159,7 +161,7 @@ describe("Integration Tests", () => {
 
       it("should update a draft", async () => {
         await draftAddHandler.execute({
-          actionParams: { id: "to-update", content: "# Original\n\nOriginal content." },
+          actionParams: { id: "to-update", content: "# Original\n\nOriginal content.", description: "Original", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -181,7 +183,7 @@ describe("Integration Tests", () => {
 
       it("should delete a draft", async () => {
         await draftAddHandler.execute({
-          actionParams: { id: "to-delete", content: "# Delete Me\n\nThis will be deleted." },
+          actionParams: { id: "to-delete", content: "# Delete Me\n\nThis will be deleted.", description: "To delete", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -200,7 +202,7 @@ describe("Integration Tests", () => {
 
       it("should rename a draft", async () => {
         await draftAddHandler.execute({
-          actionParams: { id: "old-name", content: "# Rename Me\n\nThis will be renamed." },
+          actionParams: { id: "old-name", content: "# Rename Me\n\nThis will be renamed.", description: "Old name", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -224,11 +226,11 @@ describe("Integration Tests", () => {
     describe("2. Draft with hierarchy", () => {
       it("should create drafts with hierarchical IDs", async () => {
         await draftAddHandler.execute({
-          actionParams: { id: "coding__style", content: "# Style\n\nCoding style guidelines." },
+          actionParams: { id: "coding__style", content: "# Style\n\nCoding style guidelines.", description: "Style guide", whenToUse: ["Coding"] },
           context: draftContext,
         });
         await draftAddHandler.execute({
-          actionParams: { id: "coding__testing", content: "# Testing\n\nTesting guidelines." },
+          actionParams: { id: "coding__testing", content: "# Testing\n\nTesting guidelines.", description: "Testing guide", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -256,7 +258,7 @@ describe("Integration Tests", () => {
       it("should promote a draft with same name", async () => {
         // Create draft
         await draftAddHandler.execute({
-          actionParams: { id: "rules", content: "# Rules\n\nFollow these rules." },
+          actionParams: { id: "rules", content: "# Rules\n\nFollow these rules.", description: "Rules", whenToUse: ["Following rules"] },
           context: draftContext,
         });
 
@@ -280,7 +282,7 @@ describe("Integration Tests", () => {
 
       it("should promote a draft with different target name", async () => {
         await draftAddHandler.execute({
-          actionParams: { id: "temp-rules", content: "# Rules\n\nTemporary rules draft." },
+          actionParams: { id: "temp-rules", content: "# Rules\n\nTemporary rules draft.", description: "Temp rules", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -299,11 +301,11 @@ describe("Integration Tests", () => {
 
       it("should list drafts ready to promote", async () => {
         await draftAddHandler.execute({
-          actionParams: { id: "ready1", content: "# Ready 1\n\nFirst ready draft." },
+          actionParams: { id: "ready1", content: "# Ready 1\n\nFirst ready draft.", description: "Ready 1", whenToUse: ["Testing"] },
           context: draftContext,
         });
         await draftAddHandler.execute({
-          actionParams: { id: "ready2", content: "# Ready 2\n\nSecond ready draft." },
+          actionParams: { id: "ready2", content: "# Ready 2\n\nSecond ready draft.", description: "Ready 2", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -347,13 +349,13 @@ describe("Integration Tests", () => {
       it("should error when adding draft that already exists", async () => {
         // First add the draft
         await draftAddHandler.execute({
-          actionParams: { id: "existing-draft", content: "# Existing\n\nContent." },
+          actionParams: { id: "existing-draft", content: "# Existing\n\nContent.", description: "Existing", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
         // Try to add again with same id
         const result = await draftAddHandler.execute({
-          actionParams: { id: "existing-draft", content: "# New\n\nNew content." },
+          actionParams: { id: "existing-draft", content: "# New\n\nNew content.", description: "New", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -430,7 +432,7 @@ describe("Integration Tests", () => {
 
       it("should error when renaming without newId", async () => {
         await draftAddHandler.execute({
-          actionParams: { id: "to-rename", content: "# Rename\n\nDocument to rename." },
+          actionParams: { id: "to-rename", content: "# Rename\n\nDocument to rename.", description: "To rename", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -445,11 +447,11 @@ describe("Integration Tests", () => {
       it("should error when renaming to existing document", async () => {
         // Create two drafts
         await draftAddHandler.execute({
-          actionParams: { id: "draft-source", content: "# Source\n\nSource." },
+          actionParams: { id: "draft-source", content: "# Source\n\nSource.", description: "Source", whenToUse: ["Testing"] },
           context: draftContext,
         });
         await draftAddHandler.execute({
-          actionParams: { id: "draft-target", content: "# Target\n\nTarget." },
+          actionParams: { id: "draft-target", content: "# Target\n\nTarget.", description: "Target", whenToUse: ["Testing"] },
           context: draftContext,
         });
 
@@ -518,6 +520,8 @@ describe("Integration Tests", () => {
         actionParams: {
           id: "workflow-test",
           content: "# Workflow Test\n\nThis is a test document.",
+          description: "Workflow test",
+          whenToUse: ["Testing workflow"],
         },
         context: draftContext,
       });
@@ -567,17 +571,17 @@ describe("Integration Tests", () => {
     });
 
     it("should handle multiple drafts independently", async () => {
-      // Create multiple drafts (must include descriptions)
+      // Create multiple drafts
       await draftAddHandler.execute({
-        actionParams: { id: "draft-a", content: "# Draft A\n\nFirst independent draft." },
+        actionParams: { id: "draft-a", content: "# Draft A\n\nFirst independent draft.", description: "Draft A", whenToUse: ["Testing"] },
         context: draftContext,
       });
       await draftAddHandler.execute({
-        actionParams: { id: "draft-b", content: "# Draft B\n\nSecond independent draft." },
+        actionParams: { id: "draft-b", content: "# Draft B\n\nSecond independent draft.", description: "Draft B", whenToUse: ["Testing"] },
         context: draftContext,
       });
       await draftAddHandler.execute({
-        actionParams: { id: "draft-c", content: "# Draft C\n\nThird independent draft." },
+        actionParams: { id: "draft-c", content: "# Draft C\n\nThird independent draft.", description: "Draft C", whenToUse: ["Testing"] },
         context: draftContext,
       });
 

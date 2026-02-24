@@ -18,13 +18,13 @@ Body content`;
 
       const result = parseFrontmatter(content);
       expect(result.description).toBe("This is a test document.");
-      expect(result.triggers).toBeUndefined();
+      expect(result.whenToUse).toBeUndefined();
     });
 
-    it("should parse description and triggers", () => {
+    it("should parse description and whenToUse", () => {
       const content = `---
 description: Test document
-triggers:
+whenToUse:
   - When doing X
   - When doing Y
   - When doing Z
@@ -34,16 +34,16 @@ triggers:
 
       const result = parseFrontmatter(content);
       expect(result.description).toBe("Test document");
-      expect(result.triggers).toEqual([
+      expect(result.whenToUse).toEqual([
         "When doing X",
         "When doing Y",
         "When doing Z",
       ]);
     });
 
-    it("should parse triggers only (no description)", () => {
+    it("should parse whenToUse only (no description)", () => {
       const content = `---
-triggers:
+whenToUse:
   - Trigger A
   - Trigger B
 ---
@@ -52,38 +52,38 @@ triggers:
 
       const result = parseFrontmatter(content);
       expect(result.description).toBeUndefined();
-      expect(result.triggers).toEqual(["Trigger A", "Trigger B"]);
+      expect(result.whenToUse).toEqual(["Trigger A", "Trigger B"]);
     });
 
     it("should handle inline array syntax", () => {
       const content = `---
 description: Test
-triggers: [a, b, c]
+whenToUse: [a, b, c]
 ---
 
 # Title`;
 
       const result = parseFrontmatter(content);
       expect(result.description).toBe("Test");
-      expect(result.triggers).toEqual(["a", "b", "c"]);
+      expect(result.whenToUse).toEqual(["a", "b", "c"]);
     });
 
-    it("should handle single inline trigger value", () => {
+    it("should handle single inline whenToUse value", () => {
       const content = `---
 description: Test
-triggers: single trigger
+whenToUse: single trigger
 ---
 
 # Title`;
 
       const result = parseFrontmatter(content);
-      expect(result.triggers).toEqual(["single trigger"]);
+      expect(result.whenToUse).toEqual(["single trigger"]);
     });
 
     it("should handle Japanese content", () => {
       const content = `---
 description: MCPツールを作成・変更した時は、以下のプロセスに従うこと。
-triggers:
+whenToUse:
   - TypeScript ファイルの大規模リファクタリング
   - 関数シグネチャの一括変更
 ---
@@ -94,7 +94,7 @@ triggers:
       expect(result.description).toBe(
         "MCPツールを作成・変更した時は、以下のプロセスに従うこと。"
       );
-      expect(result.triggers).toEqual([
+      expect(result.whenToUse).toEqual([
         "TypeScript ファイルの大規模リファクタリング",
         "関数シグネチャの一括変更",
       ]);
@@ -102,18 +102,18 @@ triggers:
 
     it("should handle CRLF line endings", () => {
       const content =
-        "---\r\ndescription: Test with CRLF\r\ntriggers:\r\n  - Trigger 1\r\n---\r\n\r\n# Title";
+        "---\r\ndescription: Test with CRLF\r\nwhenToUse:\r\n  - Trigger 1\r\n---\r\n\r\n# Title";
 
       const result = parseFrontmatter(content);
       expect(result.description).toBe("Test with CRLF");
-      expect(result.triggers).toEqual(["Trigger 1"]);
+      expect(result.whenToUse).toEqual(["Trigger 1"]);
     });
 
     it("should handle empty lines in frontmatter", () => {
       const content = `---
 description: Test
 
-triggers:
+whenToUse:
   - Trigger 1
 ---
 
@@ -121,7 +121,7 @@ triggers:
 
       const result = parseFrontmatter(content);
       expect(result.description).toBe("Test");
-      expect(result.triggers).toEqual(["Trigger 1"]);
+      expect(result.whenToUse).toEqual(["Trigger 1"]);
     });
   });
 
@@ -176,10 +176,10 @@ Body`;
       expect(result).not.toContain("description:");
     });
 
-    it("should handle frontmatter with triggers", () => {
+    it("should handle frontmatter with whenToUse", () => {
       const content = `---
 description: Test
-triggers:
+whenToUse:
   - A
   - B
 ---
@@ -216,7 +216,7 @@ Body   `;
 
 describe("updateFrontmatter", () => {
   describe("adding frontmatter", () => {
-    it("should add frontmatter with description and triggers", () => {
+    it("should add frontmatter with description and whenToUse", () => {
       const content = `# Title
 
 Body`;
@@ -225,12 +225,12 @@ Body`;
         content,
         frontmatter: {
           description: "New description",
-          triggers: ["Trigger 1", "Trigger 2"],
+          whenToUse: ["Trigger 1", "Trigger 2"],
         },
       });
 
       expect(result).toContain("---\ndescription: New description");
-      expect(result).toContain("triggers:");
+      expect(result).toContain("whenToUse:");
       expect(result).toContain("  - Trigger 1");
       expect(result).toContain("  - Trigger 2");
       expect(result).toContain("# Title\n\nBody");
@@ -249,10 +249,10 @@ Body`;
       });
 
       expect(result).toContain("description: Only description");
-      expect(result).not.toContain("triggers:");
+      expect(result).not.toContain("whenToUse:");
     });
 
-    it("should add frontmatter with triggers only", () => {
+    it("should add frontmatter with whenToUse only", () => {
       const content = `# Title
 
 Body`;
@@ -260,11 +260,11 @@ Body`;
       const result = updateFrontmatter({
         content,
         frontmatter: {
-          triggers: ["Trigger 1"],
+          whenToUse: ["Trigger 1"],
         },
       });
 
-      expect(result).toContain("triggers:");
+      expect(result).toContain("whenToUse:");
       expect(result).toContain("  - Trigger 1");
       expect(result).not.toContain("description:");
     });
@@ -274,7 +274,7 @@ Body`;
     it("should replace existing frontmatter at start", () => {
       const content = `---
 description: Old description
-triggers:
+whenToUse:
   - Old trigger
 ---
 
@@ -286,7 +286,7 @@ Body`;
         content,
         frontmatter: {
           description: "New description",
-          triggers: ["New trigger"],
+          whenToUse: ["New trigger"],
         },
       });
 
@@ -299,19 +299,19 @@ Body`;
   });
 
   describe("edge cases", () => {
-    it("should handle empty triggers array", () => {
+    it("should handle empty whenToUse array", () => {
       const content = `# Title`;
 
       const result = updateFrontmatter({
         content,
         frontmatter: {
           description: "Test",
-          triggers: [],
+          whenToUse: [],
         },
       });
 
       expect(result).toContain("description: Test");
-      expect(result).not.toContain("triggers:");
+      expect(result).not.toContain("whenToUse:");
     });
 
     it("should handle empty frontmatter object", () => {

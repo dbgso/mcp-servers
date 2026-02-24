@@ -41,7 +41,7 @@ export abstract class BaseActionHandler<TArgs = unknown, TContext = unknown> {
    * Execute the action with raw parameters.
    * Parses arguments using the schema and delegates to doExecute.
    */
-  async execute({ rawParams, context }: { rawParams: unknown; context: TContext }): Promise<ToolResponse> {
+  async execute(rawParams: unknown, context: TContext): Promise<ToolResponse> {
     const parsed = this.schema.safeParse(rawParams);
     if (!parsed.success) {
       return errorResponse(
