@@ -1,111 +1,120 @@
+---
+description: Instance-based handler pattern for CLI-style action routing.
+whenToUse:
+  - Implementing action-based MCP tools
+  - Adding subcommands to existing tools
+  - Refactoring multiple tools into single tool with actions
+---
+
 # Handler Pattern
 
 Instance-based handler pattern for CLI-style action routing.
 
-## Pattern Overview
+## Required: Use ActionRegistry
+
+When implementing action-based tools, always use `ActionRegistry` from `mcp-shared`.
 
 ```typescript
-// types/index.ts
-export type PlanRawParams = {
-  id?: string;
-  // ... all possible params
-};
+import { ActionRegistry } from "mcp-shared";
+import type { RegistrableActionHandler } from "mcp-shared";
 
-export interface PlanActionHandler {
-  readonly action: string;
-  readonly help: string;
-  execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult>;
+interface MyContext {}
+
+const registry = new ActionRegistry<MyContext>();
+
+registry.registerAll([
+  new ReadHandler(),
+  new WriteHandler(),
+  // ...
+]);
+
+// Resolve handler
+const handler = registry.getHandler(action);
+if (handler) {
+  return handler.execute(rawParams, context);
 }
 ```
 
-## Handler Implementation
+## Benefits of ActionRegistry
+
+- Duplicate registration check
+- `getActions()` to list all actions
+- `getHelp(action)` / `getAllHelp()` for help text
+- Standardized pattern
+
+## RegistrableActionHandler Interface
+
+```typescript
+interface RegistrableActionHandler<TContext> {
+  readonly action: string;
+  readonly help: string;
+  execute(rawParams: unknown, context: TContext): Promise<ToolResponse>;
+}
+```
+
+## BaseActionHandler (For New Handlers)
+
+When creating new handlers, extend `BaseActionHandler`:
 
 ```typescript
 import { z } from "zod";
-import type { PlanActionContext, ToolResult, PlanRawParams } from "../../../types/index.js";
+import { BaseActionHandler } from "mcp-shared";
 
-const paramsSchema = z.object({
-  id: z.string().describe("Task ID"),
-  // action-specific params with .describe()
+const readSchema = z.object({
+  file_path: z.string().describe("File path to read"),
 });
 
-export class ListHandler {
-  readonly action = "list";
+type ReadArgs = z.infer<typeof readSchema>;
 
-  readonly help = `# plan list
+export class ReadHandler extends BaseActionHandler<ReadArgs, MyContext> {
+  readonly action = "read";
+  readonly schema = readSchema;
+
+  readonly help = `# my_tool read
 
 Description here.
 
 ## Usage
 \`\`\`
-plan(action: "list")
+my_tool(action: "read", file_path: "src/index.ts")
 \`\`\`
-
-## Parameters
-- **id** (required): Task ID
 `;
 
-  async execute(params: { rawParams: PlanRawParams; context: PlanActionContext }): Promise<ToolResult> {
-    const parseResult = paramsSchema.safeParse(params.rawParams);
-    if (!parseResult.success) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${parseResult.error.errors.map(e => e.message).join(", ")}\n\n${this.help}` }],
-        isError: true,
-      };
-    }
-    
-    const { id } = parseResult.data;
-    const { planReader } = params.context;
-    
-    // Business logic here
-    
-    return {
-      content: [{ type: "text" as const, text: "Success" }],
-    };
+  protected async doExecute(args: ReadArgs, context: MyContext): Promise<ToolResponse> {
+    // Business logic
+    return jsonResponse({ ... });
   }
 }
 ```
 
-## Router (index.ts)
+## Wrapping Existing Handlers
+
+When wrapping existing `BaseToolHandler`-based handlers:
 
 ```typescript
-import type { PlanRawParams, PlanActionHandler } from "../../types/index.js";
+function wrapHandler(params: {
+  action: string;
+  handler: { description: string; execute: (args: unknown) => Promise<ToolResponse> };
+}): RegistrableActionHandler<MyContext> {
+  const { action, handler } = params;
+  return {
+    action,
+    help: `# my_tool ${action}\n\n${handler.description}`,
+    execute(rawParams: unknown, _context: MyContext): Promise<ToolResponse> {
+      return handler.execute(rawParams);
+    },
+  };
+}
 
-const handlers: PlanActionHandler[] = [
-  new ListHandler(),
-  new ReadHandler(),
+registry.registerAll([
+  wrapHandler({ action: "read", handler: new ExistingReadHandler() }),
   // ...
-];
-
-function resolveHandler(action: string): PlanActionHandler | undefined {
-  return handlers.find((h) => h.action === action);
-}
-
-// In tool registration
-async (toolParams) => {
-  const { action, ...rest } = toolParams;
-  
-  if (!action) {
-    return showHelp();
-  }
-  
-  const handler = resolveHandler(action);
-  if (!handler) {
-    return { error: `Unknown action: ${action}` };
-  }
-  
-  const rawParams: PlanRawParams = { ...rest };
-  const context: PlanActionContext = { /* ... */ };
-  
-  return handler.execute({ rawParams, context });
-}
+]);
 ```
 
 ## Key Points
 
-1. **Instance-based**: Handlers are instantiated once in the handlers array
-2. **Self-describing**: Each handler has `action` and `help` properties
-3. **Single params object**: `execute({ rawParams, context })` - ESLint rule
-4. **Zod validation inside execute**: Each handler validates its own params
-5. **Resolver pattern**: No switch statement, use `handlers.find(h => h.action === action)`
-6. **Type-safe rawParams**: Use `PlanRawParams` type instead of `Record<string, unknown>`
+1. **ActionRegistry required**: Use ActionRegistry instead of array + find
+2. **rawParams is `unknown`**: Each handler validates with zod
+3. **BaseActionHandler**: Extend this for new handlers
+4. **wrapHandler**: Adapter pattern for existing handlers
