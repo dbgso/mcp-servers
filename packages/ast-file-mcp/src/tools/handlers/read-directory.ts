@@ -112,7 +112,7 @@ export class ReadDirectoryHandler extends BaseToolHandler<ReadDirectoryArgs> {
         adocHandler.readDirectory({ directory }),
       ]);
 
-      // eslint-disable-next-line custom/single-params-object -- sort callback
+       
       files = [...mdResult.files, ...adocResult.files].sort((a, b) =>
         a.filePath.localeCompare(b.filePath)
       );

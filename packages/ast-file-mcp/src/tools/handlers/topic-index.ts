@@ -150,7 +150,7 @@ export class TopicIndexHandler extends BaseToolHandler<TopicIndexArgs> {
       : topics;
 
     // Sort alphabetically by text for easier searching
-    // eslint-disable-next-line custom/single-params-object -- sort callback
+     
     filteredTopics.sort((a, b) => a.text.localeCompare(b.text));
 
     // Apply pagination
