@@ -31,7 +31,8 @@ plan(action: "read", id: "<task-id>")
 - Returns all task details including feedback history
 `;
 
-  protected async doExecute(args: ReadArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: ReadArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const { id } = args;
     const { planReader } = context;
 

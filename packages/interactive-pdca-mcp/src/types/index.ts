@@ -161,7 +161,7 @@ export type PlanRawParams = Record<string, unknown>;
 export interface PlanActionHandler {
   readonly action: string;
   readonly help: string;
-  execute(rawParams: unknown, context: PlanActionContext): Promise<import("mcp-shared").ToolResult>;
+  execute(params: { rawParams: unknown; context: PlanActionContext }): Promise<import("mcp-shared").ToolResult>;
 }
 
 // Legacy: Used by state machine (TransitionContext) for status transitions

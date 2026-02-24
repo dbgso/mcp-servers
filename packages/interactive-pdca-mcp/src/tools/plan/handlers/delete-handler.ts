@@ -38,7 +38,8 @@ plan(action: "delete", id: "<task-id>", cancel: true)  # cancel pending deletion
 - With cancel: true, cancels a pending deletion created by force: true
 `;
 
-  protected async doExecute(args: DeleteArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: DeleteArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const { id, force, cancel } = args;
     const { planReader, planReporter } = context;
 

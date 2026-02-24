@@ -37,7 +37,8 @@ plan(action: "request_changes", id: "<task-id>", comment: "<feedback>")
 - Transitions task status back to in_progress
 `;
 
-  protected async doExecute(args: RequestChangesArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: RequestChangesArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const { id, comment } = args;
     const { planReader, planReporter, feedbackReader } = context;
 

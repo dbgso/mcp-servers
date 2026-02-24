@@ -497,7 +497,7 @@ Self-review templates are available for this project. Would you like to set them
         test_target, test_results, coverage, feedback_addressed, prompt,
       };
 
-      const result = await handler.execute(rawParams, context);
+      const result = await handler.execute({ rawParams, context });
       return wrapResponse({ result, config });
     }
   );

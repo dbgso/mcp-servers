@@ -34,7 +34,8 @@ None required.
 - Shows ready-to-start and blocked tasks
 `;
 
-  protected async doExecute(_args: ListArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: ListArgs; context: PlanActionContext }) {
+    const { context } = params;
     const { planReader, planReporter } = context;
 
     // Update markdown files to ensure they're in sync

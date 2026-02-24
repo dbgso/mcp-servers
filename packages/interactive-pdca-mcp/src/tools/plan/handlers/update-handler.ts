@@ -70,7 +70,8 @@ plan(action: "update", id: "<task-id>", title?: "...", content?: "...", ...)
 - When adding dependencies, dependency_reason is required
 `;
 
-  protected async doExecute(args: UpdateArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: UpdateArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const {
       id,
       title,

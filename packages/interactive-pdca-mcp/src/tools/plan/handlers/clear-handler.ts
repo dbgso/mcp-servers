@@ -29,7 +29,8 @@ None required.
 - This action cannot be undone
 `;
 
-  protected async doExecute(_args: ClearArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: ClearArgs; context: PlanActionContext }) {
+    const { context } = params;
     const { planReader, planReporter } = context;
 
     const tasks = await planReader.listTasks();

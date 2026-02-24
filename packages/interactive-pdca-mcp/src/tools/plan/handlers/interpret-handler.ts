@@ -36,7 +36,8 @@ plan(action: "interpret", id: "<task-id>", feedback_id: "<feedback-id>", interpr
 - After interpretation, present to user for approval
 `;
 
-  protected async doExecute(args: InterpretArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: InterpretArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const { id, feedback_id, interpretation } = args;
     const { feedbackReader } = context;
 

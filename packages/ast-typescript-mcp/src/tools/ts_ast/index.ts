@@ -48,8 +48,8 @@ function wrapHandler(params: {
   return {
     action,
     help: `# ts_ast ${action}\n\n${handler.description}`,
-    execute(rawParams: unknown, _context: TsAstContext): Promise<ToolResponse> {
-      return handler.execute(rawParams);
+    execute(executeParams: { rawParams: unknown; context: TsAstContext }): Promise<ToolResponse> {
+      return handler.execute(executeParams.rawParams);
     },
   };
 }
@@ -171,6 +171,6 @@ export class TsAstHandler extends BaseToolHandler<TsAstArgs> {
     }
 
     // Execute action handler
-    return handler.execute(rest, {});
+    return handler.execute({ rawParams: rest, context: {} });
   }
 }

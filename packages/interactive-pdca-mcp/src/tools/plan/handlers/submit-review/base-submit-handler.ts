@@ -67,7 +67,8 @@ export abstract class BaseSubmitHandler implements PlanActionHandler {
    */
   protected abstract formatPhaseOutput(rawParams: PlanRawParams): string;
 
-  async execute(rawParams: unknown, context: PlanActionContext): Promise<ToolResult> {
+  async execute(executeParams: { rawParams: unknown; context: PlanActionContext }): Promise<ToolResult> {
+    const { rawParams, context } = executeParams;
     const params = rawParams as PlanRawParams;
 
     // Validate base params

@@ -43,7 +43,8 @@ plan(action: "start", id: "<task-id>", prompt: "<instructions>")
 - Prompt is saved and used as reference during submit
 `;
 
-  protected async doExecute(args: StartArgs, context: PlanActionContext) {
+  protected async doExecute(params: { args: StartArgs; context: PlanActionContext }) {
+    const { args, context } = params;
     const { id, prompt } = args;
     const { planReader, planReporter, planDir } = context;
 
