@@ -96,7 +96,7 @@ describe("ApproveHandler", () => {
 
     // Create draft file
     await addHandler.execute({
-      actionParams: { id, content: `# ${id}\n\nTest content for ${id}.` },
+      actionParams: { id, content: `# ${id}\n\nTest content for ${id}.`, description: `Test ${id}`, whenToUse: ["Testing"] },
       context,
     });
 
@@ -620,6 +620,8 @@ describe("ApproveHandler", () => {
         actionParams: {
           id,
           content: "# Title\n\nLine 1\nChanged Line 2\nLine 3\nChanged Line 4\nLine 5",
+          description: "Test diff",
+          whenToUse: ["Testing"],
         },
         context,
       });
@@ -656,6 +658,8 @@ describe("ApproveHandler", () => {
         actionParams: {
           id,
           content: "# Title\n\nLine 1\nLine 2",
+          description: "Test removed lines",
+          whenToUse: ["Testing"],
         },
         context,
       });
@@ -693,6 +697,8 @@ describe("ApproveHandler", () => {
         actionParams: {
           id,
           content: "# Title\n\nLine 1\nLine 2\nLine 3\nLine 4\nLine 5",
+          description: "Test added lines",
+          whenToUse: ["Testing"],
         },
         context,
       });

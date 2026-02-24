@@ -1,6 +1,6 @@
 ---
 description: TypeScript コードの大規模変更には ts_codemod を使う。sed や手動置換ではなく AST ベースの変換を行う。
-triggers:
+whenToUse:
   - TypeScript ファイルの大規模リファクタリング
   - 関数シグネチャの一括変更
   - パターンマッチによる複数箇所の置換

@@ -41,7 +41,7 @@ coding__testing         ← About testing rules
 - \`draft()\` - Show this help
 - \`draft(action: "list")\` - List all drafts
 - \`draft(action: "read", id: "<id>")\` - Read a draft
-- \`draft(action: "add", id: "<id>", content: "<content>")\` - Create new draft
+- \`draft(action: "add", id: "<id>", content: "<content>", description: "...", whenToUse: [...])\` - Create new draft (all params required)
 - \`draft(action: "update", id: "<id>", content: "<content>")\` - Update existing draft (same topic only!)
 - \`draft(action: "delete", id: "<id>")\` - Delete a draft
 - \`draft(action: "rename", id: "<oldId>", newId: "<newId>")\` - Rename/move a draft (safe reorganization)
@@ -78,6 +78,21 @@ User then says: "Always write unit tests for services"
 draft(action: "add", id: "coding__testing", content: "# Testing Rules\\n\\nService classes must have unit tests.")
 \`\`\`
 Note: This is a NEW topic, so use "add" not "update"!
+
+## Metadata (Frontmatter) - REQUIRED
+
+All drafts must include metadata:
+- **description** (required): Brief summary of the document
+- **whenToUse** (required): List of situations when to reference this document
+
+Example:
+\`\`\`
+draft(action: "add", id: "coding__error-handling",
+  description: "Error handling patterns for async operations",
+  whenToUse: ["Writing try-catch blocks", "Handling Promise rejections"],
+  content: "# Error Handling\\n\\nAlways use try-catch..."
+)
+\`\`\`
 
 Drafts are stored under \`_mcp_drafts/\` directory. Use \`apply\` tool to promote to confirmed docs.
 
@@ -126,6 +141,14 @@ export function registerDraftTool(params: {
           .string()
           .optional()
           .describe("Markdown content for add/update actions"),
+        description: z
+          .string()
+          .optional()
+          .describe("Brief description of the document (REQUIRED for add action)"),
+        whenToUse: z
+          .array(z.string())
+          .optional()
+          .describe("List of situations when to use this document (REQUIRED for add action)"),
         newId: z
           .string()
           .optional()
@@ -152,7 +175,7 @@ export function registerDraftTool(params: {
           .describe("Skip warning when other drafts are also ready for approval"),
       },
     },
-    async ({ help, action, id, ids, content, newId, targetId, approvalToken, notes, confirmed, force }) => {
+    async ({ help, action, id, ids, content, description, whenToUse, newId, targetId, approvalToken, notes, confirmed, force }) => {
       if (help || !action) {
         return wrapResponse({
           result: {
@@ -176,7 +199,7 @@ export function registerDraftTool(params: {
       }
 
       const result = await handler.execute({
-        actionParams: { id, ids, content, newId, targetId, approvalToken, notes, confirmed, force },
+        actionParams: { id, ids, content, description, whenToUse, newId, targetId, approvalToken, notes, confirmed, force },
         context: { reader, config },
       });
       return wrapResponse({ result, config });

@@ -12,7 +12,7 @@ export interface MarkdownSummary {
 
 export interface DocumentFrontmatter {
   description?: string;
-  triggers?: string[];
+  whenToUse?: string[];
 }
 
 // Draft tool types
@@ -20,6 +20,8 @@ export interface DraftActionParams {
   id?: string;
   ids?: string;
   content?: string;
+  description?: string;
+  whenToUse?: string[];
   newId?: string;
   targetId?: string;
   approvalToken?: string;

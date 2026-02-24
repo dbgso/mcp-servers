@@ -49,7 +49,7 @@ module.exports = [
       '@typescript-eslint/no-non-null-assertion': 'error',
 
       // 一般的なルール
-      'prefer-const': 'warn',
+      'prefer-const': 'error',
     },
   },
 

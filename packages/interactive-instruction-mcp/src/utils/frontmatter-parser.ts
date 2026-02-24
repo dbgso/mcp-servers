@@ -3,6 +3,9 @@ import type { DocumentFrontmatter } from "../types/index.js";
 // Standard frontmatter at file start
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---/;
 
+// Frontmatter key for "when to use" field
+const WHEN_TO_USE_KEY = "whenToUse" as const;
+
 /**
  * Parse YAML frontmatter from markdown content
  * Frontmatter must be at the start of the file
@@ -37,20 +40,20 @@ export function parseFrontmatter(content: string): DocumentFrontmatter {
       const value = trimmed.slice(colonIndex + 1).trim();
 
       // Save previous array if exists
-      if (currentKey === "triggers" && currentArray) {
-        result.triggers = currentArray;
+      if (currentKey === WHEN_TO_USE_KEY && currentArray) {
+        result.whenToUse = currentArray;
       }
 
       if (key === "description") {
         result.description = value;
         currentKey = null;
         currentArray = null;
-      } else if (key === "triggers") {
-        currentKey = "triggers";
+      } else if (key === WHEN_TO_USE_KEY) {
+        currentKey = WHEN_TO_USE_KEY;
         if (value) {
-          // Inline array syntax: triggers: [a, b, c]
+          // Inline array syntax: whenToUse: [a, b, c]
           if (value.startsWith("[") && value.endsWith("]")) {
-            result.triggers = value
+            result.whenToUse = value
               .slice(1, -1)
               .split(",")
               .map((s) => s.trim())
@@ -73,8 +76,8 @@ export function parseFrontmatter(content: string): DocumentFrontmatter {
   }
 
   // Save final array if exists
-  if (currentKey === "triggers" && currentArray) {
-    result.triggers = currentArray;
+  if (currentKey === WHEN_TO_USE_KEY && currentArray) {
+    result.whenToUse = currentArray;
   }
 
   return result;
@@ -110,10 +113,10 @@ function serializeFrontmatter(frontmatter: DocumentFrontmatter): string {
     lines.push(`description: ${frontmatter.description}`);
   }
 
-  if (frontmatter.triggers && frontmatter.triggers.length > 0) {
-    lines.push("triggers:");
-    for (const trigger of frontmatter.triggers) {
-      lines.push(`  - ${trigger}`);
+  if (frontmatter.whenToUse && frontmatter.whenToUse.length > 0) {
+    lines.push(`${WHEN_TO_USE_KEY}:`);
+    for (const item of frontmatter.whenToUse) {
+      lines.push(`  - ${item}`);
     }
   }
 
