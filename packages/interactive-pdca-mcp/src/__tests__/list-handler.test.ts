@@ -38,7 +38,7 @@ describe("ListHandler", () => {
     it("should call planReporter.updateAll() to sync markdown files", async () => {
       const rawParams: PlanRawParams = {};
 
-      await handler.execute(rawParams, mockContext);
+      await handler.execute({ rawParams, context: mockContext });
 
       expect(mockPlanReporter.updateAll).toHaveBeenCalledTimes(1);
     });
@@ -56,7 +56,7 @@ describe("ListHandler", () => {
       });
 
       const rawParams: PlanRawParams = {};
-      await handler.execute(rawParams, mockContext);
+      await handler.execute({ rawParams, context: mockContext });
 
       expect(callOrder).toEqual(["updateAll", "listTasks"]);
     });
@@ -65,7 +65,7 @@ describe("ListHandler", () => {
       vi.mocked(mockPlanReader.listTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.content[0]).toMatchObject({
         type: "text",
@@ -90,7 +90,7 @@ describe("ListHandler", () => {
       vi.mocked(mockPlanReader.formatTaskList).mockReturnValue("| task-1 | Test Task |");
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.content[0]).toMatchObject({
         type: "text",
@@ -140,7 +140,7 @@ describe("ListHandler", () => {
       vi.mocked(mockPlanReader.formatTaskList).mockReturnValue("");
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("## Pending Review");
@@ -169,7 +169,7 @@ describe("ListHandler", () => {
       vi.mocked(mockPlanReader.formatTaskList).mockReturnValue("");
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("## In Progress");
@@ -195,7 +195,7 @@ describe("ListHandler", () => {
       vi.mocked(mockPlanReader.formatTaskList).mockReturnValue("");
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("## Blocked");
@@ -221,7 +221,7 @@ describe("ListHandler", () => {
       vi.mocked(mockPlanReader.formatTaskList).mockReturnValue("");
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("## Ready to Start");
@@ -231,7 +231,7 @@ describe("ListHandler", () => {
     it("should return error for invalid params", async () => {
       // Pass null to trigger zod validation error
       const rawParams = null as unknown as PlanRawParams;
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0]).toMatchObject({
@@ -278,7 +278,7 @@ describe("ListHandler", () => {
       vi.mocked(mockPlanReader.formatTaskList).mockReturnValue("");
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("Deliverables: none");

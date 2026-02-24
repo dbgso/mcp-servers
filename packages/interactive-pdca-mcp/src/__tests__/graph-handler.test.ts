@@ -42,7 +42,7 @@ describe("GraphHandler", () => {
       vi.mocked(mockPlanReader.listTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.content[0]).toMatchObject({
         type: "text",
@@ -59,7 +59,7 @@ describe("GraphHandler", () => {
       vi.mocked(mockPlanReader.getBlockedTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("# Task Graph");
@@ -79,7 +79,7 @@ describe("GraphHandler", () => {
       vi.mocked(mockPlanReader.getBlockedTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("parallel_task([Parallel Task");
@@ -93,7 +93,7 @@ describe("GraphHandler", () => {
       vi.mocked(mockPlanReader.getBlockedTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("Done Task ✓");
@@ -107,7 +107,7 @@ describe("GraphHandler", () => {
       vi.mocked(mockPlanReader.getBlockedTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("WIP Task ●");
@@ -121,7 +121,7 @@ describe("GraphHandler", () => {
       vi.mocked(mockPlanReader.getBlockedTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("Review Task ⏳");
@@ -135,7 +135,7 @@ describe("GraphHandler", () => {
       vi.mocked(mockPlanReader.getBlockedTasks).mockResolvedValue(mockTasks);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("Blocked Task ◇");
@@ -149,7 +149,7 @@ describe("GraphHandler", () => {
       vi.mocked(mockPlanReader.getBlockedTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("Skipped Task ⊘");
@@ -166,7 +166,7 @@ describe("GraphHandler", () => {
       vi.mocked(mockPlanReader.getBlockedTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("style completed_task fill:#90EE90,stroke:#228B22");
@@ -177,7 +177,7 @@ describe("GraphHandler", () => {
 
     it("should return error for invalid params", async () => {
       const rawParams = null as unknown as PlanRawParams;
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");

@@ -106,7 +106,7 @@ describe("PlanSubmitHandler", () => {
   describe("execute", () => {
     it("should return error for missing base params", async () => {
       const rawParams: PlanRawParams = { id: "task-1__plan" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");
@@ -117,7 +117,7 @@ describe("PlanSubmitHandler", () => {
         ...createBaseParams("plan"),
         self_review_ref: "wrong-ref",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Invalid self_review_ref");
@@ -126,7 +126,7 @@ describe("PlanSubmitHandler", () => {
     it("should return error for missing phase-specific fields", async () => {
       const rawParams = createBaseParams("plan");
       // Missing findings and sources
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("findings");
@@ -140,7 +140,7 @@ describe("PlanSubmitHandler", () => {
         findings: "Found the issue",
         sources: ["src/main.ts"],
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("not found");
@@ -155,7 +155,7 @@ describe("PlanSubmitHandler", () => {
         findings: "Found the issue",
         sources: ["src/main.ts"],
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Cannot submit for review");
@@ -172,7 +172,7 @@ describe("PlanSubmitHandler", () => {
         findings: "Found the issue",
         sources: ["src/main.ts"],
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Use submit_do instead");
@@ -184,7 +184,7 @@ describe("PlanSubmitHandler", () => {
         findings: "Found the issue in line 42",
         sources: ["src/main.ts:42", "docs/spec.md"],
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("ready for self-review");
@@ -205,7 +205,7 @@ describe("PlanSubmitHandler", () => {
         findings: "Found the issue",
         sources: ["src/main.ts"],
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Failed to update");
@@ -271,7 +271,7 @@ describe("DoSubmitHandler", () => {
   describe("execute", () => {
     it("should return error for missing phase-specific fields", async () => {
       const rawParams = createBaseParams("do");
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("changes");
@@ -283,7 +283,7 @@ describe("DoSubmitHandler", () => {
         changes: [],
         design_decisions: "Used pattern X",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("changes");
@@ -297,7 +297,7 @@ describe("DoSubmitHandler", () => {
         ],
         design_decisions: "Used early return pattern for clarity",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("ready for self-review");
@@ -365,7 +365,7 @@ describe("CheckSubmitHandler", () => {
   describe("execute", () => {
     it("should return error for missing phase-specific fields", async () => {
       const rawParams = createBaseParams("check");
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
     });
@@ -377,7 +377,7 @@ describe("CheckSubmitHandler", () => {
         test_results: "15 tests passed, 0 failed",
         coverage: "95% statement coverage",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("ready for self-review");
@@ -446,7 +446,7 @@ describe("ActSubmitHandler", () => {
   describe("execute", () => {
     it("should return error for missing phase-specific fields", async () => {
       const rawParams = createBaseParams("act");
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
     });
@@ -459,7 +459,7 @@ describe("ActSubmitHandler", () => {
         ],
         feedback_addressed: "Extracted validation to reusable helper function",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("ready for self-review");

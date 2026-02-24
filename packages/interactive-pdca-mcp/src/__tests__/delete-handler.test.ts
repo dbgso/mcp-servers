@@ -47,7 +47,7 @@ describe("DeleteHandler", () => {
   describe("execute", () => {
     it("should return error for missing id", async () => {
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");
@@ -57,7 +57,7 @@ describe("DeleteHandler", () => {
       vi.mocked(mockPlanReader.deleteTask).mockResolvedValue({ success: true });
 
       const rawParams: PlanRawParams = { id: "task-1" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.content[0].text).toContain('Task "task-1" deleted successfully');
       expect(mockPlanReader.deleteTask).toHaveBeenCalledWith({ id: "task-1", force: undefined });
@@ -71,7 +71,7 @@ describe("DeleteHandler", () => {
       });
 
       const rawParams: PlanRawParams = { id: "task-1" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error: Task has dependents");
@@ -82,7 +82,7 @@ describe("DeleteHandler", () => {
         vi.mocked(mockPlanReader.cancelPendingDeletion).mockResolvedValue({ success: true });
 
         const rawParams: PlanRawParams = { id: "task-1", cancel: true };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         expect(result.content[0].text).toContain('Pending deletion for task "task-1" cancelled');
         expect(mockPlanReader.cancelPendingDeletion).toHaveBeenCalledWith("task-1");
@@ -95,7 +95,7 @@ describe("DeleteHandler", () => {
         });
 
         const rawParams: PlanRawParams = { id: "task-1", cancel: true };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain("Error: No pending deletion found");
@@ -110,7 +110,7 @@ describe("DeleteHandler", () => {
         });
 
         const rawParams: PlanRawParams = { id: "task-1", force: true };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         const text = result.content[0].text;
         expect(text).toContain("Cascade deletion pending approval");
@@ -130,7 +130,7 @@ describe("DeleteHandler", () => {
         });
 
         const rawParams: PlanRawParams = { id: "task-1" };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         const text = result.content[0].text;
         expect(text).toContain("Deleted 3 tasks");
@@ -142,7 +142,7 @@ describe("DeleteHandler", () => {
 
     it("should return error for invalid params", async () => {
       const rawParams = null as unknown as PlanRawParams;
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");

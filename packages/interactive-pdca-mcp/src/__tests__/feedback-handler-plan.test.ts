@@ -45,7 +45,7 @@ describe("FeedbackHandler (plan)", () => {
   describe("execute", () => {
     it("should return error for missing id", async () => {
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");
@@ -55,7 +55,7 @@ describe("FeedbackHandler (plan)", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(null);
 
       const rawParams: PlanRawParams = { id: "non-existent" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Task "non-existent" not found');
@@ -86,7 +86,7 @@ describe("FeedbackHandler (plan)", () => {
         vi.mocked(mockFeedbackReader.listFeedback).mockResolvedValue([]);
 
         const rawParams: PlanRawParams = { id: "task-1" };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         expect(result.content[0].text).toContain('No feedback found for task "task-1"');
       });
@@ -147,7 +147,7 @@ describe("FeedbackHandler (plan)", () => {
         vi.mocked(mockFeedbackReader.listFeedback).mockResolvedValue(feedbackList);
 
         const rawParams: PlanRawParams = { id: "task-1" };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         const text = result.content[0].text;
         expect(text).toContain("# Feedback for: Test Task");
@@ -200,7 +200,7 @@ describe("FeedbackHandler (plan)", () => {
         vi.mocked(mockFeedbackReader.listFeedback).mockResolvedValue(feedbackList);
 
         const rawParams: PlanRawParams = { id: "task-1" };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         const text = result.content[0].text;
         expect(text).toContain("A".repeat(80) + "...");
@@ -232,7 +232,7 @@ describe("FeedbackHandler (plan)", () => {
         vi.mocked(mockFeedbackReader.getFeedback).mockResolvedValue(null);
 
         const rawParams: PlanRawParams = { id: "task-1", feedback_id: "fb-999" };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('Feedback "fb-999" not found');
@@ -272,7 +272,7 @@ describe("FeedbackHandler (plan)", () => {
         vi.mocked(mockFeedbackReader.getFeedback).mockResolvedValue(feedback);
 
         const rawParams: PlanRawParams = { id: "task-1", feedback_id: "fb-001" };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         const text = result.content[0].text;
         expect(text).toContain("# Feedback: fb-001");
@@ -318,7 +318,7 @@ describe("FeedbackHandler (plan)", () => {
         vi.mocked(mockFeedbackReader.getFeedback).mockResolvedValue(feedback);
 
         const rawParams: PlanRawParams = { id: "task-1", feedback_id: "fb-001" };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         const text = result.content[0].text;
         expect(text).toContain("## AI Interpretation");
@@ -361,7 +361,7 @@ describe("FeedbackHandler (plan)", () => {
         vi.mocked(mockFeedbackReader.getFeedback).mockResolvedValue(feedback);
 
         const rawParams: PlanRawParams = { id: "task-1", feedback_id: "fb-001" };
-        const result = await handler.execute(rawParams, mockContext);
+        const result = await handler.execute({ rawParams, context: mockContext });
 
         const text = result.content[0].text;
         expect(text).toContain("✅ CONFIRMED");
@@ -371,7 +371,7 @@ describe("FeedbackHandler (plan)", () => {
 
     it("should return error for invalid params", async () => {
       const rawParams = null as unknown as PlanRawParams;
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");
