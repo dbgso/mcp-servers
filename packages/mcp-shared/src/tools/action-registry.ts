@@ -36,8 +36,12 @@ export class ActionRegistry<TContext = unknown> {
 
   /**
    * Register an action handler.
+   * @throws Error if handler for this action is already registered
    */
   register(handler: RegistrableActionHandler<TContext>): this {
+    if (this.handlers.has(handler.action)) {
+      throw new Error(`Handler for action "${handler.action}" is already registered`);
+    }
     this.handlers.set(handler.action, handler);
     return this;
   }

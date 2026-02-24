@@ -53,21 +53,16 @@ module.exports = [
     },
   },
 
-  // 新しいコードにのみ single-params-object を適用
-  // plan tool (2024-02-14以降追加)
-  // mcp-shared, ast-file-mcp (2024-02-21以降追加)
+  // single-params-object を全パッケージに適用
   {
     files: [
-      'packages/interactive-instruction-mcp/src/tools/plan/**/*.ts',
-      'packages/interactive-instruction-mcp/src/services/plan-reader.ts',
-      'packages/mcp-shared/src/**/*.ts',
-      'packages/ast-file-mcp/src/**/*.ts',
+      'packages/*/src/**/*.ts',
     ],
     rules: {
       'custom/single-params-object': ['error', {
         maxParams: 1,
         ignoreConstructors: true,
-        ignoreArrowFunctions: false,
+        ignoreArrowFunctions: true,  // .map((a, b) => ...) 等を除外
       }],
     },
   },
