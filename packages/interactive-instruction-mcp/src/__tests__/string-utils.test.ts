@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { trimString } from "../utils/string-utils.js";
+import { trimString, formatDocumentListItem } from "../utils/string-utils.js";
 
 describe("trimString", () => {
   it.each<{
@@ -58,5 +58,46 @@ describe("trimString", () => {
   ])("$name", ({ value, collapseSpaces, expected }) => {
     const result = trimString({ value, collapseSpaces });
     expect(result).toBe(expected);
+  });
+});
+
+describe("formatDocumentListItem", () => {
+  it("formats document with description only", () => {
+    const result = formatDocumentListItem({
+      id: "coding__test",
+      description: "Test description",
+    });
+    expect(result).toBe("- **coding__test**: Test description");
+  });
+
+  it("formats document with description and whenToUse", () => {
+    const result = formatDocumentListItem({
+      id: "coding__test",
+      description: "Test description",
+      whenToUse: ["Situation A", "Situation B"],
+    });
+    expect(result).toBe(
+      "- **coding__test**: Test description\n  - When to use: Situation A, Situation B"
+    );
+  });
+
+  it("formats document with empty whenToUse array", () => {
+    const result = formatDocumentListItem({
+      id: "coding__test",
+      description: "Test description",
+      whenToUse: [],
+    });
+    expect(result).toBe("- **coding__test**: Test description");
+  });
+
+  it("formats document with single whenToUse item", () => {
+    const result = formatDocumentListItem({
+      id: "coding__test",
+      description: "Test description",
+      whenToUse: ["Only one situation"],
+    });
+    expect(result).toBe(
+      "- **coding__test**: Test description\n  - When to use: Only one situation"
+    );
   });
 });

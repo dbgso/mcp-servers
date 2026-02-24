@@ -39,7 +39,7 @@ describe("ReadOutputHandler", () => {
   describe("execute", () => {
     it("should return error for missing id", async () => {
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");
@@ -49,7 +49,7 @@ describe("ReadOutputHandler", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(null);
 
       const rawParams: PlanRawParams = { id: "non-existent" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Task "non-existent" not found');
@@ -78,7 +78,7 @@ describe("ReadOutputHandler", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(mockTask);
 
       const rawParams: PlanRawParams = { id: "task-1" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("# Task Output: Test Task");
@@ -120,7 +120,7 @@ describe("ReadOutputHandler", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(mockTask);
 
       const rawParams: PlanRawParams = { id: "task-1" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("# Task Output: Research Task");
@@ -173,7 +173,7 @@ describe("ReadOutputHandler", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(mockTask);
 
       const rawParams: PlanRawParams = { id: "task-2" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("## Changes");
@@ -221,7 +221,7 @@ describe("ReadOutputHandler", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(mockTask);
 
       const rawParams: PlanRawParams = { id: "task-3" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("## Test Target");
@@ -269,7 +269,7 @@ describe("ReadOutputHandler", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(mockTask);
 
       const rawParams: PlanRawParams = { id: "task-4" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
       expect(text).toContain("## Changes");
@@ -280,7 +280,7 @@ describe("ReadOutputHandler", () => {
 
     it("should return error for invalid params", async () => {
       const rawParams = null as unknown as PlanRawParams;
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");

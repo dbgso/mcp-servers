@@ -47,7 +47,7 @@ describe("ClearHandler", () => {
       vi.mocked(mockPlanReader.listTasks).mockResolvedValue([]);
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.content[0]).toMatchObject({
         type: "text",
@@ -65,7 +65,7 @@ describe("ClearHandler", () => {
       vi.mocked(mockPlanReader.clearAllTasks).mockResolvedValue({ success: true, count: 2 });
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.content[0]).toMatchObject({
         type: "text",
@@ -83,7 +83,7 @@ describe("ClearHandler", () => {
       vi.mocked(mockPlanReader.clearAllTasks).mockResolvedValue({ success: false, error: "File system error" });
 
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0]).toMatchObject({
@@ -94,7 +94,7 @@ describe("ClearHandler", () => {
 
     it("should return error for invalid params", async () => {
       const rawParams = null as unknown as PlanRawParams;
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");

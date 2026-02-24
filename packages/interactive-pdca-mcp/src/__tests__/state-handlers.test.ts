@@ -68,7 +68,7 @@ describe("BlockHandler", () => {
   describe("execute", () => {
     it("should return error for missing params", async () => {
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");
@@ -78,7 +78,7 @@ describe("BlockHandler", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(null);
 
       const rawParams: PlanRawParams = { id: "task-1", reason: "Blocked due to X" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("not found");
@@ -89,7 +89,7 @@ describe("BlockHandler", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(mockTask);
 
       const rawParams: PlanRawParams = { id: "task-1", reason: "Blocked due to X" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Cannot block a completed task");
@@ -100,7 +100,7 @@ describe("BlockHandler", () => {
       vi.mocked(mockPlanReader.getTask).mockResolvedValue(mockTask);
 
       const rawParams: PlanRawParams = { id: "task-1", reason: "Blocked due to X" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Cannot block a skipped task");
@@ -108,7 +108,7 @@ describe("BlockHandler", () => {
 
     it("should block task successfully", async () => {
       const rawParams: PlanRawParams = { id: "task-1", reason: "Waiting for API access" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("marked as blocked");
@@ -128,7 +128,7 @@ describe("BlockHandler", () => {
       });
 
       const rawParams: PlanRawParams = { id: "task-1", reason: "Blocked" };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Failed to update");
@@ -198,7 +198,7 @@ describe("RequestChangesHandler", () => {
   describe("execute", () => {
     it("should return error for missing params", async () => {
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
     });
@@ -211,7 +211,7 @@ describe("RequestChangesHandler", () => {
         comment: "Please fix X",
         decision: "adopted",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("not found");
@@ -226,7 +226,7 @@ describe("RequestChangesHandler", () => {
         comment: "Please fix X",
         decision: "adopted",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Only pending_review tasks");
@@ -238,7 +238,7 @@ describe("RequestChangesHandler", () => {
         comment: "Please add error handling",
         decision: "adopted",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("Changes requested");
@@ -261,7 +261,7 @@ describe("RequestChangesHandler", () => {
         comment: "Please fix",
         decision: "adopted",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Failed to create feedback");
@@ -278,7 +278,7 @@ describe("RequestChangesHandler", () => {
         comment: "Please fix",
         decision: "adopted",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Failed to update status");
@@ -360,7 +360,7 @@ describe("InterpretHandler", () => {
   describe("execute", () => {
     it("should return error for missing params", async () => {
       const rawParams: PlanRawParams = {};
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
     });
@@ -373,7 +373,7 @@ describe("InterpretHandler", () => {
         feedback_id: "fb-001",
         interpretation: "Will add null check",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("not found");
@@ -388,7 +388,7 @@ describe("InterpretHandler", () => {
         feedback_id: "fb-001",
         interpretation: "Will add null check",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("already confirmed");
@@ -400,7 +400,7 @@ describe("InterpretHandler", () => {
         feedback_id: "fb-001",
         interpretation: "Will add null check to prevent crash",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("Interpretation added");
@@ -424,7 +424,7 @@ describe("InterpretHandler", () => {
         feedback_id: "fb-001",
         interpretation: "Will fix it",
       };
-      const result = await handler.execute(rawParams, mockContext);
+      const result = await handler.execute({ rawParams, context: mockContext });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Feedback not found");
