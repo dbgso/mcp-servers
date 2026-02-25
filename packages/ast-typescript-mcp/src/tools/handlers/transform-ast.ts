@@ -123,11 +123,32 @@ type TransformAstArgs = z.infer<typeof TransformAstSchema>;
 
 export class TransformAstHandler extends BaseToolHandler<TransformAstArgs> {
   readonly name = "transform_ast";
-  readonly description =
-    "AST-based code transformation. Two modes:\n" +
-    "1. Query-based: Find patterns with AST query and replace using template (${capture} syntax)\n" +
-    "2. Preset-based: class_to_object transformation\n" +
-    "Supports automatic import insertion. Dry-run by default.";
+  readonly description = `AST-based code transformation with pattern matching.
+
+## Can Do
+- Find pattern and replace: \`query\` + \`replacement\`
+- Use captures in replacement: \`\${errorVar}\`
+- Auto-add imports: \`add_imports\`
+- Class to object transformation: \`preset: "class_to_object"\`
+
+## Cannot Do
+- Complex multi-node transformations
+- Preserve exact whitespace/formatting
+- Cross-file transformations in one call (use batch)
+
+## Query-based Example
+\`\`\`json
+ts_ast(action: "transform",
+  path: "src/",
+  query_preset: "instanceof_error_ternary",
+  replacement: "getErrorMessage(\${errorVar})",
+  add_imports: [{ from: "mcp-shared", named: ["getErrorMessage"] }],
+  dry_run: false)
+\`\`\`
+Transforms: \`e instanceof Error ? e.message : String(e)\` → \`getErrorMessage(e)\`
+
+## Presets
+instanceof, console_log, await_then, non_null_assertion, type_assertion, any_type, instanceof_error_ternary`;
   readonly schema = TransformAstSchema;
 
   readonly inputSchema = {

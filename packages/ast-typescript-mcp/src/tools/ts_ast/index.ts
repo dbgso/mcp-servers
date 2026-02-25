@@ -90,22 +90,84 @@ registry.registerAll([
 // ─── Help ────────────────────────────────────────────────────────────────────
 
 function generateHelp(): string {
-  const actionList = registry.getActions().map((a) => `- **${a}**`).join("\n");
   return `# ts_ast
 
-TypeScript AST operations tool.
+TypeScript AST operations - structural code search and transformation.
 
-## Actions
-${actionList}
+## When to Use (vs grep)
+
+| Task | grep | ts_ast |
+|------|------|--------|
+| Find text "execute" | ✓ | - |
+| Find function calls to \`execute\` | ✗ | ✓ query |
+| Find function definitions named \`*Handler\` | ✗ | ✓ query |
+| Rename symbol project-wide | ✗ | ✓ rename |
+| Transform call site arguments | ✗ | ✓ transform_call_site |
+| Find unused code | ✗ | ✓ dead_code |
+
+**Use ts_ast when you need structure-aware operations.**
+
+## Action Categories
+
+### Search & Analysis
+- **query** - AST pattern search (e.g., find all CallExpressions)
+- **find_blocks** - Find code blocks by pattern
+- **references** - Find all references to a symbol
+- **definition** - Go to definition
+- **call_graph** - Analyze function call relationships
+- **dead_code** - Find unused exports
+- **type_check** - Run TypeScript type checker
+
+### Transform
+- **transform** - Pattern-based AST transformation
+- **transform_call_site** - Transform function call arguments
+- **rename** - Rename symbol across project
+- **remove_nodes** - Remove AST nodes by pattern
+- **remove_unused_imports** - Clean up imports
+
+### Batch Operations
+- **batch** - Execute multiple actions atomically
+
+### Structure
+- **read** - Read file structure (functions, classes, etc.)
+- **write** - Write/modify code structure
+- **dependency_graph** - Module dependency analysis
+- **monorepo_graph** - Monorepo package relationships
+
+## Examples
+
+### Find all function calls to \`execute\`
+\`\`\`
+ts_ast(action: "query", pattern: "CallExpression[expression.name.text=execute]", path: "src/")
+\`\`\`
+
+### Rename symbol
+\`\`\`
+ts_ast(action: "rename", file: "src/foo.ts", line: 10, column: 5, newName: "newSymbolName")
+\`\`\`
+
+### Transform call site (e.g., add object wrapper)
+\`\`\`
+ts_ast(action: "transform_call_site",
+  file: "src/test.ts",
+  callee: "handler.execute",
+  transform: "({ rawParams: $1, context: $2 })")
+\`\`\`
+
+### Batch transform multiple files
+\`\`\`
+ts_ast(action: "batch", operations: [
+  { action: "transform_call_site", file: "a.ts", callee: "foo", transform: "..." },
+  { action: "transform_call_site", file: "b.ts", callee: "foo", transform: "..." }
+])
+\`\`\`
 
 ## Usage
 \`\`\`
 ts_ast(action: "<action>", ...)
 ts_ast(help: true)
-ts_ast(action: "<action>", help: true)
+ts_ast(action: "<action>", help: true)  # Action-specific help
 \`\`\`
-
-Use \`help: true\` with an action to see detailed help for that action.
 `;
 }
 
@@ -122,7 +184,7 @@ type TsAstArgs = z.infer<typeof TsAstSchema>;
 
 export class TsAstHandler extends BaseToolHandler<TsAstArgs> {
   readonly name = "ts_ast";
-  readonly description = "TypeScript AST operations: read, query, transform, and more. Call with help:true for usage.";
+  readonly description = "TypeScript structural code search & transform. Use instead of grep for: finding function calls/definitions, renaming symbols, transforming call sites. Call with help:true for examples.";
   readonly schema = TsAstSchema;
 
   readonly inputSchema = {
@@ -130,11 +192,11 @@ export class TsAstHandler extends BaseToolHandler<TsAstArgs> {
     properties: {
       action: {
         type: "string",
-        description: "Action to perform (read, query, transform, etc.)",
+        description: "Action: query (AST search), transform (AST transform), transform_call_site (call arg transform), rename (symbol rename), batch (multi-op), references, definition, dead_code, etc.",
       },
       help: {
         type: "boolean",
-        description: "Show help. Use with action to see action-specific help.",
+        description: "Show help with examples. Use with action for action-specific help.",
       },
     },
   };

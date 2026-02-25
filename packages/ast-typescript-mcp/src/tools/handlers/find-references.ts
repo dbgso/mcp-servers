@@ -19,7 +19,27 @@ type FindReferencesArgs = z.infer<typeof FindReferencesSchema>;
 
 export class FindReferencesHandler extends BaseToolHandler<FindReferencesArgs> {
   readonly name = "find_references";
-  readonly description = "Find all references to a symbol. Uses git grep for fast file search, then parses candidates to verify actual references. Returns file paths, lines, and context of each reference.";
+  readonly description = `Find all references to a symbol across project.
+
+## Can Do
+- Find all usages of function/class/variable
+- Returns file, line, column for each reference
+- Works with imports/exports
+- Monorepo optimization: scope_to_dependents
+
+## Cannot Do
+- Find string occurrences (use grep)
+- Find in comments (use grep)
+
+## Use Case: Batch Call Site Transform
+1. \`ts_ast(action: "references", file_path: "src/foo.ts", line: 10, column: 5)\`
+2. Use returned locations with \`batch\` + \`transform_call_site\`
+
+## Example
+\`\`\`json
+ts_ast(action: "references", file_path: "src/handlers/base.ts", line: 15, column: 10)
+\`\`\`
+Returns: [{ file, line, column, context }, ...]`;
   readonly schema = FindReferencesSchema;
 
   readonly inputSchema = {

@@ -130,10 +130,35 @@ type QueryAstArgs = z.infer<typeof QueryAstSchema>;
 
 export class QueryAstHandler extends BaseToolHandler<QueryAstArgs> {
   readonly name = "query_ast";
-  readonly description =
-    "Search for AST patterns in TypeScript files. Use presets for common patterns " +
-    "(instanceof, console_log, await_then, non_null_assertion, type_assertion, any_type) " +
-    "or provide a custom query. Returns matching locations with captured values.";
+  readonly description = `AST pattern search in TypeScript files.
+
+## Can Do
+- Find function calls: \`{ kind: "CallExpression", expression: { $text: "^myFunc$" } }\`
+- Find instanceof checks: \`preset: "instanceof"\`
+- Find console.log: \`preset: "console_log"\`
+- Match by node kind + text pattern
+- Capture matched nodes: \`$capture: "name"\`
+- Search directory recursively
+
+## Cannot Do
+- Filter by argument count (e.g., calls with exactly 2 args)
+- Match array indices (e.g., arguments[0])
+- Complex boolean logic (AND/OR conditions)
+
+## Presets
+instanceof, console_log, await_then, non_null_assertion, type_assertion, any_type
+
+## Custom Query Example
+\`\`\`json
+{
+  "kind": "CallExpression",
+  "expression": {
+    "kind": "PropertyAccessExpression",
+    "name": { "$text": "^execute$" }
+  }
+}
+\`\`\`
+Finds: obj.execute(...), handler.execute(...)`;
   readonly schema = QueryAstSchema;
 
   readonly inputSchema = {

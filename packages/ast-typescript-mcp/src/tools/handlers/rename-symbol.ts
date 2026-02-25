@@ -16,7 +16,27 @@ type RenameSymbolArgs = z.infer<typeof RenameSymbolSchema>;
 
 export class RenameSymbolHandler extends BaseToolHandler<RenameSymbolArgs> {
   readonly name = "rename_symbol";
-  readonly description = "Rename a symbol across all files. By default, runs in dry-run mode (no files modified). Set dry_run=false to actually perform the rename.";
+  readonly description = `Rename a symbol across all files in project.
+
+## Can Do
+- Rename variables, functions, classes, interfaces
+- Updates all references automatically
+- Works across multiple files
+- Preserves types and imports
+
+## Cannot Do
+- Rename string literals (use grep/sed)
+- Rename comments (use grep/sed)
+- Cross-project renames
+
+## Workflow
+1. Preview: \`dry_run: true\` (default) - see all affected locations
+2. Apply: \`dry_run: false\` - perform rename
+
+## Example
+\`\`\`json
+ts_ast(action: "rename", file_path: "src/foo.ts", line: 5, column: 10, new_name: "newName", dry_run: false)
+\`\`\``;
   readonly schema = RenameSymbolSchema;
 
   readonly inputSchema = {

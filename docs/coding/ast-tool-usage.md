@@ -14,7 +14,7 @@ When coding TypeScript (investigation, modification, refactoring), actively use 
 
 ## Related
 
-- **`coding__ts-codemod-refactoring`**: Detailed guide for large-scale refactoring with `ts_codemod`
+- **`ts_ast(action: "transform")`**: AST-based pattern matching and replacement
 
 ## Investigation
 
@@ -31,7 +31,7 @@ When coding TypeScript (investigation, modification, refactoring), actively use 
 - **Symbol renaming**: `rename_symbol`
 - **Dead code removal**: `ts_remove_nodes`, `ts_remove_unused_imports`
 - **Type extraction**: `extract_interface`, `extract_common_interface`
-- **Large-scale refactoring**: `ts_codemod` (see `coding__ts-codemod-refactoring`)
+- **Large-scale refactoring**: `ts_ast(action: "transform")` with query patterns
 
 ## Benefits
 
