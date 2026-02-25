@@ -71,8 +71,33 @@ interface PreparedTransform {
 
 export class BatchExecuteHandler extends BaseToolHandler<BatchExecuteArgs> {
   readonly name = "batch_execute";
-  readonly description =
-    "Execute multiple AST transformations atomically. All operations share a single Project instance, ensuring consistent line numbers across changes. Use mode='preview' first to review changes, then mode='execute' to apply.";
+  readonly description = `Execute multiple AST transformations atomically.
+
+## Can Do
+- Multiple transform_call_site in one operation
+- Multiple transform_signature in one operation
+- Mix different files in single batch
+- Atomic: all succeed or none applied
+- Preview before execute
+
+## Cannot Do
+- Other actions (query, rename, etc.)
+- Nested batches
+
+## Workflow
+1. Preview: \`mode: "preview"\` - see all changes
+2. Execute: \`mode: "execute"\` - apply all changes
+
+## Example
+\`\`\`json
+ts_ast(action: "batch", mode: "preview", operations: [
+  { tool: "transform_call_site", args: { file_path: "a.ts", line: 10, column: 5, param_names: ["x"] } },
+  { tool: "transform_call_site", args: { file_path: "a.ts", line: 20, column: 5, param_names: ["x"] } },
+  { tool: "transform_call_site", args: { file_path: "b.ts", line: 15, column: 3, param_names: ["x"] } }
+])
+\`\`\`
+
+Handles line number shifts automatically (applies bottom-up).`;
   readonly schema = BatchExecuteSchema;
 
   readonly inputSchema = {

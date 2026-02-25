@@ -5,7 +5,7 @@
 **すべてのタスクを開始する前に、必ず以下を実行してください:**
 
 ```
-mcp__interactive-instruction-mcp__help
+mcp__interactive-instruction-mcp__help(recursive: true)
 ```
 
-プロジェクト固有のコーディング規約、ガイドライン、作業手順はすべてhelpツールから参照できます。
+全ドキュメントと「When to use」が表示されます。タスクに関連するドキュメントを確認してから作業を開始してください。

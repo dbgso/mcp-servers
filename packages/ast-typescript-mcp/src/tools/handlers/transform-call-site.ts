@@ -47,8 +47,31 @@ export interface CallSitePreparedTransform {
 
 export class TransformCallSiteHandler extends BaseToolHandler<TransformCallSiteArgs> {
   readonly name = "transform_call_site";
-  readonly description =
-    "Transform a single function call from positional arguments to object argument. e.g., fn(a, b) → fn({ x: a, y: b }). Use with find_references to transform all call sites.";
+  readonly description = `Transform function call arguments to object pattern.
+
+## Can Do
+- \`fn(a, b)\` → \`fn({ x: a, y: b })\`
+- Works with any expression as arguments
+- Skips already-transformed calls (single object arg)
+- Batch via \`ts_ast(action: "batch")\`
+
+## Cannot Do
+- Add/remove arguments (count must match param_names)
+- Transform spread arguments
+- Transform destructuring in args
+
+## Workflow
+1. Find call sites: \`ts_ast(action: "references", ...)\`
+2. Preview: \`ts_ast(action: "transform_call_site", ..., dry_run: true)\`
+3. Apply: \`ts_ast(action: "transform_call_site", ..., dry_run: false)\`
+
+## Batch Transform
+\`\`\`json
+ts_ast(action: "batch", mode: "execute", operations: [
+  { tool: "transform_call_site", args: { file_path: "a.ts", line: 10, column: 5, param_names: ["x", "y"] } },
+  { tool: "transform_call_site", args: { file_path: "b.ts", line: 20, column: 3, param_names: ["x", "y"] } }
+])
+\`\`\``;
   readonly schema = TransformCallSiteSchema;
 
   readonly inputSchema = {
