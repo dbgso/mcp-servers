@@ -58,7 +58,7 @@ describe("FeedbackReader", () => {
         expect(result.feedbackId).toBeDefined();
         expect(result.feedbackId).toMatch(/^fb-\d+$/);
 
-        const feedback = await feedbackReader.getFeedback("task-1", result.feedbackId!);
+        const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: result.feedbackId! });
         expect(feedback?.decision).toBe(expectedDecision);
       }
     );
@@ -72,7 +72,7 @@ describe("FeedbackReader", () => {
         decision: "adopted",
       });
 
-      const feedback = await feedbackReader.getFeedback("task-1", createResult.feedbackId!);
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: createResult.feedbackId! });
 
       expect(feedback).not.toBeNull();
       expect(feedback?.task_id).toBe("task-1");
@@ -83,7 +83,7 @@ describe("FeedbackReader", () => {
     });
 
     it("should return null for non-existent feedback", async () => {
-      const feedback = await feedbackReader.getFeedback("task-1", "non-existent");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: "non-existent" });
       expect(feedback).toBeNull();
     });
   });
@@ -135,7 +135,7 @@ describe("FeedbackReader", () => {
 
       expect(result.success).toBe(true);
 
-      const feedback = await feedbackReader.getFeedback("task-1", createResult.feedbackId!);
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: createResult.feedbackId! });
       expect(feedback?.interpretation).toBe("I will fix the null pointer exception");
     });
 
@@ -200,7 +200,7 @@ describe("FeedbackReader", () => {
 
       expect(result.success).toBe(true);
 
-      const feedback = await feedbackReader.getFeedback("task-1", createResult.feedbackId!);
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: createResult.feedbackId! });
       expect(feedback?.status).toBe("confirmed");
     });
 
@@ -298,7 +298,7 @@ describe("FeedbackReader", () => {
 
       expect(result.success).toBe(true);
 
-      const feedback = await feedbackReader.getFeedback("task-1", createResult.feedbackId!);
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: createResult.feedbackId! });
       expect(feedback?.addressed_by).toBe("task-2");
     });
 
@@ -418,7 +418,7 @@ describe("FeedbackReader", () => {
 
       expect(result.success).toBe(true);
 
-      const feedback = await feedbackReader.getFeedback("task-1", createResult.feedbackId!);
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: createResult.feedbackId! });
       expect(feedback).toBeNull();
     });
 
@@ -515,7 +515,7 @@ describe("FeedbackReader", () => {
         decision: "adopted",
       });
 
-      const feedback = await feedbackReader.getFeedback("task-1", createResult.feedbackId!);
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: createResult.feedbackId! });
 
       // The status should be parsed correctly
       expect(feedback?.status).toBe("draft");
@@ -541,7 +541,7 @@ addressed_by: null
         "utf-8"
       );
 
-      const feedback = await feedbackReader.getFeedback("task-bool", "bool-test");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-bool", feedbackId: "bool-test" });
       expect(feedback).not.toBeNull();
     });
 
@@ -566,7 +566,7 @@ addressed_by: null
       );
 
       // Since original must be a string for validation, this should fail
-      const feedback = await feedbackReader.getFeedback("task-true", "bool-true");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-true", feedbackId: "bool-true" });
       // The file will be invalid because original is not a string
       expect(feedback).toBeNull();
     });
@@ -591,7 +591,7 @@ addressed_by: null
         "utf-8"
       );
 
-      const feedback = await feedbackReader.getFeedback("task-false-val", "bool-false-val");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-false-val", feedbackId: "bool-false-val" });
       expect(feedback).not.toBeNull();
       // interpretation parsed as boolean false, but cast to string | null
       expect(feedback?.interpretation).toBe(false);
@@ -616,7 +616,7 @@ addressed_by: null
         "utf-8"
       );
 
-      const feedback = await feedbackReader.getFeedback("task-unquoted", "unquoted");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-unquoted", feedbackId: "unquoted" });
       expect(feedback?.original).toBe("Unquoted string value");
     });
 
@@ -640,7 +640,7 @@ addressed_by: null
         "utf-8"
       );
 
-      const feedback = await feedbackReader.getFeedback("task-booleans", "bool-true");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-booleans", feedbackId: "bool-true" });
       expect(feedback).not.toBeNull();
     });
   });
@@ -712,7 +712,7 @@ addressed_by: null
         "utf-8"
       );
 
-      const feedback = await feedbackReader.getFeedback("task-1", "with-null");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: "with-null" });
       expect(feedback?.interpretation).toBeNull();
       expect(feedback?.addressed_by).toBeNull();
     });
@@ -736,7 +736,7 @@ addressed_by: null
         "utf-8"
       );
 
-      const feedback = await feedbackReader.getFeedback("task-1", "quoted");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: "quoted" });
       expect(feedback?.original).toBe("Single quoted string");
     });
 
@@ -760,7 +760,7 @@ addressed_by: null
         "utf-8"
       );
 
-      const feedback = await feedbackReader.getFeedback("task-bool-false", "bool-false");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-bool-false", feedbackId: "bool-false" });
       expect(feedback).not.toBeNull();
     });
 
@@ -785,7 +785,7 @@ addressed_by: null
         "utf-8"
       );
 
-      const feedback = await feedbackReader.getFeedback("task-no-colon", "no-colon");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-no-colon", feedbackId: "no-colon" });
       expect(feedback).not.toBeNull();
       expect(feedback?.original).toBe("Test");
     });
@@ -807,7 +807,7 @@ addressed_by: null
         "utf-8"
       );
 
-      const feedback = await feedbackReader.getFeedback("task-defaults", "defaults");
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-defaults", feedbackId: "defaults" });
       expect(feedback).not.toBeNull();
       expect(feedback?.decision).toBe("rejected");
       expect(feedback?.status).toBe("draft");
