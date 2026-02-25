@@ -83,6 +83,32 @@ describe("Integration Tests", () => {
 });
 ```
 
+## Quick CLI Testing (Without MCP Restart)
+
+Use `scripts/mcp-test.sh` to test MCP tools directly from command line without restarting Claude Code:
+
+```bash
+./scripts/mcp-test.sh <package> <tool> '<json_args>'
+```
+
+### Examples
+
+```bash
+# Test ts_ast hover
+./scripts/mcp-test.sh ast-typescript-mcp ts_ast '{"action":"hover","file_path":"src/index.ts","line":10,"column":5}'
+
+# Test dead_code with path parameter
+./scripts/mcp-test.sh ast-typescript-mcp ts_ast '{"action":"dead_code","path":"src/handlers"}'
+
+# Test help tool
+./scripts/mcp-test.sh interactive-instruction-mcp help '{"recursive":true}'
+```
+
+This is useful for:
+- Rapid iteration during development
+- Testing changes before requesting MCP restart
+- Debugging tool responses
+
 ## Use AST MCP Tools for File Verification
 
 Use various AST MCP tools to verify the contents of code and document files:

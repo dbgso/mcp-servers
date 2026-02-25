@@ -10,6 +10,7 @@ import type {
   DeclarationKind,
   GoToDefinitionResult,
   DefinitionLocation,
+  HoverResult,
   FindReferencesResult,
   ReferenceLocation,
   CallGraphNode,
@@ -463,6 +464,94 @@ export class TypeScriptHandler {
         if (sf) {
           project.removeSourceFile(sf);
         }
+      }
+    }
+  }
+
+  async hover(
+    { filePath, line, column }: { filePath: string; line: number; column: number }
+  ): Promise<HoverResult> {
+    const project = this.getProjectForFile(filePath);
+    const sourceFile = project.addSourceFileAtPath(filePath);
+
+    try {
+      // Convert line/column to position (ts-morph uses 0-based line internally)
+      const pos = sourceFile.compilerNode.getPositionOfLineAndCharacter(line - 1, column - 1);
+
+      // Find the node at position
+      const node = sourceFile.getDescendantAtPos(pos);
+      if (!node) {
+        return {
+          filePath,
+          line,
+          column,
+          found: false,
+        };
+      }
+
+      const text = node.getText();
+      const kind = node.getKindName();
+
+      // Get type information
+      let typeText: string | undefined;
+      try {
+        const type = node.getType();
+        typeText = type.getText(node);
+      } catch {
+        // Some nodes don't have types
+      }
+
+      // Get JSDoc if available
+      let documentation: string | undefined;
+      let jsdocTags: Array<{ tag: string; text: string }> | undefined;
+
+      // Navigate to the symbol's declaration to get JSDoc
+      try {
+        if (Node.isIdentifier(node)) {
+          const symbol = node.getSymbol();
+          if (symbol) {
+            const declarations = symbol.getDeclarations();
+            for (const decl of declarations) {
+              // Check if declaration has JSDoc
+              if (Node.isJSDocable(decl)) {
+                const jsDocs = decl.getJsDocs();
+                if (jsDocs.length > 0) {
+                  const doc = jsDocs[0];
+                  documentation = doc.getDescription().trim();
+
+                  // Get JSDoc tags
+                  const tags = doc.getTags();
+                  if (tags.length > 0) {
+                    jsdocTags = tags.map(tag => ({
+                      tag: tag.getTagName(),
+                      text: tag.getText().replace(/^@\w+\s*/, '').trim(),
+                    }));
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // Ignore errors when getting symbol/JSDoc (can fail for some nodes)
+      }
+
+      return {
+        filePath,
+        line,
+        column,
+        found: true,
+        text,
+        kind,
+        type: typeText,
+        documentation,
+        jsdocTags,
+      };
+    } finally {
+      const sf = project.getSourceFile(filePath);
+      if (sf) {
+        project.removeSourceFile(sf);
       }
     }
   }

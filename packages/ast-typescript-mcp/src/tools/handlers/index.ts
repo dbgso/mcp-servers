@@ -1,6 +1,7 @@
 export { TsStructureReadHandler } from "./ts-structure-read.js";
 export { TsStructureWriteHandler } from "./ts-structure-write.js";
 export { GoToDefinitionHandler } from "./go-to-definition.js";
+export { HoverHandler } from "./hover.js";
 export { FindReferencesHandler } from "./find-references.js";
 export { CallGraphHandler } from "./call-graph.js";
 export { TypeHierarchyHandler } from "./type-hierarchy.js";
