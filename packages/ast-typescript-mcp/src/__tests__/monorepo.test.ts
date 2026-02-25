@@ -181,11 +181,12 @@ describe("Monorepo Dependency Graph", () => {
       const filePath = `${MONOREPO_ROOT}/packages/ast-typescript-mcp/src/handlers/typescript.ts`;
 
       // Get references without scoping
-      const unscopedResult = await handler.findReferences({ filePath: filePath, line: 56, column: 14 });
+      // Line 64: "export class TypeScriptHandler {" - column 14 is 'T' of TypeScriptHandler
+      const unscopedResult = await handler.findReferences({ filePath: filePath, line: 64, column: 14 });
 
       // Get references with scoping
       const scopedResult = await handler.findReferences(
-        { filePath: filePath, line: 56, column: 14, options: { scopeToDependents: true } }
+        { filePath: filePath, line: 64, column: 14, options: { scopeToDependents: true } }
       );
 
       // Scoped should have <= unscoped references
