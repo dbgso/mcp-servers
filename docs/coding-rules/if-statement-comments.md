@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Writing if statements with complex conditions
+  - Adding guard clauses
+  - Reviewing code for readability
+  - Documenting conditional logic
+---
+
 # If Statement Comments
 
 Add a summary comment on the line immediately before each if statement explaining the condition, except when the condition is self-evident.

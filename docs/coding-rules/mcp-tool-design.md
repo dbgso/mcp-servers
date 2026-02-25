@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Designing new MCP tools
+  - Structuring MCP tool operations
+  - Deciding tool separation boundaries
+  - Reviewing MCP architecture
+---
+
 # MCP Tool Design Principles
 
 MCPツールの設計原則。

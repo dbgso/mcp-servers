@@ -1,3 +1,12 @@
+---
+description: GitHub ActionsからnpmにOIDC（Trusted Publishers）で認証してパッケージを公開する設定。
+whenToUse:
+  - Setting up GitHub Actions to publish npm packages
+  - Configuring OIDC Trusted Publishers on npm
+  - Troubleshooting npm publish authentication errors
+  - Adding provenance to npm packages
+---
+
 # npm OIDC Trusted Publishers 設定
 
 GitHub ActionsからnpmにOIDC（Trusted Publishers）で認証してパッケージを公開する設定。

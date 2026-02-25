@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Writing conditional logic
+  - Refactoring nested if-else statements
+  - Implementing guard clauses
+  - Reviewing code with deep nesting
+---
+
 # Early Return パターン
 
 条件分岐では `let` や三項演算子ではなく、メソッド・関数の早期returnを使用するルール。

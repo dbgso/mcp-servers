@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Designing new MCP tools
+  - Adding new actions to MCP tools
+  - Deciding which tool should contain an action
+  - Reviewing MCP tool security
+---
+
 # MCP Tool Approval Levels
 
 MCPツールの承認レベルに関するガイドライン。

@@ -1,5 +1,10 @@
 ---
 description: MCPツールを作成・変更した時は、以下のプロセスに従うこと。
+whenToUse:
+  - Creating new MCP tools
+  - Fixing MCP tool bugs
+  - Testing MCP tool changes
+  - Debugging MCP tool issues
 ---
 
 # MCP Tool Testing Requirements

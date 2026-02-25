@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Writing new code
+  - Refactoring existing code
+  - Reviewing code quality
+  - Learning project coding standards
+---
+
 # コーディング規約
 
 保守性・可読性の高いコードを書くための基本的なルール集。

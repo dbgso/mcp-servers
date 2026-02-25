@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Starting any implementation work
+  - Tracking progress on multi-step tasks
+  - Completing a task with required documentation
+  - Understanding the task workflow lifecycle
+---
+
 # Plan Tool Required
 
 All implementation work must use the plan tool for task tracking and progress visibility.

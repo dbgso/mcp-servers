@@ -454,9 +454,9 @@ export class MarkdownReader {
       };
     }
 
-    // Fallback to first paragraph after title
+    // Fallback to first paragraph after title (but still include whenToUse from frontmatter)
     const description = this.parseDescriptionFromBody(content);
-    return { description };
+    return { description, whenToUse: frontmatter.whenToUse };
   }
 
   /**

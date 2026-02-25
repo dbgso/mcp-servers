@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Writing tests
+  - Checking coverage requirements
+  - Preparing code for PR review
+  - Configuring test coverage exclusions
+---
+
 # Test Coverage Requirements
 
 All code must maintain a minimum test coverage of 95%.

@@ -1,3 +1,11 @@
+---
+description: Standard pattern for implementing help parameter in MCP tools
+whenToUse:
+  - Creating new MCP tools
+  - Adding help functionality to MCP tools
+  - Designing MCP tool interfaces
+---
+
 # MCP Tool Help Pattern
 
 All MCP tools must implement a `help` parameter for showing usage information.
