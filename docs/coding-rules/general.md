@@ -6,53 +6,53 @@ whenToUse:
   - Learning project coding standards
 ---
 
-# コーディング規約
+# Coding Standards
 
-保守性・可読性の高いコードを書くための基本的なルール集。
+A collection of fundamental rules for writing maintainable and readable code.
 
-## 基本原則
+## Basic Principles
 
 ### DRY (Don't Repeat Yourself)
-- 同じコードを繰り返さない
-- 共通処理は関数・モジュールに抽出する
+- Don't repeat the same code
+- Extract common logic into functions/modules
 
 ### KISS (Keep It Simple, Stupid)
-- シンプルな実装を心がける
-- 複雑なロジックは分割して理解しやすくする
+- Strive for simple implementations
+- Break down complex logic to make it easier to understand
 
 ### YAGNI (You Aren't Gonna Need It)
-- 必要になるまで実装しない
-- 将来の仮定に基づいた過剰な設計を避ける
+- Don't implement until it's needed
+- Avoid over-engineering based on future assumptions
 
-## 命名規則
+## Naming Conventions
 
-- 意味のある名前を使う（`data`や`temp`より具体的な名前）
-- 一貫した命名規則を守る（camelCase, snake_case等）
-- 略語は避け、読みやすさを優先する
-- 関数名は動詞で始める（`getUserName`, `calculateTotal`）
-- 真偽値は`is`, `has`, `can`で始める
+- Use meaningful names (specific names rather than `data` or `temp`)
+- Follow consistent naming conventions (camelCase, snake_case, etc.)
+- Avoid abbreviations; prioritize readability
+- Start function names with verbs (`getUserName`, `calculateTotal`)
+- Start boolean values with `is`, `has`, `can`
 
-## 関数設計
+## Function Design
 
-- 単一責任の原則（1つの関数は1つのことだけを行う）
-- 関数は短く保つ（目安: 20-30行以内）
-- 引数は少なく（3つ以下が理想）
-- 副作用を最小限に
+- Single Responsibility Principle (one function does one thing)
+- Keep functions short (guideline: within 20-30 lines)
+- Keep arguments minimal (ideally 3 or fewer)
+- Minimize side effects
 
-## エラーハンドリング
+## Error Handling
 
-- エラーは早期に検出し、適切に処理する
-- エラーメッセージは具体的で有用な情報を含める
-- nullやundefinedのチェックを忘れない
+- Detect errors early and handle them appropriately
+- Include specific and useful information in error messages
+- Don't forget to check for null and undefined
 
-## コメント
+## Comments
 
-- コードで表現できることはコードで表現する
-- 「なぜ」を説明するコメントを書く（「何を」ではなく）
-- 古いコメントは削除または更新する
+- Express in code what can be expressed in code
+- Write comments that explain "why" (not "what")
+- Delete or update outdated comments
 
-## テスト
+## Testing
 
-- テスト可能なコードを書く
-- 境界値とエッジケースをテストする
-- テスト名は何をテストしているか明確に
+- Write testable code
+- Test boundary values and edge cases
+- Make test names clearly describe what is being tested

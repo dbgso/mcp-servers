@@ -8,49 +8,49 @@ whenToUse:
 
 # MCP Tool Design Principles
 
-MCPツールの設計原則。
+Design principles for MCP tools.
 
-## 基本構成: Describe + Execute
+## Basic Structure: Describe + Execute
 
-各ツールは以下の2つの操作を持つ構成を基本とする:
+Each tool should have the following two operations as its basic structure:
 
-1. **Describe** - 操作内容の説明・確認（読み取り専用）
-2. **Execute** - 実際の操作実行（変更を伴う）
+1. **Describe** - Explanation/confirmation of operation content (read-only)
+2. **Execute** - Actual operation execution (involves changes)
 
-## ツール分割の基準: 自動実行許可
+## Tool Separation Criteria: Auto-Execution Permission
 
-ツールは「AIに自動実行を許可できるか」を基準に分割する。
+Tools should be separated based on "whether auto-execution can be permitted to AI."
 
-### 自動実行OK（許可リストに追加可能）
-- 読み取り専用の操作
-- 副作用が限定的な操作
-- 取り消し可能な操作
+### Auto-Execution OK (Can be added to allow list)
+- Read-only operations
+- Operations with limited side effects
+- Reversible operations
 
-例: `help`, `plan`, `draft`
+Examples: `help`, `plan`, `draft`
 
-### 自動実行NG（ユーザー確認必須）
-- 承認・確定操作
-- 不可逆な変更
-- 外部への影響がある操作
+### Auto-Execution NG (User confirmation required)
+- Approval/confirmation operations
+- Irreversible changes
+- Operations with external impact
 
-例: `approve`, `apply`
+Examples: `approve`, `apply`
 
-## 設計例
+## Design Example
 
 ```
-plan tool (自動実行OK)
-├── list    - タスク一覧表示
-├── read    - タスク詳細表示
-├── status  - ステータス変更
-├── feedback - フィードバック表示
-└── interpret - AI解釈追加
+plan tool (Auto-execution OK)
+├── list    - Display task list
+├── read    - Display task details
+├── status  - Change status
+├── feedback - Display feedback
+└── interpret - Add AI interpretation
 
-approve tool (ユーザー確認必須)
-└── approve - タスク/フィードバック承認
+approve tool (User confirmation required)
+└── approve - Task/feedback approval
 ```
 
-## なぜこの設計か
+## Why This Design
 
-1. **安全性**: 重要な操作にはユーザー確認が入る
-2. **効率性**: 日常的な操作は自動実行で高速化
-3. **透明性**: ツール名から権限レベルが分かる
+1. **Safety**: User confirmation is required for important operations
+2. **Efficiency**: Daily operations are accelerated with auto-execution
+3. **Transparency**: Permission level is clear from the tool name

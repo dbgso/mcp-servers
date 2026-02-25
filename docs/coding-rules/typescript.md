@@ -7,16 +7,16 @@ whenToUse:
   - Creating test cases with test.each
 ---
 
-# TypeScript コーディング規約
+# TypeScript Coding Standards
 
-このプロジェクト固有のTypeScriptコーディング規約。
+TypeScript coding standards specific to this project.
 
 ## Zod
 
 ### z.infer vs z.input
 
-- `z.infer<T>` / `z.output<T>`: パース後の出力型（デフォルト値適用後）
-- `z.input<T>`: パース前の入力型（デフォルト値適用前）
+- `z.infer<T>` / `z.output<T>`: Output type after parsing (after defaults applied)
+- `z.input<T>`: Input type before parsing (before defaults applied)
 
 ```typescript
 const schema = z.object({
@@ -27,41 +27,41 @@ const schema = z.object({
 // z.input: { name: string; age?: number | undefined }
 // z.infer: { name: string; age: number }
 
-// ❌ Bad - 用途を考えずに使う
+// ❌ Bad - Using without considering the purpose
 type Args = z.infer<typeof schema>;
 
-// ✅ Good - 用途に応じて使い分け
-type InputArgs = z.input<typeof schema>;   // バリデーション前
-type OutputArgs = z.infer<typeof schema>;  // バリデーション後
+// ✅ Good - Use appropriately based on purpose
+type InputArgs = z.input<typeof schema>;   // Before validation
+type OutputArgs = z.infer<typeof schema>;  // After validation
 ```
 
-### Operation型での使い方
+### Usage in Operation Types
 
 ```typescript
-// スキーマを先に定義
+// Define schema first
 const argsSchema = z.object({
   id: z.string(),
-  limit: z.number().optional(),  // .default() は避ける
+  limit: z.number().optional(),  // Avoid .default()
 });
 
-// パース後の型を使用（executeが受け取る型）
+// Use the parsed type (type that execute receives)
 type Args = z.infer<typeof argsSchema>;
 
 export const op: Operation<Args> = {
   argsSchema,
   execute: async (args, ctx) => {
-    // args.limit は number | undefined
-    const limit = args.limit ?? 10;  // デフォルトはここで適用
+    // args.limit is number | undefined
+    const limit = args.limit ?? 10;  // Apply default here
   },
 };
 ```
 
-## 型定義
+## Type Definitions
 
-### インターフェース命名
+### Interface Naming
 
 ```typescript
-// ❌ Bad - Iプレフィックス不要
+// ❌ Bad - I prefix unnecessary
 interface IUser { }
 
 // ✅ Good
@@ -69,23 +69,23 @@ interface User { }
 interface UserParams { }
 ```
 
-### 型エイリアス vs インターフェース
+### Type Alias vs Interface
 
 ```typescript
-// オブジェクト型はインターフェース
+// Use interface for object types
 interface User {
   id: string;
   name: string;
 }
 
-// ユニオン型や複合型は型エイリアス
+// Use type alias for union types and complex types
 type Status = 'pending' | 'active' | 'completed';
 type Result<T> = { success: true; data: T } | { success: false; error: string };
 ```
 
 ## import/export
 
-### 名前付きエクスポートを優先
+### Prefer Named Exports
 
 ```typescript
 // ❌ Bad
@@ -96,23 +96,23 @@ export class UserService { }
 export function createUser(params: CreateUserParams) { }
 ```
 
-### 型インポートを明示
+### Make Type Imports Explicit
 
 ```typescript
 // ❌ Bad
 import { User, createUser } from './user';
 
-// ✅ Good - 型は type キーワードで明示
+// ✅ Good - Make types explicit with type keyword
 import type { User } from './user';
 import { createUser } from './user';
 
-// または
+// Or
 import { type User, createUser } from './user';
 ```
 
-## 非同期処理
+## Async Processing
 
-### async/await を優先
+### Prefer async/await
 
 ```typescript
 // ❌ Bad
@@ -130,10 +130,10 @@ async function fetchUser(params: { id: string }) {
 }
 ```
 
-### エラーハンドリング
+### Error Handling
 
 ```typescript
-// Result型パターンを推奨
+// Result type pattern is recommended
 type Result<T> =
   | { success: true; data: T }
   | { success: false; error: string };
@@ -155,14 +155,14 @@ async function fetchUser(params: { id: string }): Promise<Result<User>> {
 }
 ```
 
-## テスト
+## Testing
 
-### test.each を使用
+### Use test.each
 
-テストケースは `test.each` / `it.each` で記述し、テストデータは型付きの変数に抽出する。
+Write test cases with `test.each` / `it.each`, and extract test data into typed variables.
 
 ```typescript
-// ❌ Bad - 個別のテスト
+// ❌ Bad - Individual tests
 it('should parse "hello"', () => {
   expect(parse('hello')).toBe('hello');
 });
@@ -171,7 +171,7 @@ it('should parse "world"', () => {
   expect(parse('world')).toBe('world');
 });
 
-// ❌ Bad - インライン配列、型なし
+// ❌ Bad - Inline array, no types
 it.each([
   ['hello', 'hello'],
   ['world', 'world'],
@@ -179,7 +179,7 @@ it.each([
   expect(parse(input)).toBe(expected);
 });
 
-// ✅ Good - 型付き変数 + test.each
+// ✅ Good - Typed variable + test.each
 type ParseTestCase = {
   input: string;
   expected: string;
@@ -195,8 +195,8 @@ it.each(parseTestCases)('should parse "$input"', ({ input, expected }) => {
 });
 ```
 
-### 理由
+### Rationale
 
-1. **型安全**: テストデータの構造が明確
-2. **保守性**: ケース追加が容易
-3. **可読性**: テストの意図が明確
+1. **Type safety**: Test data structure is clear
+2. **Maintainability**: Easy to add cases
+3. **Readability**: Test intent is clear
