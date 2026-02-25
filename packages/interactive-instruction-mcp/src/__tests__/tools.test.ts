@@ -246,6 +246,99 @@ describe("registerHelpTool", () => {
     expect(result.content[0].text).toContain("public");
     expect(result.content[0].text).not.toContain("_mcp_drafts");
   });
+
+  it("should filter by query in description", async () => {
+    await fs.writeFile(
+      path.join(tempBase, "design-doc.md"),
+      "---\ndescription: Design patterns for architecture\n---\n# Design"
+    );
+    await fs.writeFile(
+      path.join(tempBase, "coding-rules.md"),
+      "---\ndescription: Coding guidelines\n---\n# Rules"
+    );
+
+    const mockServer = createMockServer();
+    registerHelpTool({
+      server: mockServer as unknown as Parameters<typeof registerHelpTool>[0]["server"],
+      reader,
+      config: defaultConfig,
+    });
+
+    const tool = mockServer.getTool("help");
+    const result = await tool!.handler({ query: "design" });
+    expect(result.content[0].text).toContain("design-doc");
+    expect(result.content[0].text).not.toContain("coding-rules");
+  });
+
+  it("should filter by query in whenToUse", async () => {
+    await fs.writeFile(
+      path.join(tempBase, "testing.md"),
+      "---\ndescription: Testing guide\nwhenToUse:\n  - When writing tests\n---\n# Testing"
+    );
+    await fs.writeFile(
+      path.join(tempBase, "deploy.md"),
+      "---\ndescription: Deploy guide\nwhenToUse:\n  - When deploying\n---\n# Deploy"
+    );
+
+    const mockServer = createMockServer();
+    registerHelpTool({
+      server: mockServer as unknown as Parameters<typeof registerHelpTool>[0]["server"],
+      reader,
+      config: defaultConfig,
+    });
+
+    const tool = mockServer.getTool("help");
+    const result = await tool!.handler({ query: "tests" });
+    expect(result.content[0].text).toContain("testing");
+    expect(result.content[0].text).not.toContain("deploy");
+  });
+
+  it("should find documents with missing whenToUse", async () => {
+    await fs.writeFile(
+      path.join(tempBase, "full-meta.md"),
+      "---\ndescription: Full metadata doc\nwhenToUse:\n  - Always\n---\n# Full"
+    );
+    await fs.writeFile(
+      path.join(tempBase, "partial-meta.md"),
+      "---\ndescription: Partial metadata doc\n---\n# Partial"
+    );
+
+    const mockServer = createMockServer();
+    registerHelpTool({
+      server: mockServer as unknown as Parameters<typeof registerHelpTool>[0]["server"],
+      reader,
+      config: defaultConfig,
+    });
+
+    const tool = mockServer.getTool("help");
+    const result = await tool!.handler({ missingMeta: "whenToUse" });
+    expect(result.content[0].text).toContain("partial-meta");
+    expect(result.content[0].text).not.toContain("full-meta");
+  });
+
+  it("should find documents with missing any metadata", async () => {
+    await fs.writeFile(
+      path.join(tempBase, "has-desc.md"),
+      "---\ndescription: Has description\n---\n# HasDesc"
+    );
+    await fs.writeFile(
+      path.join(tempBase, "no-meta.md"),
+      "# No Meta\n\nJust content."
+    );
+
+    const mockServer = createMockServer();
+    registerHelpTool({
+      server: mockServer as unknown as Parameters<typeof registerHelpTool>[0]["server"],
+      reader,
+      config: defaultConfig,
+    });
+
+    const tool = mockServer.getTool("help");
+    const result = await tool!.handler({ missingMeta: "any" });
+    // Both should appear - has-desc has no whenToUse, no-meta has no description
+    expect(result.content[0].text).toContain("has-desc");
+    expect(result.content[0].text).toContain("no-meta");
+  });
 });
 
 describe("registerStderrTestTool", () => {
