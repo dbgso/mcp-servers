@@ -9,8 +9,11 @@ import {
 } from "../monorepo/index.js";
 import { TypeScriptHandler } from "../handlers/typescript.js";
 
-// Use the actual monorepo for testing
-const MONOREPO_ROOT = "/ramdisk/mcp-servers";
+import * as path from "node:path";
+
+// Use the actual monorepo for testing - resolve from this file's location
+// __tests__ -> src -> ast-typescript-mcp -> packages -> mcp-servers
+const MONOREPO_ROOT = path.resolve(import.meta.dirname, "../../../..");
 
 describe("Monorepo Dependency Graph", () => {
   describe("detectWorkspace", () => {
