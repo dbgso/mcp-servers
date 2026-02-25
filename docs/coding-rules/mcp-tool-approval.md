@@ -8,42 +8,42 @@ whenToUse:
 
 # MCP Tool Approval Levels
 
-MCPツールの承認レベルに関するガイドライン。
+Guidelines for MCP tool approval levels.
 
-## 重要な原則
+## Important Principle
 
-**MCPツールはツールレベルで承認される（actionレベルではない）**
+**MCP tools are approved at the tool level (not at the action level)**
 
-Claude Codeでは、ツール単位でauto-approve設定ができる。例えば`plan`ツールをauto-approvedに設定すると、そのツールの全てのactionが自動承認される。
+In Claude Code, auto-approve settings can be configured per tool. For example, if the `plan` tool is set to auto-approved, all actions within that tool will be automatically approved.
 
-## 設計指針
+## Design Guidelines
 
-### ユーザー承認が必要なアクション
+### Actions Requiring User Approval
 
-以下のようなアクションは、auto-approved対象外のツールに配置すべき:
+The following types of actions should be placed in tools that are NOT auto-approved:
 
-- ファイルシステムへの書き込み
-- 外部サービスへの接続
-- 不可逆な操作（削除など）
-- ユーザーの明示的な意思決定が必要な操作
+- Writing to the file system
+- Connecting to external services
+- Irreversible operations (such as deletion)
+- Operations requiring explicit user decision
 
-### 例: approve tool
+### Example: approve tool
 
-`approve`ツールは設計上、常にユーザー承認を要求する。重要なアクションの配置先として適切:
+The `approve` tool is designed to always require user approval. It's appropriate for placing important actions:
 
 ```typescript
-// Good: approve toolに配置（ユーザー承認必須）
+// Good: Placed in approve tool (user approval required)
 approve(target: "setup_templates")
 approve(target: "deletion", task_id: "...")
 
-// Bad: plan toolに配置（auto-approved可能）
-plan(action: "setup_templates")  // ユーザー承認なしで実行される可能性
+// Bad: Placed in plan tool (can be auto-approved)
+plan(action: "setup_templates")  // May be executed without user approval
 ```
 
-## 実装時のチェックリスト
+## Implementation Checklist
 
-新しいアクションを追加する際:
+When adding new actions:
 
-1. [ ] このアクションはユーザーの明示的な承認が必要か？
-2. [ ] 配置先のツールはauto-approved対象になりうるか？
-3. [ ] 承認が必要なら、approve toolまたは同等の非auto-approvedツールに配置
+1. [ ] Does this action require explicit user approval?
+2. [ ] Can the target tool be auto-approved?
+3. [ ] If approval is needed, place it in the approve tool or an equivalent non-auto-approved tool

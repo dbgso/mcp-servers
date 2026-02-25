@@ -23,7 +23,7 @@ Essential information to check before starting any task.
 ## Principles
 
 - **DRY**: See `workflow__dry-principle`
-- **AST Tool Evolution**: See `workflow__ast-tool-evolution` - 開発中に便利なツールを見つけたらast-*-mcpに追加
+- **AST Tool Evolution**: See `workflow__ast-tool-evolution` - When you discover useful tools during development, add them to ast-*-mcp
 
 ## Coding Rules
 

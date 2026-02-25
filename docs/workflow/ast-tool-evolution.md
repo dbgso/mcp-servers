@@ -1,38 +1,38 @@
-# ASTツール育成方針
+# AST Tool Evolution Policy
 
-MCPサーバ開発を通じて、ASTツール（ast-typescript-mcp, ast-file-mcp）を継続的に強化していく。
+Continuously enhance AST tools (ast-typescript-mcp, ast-file-mcp) through MCP server development.
 
-## 基本方針
+## Core Philosophy
 
-**自分たちが使うツールを自分たちで作る**
+**Build the tools we use ourselves**
 
-1. MCPサーバ開発中に「こういうツールがあれば便利」と感じたら、すぐにast-*-mcpに追加
-2. 実際の開発で使いながら改善点を発見→フィードバックループ
-3. ドッグフーディングで品質向上
+1. When you feel "this tool would be useful" during MCP server development, add it to ast-*-mcp immediately
+2. Discover improvements while using in actual development -> feedback loop
+3. Improve quality through dogfooding
 
-## ツール追加の判断基準
+## Criteria for Adding Tools
 
-### 追加すべきケース
-- 同じ操作を3回以上手動で行った
-- ビルド→エラー確認→修正のサイクルが遅い
-- コード理解に時間がかかる（型展開、参照追跡など）
+### Cases to Add
+- Performed the same operation manually 3+ times
+- Build -> check errors -> fix cycle is slow
+- Understanding code takes too long (type expansion, reference tracking, etc.)
 
-### 例
-| 課題 | ツール |
-|------|--------|
-| ビルド前に型エラー確認したい | `type_check` |
-| import追加が面倒 | `auto_import` |
-| 複雑な型を理解したい | `inline_type` |
+### Examples
+| Issue | Tool |
+|-------|------|
+| Want to check type errors before building | `type_check` |
+| Adding imports is tedious | `auto_import` |
+| Want to understand complex types | `inline_type` |
 
-## 開発フロー
+## Development Flow
 
-1. **課題発見**: MCP開発中に不便を感じる
-2. **即座にplan追加**: 忘れる前にタスク化
-3. **優先度判断**: 今すぐ必要 vs 後で実装
-4. **実装→即使用**: 作ったらすぐに自分で使う
-5. **改善**: 使用中に気づいた問題を修正
+1. **Discover Issue**: Feel inconvenience during MCP development
+2. **Add to Plan Immediately**: Create a task before forgetting
+3. **Prioritize**: Need now vs. implement later
+4. **Implement -> Use Immediately**: Use it yourself right after building
+5. **Improve**: Fix issues noticed during use
 
-## 参照
+## References
 
-- `ast-typescript-mcp`: TypeScript用ASTツール
-- `ast-file-mcp`: Markdown/AsciiDoc用ASTツール
+- `ast-typescript-mcp`: AST tools for TypeScript
+- `ast-file-mcp`: AST tools for Markdown/AsciiDoc

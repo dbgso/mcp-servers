@@ -6,79 +6,79 @@ whenToUse:
   - Onboarding new team members
 ---
 
-# コーディング規約 概要
+# Coding Standards Overview
 
-このドキュメントは、プロジェクト全体のコーディング規約の概要と各詳細ドキュメントへの参照を提供する。
+This document provides an overview of project-wide coding standards and references to detailed documents.
 
-## 基本原則
+## Basic Principles
 
-1. **可読性**: コードは書く時間より読む時間の方が長い。読みやすさを最優先する。
-2. **保守性**: 将来の変更に対応しやすい設計を心がける。
-3. **一貫性**: プロジェクト全体で統一されたスタイルを維持する。
-4. **テスト可能性**: テストしやすいコードを書く。
+1. **Readability**: Code is read more often than it is written. Prioritize readability.
+2. **Maintainability**: Design for ease of future changes.
+3. **Consistency**: Maintain a unified style across the project.
+4. **Testability**: Write code that is easy to test.
 
-## 規約一覧
+## Standards List
 
-### 言語・フレームワーク固有
+### Language/Framework Specific
 
-| ドキュメント | 説明 |
-|------------|------|
-| [typescript](coding-rules__typescript) | TypeScript固有の規約 |
+| Document | Description |
+|----------|-------------|
+| [typescript](coding-rules__typescript) | TypeScript-specific standards |
 
-### コードスタイル
+### Code Style
 
-| ドキュメント | 説明 |
-|------------|------|
-| [general](coding-rules__general) | 一般的なコーディングルール |
-| [style](coding-rules__style) | DRY原則とコード共通化 |
-| [english-comments](coding-rules__english-comments) | コメントは英語で記述 |
-| [if-statement-comments](coding-rules__if-statement-comments) | if文へのコメント追加ルール |
+| Document | Description |
+|----------|-------------|
+| [general](coding-rules__general) | General coding rules |
+| [style](coding-rules__style) | DRY principle and code sharing |
+| [english-comments](coding-rules__english-comments) | Write comments in English |
+| [if-statement-comments](coding-rules__if-statement-comments) | Rules for adding comments to if statements |
 
-### 設計パターン
+### Design Patterns
 
-| ドキュメント | 説明 |
-|------------|------|
-| [early-return](coding-rules__early-return) | 早期リターンの使用 |
-| [polymorphism](coding-rules__polymorphism) | ポリモーフィズムの活用 |
-| [handler-pattern](coding-rules__handler-pattern) | ハンドラーパターン |
-| [ternary-testability](coding-rules__ternary-testability) | 三項演算子とテスト容易性 |
+| Document | Description |
+|----------|-------------|
+| [early-return](coding-rules__early-return) | Use early returns |
+| [polymorphism](coding-rules__polymorphism) | Leverage polymorphism |
+| [handler-pattern](coding-rules__handler-pattern) | Handler pattern |
+| [ternary-testability](coding-rules__ternary-testability) | Ternary operators and testability |
 
-### MCP固有
+### MCP Specific
 
-| ドキュメント | 説明 |
-|------------|------|
-| [mcp-tool-design](coding-rules__mcp-tool-design) | MCPツールの設計原則 |
-| [mcp-tool-approval](coding-rules__mcp-tool-approval) | 承認レベルのガイドライン |
-| [mcp-tool-testing](coding-rules__mcp-tool-testing) | MCPツールのテストプロセス |
-| [mcp-tool-help-pattern](coding__mcp-tool-help-pattern) | helpパラメータの実装 |
+| Document | Description |
+|----------|-------------|
+| [mcp-tool-design](coding-rules__mcp-tool-design) | MCP tool design principles |
+| [mcp-tool-approval](coding-rules__mcp-tool-approval) | Approval level guidelines |
+| [mcp-tool-testing](coding-rules__mcp-tool-testing) | MCP tool testing process |
+| [mcp-tool-help-pattern](coding__mcp-tool-help-pattern) | Help parameter implementation |
 
-### 品質保証
+### Quality Assurance
 
-| ドキュメント | 説明 |
-|------------|------|
-| [test-coverage](coding-rules__test-coverage) | テストカバレッジ95%以上必須 |
+| Document | Description |
+|----------|-------------|
+| [test-coverage](coding-rules__test-coverage) | 95%+ test coverage required |
 
-## クイックリファレンス
+## Quick Reference
 
-### 必須事項
+### Requirements
 
-- テストカバレッジ **95%以上** を維持
-- コメントは **英語** で記述
-- **早期リターン** を使用（ネストを減らす）
-- **ポリモーフィズム** を活用（switch/if文を減らす）
-- MCPツールには **helpパラメータ** を実装
+- Maintain test coverage of **95% or higher**
+- Write comments in **English**
+- Use **early returns** (reduce nesting)
+- Leverage **polymorphism** (reduce switch/if statements)
+- Implement **help parameter** for MCP tools
 
-### 禁止事項
+### Prohibited
 
-- `any`型の使用（やむを得ない場合は `unknown` を検討）
-- コメントなしの複雑な条件分岐
-- テストなしのコードマージ
-- 95%未満のカバレッジでのリリース
+- Use of `any` type (consider `unknown` if unavoidable)
+- Complex conditionals without comments
+- Merging code without tests
+- Releasing with coverage below 95%
 
-## 新規ルールの追加
+## Adding New Rules
 
-新しいコーディングルールを追加する場合：
+When adding new coding rules:
 
-1. `docs/coding-rules/` 配下に新規ドキュメントを作成
-2. 本概要ドキュメントの該当セクションに追加
-3. チームへの周知を行う
+1. Create a new document under `docs/coding-rules/`
+2. Add it to the relevant section in this overview document
+3. Notify the team

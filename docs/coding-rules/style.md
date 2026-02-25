@@ -6,6 +6,6 @@ whenToUse:
   - Extracting common functionality
 ---
 
-# ルール
+# Rule
 
-共通化できる処理は共通化してDRYに保つこと
+Keep code DRY by extracting and sharing common logic.

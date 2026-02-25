@@ -6,24 +6,24 @@ whenToUse:
   - Adding new variants to existing types
 ---
 
-# ポリモーフィズムの活用
+# Leveraging Polymorphism
 
-条件分岐（if/switch）ではなくポリモーフィズムを使い、不要な分岐を作らない。
+Use polymorphism instead of conditional branching (if/switch), and avoid creating unnecessary branches.
 
-## 悪い例
+## Bad Examples
 
 ```typescript
-// ❌ オプショナルメソッド + null チェック
+// ❌ Optional method + null check
 interface TaskState {
-  getEntryMessage?(task: Task): string;  // オプショナル
+  getEntryMessage?(task: Task): string;  // Optional
 }
 
-// 呼び出し側で分岐が必要
+// Branching required on the calling side
 const message = state.getEntryMessage
   ? state.getEntryMessage(task)
   : "";
 
-// ❌ 型による分岐
+// ❌ Branching by type
 if (status === "pending_review") {
   return getPendingReviewMessage(task);
 } else if (status === "in_progress") {
@@ -31,34 +31,34 @@ if (status === "pending_review") {
 }
 ```
 
-## 良い例
+## Good Examples
 
 ```typescript
-// ✅ 必須メソッド + デフォルト実装
+// ✅ Required method + default implementation
 interface TaskState {
-  getEntryMessage(task: Task): string;  // 必須
+  getEntryMessage(task: Task): string;  // Required
 }
 
-// メッセージ不要な状態は空文字を返す
+// States that don't need a message return empty string
 class PendingState implements TaskState {
   getEntryMessage(_task: Task): string {
     return "";
   }
 }
 
-// メッセージが必要な状態は実装
+// States that need a message implement it
 class PendingReviewState implements TaskState {
   getEntryMessage(task: Task): string {
     return `🛑 STOP - Task "${task.id}" needs review...`;
   }
 }
 
-// 呼び出し側は分岐不要
+// No branching needed on the calling side
 const message = stateRegistry[status].getEntryMessage(task);
 ```
 
-## 理由
+## Rationale
 
-- 呼び出し側のコードがシンプルになる
-- 新しい状態を追加しても呼び出し側の変更が不要
-- TypeScript が実装漏れを検出できる
+- Simplifies the calling code
+- No changes needed on the calling side when adding new states
+- TypeScript can detect missing implementations

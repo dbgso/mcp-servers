@@ -8,28 +8,28 @@ whenToUse:
 
 # Bug Fix Testing Rule
 
-発見した不具合を修正する際は、必ずテストコードで担保する。
+When fixing discovered bugs, always ensure the fix is covered by test code.
 
-## ルール
+## Rules
 
-1. **修正前にテストを書く** - 不具合を再現するテストを先に書く
-2. **テストが失敗することを確認** - 修正前はテストが失敗すること
-3. **修正を実装** - 不具合を修正
-4. **テストが成功することを確認** - 修正後はテストが成功すること
+1. **Write tests before fixing** - Write tests that reproduce the bug first
+2. **Confirm tests fail** - Verify that tests fail before the fix
+3. **Implement the fix** - Fix the bug
+4. **Confirm tests pass** - Verify that tests pass after the fix
 
-## 理由
+## Rationale
 
-- 同じ不具合の再発を防ぐ
-- 修正が正しいことを証明する
-- リグレッションテストとして機能する
+- Prevents the same bug from recurring
+- Proves that the fix is correct
+- Functions as a regression test
 
-## 例
+## Example
 
 ```typescript
-// 不具合: notesなしでself_review→pending_explanationが成功してしまう
+// Bug: self_review→pending_explanation succeeds without notes
 it("should fail without notes", async () => {
   const result = await instance.trigger({
-    params: { action: "review_complete" },  // notesなし
+    params: { action: "review_complete" },  // No notes
   });
   expect(result.ok).toBe(false);
   expect(result.error).toContain("notes");

@@ -6,11 +6,11 @@ whenToUse:
   - Reviewing code with deep nesting
 ---
 
-# Early Return パターン
+# Early Return Pattern
 
-条件分岐では `let` や三項演算子ではなく、メソッド・関数の早期returnを使用するルール。
+Use early returns from methods/functions instead of `let` or ternary operators in conditional logic.
 
-## 悪い例
+## Bad Examples
 
 ```typescript
 // ❌ let + if-else
@@ -22,7 +22,7 @@ if (condition) {
 }
 return result;
 
-// ❌ 三項演算子（複雑な場合）
+// ❌ Ternary operator (when complex)
 const result = condition1
   ? value1
   : condition2
@@ -30,10 +30,10 @@ const result = condition1
     : value3;
 ```
 
-## 良い例
+## Good Examples
 
 ```typescript
-// ✅ 早期return
+// ✅ Early return
 function getValue(condition: boolean): string {
   if (condition) {
     return "value1";
@@ -41,7 +41,7 @@ function getValue(condition: boolean): string {
   return "value2";
 }
 
-// ✅ ガード節
+// ✅ Guard clauses
 async function validateTransition(ctx: TransitionContext): Promise<TransitionResult> {
   if (!this.allowedTransitions.includes(ctx.newStatus)) {
     return {
@@ -61,8 +61,8 @@ async function validateTransition(ctx: TransitionContext): Promise<TransitionRes
 }
 ```
 
-## 理由
+## Rationale
 
-- コードの読みやすさが向上（ネストが浅くなる）
-- 各条件の処理が明確に分離される
-- `let` による変数の再代入を避けられる
+- Improves code readability (reduces nesting depth)
+- Each condition's processing is clearly separated
+- Avoids variable reassignment with `let`
