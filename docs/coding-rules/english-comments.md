@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Writing code comments
+  - Adding TODO/FIXME comments
+  - Writing JSDoc documentation
+  - Reviewing code for comment language
+---
+
 # English Comments
 
 All code comments must be written in English.

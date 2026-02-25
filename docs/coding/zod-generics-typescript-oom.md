@@ -1,3 +1,11 @@
+---
+description: Solution for TypeScript OOM crashes when using Zod schemas with generics
+whenToUse:
+  - Using Zod schemas with TypeScript generics
+  - Debugging TypeScript OOM or slow compilation
+  - Designing base classes that use Zod for validation
+---
+
 # Zod Generics と TypeScript コンパイル OOM 問題
 
 zod のスキーマ型をジェネリクス引数として使うと TypeScript コンパイルが OOM でクラッシュする問題と、その解決策。

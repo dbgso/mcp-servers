@@ -1,3 +1,12 @@
+---
+whenToUse:
+  - Writing TypeScript code
+  - Using Zod schemas
+  - Defining types and interfaces
+  - Writing async functions
+  - Creating test cases with test.each
+---
+
 # TypeScript コーディング規約
 
 このプロジェクト固有のTypeScriptコーディング規約。

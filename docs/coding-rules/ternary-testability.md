@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Writing conditional expressions
+  - Improving test coverage
+  - Refactoring ternary operators
+  - Making code more testable
+---
+
 # Ternary Operators and Testability
 
 Ternary operators are concise but can make test coverage difficult. Extract to functions to improve testability.

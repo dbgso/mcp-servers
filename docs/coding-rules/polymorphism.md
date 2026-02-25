@@ -1,3 +1,11 @@
+---
+whenToUse:
+  - Refactoring switch/if-else chains
+  - Designing state machines
+  - Implementing strategy patterns
+  - Adding new variants to existing types
+---
+
 # ポリモーフィズムの活用
 
 条件分岐（if/switch）ではなくポリモーフィズムを使い、不要な分岐を作らない。
