@@ -39,6 +39,55 @@ A collection of fundamental rules for writing maintainable and readable code.
 - Keep arguments minimal (ideally 3 or fewer)
 - Minimize side effects
 
+### Extract Conditional Chains as Pure Functions
+
+When you have logic that determines output based on input through conditional branches, extract it as a pure function:
+
+**Before** (inline conditional chain):
+```typescript
+let name = "";
+let kind = "unknown";
+if (Node.isInterfaceDeclaration(decl)) {
+  name = decl.getName();
+  kind = "interface";
+} else if (Node.isClassDeclaration(decl)) {
+  name = decl.getName() ?? "anonymous";
+  kind = "class";
+} else {
+  name = fallback;
+  kind = decl.getKindName();
+}
+```
+
+**After** (extracted pure function):
+```typescript
+// Pure function - testable, reusable, named
+function getDeclarationInfo(params: { node: Node; fallbackName?: string }): { name: string; kind: string } {
+  const { node, fallbackName } = params;
+  if (Node.isInterfaceDeclaration(node)) {
+    return { name: node.getName(), kind: "interface" };
+  }
+  if (Node.isClassDeclaration(node)) {
+    return { name: node.getName() ?? "anonymous", kind: "class" };
+  }
+  return { name: fallbackName ?? "unknown", kind: node.getKindName() };
+}
+
+// Usage
+const { name, kind } = getDeclarationInfo({ node: decl, fallbackName });
+```
+
+**Benefits**:
+1. **Testability**: Pure functions are easy to unit test without mocking
+2. **Reusability**: Can be called from multiple places
+3. **Readability**: Logic has a descriptive name
+
+**Applies to**:
+- `if/else if` chains
+- `switch` statements
+- Type discrimination logic
+- Mapping/transformation logic
+
 ## Error Handling
 
 - Detect errors early and handle them appropriately

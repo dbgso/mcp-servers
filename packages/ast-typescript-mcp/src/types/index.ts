@@ -8,6 +8,68 @@ export type {
   FindReferencesResult,
 } from "mcp-shared";
 
+// Implementation location types
+export interface ImplementationLocation {
+  /** File path of the implementation */
+  filePath: string;
+  /** Line number (1-based) */
+  line: number;
+  /** Column number (1-based) */
+  column: number;
+  /** Name of the implementing class/function */
+  name: string;
+  /** Kind of implementation (class, method, function) */
+  kind: string;
+  /** Preview text of the implementation */
+  preview?: string;
+}
+
+export interface GoToImplementationResult {
+  /** Source file path */
+  sourceFilePath: string;
+  /** Source line number */
+  sourceLine: number;
+  /** Source column number */
+  sourceColumn: number;
+  /** Identifier at the cursor */
+  identifier: string;
+  /** Kind of the source symbol (interface, abstract class, method) */
+  sourceKind: string;
+  /** Found implementations */
+  implementations: ImplementationLocation[];
+}
+
+// Type definition location types
+export interface TypeDefinitionLocation {
+  /** File path of the type definition */
+  filePath: string;
+  /** Line number (1-based) */
+  line: number;
+  /** Column number (1-based) */
+  column: number;
+  /** Name of the type */
+  name: string;
+  /** Kind of type (interface, type, class, enum) */
+  kind: string;
+  /** Preview text */
+  preview?: string;
+}
+
+export interface GoToTypeDefinitionResult {
+  /** Source file path */
+  sourceFilePath: string;
+  /** Source line number */
+  sourceLine: number;
+  /** Source column number */
+  sourceColumn: number;
+  /** Identifier at the cursor */
+  identifier: string;
+  /** Inferred type text */
+  typeText: string;
+  /** Type definition locations */
+  typeDefinitions: TypeDefinitionLocation[];
+}
+
 // Hover types
 export interface HoverResult {
   /** File path of the source file */

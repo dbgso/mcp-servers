@@ -10,6 +10,10 @@ import type {
   DeclarationKind,
   GoToDefinitionResult,
   DefinitionLocation,
+  GoToImplementationResult,
+  ImplementationLocation,
+  GoToTypeDefinitionResult,
+  TypeDefinitionLocation,
   HoverResult,
   FindReferencesResult,
   ReferenceLocation,
@@ -60,6 +64,47 @@ import {
   findPackageForFile,
   parseAllPackages,
 } from "../monorepo/index.js";
+
+// ─── Pure Utility Functions ───────────────────────────────────────────────────
+
+/**
+ * Extract name and kind from a declaration node.
+ * Pure function - no side effects, depends only on input.
+ */
+export function getDeclarationInfo(params: {
+  node: Node;
+  fallbackName?: string;
+}): { name: string; kind: string } {
+  const { node, fallbackName } = params;
+  if (Node.isInterfaceDeclaration(node)) {
+    return { name: node.getName(), kind: "interface" };
+  }
+  if (Node.isTypeAliasDeclaration(node)) {
+    return { name: node.getName(), kind: "type" };
+  }
+  if (Node.isClassDeclaration(node)) {
+    return { name: node.getName() ?? "anonymous", kind: "class" };
+  }
+  if (Node.isEnumDeclaration(node)) {
+    return { name: node.getName(), kind: "enum" };
+  }
+  if (Node.isFunctionDeclaration(node)) {
+    return { name: node.getName() ?? "anonymous", kind: "function" };
+  }
+  if (Node.isVariableDeclaration(node)) {
+    return { name: node.getName(), kind: "variable" };
+  }
+  if (Node.isMethodDeclaration(node)) {
+    return { name: node.getName(), kind: "method" };
+  }
+  if (Node.isPropertyDeclaration(node)) {
+    return { name: node.getName(), kind: "property" };
+  }
+  // Fallback
+  return { name: fallbackName ?? "unknown", kind: node.getKindName() };
+}
+
+// ─── TypeScriptHandler ────────────────────────────────────────────────────────
 
 export class TypeScriptHandler {
   readonly extensions = ["ts", "tsx", "mts", "cts"];
@@ -112,6 +157,31 @@ export class TypeScriptHandler {
           skipAddingFilesFromTsConfig: true,
           skipFileDependencyResolution: true,
         });
+      }
+      this.projectCache.set(cacheKey, project);
+    }
+    return project;
+  }
+
+  /**
+   * Get a Project that loads all files from tsconfig.
+   * Used for implementation search where we need to find derived classes.
+   */
+  private getFullProjectForFile(filePath: string): Project {
+    const tsConfigPath = findTsConfig(filePath);
+    const cacheKey = `full:${tsConfigPath ?? "__no_tsconfig__"}`;
+
+    let project = this.projectCache.get(cacheKey);
+    if (!project) {
+      if (tsConfigPath) {
+        project = new Project({
+          tsConfigFilePath: tsConfigPath,
+          skipAddingFilesFromTsConfig: false, // Load all files
+          skipFileDependencyResolution: false,
+        });
+      } else {
+        // Fallback to regular project if no tsconfig
+        project = this.getProjectForFile(filePath);
       }
       this.projectCache.set(cacheKey, project);
     }
@@ -464,6 +534,211 @@ export class TypeScriptHandler {
         if (sf) {
           project.removeSourceFile(sf);
         }
+      }
+    }
+  }
+
+  async goToImplementation(
+    { filePath, line, column }: { filePath: string; line: number; column: number }
+  ): Promise<GoToImplementationResult> {
+    // Use a project that loads all files from tsconfig for implementation search
+    const project = this.getFullProjectForFile(filePath);
+    const sourceFile = project.getSourceFile(filePath) ?? project.addSourceFileAtPath(filePath);
+
+    try {
+      const pos = sourceFile.compilerNode.getPositionOfLineAndCharacter(line - 1, column - 1);
+      const node = sourceFile.getDescendantAtPos(pos);
+
+      if (!node) {
+        return {
+          sourceFilePath: filePath,
+          sourceLine: line,
+          sourceColumn: column,
+          identifier: "",
+          sourceKind: "unknown",
+          implementations: [],
+        };
+      }
+
+      const identifier = node.getText();
+      const implementations: ImplementationLocation[] = [];
+      let sourceKind = "unknown";
+
+      // Find the declaration this identifier refers to
+      if (Node.isIdentifier(node)) {
+        const symbol = node.getSymbol();
+        if (symbol) {
+          const declarations = symbol.getDeclarations();
+          for (const decl of declarations) {
+            // Interface - find implementing classes
+            if (Node.isInterfaceDeclaration(decl)) {
+              sourceKind = "interface";
+              try {
+                const impls = decl.getImplementations();
+                for (const impl of impls) {
+                  const implNode = impl.getNode();
+                  const implDecl = this.findTypeDeclaration(implNode);
+                  if (implDecl && Node.isClassDeclaration(implDecl)) {
+                    const implFile = implDecl.getSourceFile();
+                    const implLine = implDecl.getStartLineNumber();
+                    const implCol = implDecl.getStart() - implDecl.getStartLinePos() + 1;
+                    implementations.push({
+                      filePath: implFile.getFilePath(),
+                      line: implLine,
+                      column: implCol,
+                      name: implDecl.getName() ?? "anonymous",
+                      kind: "class",
+                      preview: implDecl.getText().split("\n")[0].slice(0, 100),
+                    });
+                  }
+                }
+              } catch {
+                // getImplementations may fail
+              }
+            }
+
+            // Abstract class - find extending classes
+            if (Node.isClassDeclaration(decl) && decl.isAbstract()) {
+              sourceKind = "abstract class";
+              try {
+                const derivedClasses = decl.getDerivedClasses();
+                for (const derived of derivedClasses) {
+                  const derivedFile = derived.getSourceFile();
+                  const derivedLine = derived.getStartLineNumber();
+                  const derivedCol = derived.getStart() - derived.getStartLinePos() + 1;
+                  implementations.push({
+                    filePath: derivedFile.getFilePath(),
+                    line: derivedLine,
+                    column: derivedCol,
+                    name: derived.getName() ?? "anonymous",
+                    kind: "class",
+                    preview: derived.getText().split("\n")[0].slice(0, 100),
+                  });
+                }
+              } catch {
+                // getDerivedClasses may fail
+              }
+            }
+
+            // Abstract method - find overriding methods
+            if (Node.isMethodDeclaration(decl) && decl.isAbstract()) {
+              sourceKind = "abstract method";
+              const parentClass = decl.getParentIfKind(SyntaxKind.ClassDeclaration);
+              if (parentClass) {
+                try {
+                  const derivedClasses = parentClass.getDerivedClasses();
+                  const methodName = decl.getName();
+                  for (const derived of derivedClasses) {
+                    const overridingMethod = derived.getMethod(methodName);
+                    if (overridingMethod && !overridingMethod.isAbstract()) {
+                      const methodFile = overridingMethod.getSourceFile();
+                      const methodLine = overridingMethod.getStartLineNumber();
+                      const methodCol = overridingMethod.getStart() - overridingMethod.getStartLinePos() + 1;
+                      implementations.push({
+                        filePath: methodFile.getFilePath(),
+                        line: methodLine,
+                        column: methodCol,
+                        name: `${derived.getName()}.${methodName}`,
+                        kind: "method",
+                        preview: overridingMethod.getText().split("\n")[0].slice(0, 100),
+                      });
+                    }
+                  }
+                } catch {
+                  // may fail
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return {
+        sourceFilePath: filePath,
+        sourceLine: line,
+        sourceColumn: column,
+        identifier,
+        sourceKind,
+        implementations,
+      };
+    } finally {
+      const sf = project.getSourceFile(filePath);
+      if (sf) {
+        project.removeSourceFile(sf);
+      }
+    }
+  }
+
+  async goToTypeDefinition(
+    { filePath, line, column }: { filePath: string; line: number; column: number }
+  ): Promise<GoToTypeDefinitionResult> {
+    const project = this.getProjectForFile(filePath);
+    const sourceFile = project.addSourceFileAtPath(filePath);
+
+    try {
+      const pos = sourceFile.compilerNode.getPositionOfLineAndCharacter(line - 1, column - 1);
+      const node = sourceFile.getDescendantAtPos(pos);
+
+      if (!node) {
+        return {
+          sourceFilePath: filePath,
+          sourceLine: line,
+          sourceColumn: column,
+          identifier: "",
+          typeText: "",
+          typeDefinitions: [],
+        };
+      }
+
+      const identifier = node.getText();
+      const typeDefinitions: TypeDefinitionLocation[] = [];
+      let typeText = "";
+
+      try {
+        const type = node.getType();
+        typeText = type.getText(node);
+
+        // Get the type's symbol and find its declaration
+        const typeSymbol = type.getSymbol() ?? type.getAliasSymbol();
+        if (typeSymbol) {
+          const declarations = typeSymbol.getDeclarations();
+          for (const decl of declarations) {
+            const declFile = decl.getSourceFile();
+            const declFilePath = declFile.getFilePath();
+
+            // Skip node_modules for cleaner results
+            if (declFilePath.includes("node_modules")) continue;
+
+            const declLine = decl.getStartLineNumber();
+            const declCol = decl.getStart() - decl.getStartLinePos() + 1;
+            const { name, kind } = getDeclarationInfo({ node: decl, fallbackName: typeSymbol.getName() });
+
+            typeDefinitions.push({
+              filePath: declFilePath,
+              line: declLine,
+              column: declCol,
+              name,
+              kind,
+              preview: decl.getText().split("\n")[0].slice(0, 100),
+            });
+          }
+        }
+      } catch {
+        // Type resolution may fail
+      }
+
+      return {
+        sourceFilePath: filePath,
+        sourceLine: line,
+        sourceColumn: column,
+        identifier,
+        typeText,
+        typeDefinitions,
+      };
+    } finally {
+      const sf = project.getSourceFile(filePath);
+      if (sf) {
+        project.removeSourceFile(sf);
       }
     }
   }
