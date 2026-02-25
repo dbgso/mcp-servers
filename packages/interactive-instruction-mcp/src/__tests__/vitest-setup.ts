@@ -11,8 +11,12 @@ import * as os from "node:os";
 
 // Clean up persisted workflow states
 const PERSIST_DIR = path.join(os.tmpdir(), "mcp-draft-workflows");
-await fs.rm(PERSIST_DIR, { recursive: true, force: true }).catch(() => {});
-await fs.mkdir(PERSIST_DIR, { recursive: true }).catch(() => {});
+try {
+  await fs.rm(PERSIST_DIR, { recursive: true, force: true });
+} catch {
+  // Directory might not exist, ignore
+}
+await fs.mkdir(PERSIST_DIR, { recursive: true });
 
 // Clean up approval directory
 const APPROVAL_DIR = path.join(os.tmpdir(), "mcp-approval");
