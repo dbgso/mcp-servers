@@ -8,6 +8,28 @@ export type {
   FindReferencesResult,
 } from "mcp-shared";
 
+// Hover types
+export interface HoverResult {
+  /** File path of the source file */
+  filePath: string;
+  /** Line number (1-based) */
+  line: number;
+  /** Column number (1-based) */
+  column: number;
+  /** Whether a symbol was found at the position */
+  found: boolean;
+  /** Text of the node at the position */
+  text?: string;
+  /** AST kind of the node */
+  kind?: string;
+  /** Type information as string */
+  type?: string;
+  /** JSDoc documentation if available */
+  documentation?: string;
+  /** JSDoc tags if available */
+  jsdocTags?: Array<{ tag: string; text: string }>;
+}
+
 export interface TsAstReadResult {
   filePath: string;
   fileType: "typescript";

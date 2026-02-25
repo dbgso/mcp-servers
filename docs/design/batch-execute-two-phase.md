@@ -10,7 +10,7 @@ globs: ["packages/ast-typescript-mcp/**"]
 
 # batch_execute Two-Phase Execution
 
-batch_executeツールは、複数のAST変換を安全に一括適用するため、Position-based Two-Phase方式を採用している。
+The batch_execute tool uses a Position-based Two-Phase approach to safely apply multiple AST transformations at once.
 
 ## Problem
 

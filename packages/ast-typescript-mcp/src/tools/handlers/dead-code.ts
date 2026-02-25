@@ -5,9 +5,12 @@ import type { ToolResponse } from "../types.js";
 import { getHandler } from "../../handlers/index.js";
 
 const DeadCodeSchema = z.object({
-  paths: z.array(z.string()).describe("Absolute path(s) to files or directories to analyze"),
+  path: z.string().optional().describe("Single path to analyze (alternative to paths)"),
+  paths: z.array(z.string()).optional().describe("Absolute path(s) to files or directories to analyze"),
   include_tests: z.boolean().optional().default(false).describe("Include test files in analysis (default: false)"),
   entry_points: z.array(z.string()).optional().default([]).describe("Glob patterns for entry points (exports from these files are considered used)"),
+}).refine(data => data.path || (data.paths && data.paths.length > 0), {
+  message: "Either 'path' or 'paths' must be provided",
 });
 
 type DeadCodeArgs = z.infer<typeof DeadCodeSchema>;
@@ -20,6 +23,10 @@ export class DeadCodeHandler extends BaseToolHandler<DeadCodeArgs> {
   readonly inputSchema = {
     type: "object" as const,
     properties: {
+      path: {
+        type: "string",
+        description: "Single path to analyze (alternative to paths)",
+      },
       paths: {
         type: "array",
         items: { type: "string" },
@@ -35,11 +42,14 @@ export class DeadCodeHandler extends BaseToolHandler<DeadCodeArgs> {
         description: "Glob patterns for entry points (exports from these files are considered used)",
       },
     },
-    required: ["paths"],
+    required: [],
   };
 
   protected async doExecute(args: DeadCodeArgs): Promise<ToolResponse> {
-    const { paths, include_tests, entry_points } = args;
+    const { path, paths: pathsArg, include_tests, entry_points } = args;
+
+    // Normalize: support both path (single) and paths (array)
+    const paths = path ? [path] : (pathsArg ?? []);
 
     // Get handler using the first path (or a dummy TypeScript file)
     const firstPath = paths[0];

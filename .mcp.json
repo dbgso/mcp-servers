@@ -27,6 +27,34 @@
     "ast-typescript-mcp": {
       "command": "npx",
       "args": ["tsx", "./packages/ast-typescript-mcp/src/index.ts"]
+    },
+    "ast-file-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/ast-file-mcp/docs"]
+    },
+    "ast-typescript-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/ast-typescript-mcp/docs"]
+    },
+    "git-repo-explorer-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/git-repo-explorer-mcp/docs"]
+    },
+    "interactive-pdca-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/interactive-pdca-mcp/docs"]
+    },
+    "kroki-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/kroki-mcp/docs"]
+    },
+    "traceable-chain-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/traceable-chain-mcp/docs"]
+    },
+    "interactive-instruction-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/interactive-instruction-mcp/docs"]
     }
   }
 }

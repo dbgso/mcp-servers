@@ -52,6 +52,67 @@ const PRESETS: Record<string, AstQuery> = {
   any_type: {
     kind: "AnyKeyword",
   },
+
+  // debugger statements - should be removed before commit
+  debugger: {
+    kind: "DebuggerStatement",
+  },
+
+  // throw string literal - should throw Error instead
+  throw_string: {
+    kind: "ThrowStatement",
+    expression: { kind: "StringLiteral" },
+  },
+
+  // eval() calls - security risk
+  eval: {
+    kind: "CallExpression",
+    expression: { $text: "^eval$" },
+  },
+
+  // delete operator - often indicates code smell
+  delete: {
+    kind: "DeleteExpression",
+  },
+
+  // .bind(this) - often unnecessary with arrow functions
+  bind_this: {
+    kind: "CallExpression",
+    expression: {
+      kind: "PropertyAccessExpression",
+      name: { $text: "^bind$" },
+    },
+  },
+
+  // Empty catch block - error swallowing
+  empty_catch: {
+    kind: "CatchClause",
+    block: { $text: "^\\{\\s*\\}$" },
+  },
+
+  // TODO/FIXME comments (JsDoc style)
+  todo_comment: {
+    kind: "JSDocTag",
+    $text: "(TODO|FIXME|XXX|HACK)",
+  },
+
+  // Relative imports with ../ (potential alias candidates)
+  relative_import: {
+    kind: "ImportDeclaration",
+    moduleSpecifier: { $text: '"\\.\\.' },
+  },
+
+  // Dynamic import() calls
+  dynamic_import: {
+    kind: "CallExpression",
+    expression: { kind: "ImportKeyword" },
+  },
+
+  // require() calls (CommonJS in TypeScript)
+  require: {
+    kind: "CallExpression",
+    expression: { $text: "^require$" },
+  },
 };
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -115,8 +176,21 @@ const QueryAstSchema = z.object({
     "non_null_assertion",
     "type_assertion",
     "any_type",
+    "debugger",
+    "throw_string",
+    "eval",
+    "delete",
+    "bind_this",
+    "empty_catch",
+    "todo_comment",
+    "relative_import",
+    "dynamic_import",
+    "require",
   ]).optional().describe("Use a preset query instead of custom query"),
   limit: z.number().optional().default(100).describe("Maximum matches to return (default: 100)"),
+  output: z.enum(["full", "compact", "summary"]).optional().default("full").describe(
+    "Output mode: full (default, max 200 chars), compact (first line only), summary (file+line+kind only)"
+  ),
   include: z.array(z.string()).optional().default(["**/*.ts", "**/*.tsx"]).describe("Glob patterns to include"),
   exclude: z.array(z.string()).optional().default(["**/node_modules/**", "**/*.d.ts"]).describe("Glob patterns to exclude"),
 }).refine(
@@ -145,8 +219,16 @@ export class QueryAstHandler extends BaseToolHandler<QueryAstArgs> {
 - Match array indices (e.g., arguments[0])
 - Complex boolean logic (AND/OR conditions)
 
+## Output Modes
+- **full** (default): up to 200 chars of matched text
+- **compact**: first line only (up to 100 chars)
+- **summary**: file+line+kind only, no text (smallest output)
+
 ## Presets
-instanceof, console_log, await_then, non_null_assertion, type_assertion, any_type
+- **Code smells**: instanceof, non_null_assertion, type_assertion, any_type, delete, bind_this, empty_catch
+- **Debug artifacts**: console_log, debugger, todo_comment
+- **Anti-patterns**: await_then, throw_string, eval
+- **Imports**: relative_import, dynamic_import, require
 
 ## Custom Query Example
 \`\`\`json
@@ -174,12 +256,17 @@ Finds: obj.execute(...), handler.execute(...)`;
       },
       preset: {
         type: "string",
-        enum: ["instanceof", "console_log", "await_then", "non_null_assertion", "type_assertion", "any_type"],
+        enum: ["instanceof", "console_log", "await_then", "non_null_assertion", "type_assertion", "any_type", "debugger", "throw_string", "eval", "delete", "bind_this", "empty_catch", "todo_comment", "relative_import", "dynamic_import", "require"],
         description: "Use a preset query",
       },
       limit: {
         type: "number",
         description: "Maximum matches to return (default: 100)",
+      },
+      output: {
+        type: "string",
+        enum: ["full", "compact", "summary"],
+        description: "Output mode: full (default), compact (first line), summary (no text)",
       },
       include: {
         type: "array",
@@ -196,7 +283,7 @@ Finds: obj.execute(...), handler.execute(...)`;
   };
 
   protected async doExecute(args: QueryAstArgs): Promise<ToolResponse> {
-    const { path: searchPath, query, preset, limit, include, exclude } = args;
+    const { path: searchPath, query, preset, limit, output, include, exclude } = args;
 
     try {
       // Resolve query from preset or use provided query
@@ -232,7 +319,7 @@ Finds: obj.execute(...), handler.execute(...)`;
 
         const sourceFile = project.addSourceFileAtPath(file);
         const remainingLimit = limit - allMatches.length;
-        const matches = this.searchFile({ sourceFile, query: effectiveQuery, limit: remainingLimit });
+        const matches = this.searchFile({ sourceFile, query: effectiveQuery, limit: remainingLimit, output });
 
         if (matches.length > 0) {
           filesWithMatches++;
@@ -292,8 +379,9 @@ Finds: obj.execute(...), handler.execute(...)`;
     sourceFile: SourceFile;
     query: AstQuery;
     limit: number;
+    output: "full" | "compact" | "summary";
   }): QueryMatch[] {
-    const { sourceFile, query, limit } = params;
+    const { sourceFile, query, limit, output } = params;
     const matches: QueryMatch[] = [];
     const filePath = sourceFile.getFilePath();
 
@@ -304,16 +392,36 @@ Finds: obj.execute(...), handler.execute(...)`;
 
       const captures: Record<string, { text: string; line: number; column: number }> = {};
       if (this.matchNode({ node, query, captures })) {
-        const text = node.getText();
         const pos = sourceFile.getLineAndColumnAtPos(node.getStart());
-        matches.push({
+
+        // Format text based on output mode
+        let text: string;
+        if (output === "summary") {
+          text = ""; // No text in summary mode
+        } else if (output === "compact") {
+          const fullText = node.getText();
+          const firstLine = fullText.split("\n")[0];
+          text = firstLine.length > 100 ? firstLine.slice(0, 100) + "..." : firstLine;
+        } else {
+          // full mode
+          const fullText = node.getText();
+          text = fullText.length > 200 ? fullText.slice(0, 200) + "..." : fullText;
+        }
+
+        const match: QueryMatch = {
           file: filePath,
           line: pos.line,
           column: pos.column,
-          text: text.length > 200 ? text.slice(0, 200) + "..." : text,
+          text,
           kind: node.getKindName(),
-          captures: Object.keys(captures).length > 0 ? captures : undefined,
-        });
+        };
+
+        // Only include captures if not in summary mode and there are captures
+        if (output !== "summary" && Object.keys(captures).length > 0) {
+          match.captures = captures;
+        }
+
+        matches.push(match);
       }
 
       return undefined; // Continue traversal
@@ -437,6 +545,44 @@ Finds: obj.execute(...), handler.execute(...)`;
           const typeArgs = node.getTypeArguments();
           return typeArgs[0];
         }
+        break;
+      }
+      case "moduleSpecifier": {
+        if (Node.isImportDeclaration(node)) return node.getModuleSpecifier();
+        if (Node.isExportDeclaration(node)) return node.getModuleSpecifier();
+        break;
+      }
+      case "importClause": {
+        if (Node.isImportDeclaration(node)) return node.getImportClause();
+        break;
+      }
+      case "namedBindings": {
+        if (Node.isImportClause(node)) return node.getNamedBindings();
+        break;
+      }
+      case "condition": {
+        if (Node.isConditionalExpression(node)) return node.getCondition();
+        if (Node.isIfStatement(node)) return node.getExpression();
+        break;
+      }
+      case "thenStatement": {
+        if (Node.isIfStatement(node)) return node.getThenStatement();
+        break;
+      }
+      case "elseStatement": {
+        if (Node.isIfStatement(node)) return node.getElseStatement();
+        break;
+      }
+      case "initializer": {
+        if (Node.isVariableDeclaration(node)) return node.getInitializer();
+        if (Node.isPropertyDeclaration(node)) return node.getInitializer();
+        break;
+      }
+      case "type": {
+        if (Node.isVariableDeclaration(node)) return node.getTypeNode();
+        if (Node.isParameterDeclaration(node)) return node.getTypeNode();
+        if (Node.isFunctionDeclaration(node)) return node.getReturnTypeNode();
+        if (Node.isAsExpression(node)) return node.getTypeNode();
         break;
       }
     }
