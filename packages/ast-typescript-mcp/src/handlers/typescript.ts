@@ -832,7 +832,7 @@ export class TypeScriptHandler {
   }
 
   async findReferences(
-    { filePath, line, column, options }: { filePath: string; line: number; column: number; options?: { scopeToDependents?: boolean } }
+    { filePath, line, column, options }: { filePath: string; line: number; column: number; options?: { scopeToDependents?: boolean; scope?: "all" | "dependents" | "same_package" } }
   ): Promise<FindReferencesResult> {
     const project = this.getProjectForFile(filePath);
     const sourceFile = project.addSourceFileAtPath(filePath);
@@ -869,9 +869,21 @@ export class TypeScriptHandler {
       // Use git grep to find candidate files
       let candidateFiles = this.gitGrep({ gitRoot, symbolName });
 
-      // If scope_to_dependents is enabled, filter to only dependent packages
-      if (options?.scopeToDependents) {
+      // Determine effective scope (new scope parameter takes precedence over deprecated scopeToDependents)
+      const effectiveScope = options?.scope ?? (options?.scopeToDependents ? "dependents" : "all");
+
+      // Apply scope filtering
+      if (effectiveScope === "dependents") {
         const scopedFiles = await this.filterToDependentPackages({
+          targetFilePath: filePath,
+          candidateFiles,
+          gitRoot
+        });
+        if (scopedFiles) {
+          candidateFiles = scopedFiles;
+        }
+      } else if (effectiveScope === "same_package") {
+        const scopedFiles = await this.filterToSamePackage({
           targetFilePath: filePath,
           candidateFiles,
           gitRoot
@@ -948,6 +960,35 @@ export class TypeScriptHandler {
     // Filter candidate files to those within allowed directories
     return candidateFiles.filter((file) =>
       allowedDirs.some((dir) => file.startsWith(dir + "/") || file === dir)
+    );
+  }
+
+  /**
+   * Filter candidate files to only those in the same package as the target file.
+   * Returns null if monorepo detection fails (fallback to all files).
+   */
+  private async filterToSamePackage(
+    { targetFilePath, candidateFiles, gitRoot }: { targetFilePath: string; candidateFiles: string[]; gitRoot: string }
+  ): Promise<string[] | null> {
+    // Detect workspace
+    const workspace = await detectWorkspace(gitRoot);
+    if (!workspace) {
+      return null; // Not a monorepo, search all files
+    }
+
+    // Parse all packages
+    const packages = parseAllPackages({ packageDirs: workspace.packageDirs, rootDir: workspace.rootDir });
+
+    // Find which package the target file belongs to
+    const targetPackage = findPackageForFile({ filePath: targetFilePath, packages });
+    if (!targetPackage) {
+      return null; // File not in any package, search all files
+    }
+
+    // Filter candidate files to those within the same package directory
+    const packageDir = targetPackage.path;
+    return candidateFiles.filter((file) =>
+      file.startsWith(packageDir + "/") || file === packageDir
     );
   }
 
@@ -2298,12 +2339,16 @@ export class TypeScriptHandler {
     paths: string[];
     includeTests?: boolean;
     entryPoints?: string[];
+    scope?: "all" | "exports" | "private_members";
   }): Promise<DeadCodeResult> {
-    const { paths, includeTests = false, entryPoints = [] } = params;
+    const { paths, includeTests = false, entryPoints = [], scope = "all" } = params;
     const deadSymbols: DeadCodeSymbol[] = [];
     let filesAnalyzed = 0;
     let exportsChecked = 0;
     let privateMembersChecked = 0;
+
+    const checkExports = scope === "all" || scope === "exports";
+    const checkPrivateMembers = scope === "all" || scope === "private_members";
 
     // Collect all TypeScript files from the given paths
     const allFiles = this.collectTypeScriptFiles(paths);
@@ -2329,16 +2374,20 @@ export class TypeScriptHandler {
         sourceFile = project.addSourceFileAtPath(filePath);
 
         // Check unused exports
-        const unusedExports = await this.findUnusedExports(
-          { project: project, sourceFile: sourceFile, allFiles: filesToAnalyze, entryPointPatterns: entryPointPatterns }
-        );
-        exportsChecked += unusedExports.checked;
-        deadSymbols.push(...unusedExports.dead);
+        if (checkExports) {
+          const unusedExports = await this.findUnusedExports(
+            { project: project, sourceFile: sourceFile, allFiles: filesToAnalyze, entryPointPatterns: entryPointPatterns }
+          );
+          exportsChecked += unusedExports.checked;
+          deadSymbols.push(...unusedExports.dead);
+        }
 
         // Check unused private members
-        const unusedPrivates = this.findUnusedPrivateMembers({ sourceFile: sourceFile, filePath: filePath });
-        privateMembersChecked += unusedPrivates.checked;
-        deadSymbols.push(...unusedPrivates.dead);
+        if (checkPrivateMembers) {
+          const unusedPrivates = this.findUnusedPrivateMembers({ sourceFile: sourceFile, filePath: filePath });
+          privateMembersChecked += unusedPrivates.checked;
+          deadSymbols.push(...unusedPrivates.dead);
+        }
       } catch {
         // Skip files that can't be parsed
       } finally {

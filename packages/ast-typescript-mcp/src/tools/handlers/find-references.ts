@@ -8,11 +8,13 @@ const FindReferencesSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file containing the symbol definition"),
   line: z.number().describe("Line number of the symbol (1-based)"),
   column: z.number().describe("Column number of the symbol (1-based)"),
+  scope: z.enum(["all", "dependents", "same_package"]).optional().default("all").describe(
+    "Search scope: 'all' (everywhere), 'dependents' (only dependent packages), 'same_package' (only current package)"
+  ),
   scope_to_dependents: z
     .boolean()
     .optional()
-    .default(false)
-    .describe("Only search in packages that depend on the target package (monorepo optimization)"),
+    .describe("[Deprecated: use scope='dependents'] Only search in packages that depend on the target package"),
 });
 
 type FindReferencesArgs = z.infer<typeof FindReferencesSchema>;
@@ -57,16 +59,21 @@ Returns: [{ file, line, column, context }, ...]`;
         type: "number",
         description: "Column number of the symbol (1-based)",
       },
+      scope: {
+        type: "string",
+        enum: ["all", "dependents", "same_package"],
+        description: "Search scope: 'all' (everywhere), 'dependents' (only dependent packages), 'same_package' (only current package)",
+      },
       scope_to_dependents: {
         type: "boolean",
-        description: "Only search in packages that depend on the target package (monorepo optimization)",
+        description: "[Deprecated: use scope='dependents'] Only search in dependent packages",
       },
     },
     required: ["file_path", "line", "column"],
   };
 
   protected async doExecute(args: FindReferencesArgs): Promise<ToolResponse> {
-    const { file_path, line, column, scope_to_dependents } = args;
+    const { file_path, line, column, scope, scope_to_dependents } = args;
     const handler = getHandler(file_path);
 
     if (!handler) {
@@ -75,6 +82,7 @@ Returns: [{ file, line, column, context }, ...]`;
     }
 
     const result = await handler.findReferences({ filePath: file_path, line: line, column: column, options: {
+      scope,
       scopeToDependents: scope_to_dependents,
     } });
     return jsonResponse(result);
