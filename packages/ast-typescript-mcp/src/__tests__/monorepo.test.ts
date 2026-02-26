@@ -195,4 +195,72 @@ describe("Monorepo Dependency Graph", () => {
       );
     });
   });
+
+  describe("findReferences with scope parameter", () => {
+    it("scope='same_package' should only find references within the same package", async () => {
+      const handler = new TypeScriptHandler();
+
+      // Use TypeScriptHandler class - used in multiple files within this package
+      const filePath = `${MONOREPO_ROOT}/packages/ast-typescript-mcp/src/handlers/typescript.ts`;
+
+      // Get references with scope="all" (default)
+      const allResult = await handler.findReferences({ filePath: filePath, line: 64, column: 14 });
+
+      // Get references with scope="same_package"
+      const samePackageResult = await handler.findReferences(
+        { filePath: filePath, line: 64, column: 14, options: { scope: "same_package" } }
+      );
+
+      // same_package should have <= all references
+      expect(samePackageResult.references.length).toBeLessThanOrEqual(
+        allResult.references.length
+      );
+
+      // All references in samePackageResult should be in ast-typescript-mcp package
+      for (const ref of samePackageResult.references) {
+        expect(ref.filePath).toContain("packages/ast-typescript-mcp/");
+      }
+    });
+
+    it("scope='dependents' should work same as deprecated scopeToDependents", async () => {
+      const handler = new TypeScriptHandler();
+
+      const filePath = `${MONOREPO_ROOT}/packages/ast-typescript-mcp/src/handlers/typescript.ts`;
+
+      // Get references with deprecated scopeToDependents
+      const deprecatedResult = await handler.findReferences(
+        { filePath: filePath, line: 64, column: 14, options: { scopeToDependents: true } }
+      );
+
+      // Get references with new scope="dependents"
+      const newScopeResult = await handler.findReferences(
+        { filePath: filePath, line: 64, column: 14, options: { scope: "dependents" } }
+      );
+
+      // Both should return the same number of references
+      expect(newScopeResult.references.length).toBe(deprecatedResult.references.length);
+    });
+
+    it("scope parameter should take precedence over scopeToDependents", async () => {
+      const handler = new TypeScriptHandler();
+
+      const filePath = `${MONOREPO_ROOT}/packages/ast-typescript-mcp/src/handlers/typescript.ts`;
+
+      // Get references with scope="all" but scopeToDependents=true
+      // scope should take precedence
+      const result = await handler.findReferences(
+        { filePath: filePath, line: 64, column: 14, options: { scope: "all", scopeToDependents: true } }
+      );
+
+      // Compare with scope="dependents"
+      const dependentsResult = await handler.findReferences(
+        { filePath: filePath, line: 64, column: 14, options: { scope: "dependents" } }
+      );
+
+      // scope="all" should return >= scope="dependents"
+      expect(result.references.length).toBeGreaterThanOrEqual(
+        dependentsResult.references.length
+      );
+    });
+  });
 });

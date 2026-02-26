@@ -735,6 +735,46 @@ describe("Integration Tests", () => {
       expect(result.privateMembersChecked).toBe(0);
       expect(result.deadSymbols).toHaveLength(0);
     });
+
+    it("should only check exports when scope='exports'", async () => {
+      const result = await handler.findDeadCode({
+        paths: [DEAD_CODE_DIR],
+        includeTests: true,
+        scope: "exports",
+      });
+
+      // Should check exports but not private members
+      expect(result.exportsChecked).toBeGreaterThan(0);
+      expect(result.privateMembersChecked).toBe(0);
+
+      // Should find dead exports
+      const deadExports = result.deadSymbols.filter((s) => s.kind === "export");
+      expect(deadExports.length).toBeGreaterThan(0);
+
+      // Should NOT find any private_member kinds
+      const deadPrivates = result.deadSymbols.filter((s) => s.kind === "private_member");
+      expect(deadPrivates).toHaveLength(0);
+    });
+
+    it("should only check private members when scope='private_members'", async () => {
+      const result = await handler.findDeadCode({
+        paths: [DEAD_CODE_DIR],
+        includeTests: true,
+        scope: "private_members",
+      });
+
+      // Should check private members but not exports
+      expect(result.exportsChecked).toBe(0);
+      expect(result.privateMembersChecked).toBeGreaterThan(0);
+
+      // Should find dead private members
+      const deadPrivates = result.deadSymbols.filter((s) => s.kind === "private_member");
+      expect(deadPrivates.length).toBeGreaterThan(0);
+
+      // Should NOT find any export kinds
+      const deadExports = result.deadSymbols.filter((s) => s.kind === "export");
+      expect(deadExports).toHaveLength(0);
+    });
   });
 
   describe("TypeScriptHandler - Type Hierarchy", () => {
