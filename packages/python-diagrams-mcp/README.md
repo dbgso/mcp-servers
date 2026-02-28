@@ -149,17 +149,22 @@ with Diagram("Web Service", show=False):
 
 ### Release to DockerHub
 
-Releases are automated via GitHub Actions. To publish a new version:
+Releases are automated via GitHub Actions using a generic Docker release workflow.
+
+To publish a new version:
 
 ```bash
 git tag python-diagrams-mcp-v1.0.0
 git push origin python-diagrams-mcp-v1.0.0
 ```
 
-This will:
-1. Build the Docker image
-2. Push to DockerHub as `dbgso/python-diagrams-mcp:latest` and `dbgso/python-diagrams-mcp:1.0.0`
-3. Update the DockerHub description from this README
+The workflow automatically:
+1. Parses package name and version from the tag
+2. Verifies the package directory and Dockerfile exist
+3. Builds and pushes to DockerHub as `dbgso/python-diagrams-mcp:latest` and `dbgso/python-diagrams-mcp:1.0.0`
+4. Updates the DockerHub description from this README
+
+**Tag format**: `<package-name>-v<version>` (e.g., `python-diagrams-mcp-v1.0.0`)
 
 ### Required GitHub Secrets
 
