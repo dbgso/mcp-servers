@@ -775,6 +775,54 @@ describe("Integration Tests", () => {
       const deadExports = result.deadSymbols.filter((s) => s.kind === "export");
       expect(deadExports).toHaveLength(0);
     });
+
+    it("reference_scope='paths' should cause false positives for cross-file usage", async () => {
+      // Only analyze used-export.ts but NOT consumer.ts
+      const usedExportFile = join(DEAD_CODE_DIR, "used-export.ts");
+      const result = await handler.findDeadCode({
+        paths: [usedExportFile],
+        includeTests: true,
+        referenceScope: "paths", // Only check within the single file
+      });
+
+      // With reference_scope="paths", exports appear dead because consumer.ts is not in paths
+      const deadNames = result.deadSymbols.map((s) => s.name);
+      expect(deadNames).toContain("usedFunction");
+      expect(deadNames).toContain("UsedClass");
+      expect(deadNames).toContain("USED_CONSTANT");
+    });
+
+    it("reference_scope='project' should avoid false positives for cross-file usage", async () => {
+      // Only analyze used-export.ts but NOT consumer.ts
+      const usedExportFile = join(DEAD_CODE_DIR, "used-export.ts");
+      const result = await handler.findDeadCode({
+        paths: [usedExportFile],
+        includeTests: true,
+        referenceScope: "project", // Check across the entire project
+      });
+
+      // With reference_scope="project", consumer.ts is found and exports are NOT dead
+      const deadNames = result.deadSymbols.map((s) => s.name);
+      expect(deadNames).not.toContain("usedFunction");
+      expect(deadNames).not.toContain("UsedClass");
+      expect(deadNames).not.toContain("USED_CONSTANT");
+    });
+
+    it("default reference_scope should be 'project' (avoids false positives)", async () => {
+      // Only analyze used-export.ts, do NOT specify referenceScope
+      const usedExportFile = join(DEAD_CODE_DIR, "used-export.ts");
+      const result = await handler.findDeadCode({
+        paths: [usedExportFile],
+        includeTests: true,
+        // referenceScope not specified - should default to "project"
+      });
+
+      // Default behavior should check entire project, so no false positives
+      const deadNames = result.deadSymbols.map((s) => s.name);
+      expect(deadNames).not.toContain("usedFunction");
+      expect(deadNames).not.toContain("UsedClass");
+      expect(deadNames).not.toContain("USED_CONSTANT");
+    });
   });
 
   describe("TypeScriptHandler - Type Hierarchy", () => {
