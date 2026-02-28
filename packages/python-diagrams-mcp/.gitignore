@@ -1,0 +1,11 @@
+# Old Node.js files (no longer needed)
+dist/
+src/
+docker/
+node_modules/
+package.json
+tsconfig.json
+
+# Temporary files
+output/
+*.svg
