@@ -10,6 +10,9 @@ const DeadCodeSchema = z.object({
   include_tests: z.boolean().optional().default(false).describe("Include test files in analysis (default: false)"),
   entry_points: z.array(z.string()).optional().default([]).describe("Glob patterns for entry points (exports from these files are considered used)"),
   scope: z.enum(["all", "exports", "private_members"]).optional().default("all").describe("Scope of analysis: 'all' (default), 'exports' only, or 'private_members' only"),
+  reference_scope: z.enum(["paths", "project"]).optional().default("project").describe(
+    "Where to check for references: 'project' (default, check entire project - avoids false positives), 'paths' (only check within given paths)"
+  ),
 }).refine(data => data.path || (data.paths && data.paths.length > 0), {
   message: "Either 'path' or 'paths' must be provided",
 });
@@ -47,12 +50,17 @@ export class DeadCodeHandler extends BaseToolHandler<DeadCodeArgs> {
         enum: ["all", "exports", "private_members"],
         description: "Scope of analysis: 'all' (default), 'exports' only, or 'private_members' only",
       },
+      reference_scope: {
+        type: "string",
+        enum: ["paths", "project"],
+        description: "Where to check for references: 'project' (default, avoids false positives), 'paths' (only within given paths)",
+      },
     },
     required: [],
   };
 
   protected async doExecute(args: DeadCodeArgs): Promise<ToolResponse> {
-    const { path, paths: pathsArg, include_tests, entry_points, scope } = args;
+    const { path, paths: pathsArg, include_tests, entry_points, scope, reference_scope } = args;
 
     // Normalize: support both path (single) and paths (array)
     const paths = path ? [path] : (pathsArg ?? []);
@@ -71,6 +79,7 @@ export class DeadCodeHandler extends BaseToolHandler<DeadCodeArgs> {
       includeTests: include_tests,
       entryPoints: entry_points,
       scope,
+      referenceScope: reference_scope,
     });
     return jsonResponse(result);
   }

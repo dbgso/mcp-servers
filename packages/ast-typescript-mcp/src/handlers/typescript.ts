@@ -2340,8 +2340,9 @@ export class TypeScriptHandler {
     includeTests?: boolean;
     entryPoints?: string[];
     scope?: "all" | "exports" | "private_members";
+    referenceScope?: "paths" | "project";
   }): Promise<DeadCodeResult> {
-    const { paths, includeTests = false, entryPoints = [], scope = "all" } = params;
+    const { paths, includeTests = false, entryPoints = [], scope = "all", referenceScope = "project" } = params;
     const deadSymbols: DeadCodeSymbol[] = [];
     let filesAnalyzed = 0;
     let exportsChecked = 0;
@@ -2353,10 +2354,31 @@ export class TypeScriptHandler {
     // Collect all TypeScript files from the given paths
     const allFiles = this.collectTypeScriptFiles(paths);
 
+    // Determine reference check scope
+    let referenceFiles: string[];
+    if (referenceScope === "project") {
+      // Check references across the entire project (git root)
+      const gitRoot = this.findGitRoot(paths[0]);
+      if (gitRoot) {
+        referenceFiles = this.collectTypeScriptFiles([gitRoot]);
+      } else {
+        // Fallback to paths if git root not found
+        referenceFiles = allFiles;
+      }
+    } else {
+      // Only check references within the given paths
+      referenceFiles = allFiles;
+    }
+
     // Filter out test files if not included
     const filesToAnalyze = includeTests
       ? allFiles
       : allFiles.filter((f) => !this.isTestFile(f));
+
+    // Filter reference files the same way
+    const filteredReferenceFiles = includeTests
+      ? referenceFiles
+      : referenceFiles.filter((f) => !this.isTestFile(f));
 
     // Build a set of entry point patterns for exclusion
     const entryPointPatterns = entryPoints.map((ep) => {
@@ -2376,7 +2398,7 @@ export class TypeScriptHandler {
         // Check unused exports
         if (checkExports) {
           const unusedExports = await this.findUnusedExports(
-            { project: project, sourceFile: sourceFile, allFiles: filesToAnalyze, entryPointPatterns: entryPointPatterns }
+            { project: project, sourceFile: sourceFile, allFiles: filteredReferenceFiles, entryPointPatterns: entryPointPatterns }
           );
           exportsChecked += unusedExports.checked;
           deadSymbols.push(...unusedExports.dead);
