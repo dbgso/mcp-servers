@@ -2,7 +2,7 @@
 export type { ToolHandler, ToolResponse, ToolDefinition } from "./types.js";
 
 // Base class
-export { BaseToolHandler } from "./base-handler.js";
+export { BaseToolHandler } from "mcp-shared";
 
 // Registry
 export { ToolRegistry, getToolRegistry } from "./registry.js";

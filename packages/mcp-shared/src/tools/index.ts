@@ -1,5 +1,5 @@
 // Types
-export type { ToolHandler, ToolResponse, ToolDefinition, ZodLikeSchema } from "./types.js";
+export type { ToolHandler, ToolResponse, ToolDefinition, ZodLikeSchema, TextContent, ImageContent, ToolContent } from "./types.js";
 
 // Base class for 1 handler = 1 tool pattern
 export { BaseToolHandler } from "./base-handler.js";
