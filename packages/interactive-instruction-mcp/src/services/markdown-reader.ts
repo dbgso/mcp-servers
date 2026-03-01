@@ -7,6 +7,8 @@ import {
   NotExistsValidator,
   ExistsValidator,
 } from "./validators.js";
+import { parseFrontmatter } from "../utils/frontmatter-parser.js";
+import { formatDocumentListItem } from "../utils/string-utils.js";
 
 export interface AddResult {
   success: boolean;
@@ -46,6 +48,13 @@ export class MarkdownReader {
   }
 
   /**
+   * Get the file path for a document ID (public accessor)
+   */
+  getFilePath(id: string): string {
+    return this.idToPath(id);
+  }
+
+  /**
    * Convert file path to hierarchical ID
    * "git/workflow.md" -> "git__workflow"
    */
@@ -72,8 +81,12 @@ export class MarkdownReader {
           summaries.push(...subDocs);
         } else if (entry.isFile() && entry.name.endsWith(".md")) {
           const id = this.pathToId(fullPath);
-          const description = await this.extractDescription(fullPath);
-          summaries.push({ id, description });
+          const metadata = await this.extractMetadata(fullPath);
+          summaries.push({
+            id,
+            description: metadata.description,
+            whenToUse: metadata.whenToUse,
+          });
         }
       }
     } catch (error) {
@@ -216,7 +229,11 @@ export class MarkdownReader {
         lines.push("**Documents:**");
       }
       for (const doc of documents) {
-        lines.push(`- **${doc.id}**: ${doc.description}`);
+        lines.push(formatDocumentListItem({
+          id: doc.id,
+          description: doc.description,
+          whenToUse: doc.whenToUse,
+        }));
       }
     }
 
@@ -410,16 +427,46 @@ export class MarkdownReader {
     }
   }
 
-  private async extractDescription(filePath: string): Promise<string> {
+  private async extractMetadata(
+    filePath: string
+  ): Promise<{ description: string; whenToUse?: string[] }> {
     try {
       const content = await fs.readFile(filePath, "utf-8");
-      return this.parseDescription(content);
+      return this.parseMetadata(content);
     } catch {
-      return "(Unable to read file)";
+      return { description: "(Unable to read file)" };
     }
   }
 
-  private parseDescription(content: string): string {
+  /**
+   * Parse metadata from content (frontmatter or first paragraph)
+   */
+  parseMetadata(content: string): {
+    description: string;
+    whenToUse?: string[];
+  } {
+    // Try frontmatter first
+    const frontmatter = parseFrontmatter(content);
+    if (frontmatter.description) {
+      return {
+        description: this.truncateDescription(frontmatter.description),
+        whenToUse: frontmatter.whenToUse,
+      };
+    }
+
+    // Fallback to first paragraph after title (but still include whenToUse from frontmatter)
+    const description = this.parseDescriptionFromBody(content);
+    return { description, whenToUse: frontmatter.whenToUse };
+  }
+
+  /**
+   * For validation - get just the description
+   */
+  parseDescription(content: string): string {
+    return this.parseMetadata(content).description;
+  }
+
+  private parseDescriptionFromBody(content: string): string {
     const lines = content.split("\n");
     let foundTitle = false;
     const descriptionLines: string[] = [];
@@ -452,7 +499,10 @@ export class MarkdownReader {
       return "(No description)";
     }
 
-    const description = descriptionLines.join(" ");
+    return this.truncateDescription(descriptionLines.join(" "));
+  }
+
+  private truncateDescription(description: string): string {
     const maxLength = 150;
     if (description.length > maxLength) {
       return description.slice(0, maxLength - 3) + "...";

@@ -57,3 +57,24 @@ jobs:
           cd packages/interactive-instruction-mcp && npm publish --provenance --access public || true
           cd ../git-repo-explorer-mcp && npm publish --provenance --access public || true
           cd ../kroki-mcp && npm publish --provenance --access public || true
+
+      - name: Create Docker release tags
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          # Find packages with Dockerfile and create git tags
+          for pkg_dir in packages/*/; do
+            if [ -f "${pkg_dir}Dockerfile" ] && [ -f "${pkg_dir}package.json" ]; then
+              name=$(basename "$pkg_dir")
+              version=$(jq -r .version "${pkg_dir}package.json")
+              tag="${name}-v${version}"
+
+              # Check if tag already exists
+              if ! git rev-parse "$tag" >/dev/null 2>&1; then
+                echo "Creating tag: $tag"
+                git tag "$tag"
+                git push origin "$tag"
+              else
+                echo "Tag already exists: $tag"
+              fi
+            fi
+          done

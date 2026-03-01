@@ -20,9 +20,8 @@ vi.mock("../git-repo-manager.js", async (importOriginal) => {
   };
 });
 
-import { resolveRepo, gitGrep, gitLsFiles, gitLog, gitBlame, gitShow, gitDiff, gitBranchList, gitTagList } from "../git-repo-manager.js";
+import { gitGrep, gitLsFiles, gitLog, gitBlame, gitShow, gitDiff, gitBranchList, gitTagList } from "../git-repo-manager.js";
 
-const mockResolveRepo = vi.mocked(resolveRepo);
 const mockGitGrep = vi.mocked(gitGrep);
 const mockGitLsFiles = vi.mocked(gitLsFiles);
 const mockGitLog = vi.mocked(gitLog);

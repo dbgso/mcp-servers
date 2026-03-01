@@ -1,0 +1,61 @@
+{
+  "name": "interactive-pdca-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for PDCA task planning workflow - plan and approve tools",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "interactive-pdca-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "pdca",
+    "task-planning",
+    "workflow",
+    "claude",
+    "ai",
+    "llm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/interactive-pdca-mcp"
+  },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/interactive-pdca-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:interactive-pdca-mcp"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "mcp-shared": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
+  }
+}

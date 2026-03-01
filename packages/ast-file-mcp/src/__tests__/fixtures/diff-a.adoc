@@ -1,0 +1,23 @@
+= Document Title
+
+This is the original AsciiDoc document.
+
+== Introduction
+
+Some intro text here.
+
+== Getting Started
+
+How to get started.
+
+=== Installation
+
+Install the package.
+
+=== Configuration
+
+Configure the settings.
+
+== API Reference
+
+API documentation here.

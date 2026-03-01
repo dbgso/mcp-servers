@@ -4,6 +4,8 @@ import { registerDescriptionTool } from "./tools/description.js";
 import { registerHelpTool } from "./tools/help.js";
 import { registerDraftTool } from "./tools/draft/index.js";
 import { registerApplyTool } from "./tools/apply/index.js";
+import { registerStderrTestTool } from "./tools/stderr-test.js";
+import { registerUpdateMetaTool } from "./tools/update-meta.js";
 import type { ReminderConfig } from "./types/index.js";
 
 const DEFAULT_CONFIG: ReminderConfig = {
@@ -31,6 +33,8 @@ export function createServer(params: {
   registerHelpTool({ server, reader, config });
   registerDraftTool({ server, reader, config });
   registerApplyTool({ server, reader, config });
+  registerStderrTestTool({ server });
+  registerUpdateMetaTool({ server, reader, config });
 
   return server;
 }

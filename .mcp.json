@@ -6,7 +6,11 @@
     },
     "interactive-instruction-mcp": {
       "command": "npx",
-      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./docs", "--remind-mcp"]
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./docs", "--remind-mcp", "--topic-for-every-task", "every-task"]
+    },
+    "interactive-pdca-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-pdca-mcp/src/index.ts", "./docs", "--remind-mcp", "--topic-for-every-task", "every-task"]
     },
     "traceable-chain-mcp": {
       "command": "npx",
@@ -15,6 +19,46 @@
     "kroki-mcp": {
       "command": "npx",
       "args": ["tsx", "./packages/kroki-mcp/src/index.ts"]
+    },
+    "ast-file-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/ast-file-mcp/src/index.ts"]
+    },
+    "ast-typescript-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/ast-typescript-mcp/src/index.ts"]
+    },
+    "python-diagrams-mcp": {
+      "command": "sh",
+      "args": ["-c", "docker run --rm -i -v \"${PWD}/output:/output\" --user \"$(id -u):$(id -g)\" python-diagrams-mcp:latest"]
+    },
+    "ast-file-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/ast-file-mcp/docs"]
+    },
+    "ast-typescript-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/ast-typescript-mcp/docs"]
+    },
+    "git-repo-explorer-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/git-repo-explorer-mcp/docs"]
+    },
+    "interactive-pdca-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/interactive-pdca-mcp/docs"]
+    },
+    "kroki-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/kroki-mcp/docs"]
+    },
+    "traceable-chain-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/traceable-chain-mcp/docs"]
+    },
+    "interactive-instruction-mcp-docs": {
+      "command": "npx",
+      "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/interactive-instruction-mcp/docs"]
     }
   }
 }

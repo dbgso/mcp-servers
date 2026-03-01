@@ -1,0 +1,50 @@
+{
+  "name": "mcp-shared",
+  "version": "1.0.0",
+  "description": "Shared types and utilities for MCP servers",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "eslint src/"
+  },
+  "keywords": [
+    "mcp",
+    "shared",
+    "types",
+    "utilities"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@types/node-notifier": "8.0.5",
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
+  },
+  "dependencies": {
+    "node-notifier": "10.0.1",
+    "zod": "catalog:"
+  }
+}

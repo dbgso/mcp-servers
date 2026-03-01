@@ -6,10 +6,11 @@ export interface OperationContext {
   manager: ChainManager;
 }
 
-export interface Operation<TArgs = any> {
+export interface Operation<TArgs = unknown> {
   id: string;
   summary: string;
   detail: string;
   argsSchema: z.ZodType<TArgs>;
-  execute: (args: TArgs, ctx: OperationContext) => Promise<CallToolResult>;
+  // Method syntax for bivariance (allows assignment to Operation<unknown>[])
+  execute(args: TArgs, ctx: OperationContext): Promise<CallToolResult>;
 }

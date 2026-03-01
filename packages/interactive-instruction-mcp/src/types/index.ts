@@ -1,35 +1,33 @@
 import type { MarkdownReader } from "../services/markdown-reader.js";
 
+// Re-export shared types from mcp-shared
+export type { ReminderConfig, ToolResult, ActionHandler } from "mcp-shared";
+import type { ReminderConfig, ActionHandler } from "mcp-shared";
+
 export interface MarkdownSummary {
   id: string;
   description: string;
+  whenToUse?: string[];
 }
 
-export interface ReminderConfig {
-  remindMcp: boolean;
-  remindOrganize: boolean;
-  customReminders: string[];
-  topicForEveryTask: string | null;
-  infoValidSeconds: number;
-}
-
-export type ToolResult = {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-};
-
-export interface ActionHandler<TParams, TContext> {
-  execute(params: {
-    actionParams: TParams;
-    context: TContext;
-  }): Promise<ToolResult>;
+export interface DocumentFrontmatter {
+  description?: string;
+  whenToUse?: string[];
 }
 
 // Draft tool types
 export interface DraftActionParams {
   id?: string;
+  ids?: string;
   content?: string;
+  description?: string;
+  whenToUse?: string[];
   newId?: string;
+  targetId?: string;
+  approvalToken?: string;
+  notes?: string;
+  confirmed?: boolean;
+  force?: boolean;
 }
 
 export interface DraftActionContext {

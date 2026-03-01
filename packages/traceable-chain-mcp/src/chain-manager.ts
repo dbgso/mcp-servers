@@ -204,7 +204,7 @@ export class ChainManager {
       throw new Error(parentValidation.error);
     }
 
-    return this.storage.create(type, title, content, requires);
+    return this.storage.create({ type: type, title: title, content: content, requires: requires });
   }
 
   /**
@@ -214,7 +214,7 @@ export class ChainManager {
     id: string,
     updates: { title?: string; content?: string },
   ): Promise<Document> {
-    const doc = await this.storage.update(id, updates);
+    const doc = await this.storage.update({ id: id, updates: updates });
     if (!doc) {
       throw new Error(`Document "${id}" not found`);
     }
@@ -263,6 +263,6 @@ export class ChainManager {
     // This is a special update - we need to modify requires
     // For now, we'll delete and recreate (not ideal but works)
     await this.storage.delete(id);
-    return this.storage.create(doc.type, doc.title, doc.content, parentId);
+    return this.storage.create({ type: doc.type, title: doc.title, content: doc.content, requires: parentId });
   }
 }

@@ -1,25 +1,34 @@
-# npm OIDC Trusted Publishers 設定
+---
+description: Configure authentication via OIDC (Trusted Publishers) from GitHub Actions to npm for publishing packages.
+whenToUse:
+  - Setting up GitHub Actions to publish npm packages
+  - Configuring OIDC Trusted Publishers on npm
+  - Troubleshooting npm publish authentication errors
+  - Adding provenance to npm packages
+---
 
-GitHub ActionsからnpmにOIDC（Trusted Publishers）で認証してパッケージを公開する設定。
+# npm OIDC Trusted Publishers Configuration
 
-## 必要な設定
+Configure authentication via OIDC (Trusted Publishers) from GitHub Actions to npm for publishing packages.
 
-### 1. npm側: Trusted Publisher設定
+## Required Configuration
 
-1. npmjs.comでパッケージの Settings > Trusted Publishers
-2. 以下を設定:
+### 1. npm Side: Trusted Publisher Settings
+
+1. Go to Settings > Trusted Publishers for the package on npmjs.com
+2. Configure the following:
    - Repository owner: `dbgso`
    - Repository name: `mcp-servers`
    - Workflow file name: `release.yml`
-   - Environment: (空欄)
+   - Environment: (leave empty)
 
-### 2. GitHub Actions ワークフロー
+### 2. GitHub Actions Workflow
 
 ```yaml
 permissions:
   contents: write
   pull-requests: write
-  id-token: write  # ← 必須
+  id-token: write  # <- Required
 
 jobs:
   release:
@@ -33,13 +42,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'  # ← 必須
+          registry-url: 'https://registry.npmjs.org'  # <- Required
 
       - name: Update npm for OIDC support
-        run: npm install -g npm@latest && npm --version  # ← 必須
+        run: npm install -g npm@latest && npm --version  # <- Required
 
       - name: Publish to npm
-        run: npm publish --provenance --access public  # ← --provenance 必須
+        run: npm publish --provenance --access public  # <- --provenance Required
 ```
 
 ### 3. package.json
@@ -49,7 +58,7 @@ jobs:
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dbgso/mcp-servers.git",
-    "directory": "packages/パッケージ名"
+    "directory": "packages/package-name"
   },
   "publishConfig": {
     "access": "public",
@@ -58,23 +67,23 @@ jobs:
 }
 ```
 
-## チェックリスト
+## Checklist
 
-- [ ] `id-token: write` 権限
-- [ ] `registry-url` を setup-node で設定
-- [ ] `npm install -g npm@latest` で最新npm
-- [ ] `--provenance` フラグ付きで npm publish
-- [ ] `repository` フィールドがGitHubリポジトリと一致
-- [ ] npm側でTrusted Publisher設定済み
+- [ ] `id-token: write` permission
+- [ ] `registry-url` set in setup-node
+- [ ] `npm install -g npm@latest` for latest npm
+- [ ] `--provenance` flag with npm publish
+- [ ] `repository` field matches the GitHub repository
+- [ ] Trusted Publisher configured on npm side
 
-## よくあるエラー
+## Common Errors
 
-| エラー | 原因 |
-|--------|------|
-| `ENEEDAUTH` | `registry-url` がない、または npm が古い |
-| `E404 Not found` | Trusted Publisher設定がワークフローと不一致 |
-| `E422 repository.url` | package.json に `repository` フィールドがない |
+| Error | Cause |
+|-------|-------|
+| `ENEEDAUTH` | `registry-url` missing, or npm is outdated |
+| `E404 Not found` | Trusted Publisher settings don't match workflow |
+| `E422 repository.url` | `repository` field missing in package.json |
 
-## 参考
+## Reference
 
 - [npm Trusted Publishers](https://docs.npmjs.com/generating-provenance-statements)

@@ -1,0 +1,75 @@
+name: Docker Release
+
+on:
+  push:
+    tags:
+      - '*-mcp-v*'  # Matches: python-diagrams-mcp-v1.0.0, foo-mcp-v2.1.0, etc.
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse tag
+        id: parse
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Extract package name (everything before -v followed by version)
+          PACKAGE_NAME=$(echo "$TAG" | sed 's/-v[0-9].*$//')
+          # Extract version (everything after last -v)
+          VERSION=$(echo "$TAG" | sed 's/.*-v//')
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "package=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "image=${{ env.REGISTRY }}/${{ github.repository_owner }}/$PACKAGE_NAME" >> $GITHUB_OUTPUT
+
+          echo "Tag: $TAG"
+          echo "Package: $PACKAGE_NAME"
+          echo "Version: $VERSION"
+
+      - name: Verify package exists
+        run: |
+          PACKAGE_PATH="./packages/${{ steps.parse.outputs.package }}"
+          if [ ! -d "$PACKAGE_PATH" ]; then
+            echo "Error: Package directory not found: $PACKAGE_PATH"
+            exit 1
+          fi
+          if [ ! -f "$PACKAGE_PATH/Dockerfile" ]; then
+            echo "Error: Dockerfile not found in $PACKAGE_PATH"
+            exit 1
+          fi
+          echo "Package verified: $PACKAGE_PATH"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./packages/${{ steps.parse.outputs.package }}
+          push: true
+          tags: |
+            ${{ steps.parse.outputs.image }}:latest
+            ${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}

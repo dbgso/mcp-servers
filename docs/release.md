@@ -1,3 +1,12 @@
+---
+description: Automated release setup using Changesets with npm OIDC provenance for secure, tokenless publishing.
+whenToUse:
+  - Setting up package release workflow
+  - Creating changesets for version bumps
+  - Adding a new package to npm registry
+  - Understanding monorepo release strategy
+---
+
 # Release Configuration
 
 Automated release setup using Changesets with npm OIDC provenance for secure, tokenless publishing.

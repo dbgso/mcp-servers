@@ -9,6 +9,7 @@
   },
   "files": [
     "dist",
+    "templates",
     "README.md",
     "LICENSE"
   ],
@@ -49,11 +50,12 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
-    "zod": "^3.25.0"
+    "@modelcontextprotocol/sdk": "catalog:",
+    "mcp-shared": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.0.18",
-    "vitest": "^4.0.18"
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
   }
 }
