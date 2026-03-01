@@ -3,7 +3,6 @@ dist/
 src/
 docker/
 node_modules/
-package.json
 tsconfig.json
 
 # Temporary files
