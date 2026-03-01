@@ -263,11 +263,11 @@ ts_ast(action: "params_to_object", file_path: "src/foo.ts", line: 10, column: 17
       }
     }
 
-    if (!nameNode) {
+    if (!nameNode || !Node.isIdentifier(nameNode)) {
       return results;
     }
 
-    // Get all references semantically
+    // Get all references semantically (Identifier has findReferencesAsNodes)
     const refs = nameNode.findReferencesAsNodes();
 
     for (const ref of refs) {
