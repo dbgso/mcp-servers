@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { TypeScriptHandler } from "../handlers/typescript.js";
 import { join } from "node:path";
-import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 
 const FIXTURES_DIR = join(import.meta.dirname, "fixtures/implementation");
 
