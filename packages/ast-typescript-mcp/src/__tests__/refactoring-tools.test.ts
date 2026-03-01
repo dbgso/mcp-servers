@@ -149,6 +149,108 @@ describe("Refactoring Tools", () => {
     });
   });
 
+  describe("ParamsToObject", () => {
+    // Use existing committed fixture file for reliable git grep
+    // params_to_object relies on git grep for finding references
+    const fixturesDir = join(import.meta.dirname, "fixtures");
+
+    it("should detect call sites in the same file", async () => {
+      // Use the pre-committed fixture file
+      const testFile = join(fixturesDir, "same-file-call.ts");
+      // Ensure the file exists with expected content
+      await writeFile(
+        testFile,
+        `export function processUser(name: string, age: number): void {
+  console.log(name, age);
+}
+
+export function main() {
+  processUser("Alice", 30);
+  processUser("Bob", 25);
+}
+`
+      );
+
+      const { ParamsToObjectHandler } = await import("../tools/handlers/params-to-object.js");
+      const handler = new ParamsToObjectHandler();
+
+      const result = await handler.execute({
+        file_path: testFile,
+        line: 1,
+        column: 17, // on "processUser"
+        dry_run: true,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const content = JSON.parse((result.content[0] as { text: string }).text);
+
+      // Should find 2 call sites in the same file
+      expect(content.callSites.length).toBe(2);
+      expect(content.skipped.length).toBe(0);
+    });
+
+    it("should work when line points to parameter line", async () => {
+      const testFile = join(fixturesDir, "same-file-call.ts");
+      // Rewrite with multiline function
+      await writeFile(
+        testFile,
+        `export function processData(
+  name: string,
+  age: number
+): void {
+  console.log(name, age);
+}
+
+processData("Alice", 30);
+`
+      );
+
+      const { ParamsToObjectHandler } = await import("../tools/handlers/params-to-object.js");
+      const handler = new ParamsToObjectHandler();
+
+      // Line 2 is parameter line (name: string), not function keyword line
+      const result = await handler.execute({
+        file_path: testFile,
+        line: 2,
+        column: 3, // on "name"
+        dry_run: true,
+      });
+
+      // Should NOT error - should find the parent function
+      expect(result.isError).toBeFalsy();
+      const content = JSON.parse((result.content[0] as { text: string }).text);
+      expect(content.functionName).toBe("processData");
+    });
+
+    it("should handle function on line 1 with column 1", async () => {
+      const testFile = join(fixturesDir, "same-file-call.ts");
+      await writeFile(
+        testFile,
+        `function greet(name: string, greeting: string): string {
+  return greeting + " " + name;
+}
+
+greet("World", "Hello");
+`
+      );
+
+      const { ParamsToObjectHandler } = await import("../tools/handlers/params-to-object.js");
+      const handler = new ParamsToObjectHandler();
+
+      const result = await handler.execute({
+        file_path: testFile,
+        line: 1,
+        column: 1,
+        dry_run: true,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const content = JSON.parse((result.content[0] as { text: string }).text);
+      expect(content.functionName).toBe("greet");
+      expect(content.callSites.length).toBe(1);
+    });
+  });
+
   describe("TransformCallSite - param name mismatch", () => {
     it("should transform call site when call argument names differ from param names", async () => {
       // Test case: call uses `oldName` but param is named `symbolName`
