@@ -249,10 +249,13 @@ ts_ast(action: "batch", mode: "execute", operations: [
       };
     }
 
-    if (callArgs.length !== paramNames.length) {
+    // Allow partial matching for optional parameters:
+    // callArgs.length can be less than paramNames.length (optional params not provided)
+    // but cannot be more than paramNames.length
+    if (callArgs.length > paramNames.length) {
       return {
         success: false,
-        error: `Argument count mismatch: call has ${callArgs.length} args, but ${paramNames.length} param names provided`,
+        error: `Too many arguments: call has ${callArgs.length} args, but only ${paramNames.length} param names provided`,
       };
     }
 
@@ -262,8 +265,16 @@ ts_ast(action: "batch", mode: "execute", operations: [
     const argsStart = callArgs[0].getStart();
     const argsEnd = callArgs[callArgs.length - 1].getEnd();
 
-    // Build the new object argument
-    const objectProps = paramNames.map((name, i) => `${name}: ${argTexts[i]}`);
+    // Build the new object argument (only include provided arguments)
+    // Use shorthand when argument is an identifier matching the property name
+    const objectProps = paramNames.slice(0, callArgs.length).map((name, i) => {
+      const argText = argTexts[i];
+      // Use shorthand if arg is a simple identifier matching the property name
+      if (argText === name) {
+        return name;
+      }
+      return `${name}: ${argText}`;
+    });
     const newArg = `{ ${objectProps.join(", ")} }`;
 
     const oldCall = `${functionName}(${argTexts.join(", ")})`;
@@ -353,9 +364,10 @@ ts_ast(action: "batch", mode: "execute", operations: [
       return { error: "Already using object argument", skipped: true };
     }
 
-    if (callArgs.length !== paramNames.length) {
+    // Allow partial matching for optional parameters
+    if (callArgs.length > paramNames.length) {
       return {
-        error: `Argument count mismatch: call has ${callArgs.length} args, but ${paramNames.length} param names provided`,
+        error: `Too many arguments: call has ${callArgs.length} args, but only ${paramNames.length} param names provided`,
       };
     }
 
@@ -364,8 +376,15 @@ ts_ast(action: "batch", mode: "execute", operations: [
     const argsStart = callArgs[0].getStart();
     const argsEnd = callArgs[callArgs.length - 1].getEnd();
 
-    // Build the new object argument
-    const objectProps = paramNames.map((name, i) => `${name}: ${argTexts[i]}`);
+    // Build the new object argument (only include provided arguments)
+    // Use shorthand when argument is an identifier matching the property name
+    const objectProps = paramNames.slice(0, callArgs.length).map((name, i) => {
+      const argText = argTexts[i];
+      if (argText === name) {
+        return name;
+      }
+      return `${name}: ${argText}`;
+    });
     const newArg = `{ ${objectProps.join(", ")} }`;
 
     const oldCall = `${functionName}(${argTexts.join(", ")})`;
@@ -407,10 +426,11 @@ ts_ast(action: "batch", mode: "execute", operations: [
 
     const callArgs = node.getArguments();
 
-    if (callArgs.length !== paramNames.length) {
+    // Allow partial matching for optional parameters
+    if (callArgs.length > paramNames.length) {
       return {
         success: false,
-        error: `Argument count mismatch: call has ${callArgs.length} args, but ${paramNames.length} param names provided`,
+        error: `Too many arguments: call has ${callArgs.length} args, but only ${paramNames.length} param names provided`,
       };
     }
 
@@ -419,8 +439,15 @@ ts_ast(action: "batch", mode: "execute", operations: [
     const argsStart = callArgs[0].getStart();
     const argsEnd = callArgs[callArgs.length - 1].getEnd();
 
-    // Build the new object argument
-    const objectProps = paramNames.map((name, i) => `${name}: ${argTexts[i]}`);
+    // Build the new object argument (only include provided arguments)
+    // Use shorthand when argument is an identifier matching the property name
+    const objectProps = paramNames.slice(0, callArgs.length).map((name, i) => {
+      const argText = argTexts[i];
+      if (argText === name) {
+        return name;
+      }
+      return `${name}: ${argText}`;
+    });
     const newArg = `{ ${objectProps.join(", ")} }`;
 
     const oldCall = `${functionName}(${argTexts.join(", ")})`;

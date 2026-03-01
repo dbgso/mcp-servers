@@ -78,8 +78,37 @@ export interface SignaturePreparedTransform {
 
 export class TransformSignatureHandler extends BaseToolHandler<TransformSignatureArgs> {
   readonly name = "transform_signature";
-  readonly description =
-    "Transform a function's parameter list to use object destructuring. Only modifies the function definition, not call sites. Use with find_references + transform_call_site for complete refactoring.";
+  readonly description = `Transform function signature to object destructuring.
+
+## What it does
+\`(a: T, b: U)\` → \`({ a, b }: { a: T; b: U })\`
+
+## Complete Refactoring Workflow
+To refactor a function AND all its call sites:
+
+\`\`\`
+1. Get current params:
+   ts_ast(action: "read", file_path: "src/foo.ts", line: 10, column: 17)
+
+2. Find call sites:
+   ts_ast(action: "references", file_path: "src/foo.ts", line: 10, column: 17)
+
+3. Batch transform all:
+   ts_ast(action: "batch", operations: [
+     { action: "transform_signature", file_path: "src/foo.ts", line: 10, column: 17,
+       new_params: [{ name: "a", type: "string" }, { name: "b", type: "number" }] },
+     { action: "transform_call_site", file_path: "src/bar.ts", line: 5, column: 3,
+       param_names: ["a", "b"] },
+     // ... more call sites
+   ])
+\`\`\`
+
+## Standalone Usage
+\`\`\`json
+ts_ast(action: "transform_signature", file_path: "src/foo.ts", line: 10, column: 17,
+  new_params: [{ name: "a", type: "string" }, { name: "b", type: "number", optional: true }],
+  dry_run: false)
+\`\`\``;
   readonly schema = TransformSignatureSchema;
 
   readonly inputSchema = {
