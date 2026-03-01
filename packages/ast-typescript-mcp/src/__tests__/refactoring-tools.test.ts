@@ -185,8 +185,10 @@ const result = gitGrep(gitRoot, oldName);
 
       expect("error" in result2).toBe(false);
       if (!("error" in result2)) {
-        // Should produce: gitGrep({ gitRoot: gitRoot, symbolName: oldName })
-        expect(result2.after).toContain("gitRoot: gitRoot");
+        // Should produce: gitGrep({ gitRoot, symbolName: oldName })
+        // - gitRoot uses shorthand since arg name matches param name
+        // - symbolName: oldName since names differ
+        expect(result2.after).toContain("gitRoot,");
         expect(result2.after).toContain("symbolName: oldName");
       }
     });
