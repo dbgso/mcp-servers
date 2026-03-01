@@ -21,10 +21,10 @@ MCP server for rendering Python [diagrams](https://diagrams.mingrammer.com/) lib
 
 ## Installation
 
-### Pull from DockerHub
+### Pull from GitHub Container Registry
 
 ```bash
-docker pull dbgso/python-diagrams-mcp:latest
+docker pull ghcr.io/dbgso/python-diagrams-mcp:latest
 ```
 
 ### Or Build Locally
@@ -45,7 +45,7 @@ Add to your MCP client configuration:
   "mcpServers": {
     "python-diagrams": {
       "command": "docker",
-      "args": ["run", "--rm", "-i", "dbgso/python-diagrams-mcp:latest"]
+      "args": ["run", "--rm", "-i", "ghcr.io/dbgso/python-diagrams-mcp:latest"]
     }
   }
 }
@@ -63,7 +63,7 @@ To save diagrams to files, mount a volume to `/output`:
 exec docker run --rm -i \
   -v "${PWD}/output:/output" \
   --user "$(id -u):$(id -g)" \
-  dbgso/python-diagrams-mcp:latest
+  ghcr.io/dbgso/python-diagrams-mcp:latest
 ```
 
 - `--user "$(id -u):$(id -g)"`: Runs as your user to avoid permission issues
@@ -147,29 +147,27 @@ with Diagram("Web Service", show=False):
 
 ## Development
 
-### Release to DockerHub
+### Release to GitHub Container Registry
 
-Releases are automated via GitHub Actions using a generic Docker release workflow.
+Releases are automated via GitHub Actions using Changesets.
 
 To publish a new version:
 
 ```bash
-git tag python-diagrams-mcp-v1.0.0
-git push origin python-diagrams-mcp-v1.0.0
+pnpm changeset
+# Select python-diagrams-mcp, choose version type, add description
+git add .changeset/*.md
+git commit -m "chore: add changeset"
+git push
 ```
 
-The workflow automatically:
-1. Parses package name and version from the tag
-2. Verifies the package directory and Dockerfile exist
-3. Builds and pushes to DockerHub as `dbgso/python-diagrams-mcp:latest` and `dbgso/python-diagrams-mcp:1.0.0`
-4. Updates the DockerHub description from this README
+After merging to main:
+1. Version PR is created automatically
+2. Merge the Version PR
+3. Git tag is created (e.g., `python-diagrams-mcp-v1.0.0`)
+4. Docker image is built and pushed to `ghcr.io/dbgso/python-diagrams-mcp`
 
-**Tag format**: `<package-name>-v<version>` (e.g., `python-diagrams-mcp-v1.0.0`)
-
-### Required GitHub Secrets
-
-- `DOCKERHUB_USERNAME`: DockerHub username
-- `DOCKERHUB_TOKEN`: DockerHub access token
+No additional secrets required - uses `GITHUB_TOKEN` for authentication.
 
 ## License
 

@@ -6,14 +6,14 @@ on:
       - '*-mcp-v*'  # Matches: python-diagrams-mcp-v1.0.0, foo-mcp-v2.1.0, etc.
 
 env:
-  REGISTRY: docker.io
-  DOCKERHUB_ORG: dbgso
+  REGISTRY: ghcr.io
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -31,7 +31,7 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "package=$PACKAGE_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "image=${{ env.DOCKERHUB_ORG }}/$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "image=${{ env.REGISTRY }}/${{ github.repository_owner }}/$PACKAGE_NAME" >> $GITHUB_OUTPUT
 
           echo "Tag: $TAG"
           echo "Package: $PACKAGE_NAME"
@@ -53,11 +53,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to DockerHub
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -69,11 +70,6 @@ jobs:
             ${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Update DockerHub description
-        uses: peter-evans/dockerhub-description@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ steps.parse.outputs.image }}
-          readme-filepath: ./packages/${{ steps.parse.outputs.package }}/README.md
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
