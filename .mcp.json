@@ -28,6 +28,10 @@
       "command": "npx",
       "args": ["tsx", "./packages/ast-typescript-mcp/src/index.ts"]
     },
+    "python-diagrams-mcp": {
+      "command": "sh",
+      "args": ["-c", "docker run --rm -i -v \"${PWD}/output:/output\" --user \"$(id -u):$(id -g)\" python-diagrams-mcp:latest"]
+    },
     "ast-file-mcp-docs": {
       "command": "npx",
       "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/ast-file-mcp/docs"]
