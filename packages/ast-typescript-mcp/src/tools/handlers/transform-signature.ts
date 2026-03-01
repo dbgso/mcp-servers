@@ -76,6 +76,14 @@ export interface SignaturePreparedTransform {
   after: string;
 }
 
+/**
+ * Extract property name from destructuring name.
+ * Handles renamed destructuring: "propName: localName" -> "propName"
+ */
+function getPropertyName(name: string): string {
+  return name.includes(":") ? name.split(":")[0].trim() : name;
+}
+
 export class TransformSignatureHandler extends BaseToolHandler<TransformSignatureArgs> {
   readonly name = "transform_signature";
   readonly description = `Transform function signature to object destructuring.
@@ -282,11 +290,12 @@ ts_ast(action: "transform_signature", file_path: "src/foo.ts", line: 10, column:
     const paramsEnd = funcParams[funcParams.length - 1].getEnd();
 
     // Build the new signature
+    // Handle renamed destructuring: "propName: localName" -> use propName for type
     const destructure = newParams.map(p => p.name).join(", ");
     const typeProps = newParams
       .map(p => {
         const optional = p.optional ? "?" : "";
-        return `${p.name}${optional}: ${p.type}`;
+        return `${getPropertyName(p.name)}${optional}: ${p.type}`;
       })
       .join("; ");
 
@@ -415,11 +424,12 @@ ts_ast(action: "transform_signature", file_path: "src/foo.ts", line: 10, column:
     const paramsEnd = funcParams[funcParams.length - 1].getEnd();
 
     // Build the new signature
+    // Handle renamed destructuring: "propName: localName" -> use propName for type
     const destructure = newParams.map((p) => p.name).join(", ");
     const typeProps = newParams
       .map((p) => {
         const optional = p.optional ? "?" : "";
-        return `${p.name}${optional}: ${p.type}`;
+        return `${getPropertyName(p.name)}${optional}: ${p.type}`;
       })
       .join("; ");
 
@@ -465,11 +475,12 @@ ts_ast(action: "transform_signature", file_path: "src/foo.ts", line: 10, column:
     const paramsEnd = funcParams[funcParams.length - 1].getEnd();
 
     // Build the new signature
+    // Handle renamed destructuring: "propName: localName" -> use propName for type
     const destructure = newParams.map((p) => p.name).join(", ");
     const typeProps = newParams
       .map((p) => {
         const optional = p.optional ? "?" : "";
-        return `${p.name}${optional}: ${p.type}`;
+        return `${getPropertyName(p.name)}${optional}: ${p.type}`;
       })
       .join("; ");
 
