@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "../base-handler.js";
+import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { Project, Node, SyntaxKind } from "ts-morph";
 import type { CallExpression, SourceFile } from "ts-morph";

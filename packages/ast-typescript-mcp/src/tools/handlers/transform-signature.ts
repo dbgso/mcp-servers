@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "../base-handler.js";
+import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse, BatchContext, BatchChange } from "../types.js";
 import { Project, Node } from "ts-morph";
 import { acquireFileLock, releaseFileLock } from "../../utils/file-lock.js";

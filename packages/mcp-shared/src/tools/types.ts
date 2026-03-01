@@ -1,10 +1,17 @@
 /**
+ * MCP content types for tool responses.
+ */
+export type TextContent = { type: "text"; text: string };
+export type ImageContent = { type: "image"; data: string; mimeType: string };
+export type ToolContent = TextContent | ImageContent;
+
+/**
  * MCP tool response format.
  * Uses index signature to satisfy MCP SDK requirements.
  */
 export interface ToolResponse {
   [key: string]: unknown;
-  content: Array<{ type: "text"; text: string }>;
+  content: ToolContent[];
   isError?: boolean;
 }
 

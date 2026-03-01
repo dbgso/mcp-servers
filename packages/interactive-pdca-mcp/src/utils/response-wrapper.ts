@@ -1,10 +1,5 @@
 import type { ReminderConfig } from "../types/index.js";
-
-interface ToolResult {
-  [x: string]: unknown;
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+import type { ToolResponse, ToolContent } from "mcp-shared";
 
 const MCP_REMINDER = `[Reminder] Always refer to this MCP to check for relevant documentation before starting any task. Use the 'help' tool to list available documents.`;
 
@@ -47,9 +42,9 @@ export function buildReminderBlock(params: {
 }
 
 export function wrapResponse(params: {
-  result: ToolResult;
+  result: ToolResponse;
   config: ReminderConfig;
-}): ToolResult {
+}): ToolResponse {
   const { result, config } = params;
   const reminderBlock = buildReminderBlock({ config });
 
@@ -59,9 +54,12 @@ export function wrapResponse(params: {
 
   return {
     ...result,
-    content: result.content.map((item) => ({
-      ...item,
-      text: item.text + reminderBlock,
-    })),
+    content: result.content.map((item): ToolContent => {
+      // Only append reminder to text content
+      if (item.type === "text") {
+        return { ...item, text: item.text + reminderBlock };
+      }
+      return item;
+    }),
   };
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "../base-handler.js";
+import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler } from "../../handlers/index.js";
 

@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "../base-handler.js";
+import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { QueryEngine, QUERY_PRESETS } from "../../query/engine.js";
 import type { AstQuery, AstQueryBase, QueryMatch, CapturedNode } from "../../query/engine.js";

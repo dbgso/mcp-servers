@@ -112,6 +112,9 @@ export type {
   ToolDefinition,
   ZodLikeSchema,
   RegistrableActionHandler,
+  TextContent,
+  ImageContent,
+  ToolContent,
 } from "./tools/index.js";
 
 export {
