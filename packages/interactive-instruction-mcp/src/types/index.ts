@@ -8,20 +8,24 @@ export interface MarkdownSummary {
   id: string;
   description: string;
   whenToUse?: string[];
+  relatedDocs?: string[];
 }
 
 export interface DocumentFrontmatter {
   description?: string;
   whenToUse?: string[];
+  relatedDocs?: string[];
 }
 
 // Draft tool types
 export interface DraftActionParams {
+  action?: string;
   id?: string;
   ids?: string;
   content?: string;
   description?: string;
   whenToUse?: string[];
+  relatedDocs?: string[];
   newId?: string;
   targetId?: string;
   approvalToken?: string;

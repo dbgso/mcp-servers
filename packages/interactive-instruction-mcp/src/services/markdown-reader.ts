@@ -7,7 +7,7 @@ import {
   NotExistsValidator,
   ExistsValidator,
 } from "./validators.js";
-import { parseFrontmatter } from "../utils/frontmatter-parser.js";
+import { parseFrontmatter, updateFrontmatter } from "../utils/frontmatter-parser.js";
 import { formatDocumentListItem } from "../utils/string-utils.js";
 
 export interface AddResult {
@@ -86,6 +86,7 @@ export class MarkdownReader {
             id,
             description: metadata.description,
             whenToUse: metadata.whenToUse,
+            relatedDocs: metadata.relatedDocs,
           });
         }
       }
@@ -233,6 +234,7 @@ export class MarkdownReader {
           id: doc.id,
           description: doc.description,
           whenToUse: doc.whenToUse,
+          relatedDocs: doc.relatedDocs,
         }));
       }
     }
@@ -357,12 +359,23 @@ export class MarkdownReader {
     }
   }
 
+  /**
+   * Find documents that reference the given ID in their relatedDocs
+   */
+  async findBacklinks(id: string): Promise<MarkdownSummary[]> {
+    const cache = await this.getCache();
+    return cache.documents.filter(
+      (doc) => doc.relatedDocs?.includes(id)
+    );
+  }
+
   async renameDocument(params: {
     oldId: string;
     newId: string;
     overwrite?: boolean;
-  }): Promise<AddResult> {
-    const { oldId, newId, overwrite = false } = params;
+    updateBacklinks?: boolean;
+  }): Promise<AddResult & { updatedBacklinks?: string[] }> {
+    const { oldId, newId, overwrite = false, updateBacklinks = true } = params;
     const oldExists = await this.documentExists(oldId);
     if (!oldExists) {
       return {
@@ -399,14 +412,56 @@ export class MarkdownReader {
       const oldDir = path.dirname(oldPath);
       await this.removeEmptyDirs(oldDir);
 
+      // Update backlinks if enabled
+      const updatedBacklinks: string[] = [];
+      if (updateBacklinks) {
+        const backlinks = await this.findBacklinks(oldId);
+        for (const doc of backlinks) {
+          const updated = await this.updateRelatedDocsReference({
+            docId: doc.id,
+            oldRef: oldId,
+            newRef: newId,
+          });
+          if (updated) {
+            updatedBacklinks.push(doc.id);
+          }
+        }
+      }
+
       this.invalidateCache();
-      return { success: true };
+      return { success: true, updatedBacklinks };
     } catch (error) {
       return {
         success: false,
         error: `Failed to rename document: ${(error as Error).message}`,
       };
     }
+  }
+
+  /**
+   * Update a reference in a document's relatedDocs
+   */
+  private async updateRelatedDocsReference(params: {
+    docId: string;
+    oldRef: string;
+    newRef: string;
+  }): Promise<boolean> {
+    const { docId, oldRef, newRef } = params;
+    const content = await this.getDocumentContent(docId);
+    if (!content) return false;
+
+    const frontmatter = parseFrontmatter(content);
+    if (!frontmatter.relatedDocs?.includes(oldRef)) return false;
+
+    // Replace old reference with new
+    frontmatter.relatedDocs = frontmatter.relatedDocs.map((ref) =>
+      ref === oldRef ? newRef : ref
+    );
+
+    const newContent = updateFrontmatter({ content, frontmatter });
+    const filePath = this.idToPath(docId);
+    await fs.writeFile(filePath, newContent, "utf-8");
+    return true;
   }
 
   private async removeEmptyDirs(dir: string): Promise<void> {
@@ -429,7 +484,7 @@ export class MarkdownReader {
 
   private async extractMetadata(
     filePath: string
-  ): Promise<{ description: string; whenToUse?: string[] }> {
+  ): Promise<{ description: string; whenToUse?: string[]; relatedDocs?: string[] }> {
     try {
       const content = await fs.readFile(filePath, "utf-8");
       return this.parseMetadata(content);
@@ -444,6 +499,7 @@ export class MarkdownReader {
   parseMetadata(content: string): {
     description: string;
     whenToUse?: string[];
+    relatedDocs?: string[];
   } {
     // Try frontmatter first
     const frontmatter = parseFrontmatter(content);
@@ -451,12 +507,17 @@ export class MarkdownReader {
       return {
         description: this.truncateDescription(frontmatter.description),
         whenToUse: frontmatter.whenToUse,
+        relatedDocs: frontmatter.relatedDocs,
       };
     }
 
-    // Fallback to first paragraph after title (but still include whenToUse from frontmatter)
+    // Fallback to first paragraph after title (but still include metadata from frontmatter)
     const description = this.parseDescriptionFromBody(content);
-    return { description, whenToUse: frontmatter.whenToUse };
+    return {
+      description,
+      whenToUse: frontmatter.whenToUse,
+      relatedDocs: frontmatter.relatedDocs,
+    };
   }
 
   /**

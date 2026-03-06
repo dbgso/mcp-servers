@@ -35,6 +35,5 @@ export function createServer(params: {
   registerApplyTool({ server, reader, config });
   registerStderrTestTool({ server });
   registerUpdateMetaTool({ server, reader, config });
-
   return server;
 }

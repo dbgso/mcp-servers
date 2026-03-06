@@ -8,7 +8,7 @@ export class AddHandler implements DraftActionHandler {
     actionParams: DraftActionParams;
     context: DraftActionContext;
   }): Promise<ToolResult> {
-    const { id, content, description, whenToUse } = params.actionParams;
+    const { id, content, description, whenToUse, relatedDocs } = params.actionParams;
     const { reader } = params.context;
 
     if (!id || !content) {
@@ -52,6 +52,7 @@ export class AddHandler implements DraftActionHandler {
       content,
       description,
       whenToUse,
+      relatedDocs,
     });
 
     const draftId = DRAFT_PREFIX + id;
@@ -100,8 +101,9 @@ Path: ${result.path}${workflowStatus}
     content: string;
     description: string;
     whenToUse: string[];
+    relatedDocs?: string[];
   }): string {
-    const { content, description, whenToUse } = params;
+    const { content, description, whenToUse, relatedDocs } = params;
 
     // Strip any existing frontmatter from content
     const bodyContent = stripFrontmatter(content);
@@ -111,6 +113,7 @@ Path: ${result.path}${workflowStatus}
       frontmatter: {
         description,
         whenToUse,
+        relatedDocs,
       },
     });
   }
