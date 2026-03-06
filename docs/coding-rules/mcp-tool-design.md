@@ -4,6 +4,8 @@ whenToUse:
   - Structuring MCP tool operations
   - Deciding tool separation boundaries
   - Reviewing MCP architecture
+relatedDocs:
+  - coding-rules__prefer-git-mcp
 ---
 
 # MCP Tool Design Principles

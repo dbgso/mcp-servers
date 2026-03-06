@@ -42,9 +42,15 @@ export function registerHelpTool(params: {
           .describe(
             "Find documents with missing metadata. 'description' = no description, 'whenToUse' = no whenToUse, 'any' = missing either. Implicitly enables recursive mode."
           ),
+        backlinks: z
+          .boolean()
+          .optional()
+          .describe(
+            "If true with an id, find documents that reference this document in their relatedDocs."
+          ),
       },
     },
-    async ({ id, recursive, query, missingMeta }) => {
+    async ({ id, recursive, query, missingMeta, backlinks }) => {
       // Helper to filter out drafts
       const filterDrafts = (result: {
         documents: MarkdownSummary[];
@@ -75,6 +81,43 @@ export function registerHelpTool(params: {
           case "any": return noDescription || noWhenToUse;
         }
       };
+
+      // If backlinks is specified with an id, find documents that reference this document
+      if (backlinks && id) {
+        const result = await reader.listDocuments({ recursive: true });
+        const { documents } = filterDrafts(result);
+
+        const referencingDocs = documents.filter(doc =>
+          doc.relatedDocs?.includes(id)
+        );
+
+        if (referencingDocs.length === 0) {
+          return wrapResponse({
+            result: {
+              content: [
+                {
+                  type: "text" as const,
+                  text: `No documents reference "${id}" in their relatedDocs.`,
+                },
+              ],
+            },
+            config,
+          });
+        }
+
+        const header = `Documents referencing "${id}": ${referencingDocs.length} found\n\n`;
+        return wrapResponse({
+          result: {
+            content: [
+              {
+                type: "text" as const,
+                text: header + reader.formatDocumentList({ documents: referencingDocs, categories: [] }),
+              },
+            ],
+          },
+          config,
+        });
+      }
 
       // If query or missingMeta is specified, do filtered search
       if (query || missingMeta) {

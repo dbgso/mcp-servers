@@ -11,6 +11,7 @@ import {
   DeleteHandler,
   RenameHandler,
   ApproveHandler,
+  LinkHandler,
 } from "./handlers/index.js";
 
 const DRAFT_HELP = `# Draft Tool
@@ -41,7 +42,7 @@ coding__testing         ← About testing rules
 - \`draft()\` - Show this help
 - \`draft(action: "list")\` - List all drafts
 - \`draft(action: "read", id: "<id>")\` - Read a draft
-- \`draft(action: "add", id: "<id>", content: "<content>", description: "...", whenToUse: [...])\` - Create new draft (all params required)
+- \`draft(action: "add", id: "<id>", content: "<content>", description: "...", whenToUse: [...], relatedDocs: [...])\` - Create new draft
 - \`draft(action: "update", id: "<id>", content: "<content>")\` - Update existing draft (same topic only!)
 - \`draft(action: "delete", id: "<id>")\` - Delete a draft
 - \`draft(action: "rename", id: "<oldId>", newId: "<newId>")\` - Rename/move a draft (safe reorganization)
@@ -50,6 +51,8 @@ coding__testing         ← About testing rules
 - \`draft(action: "approve", id: "<id>", approvalToken: "<token>")\` - Approve and promote with token
 - \`draft(action: "approve", ids: "id1,id2,id3", confirmed: true)\` - **Batch confirm** multiple drafts (recommended when multiple ready)
 - \`draft(action: "approve", ids: "id1,id2,id3", approvalToken: "<token>")\` - Batch approve multiple drafts with single token
+- \`draft(action: "link_add", id: "<id>", relatedDocs: ["doc1", "doc2"])\` - Add relatedDocs to promoted document
+- \`draft(action: "link_remove", id: "<id>", relatedDocs: ["doc1"])\` - Remove relatedDocs from promoted document
 
 ## Consecutive Approval Warning
 
@@ -84,12 +87,14 @@ Note: This is a NEW topic, so use "add" not "update"!
 All drafts must include metadata:
 - **description** (required): Brief summary of the document
 - **whenToUse** (required): List of situations when to reference this document
+- **relatedDocs** (optional): List of related document IDs
 
 Example:
 \`\`\`
 draft(action: "add", id: "coding__error-handling",
   description: "Error handling patterns for async operations",
   whenToUse: ["Writing try-catch blocks", "Handling Promise rejections"],
+  relatedDocs: ["coding__typescript", "coding__testing"],
   content: "# Error Handling\\n\\nAlways use try-catch..."
 )
 \`\`\`
@@ -97,6 +102,8 @@ draft(action: "add", id: "coding__error-handling",
 Drafts are stored under \`_mcp_drafts/\` directory. Use \`apply\` tool to promote to confirmed docs.
 
 **[IMPORTANT]** After creating a draft, you MUST explain the content to the user and wait for their approval before applying.`;
+
+const linkHandler = new LinkHandler();
 
 const actionHandlers: Record<string, DraftActionHandler> = {
   list: new ListHandler(),
@@ -106,6 +113,8 @@ const actionHandlers: Record<string, DraftActionHandler> = {
   delete: new DeleteHandler(),
   rename: new RenameHandler(),
   approve: new ApproveHandler(),
+  link_add: linkHandler,
+  link_remove: linkHandler,
 };
 
 export function registerDraftTool(params: {
@@ -126,7 +135,7 @@ export function registerDraftTool(params: {
           .optional()
           .describe("Show help"),
         action: z
-          .enum(["list", "read", "add", "update", "delete", "rename", "approve"])
+          .enum(["list", "read", "add", "update", "delete", "rename", "approve", "link_add", "link_remove"])
           .optional()
           .describe("Action to perform. Omit to show help."),
         id: z
@@ -149,6 +158,10 @@ export function registerDraftTool(params: {
           .array(z.string())
           .optional()
           .describe("List of situations when to use this document (REQUIRED for add action)"),
+        relatedDocs: z
+          .array(z.string())
+          .optional()
+          .describe("List of related document IDs (optional)"),
         newId: z
           .string()
           .optional()
@@ -175,7 +188,7 @@ export function registerDraftTool(params: {
           .describe("Skip warning when other drafts are also ready for approval"),
       },
     },
-    async ({ help, action, id, ids, content, description, whenToUse, newId, targetId, approvalToken, notes, confirmed, force }) => {
+    async ({ help, action, id, ids, content, description, whenToUse, relatedDocs, newId, targetId, approvalToken, notes, confirmed, force }) => {
       if (help || !action) {
         return wrapResponse({
           result: {
@@ -199,7 +212,7 @@ export function registerDraftTool(params: {
       }
 
       const result = await handler.execute({
-        actionParams: { id, ids, content, description, whenToUse, newId, targetId, approvalToken, notes, confirmed, force },
+        actionParams: { action, id, ids, content, description, whenToUse, relatedDocs, newId, targetId, approvalToken, notes, confirmed, force },
         context: { reader, config },
       });
       return wrapResponse({ result, config });
