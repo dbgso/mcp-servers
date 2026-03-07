@@ -12,6 +12,7 @@ import {
   RenameHandler,
   ApproveHandler,
   LinkHandler,
+  LintHandler,
 } from "./handlers/index.js";
 
 const DRAFT_HELP = `# Draft Tool
@@ -53,6 +54,7 @@ coding__testing         ← About testing rules
 - \`draft(action: "approve", ids: "id1,id2,id3", approvalToken: "<token>")\` - Batch approve multiple drafts with single token
 - \`draft(action: "link_add", id: "<id>", relatedDocs: ["doc1", "doc2"])\` - Add relatedDocs to promoted document
 - \`draft(action: "link_remove", id: "<id>", relatedDocs: ["doc1"])\` - Remove relatedDocs from promoted document
+- \`draft(action: "lint")\` - Check all documents for quality issues (missing metadata, orphans, duplicates)
 
 ## Consecutive Approval Warning
 
@@ -115,6 +117,7 @@ const actionHandlers: Record<string, DraftActionHandler> = {
   approve: new ApproveHandler(),
   link_add: linkHandler,
   link_remove: linkHandler,
+  lint: new LintHandler(),
 };
 
 export function registerDraftTool(params: {
@@ -135,7 +138,7 @@ export function registerDraftTool(params: {
           .optional()
           .describe("Show help"),
         action: z
-          .enum(["list", "read", "add", "update", "delete", "rename", "approve", "link_add", "link_remove"])
+          .enum(["list", "read", "add", "update", "delete", "rename", "approve", "link_add", "link_remove", "lint"])
           .optional()
           .describe("Action to perform. Omit to show help."),
         id: z
