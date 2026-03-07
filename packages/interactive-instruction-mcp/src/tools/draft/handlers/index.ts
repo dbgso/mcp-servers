@@ -6,3 +6,4 @@ export { DeleteHandler } from "./delete-handler.js";
 export { RenameHandler } from "./rename-handler.js";
 export { ApproveHandler } from "./approve-handler.js";
 export { LinkHandler } from "./link-handler.js";
+export { LintHandler } from "./lint-handler.js";
