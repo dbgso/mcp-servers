@@ -32,6 +32,10 @@
       "command": "sh",
       "args": ["-c", "docker run --rm -i -v \"${PWD}/output:/output\" --user \"$(id -u):$(id -g)\" python-diagrams-mcp:latest"]
     },
+    "graph-math-mcp": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "graph-math-mcp:latest"]
+    },
     "ast-file-mcp-docs": {
       "command": "npx",
       "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/ast-file-mcp/docs"]
