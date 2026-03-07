@@ -50,6 +50,9 @@ jobs:
           fi
           echo "Package verified: $PACKAGE_PATH"
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -65,6 +68,7 @@ jobs:
         with:
           context: ./packages/${{ steps.parse.outputs.package }}
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ steps.parse.outputs.image }}:latest
             ${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}
