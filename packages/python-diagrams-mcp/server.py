@@ -143,11 +143,90 @@ def get_mime_type(ext: str) -> str:
     }.get(ext, "application/octet-stream")
 
 
+def embed_images_in_svg(svg_content: bytes) -> bytes:
+    """Embed external image references as base64 data URLs in SVG.
+
+    The diagrams library generates SVG with external image references like:
+        <image xlink:href="/usr/local/lib/python3.11/site-packages/resources/aws/..." />
+
+    This function converts them to embedded base64:
+        <image xlink:href="data:image/png;base64,iVBORw0KGgo..." />
+    """
+    import re
+    import mimetypes
+
+    svg_text = svg_content.decode("utf-8")
+
+    def replace_image_href(match):
+        """Replace image href with base64 data URL."""
+        prefix = match.group(1)  # Everything before the path
+        image_path = match.group(2)  # The file path
+        suffix = match.group(3)  # Everything after the path
+
+        # Check if already a data URL
+        if image_path.startswith("data:"):
+            return match.group(0)
+
+        # Try to read and encode the image file
+        if os.path.isfile(image_path):
+            try:
+                mime_type, _ = mimetypes.guess_type(image_path)
+                if mime_type is None:
+                    mime_type = "application/octet-stream"
+
+                with open(image_path, "rb") as f:
+                    encoded = base64.b64encode(f.read()).decode("ascii")
+
+                data_url = f"data:{mime_type};base64,{encoded}"
+                return f'{prefix}{data_url}{suffix}'
+            except Exception:
+                # If we can't read the file, keep original reference
+                return match.group(0)
+        else:
+            return match.group(0)
+
+    # Match xlink:href="..." or href="..." attributes with file paths
+    # Pattern captures: (prefix)(path)(suffix)
+    svg_text = re.sub(
+        r'(xlink:href="|href=")([^"]+)(")',
+        replace_image_href,
+        svg_text
+    )
+
+    return svg_text.encode("utf-8")
+
+
 def render_diagram(code: str, output_format: str = "png") -> dict:
     """Execute diagram code and return result."""
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             os.chdir(tmpdir)
+
+            # Inject outformat parameter into Diagram() calls
+            # This ensures the output format matches what user requested
+            import re
+
+            def inject_outformat(match):
+                """Inject outformat parameter into Diagram() call."""
+                prefix = match.group(1)  # "Diagram(" or "with Diagram("
+                args = match.group(2)    # existing arguments
+
+                # Skip if outformat is already specified
+                if "outformat" in args:
+                    return match.group(0)
+
+                # Find the position to insert (before closing paren or after last arg)
+                if args.strip():
+                    return f'{prefix}{args}, outformat="{output_format}")'
+                else:
+                    return f'{prefix}outformat="{output_format}")'
+
+            # Match Diagram(...) patterns, handling multi-line
+            code = re.sub(
+                r'((?:with\s+)?Diagram\s*\()([^)]*)\)',
+                inject_outformat,
+                code
+            )
 
             exec_globals = {
                 "__name__": "__main__",
@@ -156,17 +235,22 @@ def render_diagram(code: str, output_format: str = "png") -> dict:
 
             exec(code, exec_globals)
 
-            # Find generated file
-            for ext in [f".{output_format}", ".png", ".svg", ".pdf"]:
-                for f in Path(tmpdir).glob(f"*{ext}"):
-                    with open(f, "rb") as fp:
-                        content = fp.read()
-                    return {
-                        "success": True,
-                        "filename": f.name,
-                        "content": content,
-                        "mime_type": get_mime_type(ext),
-                    }
+            # Find generated file - only look for the requested format
+            ext = f".{output_format}"
+            for f in Path(tmpdir).glob(f"*{ext}"):
+                with open(f, "rb") as fp:
+                    content = fp.read()
+
+                # For SVG, embed external images as base64
+                if output_format == "svg":
+                    content = embed_images_in_svg(content)
+
+                return {
+                    "success": True,
+                    "filename": f.name,
+                    "content": content,
+                    "mime_type": get_mime_type(ext),
+                }
 
             return {
                 "success": False,
