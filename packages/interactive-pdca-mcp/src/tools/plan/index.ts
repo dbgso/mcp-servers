@@ -398,6 +398,15 @@ export function registerPlanTool(params: {
           .string()
           .optional()
           .describe("Instructions/request content (required for start action, saved to prompts/{task-id}.md)"),
+        // confirm action specific
+        review_summary: z
+          .string()
+          .optional()
+          .describe("Summary of what was verified during self-review (required for confirm, min 50 chars)"),
+        evidence: z
+          .array(z.string())
+          .optional()
+          .describe("Specific locations verified - file paths, line numbers, etc. (required for confirm)"),
       },
     },
     async ({
@@ -442,6 +451,8 @@ export function registerPlanTool(params: {
       coverage,
       feedback_addressed,
       prompt,
+      review_summary,
+      evidence,
     }) => {
       if (help || !action) {
         // Check if template setup is needed
@@ -495,6 +506,7 @@ Self-review templates are available for this project. Would you like to set them
         feedback_id, interpretation,
         self_review_ref, blockers, risks, findings, sources, design_decisions,
         test_target, test_results, coverage, feedback_addressed, prompt,
+        review_summary, evidence,
       };
 
       const result = await handler.execute({ rawParams, context });

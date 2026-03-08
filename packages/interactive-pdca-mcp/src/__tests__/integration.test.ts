@@ -32,6 +32,23 @@ import {
 const tempDir = path.join(process.cwd(), "src/__tests__/temp-integration");
 const markdownDir = path.join(process.cwd(), "src/__tests__/temp-docs");
 
+/**
+ * Helper to create confirm params with required self-review fields
+ */
+function createConfirmParams(taskId: string) {
+  // Extract phase from task ID (e.g., "test-task__do" -> "do")
+  const phaseMatch = taskId.match(/__(\w+)$/);
+  const phase = phaseMatch ? phaseMatch[1] : "do"; // default to "do"
+
+  return {
+    id: taskId,
+    self_review_ref: `_mcp-interactive-instruction__plan__self-review__${phase}`,
+    review_summary:
+      "Verified all requirements are met. Output includes specific evidence and completion criteria are addressed.",
+    evidence: [`test-file-for-${taskId}.ts:1-50`],
+  };
+}
+
 describe("Integration Tests", () => {
   let planReader: PlanReader;
   let feedbackReader: FeedbackReader;
@@ -149,7 +166,7 @@ describe("Integration Tests", () => {
       context: planContext,
     });
     await confirmHandler.execute({
-      rawParams: { id: `${taskId}__plan` },
+      rawParams: createConfirmParams(`${taskId}__plan`),
       context: planContext,
     });
     await taskHandler.execute({
@@ -232,7 +249,7 @@ describe("Integration Tests", () => {
 
         // Confirm
         const confirmResult = await confirmHandler.execute({
-          rawParams: { id: "test-task__do" },
+          rawParams: createConfirmParams("test-task__do"),
           context: planContext,
         });
         expect(confirmResult.isError).toBeFalsy();
@@ -307,7 +324,7 @@ describe("Integration Tests", () => {
         });
 
         await confirmHandler.execute({
-          rawParams: { id: "fb-task__do" },
+          rawParams: createConfirmParams("fb-task__do"),
           context: planContext,
         });
 
@@ -363,7 +380,7 @@ describe("Integration Tests", () => {
         });
 
         await confirmHandler.execute({
-          rawParams: { id: "fb-task__do" },
+          rawParams: createConfirmParams("fb-task__do"),
           context: planContext,
         });
 
@@ -593,7 +610,7 @@ describe("Integration Tests", () => {
 
         // Complete __plan before __do can start
         await confirmHandler.execute({
-          rawParams: { id: "pdca-task__plan" },
+          rawParams: createConfirmParams("pdca-task__plan"),
           context: planContext,
         });
         await taskHandler.execute({
@@ -632,7 +649,7 @@ describe("Integration Tests", () => {
 
         // Complete __do before __check can start
         await confirmHandler.execute({
-          rawParams: { id: "pdca-task__do" },
+          rawParams: createConfirmParams("pdca-task__do"),
           context: planContext,
         });
         await taskHandler.execute({
@@ -672,7 +689,7 @@ describe("Integration Tests", () => {
 
         // Complete __check before __act can start
         await confirmHandler.execute({
-          rawParams: { id: "pdca-task__check" },
+          rawParams: createConfirmParams("pdca-task__check"),
           context: planContext,
         });
         await taskHandler.execute({
@@ -768,7 +785,7 @@ describe("Integration Tests", () => {
         });
 
         const result = await confirmHandler.execute({
-          rawParams: { id: "pending-task" },
+          rawParams: createConfirmParams("pending-task"),
           context: planContext,
         });
 
@@ -1085,7 +1102,7 @@ describe("Integration Tests", () => {
           context: planContext,
         });
         await confirmHandler.execute({
-          rawParams: { id: "multi-fb__do" },
+          rawParams: createConfirmParams("multi-fb__do"),
           context: planContext,
         });
 
@@ -1126,7 +1143,7 @@ describe("Integration Tests", () => {
           context: planContext,
         });
         await confirmHandler.execute({
-          rawParams: { id: "multi-fb__do" },
+          rawParams: createConfirmParams("multi-fb__do"),
           context: planContext,
         });
 
@@ -1194,7 +1211,7 @@ describe("Integration Tests", () => {
         });
 
         await confirmHandler.execute({
-          rawParams: { id: "rapid-task__do" },
+          rawParams: createConfirmParams("rapid-task__do"),
           context: planContext,
         });
 
@@ -1257,7 +1274,7 @@ describe("Integration Tests", () => {
         });
 
         await confirmHandler.execute({
-          rawParams: { id: "review-content__do" },
+          rawParams: createConfirmParams("review-content__do"),
           context: planContext,
         });
 
