@@ -37,6 +37,13 @@ export class ChainDescribeHandler extends BaseToolHandler<DescribeArgs> {
   protected async doExecute(args: DescribeArgs): Promise<ToolResponse> {
     const { operation } = args;
 
+    // Guide mode - show best practices
+    if (operation === "guide") {
+      return {
+        content: [{ type: "text", text: this.getGuideContent() }],
+      };
+    }
+
     // Detail mode
     if (operation) {
       const queryOp = getQueryOperation(operation);
@@ -47,6 +54,7 @@ export class ChainDescribeHandler extends BaseToolHandler<DescribeArgs> {
         const available = [
           ...allQueryOperations.map(o => o.id),
           ...allMutateOperations.map(o => o.id),
+          "guide",
         ].join(", ");
         return {
           content: [{ type: "text", text: `Unknown operation: "${operation}"\n\nAvailable operations: ${available}` }],
@@ -112,9 +120,92 @@ export class ChainDescribeHandler extends BaseToolHandler<DescribeArgs> {
 
     lines.push("");
     lines.push(`Use \`chain_describe({ operation: "<id>" })\` for details.`);
+    lines.push("");
+    lines.push(`**Important:** Before creating documents, read \`chain_describe({ operation: "guide" })\` to understand proper chain structure.`);
 
     return {
       content: [{ type: "text", text: lines.join("\n") }],
     };
+  }
+
+  private getGuideContent(): string {
+    return `# Chain Structure Guide
+
+## Core Principle
+
+traceable-chain-mcp is designed to **trace dependencies**. When you call \`trace(direction: "up")\` from an ADR, you should be able to reach the original requirement in a single chain.
+
+## Type Hierarchy
+
+\`\`\`
+requirement (root)
+  └── spec
+       └── design
+            └── implementation
+                 └── test
+
+requirement | spec | design | implementation
+  └── proposal
+       └── adr
+\`\`\`
+
+## Common Mistake: Orphaned Requirements
+
+### ❌ Wrong
+
+\`\`\`
+[requirement] Feature A           ← Original requirement
+[requirement] Feature A details   ← Wrong: should be spec
+\`\`\`
+
+**Problem**: Tracing from "Feature A details" won't reach "Feature A".
+
+### ✅ Correct
+
+\`\`\`
+[requirement] Feature A
+  └── [spec] Feature A details    ← Connected under requirement
+       └── [proposal] Implementation option
+            └── [adr] Decision
+\`\`\`
+
+## Before Creating Documents
+
+### 1. Check existing chains
+
+\`\`\`
+chain_query({ operation: "list" })
+\`\`\`
+
+### 2. Identify the parent
+
+- **Detailing a requirement** → Create spec under existing requirement
+- **Design decision** → Create design under existing spec
+- **Proposing implementation** → Create proposal under requirement/spec/design
+- **Recording decision** → Create adr under proposal
+
+### 3. Verify after creation
+
+\`\`\`
+chain_query({
+  operation: "trace",
+  params: { id: "<adr-id>", direction: "up" }
+})
+\`\`\`
+
+## When to Create New Requirement
+
+**DO create new requirement:**
+- Completely independent new feature/project
+- No relation to existing chains
+
+**DON'T create new requirement:**
+- Detailing existing requirement → Use spec
+- Design decision for existing feature → Use design/proposal
+- ADR for existing feature → Use proposal under existing chain
+
+## Note on requires Field
+
+The \`requires\` field cannot be changed after creation. If you made a mistake, you must delete and recreate the document in the correct order (children first, then parents).`;
   }
 }
