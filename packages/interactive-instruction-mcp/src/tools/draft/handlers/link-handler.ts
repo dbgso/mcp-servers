@@ -55,6 +55,12 @@ export class LinkHandler implements DraftActionHandler {
     const currentRelated = frontmatter.relatedDocs || [];
     const isAdd = linkAction === "link_add";
 
+    // Check for circular references (only for link_add)
+    let circularWarnings: string[] = [];
+    if (isAdd) {
+      circularWarnings = await this.detectCircularReferences({ reader, id, relatedDocs });
+    }
+
     // Calculate new relatedDocs
     const calcResult = this.calculateNewRelatedDocs({
       isAdd,
@@ -70,7 +76,7 @@ export class LinkHandler implements DraftActionHandler {
 
     // Preview mode
     if (!confirmed && !approvalToken) {
-      return this.showPreview({ id, linkAction, currentRelated, newRelated, relatedDocs });
+      return this.showPreview({ id, linkAction, currentRelated, newRelated, relatedDocs, circularWarnings });
     }
 
     // Request approval
@@ -107,6 +113,77 @@ export class LinkHandler implements DraftActionHandler {
       }
     }
     return invalidDocs;
+  }
+
+  /**
+   * Detect circular references that would be created by adding relatedDocs.
+   * Returns warning messages for each circular reference found.
+   * Detects: self-references, direct back-links, and deeper chain cycles.
+   */
+  private async detectCircularReferences(params: {
+    reader: MarkdownReader;
+    id: string;
+    relatedDocs: string[];
+  }): Promise<string[]> {
+    const { reader, id, relatedDocs } = params;
+    const warnings: string[] = [];
+
+    for (const targetId of relatedDocs) {
+      // Check for self-reference
+      if (targetId === id) {
+        warnings.push(`Self-reference: ${id} → ${id}`);
+        continue;
+      }
+
+      // Check for circular path from target back to source
+      const cyclePath = await this.findCyclePath({ reader, startId: targetId, targetId: id, visited: new Set() });
+      if (cyclePath) {
+        warnings.push(`${id} → ${cyclePath.join(" → ")} → ${id}`);
+      }
+    }
+
+    return warnings;
+  }
+
+  /**
+   * Find a path from startId to targetId through relatedDocs.
+   * Returns the path if found, null otherwise.
+   */
+  private async findCyclePath(params: {
+    reader: MarkdownReader;
+    startId: string;
+    targetId: string;
+    visited: Set<string>;
+  }): Promise<string[] | null> {
+    const { reader, startId, targetId, visited } = params;
+
+    if (visited.has(startId)) {
+      return null;
+    }
+    visited.add(startId);
+
+    const content = await reader.getDocumentContent(startId);
+    if (content === null) {
+      return null;
+    }
+
+    const frontmatter = parseFrontmatter(content);
+    const relatedDocs = frontmatter.relatedDocs || [];
+
+    // Direct link found
+    if (relatedDocs.includes(targetId)) {
+      return [startId];
+    }
+
+    // Check deeper links
+    for (const nextId of relatedDocs) {
+      const subPath = await this.findCyclePath({ reader, startId: nextId, targetId, visited });
+      if (subPath) {
+        return [startId, ...subPath];
+      }
+    }
+
+    return null;
   }
 
   private calculateNewRelatedDocs(params: {
@@ -154,8 +231,9 @@ export class LinkHandler implements DraftActionHandler {
     currentRelated: string[];
     newRelated: string[];
     relatedDocs: string[];
+    circularWarnings?: string[];
   }): ToolResult {
-    const { id, linkAction, currentRelated, newRelated, relatedDocs } = params;
+    const { id, linkAction, currentRelated, newRelated, relatedDocs, circularWarnings = [] } = params;
     const isAdd = linkAction === "link_add";
     const changeType = isAdd ? "Adding" : "Removing";
     const changedDocs = isAdd
@@ -163,6 +241,21 @@ export class LinkHandler implements DraftActionHandler {
       : relatedDocs.filter((d) => currentRelated.includes(d));
 
     const actionName = isAdd ? "link_add" : "link_remove";
+
+    // Build circular reference warning section
+    let warningSection = "";
+    if (circularWarnings.length > 0) {
+      warningSection = `
+⚠️ **Warning: Circular reference detected**
+
+Adding this link would create circular references:
+${circularWarnings.map((w) => `- ${w}`).join("\n")}
+
+Circular references are discouraged by lint rules. Consider using one-way links instead.
+
+---
+`;
+    }
 
     const text = `## Preview: ${changeType} relatedDocs
 
@@ -173,7 +266,7 @@ export class LinkHandler implements DraftActionHandler {
 **${changeType}:** ${changedDocs.join(", ")}
 
 **New relatedDocs:** ${newRelated.length > 0 ? newRelated.join(", ") : "(none)"}
-
+${warningSection}
 ---
 
 To proceed, call:
