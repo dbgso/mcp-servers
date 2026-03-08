@@ -123,6 +123,62 @@ whenToUse:
       expect(result.description).toBe("Test");
       expect(result.whenToUse).toEqual(["Trigger 1"]);
     });
+
+    it("should parse status field", () => {
+      const content = `---
+description: Test
+status: editing
+---
+
+# Title`;
+
+      const result = parseFrontmatter(content);
+      expect(result.description).toBe("Test");
+      expect(result.status).toBe("editing");
+    });
+
+    it("should parse all draft status fields", () => {
+      const content = `---
+description: Test
+status: pending_approval
+selfReviewNotes: Reviewed and ready
+confirmedAt: 2024-01-15T10:30:00Z
+---
+
+# Title`;
+
+      const result = parseFrontmatter(content);
+      expect(result.status).toBe("pending_approval");
+      expect(result.selfReviewNotes).toBe("Reviewed and ready");
+      expect(result.confirmedAt).toBe("2024-01-15T10:30:00Z");
+    });
+
+    it("should ignore invalid status values", () => {
+      const content = `---
+description: Test
+status: invalid_status
+---
+
+# Title`;
+
+      const result = parseFrontmatter(content);
+      expect(result.description).toBe("Test");
+      expect(result.status).toBeUndefined();
+    });
+
+    it("should parse all valid status values", () => {
+      const statuses = ["editing", "self_review", "user_reviewing", "pending_approval"];
+      for (const status of statuses) {
+        const content = `---
+status: ${status}
+---
+
+# Title`;
+
+        const result = parseFrontmatter(content);
+        expect(result.status).toBe(status);
+      }
+    });
   });
 
   describe("no frontmatter", () => {
@@ -327,6 +383,59 @@ Body`;
       // Empty frontmatter produces ---\n\n--- due to serializeFrontmatter returning \n
       expect(result).toMatch(/^---\n+---/);
       expect(result).toContain("# Title\n\nBody");
+    });
+  });
+
+  describe("status fields", () => {
+    it("should add status field to frontmatter", () => {
+      const content = `# Title
+
+Body`;
+
+      const result = updateFrontmatter({
+        content,
+        frontmatter: {
+          description: "Test",
+          status: "editing",
+        },
+      });
+
+      expect(result).toContain("description: Test");
+      expect(result).toContain("status: editing");
+    });
+
+    it("should add all draft status fields", () => {
+      const content = `# Title`;
+
+      const result = updateFrontmatter({
+        content,
+        frontmatter: {
+          description: "Test",
+          status: "pending_approval",
+          selfReviewNotes: "All good",
+          confirmedAt: "2024-01-15T10:30:00Z",
+        },
+      });
+
+      expect(result).toContain("status: pending_approval");
+      expect(result).toContain("selfReviewNotes: All good");
+      expect(result).toContain("confirmedAt: 2024-01-15T10:30:00Z");
+    });
+
+    it("should not include status fields when not provided", () => {
+      const content = `# Title`;
+
+      const result = updateFrontmatter({
+        content,
+        frontmatter: {
+          description: "Test",
+        },
+      });
+
+      expect(result).toContain("description: Test");
+      expect(result).not.toContain("status:");
+      expect(result).not.toContain("selfReviewNotes:");
+      expect(result).not.toContain("confirmedAt:");
     });
   });
 });

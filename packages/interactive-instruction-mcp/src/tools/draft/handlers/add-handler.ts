@@ -114,6 +114,7 @@ Path: ${result.path}${workflowStatus}
         description,
         whenToUse,
         relatedDocs,
+        status: "editing",
       },
     });
   }

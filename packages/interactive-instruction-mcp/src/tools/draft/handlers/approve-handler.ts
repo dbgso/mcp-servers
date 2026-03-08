@@ -1,4 +1,4 @@
-import type { ToolResult, DraftActionHandler, DraftActionParams, DraftActionContext } from "../../../types/index.js";
+import type { ToolResult, DraftActionHandler, DraftActionParams, DraftActionContext, DraftStatus } from "../../../types/index.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
 import {
   requestApproval,
@@ -11,6 +11,7 @@ import {
   stateDescriptions,
   type DraftState,
 } from "../../../workflows/draft-workflow.js";
+import { parseFrontmatter, updateFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
 
 export class ApproveHandler implements DraftActionHandler {
   async execute(params: {
@@ -106,6 +107,14 @@ draft(action: "approve", id: "${id}", notes: "Reviewed: covers X and Y, ready fo
         };
       }
 
+      // Update frontmatter with self_review status and notes
+      await this.updateDraftFrontmatterStatus({
+        id,
+        status: "self_review",
+        selfReviewNotes: notes,
+        reader,
+      });
+
       // Tell AI to explain to user - reference help for format rules
       return {
         content: [{
@@ -190,6 +199,14 @@ draft(action: "approve", id: "${id}", confirmed: true, force: true)
         };
       }
 
+      // Update frontmatter with pending_approval status and confirmedAt
+      await this.updateDraftFrontmatterStatus({
+        id,
+        status: "pending_approval",
+        confirmedAt: new Date().toISOString(),
+        reader,
+      });
+
       // Generate diff/summary for user to see
       const changeInfo = await this.generateChangeInfo({ id, targetId, reader });
 
@@ -252,8 +269,7 @@ Please check the workflow status and try again.`,
     const finalTargetId = targetId || id;
     const sourceDraftId = DRAFT_PREFIX + id;
 
-    // Get file paths
-    const draftPath = reader.getFilePath(sourceDraftId);
+    // Get file path for target
     const targetPath = reader.getFilePath(finalTargetId);
 
     // Get draft content
@@ -491,6 +507,25 @@ draft(action: "approve", ids: "${ids}", approvalToken: "<token>")
         continue;
       }
 
+      // Set approved status in frontmatter before promoting
+      const existingFrontmatter = parseFrontmatter(draftContent);
+      const approvedFrontmatter = {
+        ...existingFrontmatter,
+        status: "approved" as const,
+        approvedAt: new Date().toISOString(),
+      };
+      const body = stripFrontmatter(draftContent);
+      const approvedContent = updateFrontmatter({
+        content: body,
+        frontmatter: approvedFrontmatter,
+      });
+
+      // Update the draft with approved content before renaming
+      await reader.updateDocument({
+        id: sourceDraftId,
+        content: approvedContent,
+      });
+
       const renameResult = await reader.renameDocument({
         oldId: sourceDraftId,
         newId: id,
@@ -551,10 +586,19 @@ Each draft must be explained to user first (notes → explain).`,
     }
 
     // Transition all drafts to pending_approval
+    const confirmedAt = new Date().toISOString();
     for (const id of idList) {
       await draftWorkflowManager.trigger({
         id,
         triggerParams: { action: "confirm", confirmed: true },
+      });
+
+      // Update frontmatter with pending_approval status
+      await this.updateDraftFrontmatterStatus({
+        id,
+        status: "pending_approval",
+        confirmedAt,
+        reader,
       });
     }
 
@@ -688,6 +732,25 @@ draft(action: "approve", id: "${id}", notes: "...")
       };
     }
 
+    // Set approved status in frontmatter before promoting
+    const existingFrontmatter = parseFrontmatter(draftContent);
+    const approvedFrontmatter = {
+      ...existingFrontmatter,
+      status: "approved" as const,
+      approvedAt: new Date().toISOString(),
+    };
+    const body = stripFrontmatter(draftContent);
+    const approvedContent = updateFrontmatter({
+      content: body,
+      frontmatter: approvedFrontmatter,
+    });
+
+    // Update the draft with approved content before renaming
+    await reader.updateDocument({
+      id: sourceDraftId,
+      content: approvedContent,
+    });
+
     const renameResult = await reader.renameDocument({
       oldId: sourceDraftId,
       newId: finalTargetId,
@@ -713,5 +776,43 @@ draft(action: "approve", id: "${id}", notes: "...")
         },
       ],
     };
+  }
+
+  /**
+   * Update draft frontmatter with status information.
+   */
+  private async updateDraftFrontmatterStatus(params: {
+    id: string;
+    status: DraftStatus;
+    selfReviewNotes?: string;
+    confirmedAt?: string;
+    reader: DraftActionContext["reader"];
+  }): Promise<void> {
+    const { id, status, selfReviewNotes, confirmedAt, reader } = params;
+    const draftId = DRAFT_PREFIX + id;
+
+    const content = await reader.getDocumentContent(draftId);
+    if (content === null) {
+      return;
+    }
+
+    const existingFrontmatter = parseFrontmatter(content);
+    const newFrontmatter = {
+      ...existingFrontmatter,
+      status,
+      ...(selfReviewNotes !== undefined && { selfReviewNotes }),
+      ...(confirmedAt !== undefined && { confirmedAt }),
+    };
+
+    const body = stripFrontmatter(content);
+    const newContent = updateFrontmatter({
+      content: body,
+      frontmatter: newFrontmatter,
+    });
+
+    await reader.updateDocument({
+      id: draftId,
+      content: newContent,
+    });
   }
 }

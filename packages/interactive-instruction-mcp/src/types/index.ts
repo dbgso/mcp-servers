@@ -11,10 +11,17 @@ export interface MarkdownSummary {
   relatedDocs?: string[];
 }
 
+// Draft workflow status (synced with frontmatter)
+export type DraftStatus = "editing" | "self_review" | "user_reviewing" | "pending_approval" | "approved";
+
 export interface DocumentFrontmatter {
   description?: string;
   whenToUse?: string[];
   relatedDocs?: string[];
+  status?: DraftStatus;
+  selfReviewNotes?: string;
+  confirmedAt?: string;
+  approvedAt?: string;
 }
 
 // Draft tool types
@@ -32,6 +39,7 @@ export interface DraftActionParams {
   notes?: string;
   confirmed?: boolean;
   force?: boolean;
+  status?: DraftStatus;
 }
 
 export interface DraftActionContext {

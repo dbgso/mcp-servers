@@ -8,6 +8,12 @@ const WHEN_TO_USE_KEY = "whenToUse" as const;
 const RELATED_DOCS_KEY = "relatedDocs" as const;
 type ArrayFieldKey = typeof WHEN_TO_USE_KEY | typeof RELATED_DOCS_KEY;
 
+// Draft status fields
+const STATUS_KEY = "status" as const;
+const SELF_REVIEW_NOTES_KEY = "selfReviewNotes" as const;
+const CONFIRMED_AT_KEY = "confirmedAt" as const;
+const APPROVED_AT_KEY = "approvedAt" as const;
+
 /**
  * Parse YAML frontmatter from markdown content
  * Frontmatter must be at the start of the file
@@ -94,6 +100,22 @@ export function parseFrontmatter(content: string): DocumentFrontmatter {
         parseArrayField(WHEN_TO_USE_KEY, value);
       } else if (key === RELATED_DOCS_KEY) {
         parseArrayField(RELATED_DOCS_KEY, value);
+      } else if (key === STATUS_KEY) {
+        saveCurrentArray();
+        // Validate status value
+        const validStatuses = ["editing", "self_review", "user_reviewing", "pending_approval", "approved"];
+        if (validStatuses.includes(value)) {
+          result.status = value as DocumentFrontmatter["status"];
+        }
+      } else if (key === SELF_REVIEW_NOTES_KEY) {
+        saveCurrentArray();
+        result.selfReviewNotes = value;
+      } else if (key === CONFIRMED_AT_KEY) {
+        saveCurrentArray();
+        result.confirmedAt = value;
+      } else if (key === APPROVED_AT_KEY) {
+        saveCurrentArray();
+        result.approvedAt = value;
       } else {
         saveCurrentArray();
       }
@@ -148,6 +170,23 @@ function serializeFrontmatter(frontmatter: DocumentFrontmatter): string {
     for (const item of frontmatter.relatedDocs) {
       lines.push(`  - ${item}`);
     }
+  }
+
+  // Draft status fields (only for drafts)
+  if (frontmatter.status) {
+    lines.push(`${STATUS_KEY}: ${frontmatter.status}`);
+  }
+
+  if (frontmatter.selfReviewNotes) {
+    lines.push(`${SELF_REVIEW_NOTES_KEY}: ${frontmatter.selfReviewNotes}`);
+  }
+
+  if (frontmatter.confirmedAt) {
+    lines.push(`${CONFIRMED_AT_KEY}: ${frontmatter.confirmedAt}`);
+  }
+
+  if (frontmatter.approvedAt) {
+    lines.push(`${APPROVED_AT_KEY}: ${frontmatter.approvedAt}`);
   }
 
   return lines.join("\n") + "\n";
