@@ -2,6 +2,7 @@ import type { ToolResult, DraftActionHandler, DraftActionParams, DraftActionCont
 import { DRAFT_PREFIX } from "../../../constants.js";
 import { draftWorkflowManager } from "../../../workflows/draft-workflow.js";
 import { updateFrontmatter, parseFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
+import { generateDiff, writeDiffToFile } from "../../../utils/diff-utils.js";
 
 export class UpdateHandler implements DraftActionHandler {
   async execute(params: {
@@ -61,12 +62,15 @@ export class UpdateHandler implements DraftActionHandler {
       ? `\n**Workflow:** reset → ${workflowResult.to}`
       : "";
 
+    // Generate diff against original document if it exists
+    const diffSection = await this.generateDiffSection({ id, finalContent, reader });
+
     return {
       content: [
         {
           type: "text" as const,
           text: `Draft "${id}" updated successfully.
-Path: ${result.path}${workflowStatus}
+Path: ${result.path}${workflowStatus}${diffSection}
 
 ---
 
@@ -79,6 +83,37 @@ Path: ${result.path}${workflowStatus}
         },
       ],
     };
+  }
+
+  /**
+   * Generate diff section comparing original document with draft.
+   * Writes diff to temp file and returns path.
+   * Returns empty string if original document doesn't exist.
+   */
+  private async generateDiffSection(params: {
+    id: string;
+    finalContent: string;
+    reader: DraftActionContext["reader"];
+  }): Promise<string> {
+    const { id, finalContent, reader } = params;
+
+    // Get original document (without draft prefix)
+    const originalContent = await reader.getDocumentContent(id);
+    if (!originalContent) {
+      return "";
+    }
+
+    const diff = generateDiff(originalContent, finalContent, {
+      originalName: `original: ${id}`,
+      newName: `draft: ${id}`,
+    });
+
+    if (!diff) {
+      return "\n\n**Diff:** No changes from original.";
+    }
+
+    const diffPath = await writeDiffToFile({ diff, id });
+    return `\n\n**Diff:** ${diffPath}`;
   }
 
   /**

@@ -51,10 +51,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
+    "diff": "^8.0.3",
     "mcp-shared": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/diff": "^8.0.0",
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"
   }
