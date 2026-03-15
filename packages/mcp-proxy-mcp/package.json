@@ -1,0 +1,62 @@
+{
+  "name": "mcp-proxy-mcp",
+  "version": "0.1.0",
+  "description": "MCP proxy server that wraps existing MCP servers with rule-based filtering",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-proxy-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "proxy",
+    "filter",
+    "security",
+    "claude",
+    "ai",
+    "llm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/mcp-proxy-mcp"
+  },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/mcp-proxy-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:mcp-proxy-mcp"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "mcp-shared": "workspace:*",
+    "minimatch": "^10.0.1",
+    "ulid": "^2.3.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
+  }
+}
