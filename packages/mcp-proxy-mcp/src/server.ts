@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { requestApproval, getApprovalRequestedMessage } from "mcp-shared";
 import { z } from "zod";
+import { AuditLogger } from "./audit-logger.js";
 import { PendingStore } from "./pending-store.js";
 import { ProxyClient } from "./proxy-client.js";
 import { RuleEngine } from "./rule-engine.js";
@@ -13,6 +14,7 @@ export interface CreateServerParams {
   target: TargetConfig;
   rulesFile: string;
   dryRun?: boolean;
+  auditLog?: string;
 }
 
 export interface CreateServerResult {
@@ -23,13 +25,14 @@ export interface CreateServerResult {
 export async function createServer(
   params: CreateServerParams
 ): Promise<CreateServerResult> {
-  const { target, rulesFile, dryRun = false } = params;
+  const { target, rulesFile, dryRun = false, auditLog } = params;
 
   // Initialize components
   const proxyClient = new ProxyClient(target);
   const ruleStore = new RuleStore(rulesFile);
   const ruleEngine = new RuleEngine(ruleStore);
   const pendingStore = new PendingStore();
+  const auditLogger = auditLog ? new AuditLogger(auditLog) : undefined;
 
   // Load rules
   await ruleStore.load();
@@ -57,6 +60,7 @@ export async function createServer(
     ruleEngine,
     pendingStore,
     dryRun,
+    auditLogger,
   });
 
   return { server, proxyClient };
@@ -69,8 +73,9 @@ function registerProxyExecuteTool(params: {
   ruleEngine: RuleEngine;
   pendingStore: PendingStore;
   dryRun: boolean;
+  auditLogger?: AuditLogger;
 }): void {
-  const { server, targetTools, proxyClient, ruleEngine, pendingStore, dryRun } = params;
+  const { server, targetTools, proxyClient, ruleEngine, pendingStore, dryRun, auditLogger } = params;
 
   // Build tool list for description
   const toolList = targetTools.map((t) => `- ${t.name}: ${t.description ?? "(no description)"}`).join("\n");
@@ -108,6 +113,7 @@ function registerProxyExecuteTool(params: {
         if (dryRun) {
           console.error(`[DRY-RUN] Would block: ${toolName} - ${evaluation.reason}`);
         } else {
+          auditLogger?.logDeny(toolName, args, evaluation.matchedRule, evaluation.reason);
           return {
             content: [
               {
@@ -125,6 +131,7 @@ function registerProxyExecuteTool(params: {
           console.error(`[DRY-RUN] Would ask for approval: ${toolName} - ${evaluation.reason}`);
         } else {
           const pendingCall = pendingStore.add(toolName, args, evaluation.matchedRule!);
+          auditLogger?.logAsk(toolName, args, evaluation.matchedRule!, evaluation.reason);
 
           const { fallbackPath } = await requestApproval({
             request: {
@@ -148,6 +155,7 @@ function registerProxyExecuteTool(params: {
       // Forward to target MCP
       try {
         const result = await proxyClient.callTool(toolName, args);
+        auditLogger?.logAllow(toolName, args, evaluation.matchedRule, evaluation.reason);
 
         if ("content" in result && Array.isArray(result.content)) {
           if (dryRun && evaluation.action === "deny") {
@@ -191,11 +199,13 @@ function registerProxyExecuteTool(params: {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        auditLogger?.logError(toolName, args, errorMessage);
         return {
           content: [
             {
               type: "text" as const,
-              text: `[ERROR] Failed to call tool: ${error instanceof Error ? error.message : String(error)}`,
+              text: `[ERROR] Failed to call tool: ${errorMessage}`,
             },
           ],
           isError: true,

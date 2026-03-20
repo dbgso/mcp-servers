@@ -39,6 +39,10 @@ function parseArgs(args: string[]): CliArgs {
       case "--dry-run":
         result.dryRun = true;
         break;
+      case "--audit-log":
+        result.auditLog = nextArg;
+        i++;
+        break;
       case "--help":
         printHelp();
         process.exit(0);
@@ -62,6 +66,7 @@ Options:
   --rules-file   Path to the rules JSON file
   --config       Path to the proxy configuration file
   --dry-run      Log blocked calls but don't actually block them
+  --audit-log    Path to audit log file (JSON Lines format)
   --help         Show this help message
 
 Examples:
@@ -80,16 +85,19 @@ function loadConfig(cliArgs: CliArgs): {
   target: TargetConfig;
   rulesFile: string;
   dryRun: boolean;
+  auditLog?: string;
 } {
   if (cliArgs.config) {
     // Load from config file
     const configPath = resolve(cliArgs.config);
     const configContent = readFileSync(configPath, "utf-8");
     const config = ProxyConfigSchema.parse(JSON.parse(configContent));
+    const auditLog = cliArgs.auditLog ?? config.auditLog;
     return {
       target: config.target,
       rulesFile: resolve(config.rulesFile),
       dryRun: cliArgs.dryRun ?? config.dryRun ?? false,
+      auditLog: auditLog ? resolve(auditLog) : undefined,
     };
   }
 
@@ -111,6 +119,7 @@ function loadConfig(cliArgs: CliArgs): {
     },
     rulesFile: resolve(cliArgs.rulesFile),
     dryRun: cliArgs.dryRun ?? false,
+    auditLog: cliArgs.auditLog ? resolve(cliArgs.auditLog) : undefined,
   };
 }
 
@@ -134,13 +143,17 @@ async function main(): Promise<void> {
 
   const args = process.argv.slice(2);
   const cliArgs = parseArgs(args);
-  const { target, rulesFile, dryRun } = loadConfig(cliArgs);
+  const { target, rulesFile, dryRun, auditLog } = loadConfig(cliArgs);
 
   if (dryRun) {
     console.error("[mcp-proxy] Running in DRY-RUN mode - blocked calls will be logged but not blocked");
   }
 
-  const { server, proxyClient } = await createServer({ target, rulesFile, dryRun });
+  if (auditLog) {
+    console.error(`[mcp-proxy] Audit logging enabled: ${auditLog}`);
+  }
+
+  const { server, proxyClient } = await createServer({ target, rulesFile, dryRun, auditLog });
 
   // Set cleanup function to disconnect proxy client
   cleanup = async () => {

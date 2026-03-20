@@ -1,29 +1,32 @@
 # mcp-proxy-mcp
 
-既存のMCPサーバーをラップし、ルールベースでツール呼び出しをフィルタリングする汎用プロキシMCPサーバー。
+A generic proxy MCP server that wraps existing MCP servers and provides rule-based filtering for tool calls.
 
-## 特徴
+## Features
 
-- 任意のMCPサーバーをラップ可能
-- **3種類のアクション**: allow（許可）/ deny（拒否）/ ask（確認）
-- ツール名のglobパターンマッチ (`browser_*`)
-- パラメータ条件でのフィルタリング
-- 優先度付きルール評価
-- ルールのファイル永続化
-- 実行時のルール追加・更新・削除
-- **Ask機能**: ユーザーに確認を求めてから実行（デスクトップ通知）
-- **Dry-runモード**: ブロックせずにログ出力のみ（ルールのデバッグ用）
-- **シグナル伝達**: Ctrl+Cで親子プロセス両方を正しく終了
+- Wrap any MCP server
+- **3 action types**: allow / deny / ask (requires approval)
+- Glob pattern matching for tool names (`browser_*`)
+- Parameter condition filtering
+- **Array index access**: `args[0]`, `options.volume[1]`
+- **Nested object access**: `options.profile`, `options.method`
+- Priority-based rule evaluation
+- File persistence for rules
+- Runtime rule management (add/update/delete)
+- **Ask workflow**: Require user approval before execution (desktop notification)
+- **Dry-run mode**: Log only without blocking (for rule debugging)
+- **Audit logging**: JSON Lines format audit log for all tool calls
+- **Signal propagation**: Proper Ctrl+C handling for parent and child processes
 
-## インストール
+## Installation
 
 ```bash
 npm install mcp-proxy-mcp
 ```
 
-## 使い方
+## Usage
 
-### CLI引数で起動
+### CLI arguments
 
 ```bash
 mcp-proxy-mcp \
@@ -32,7 +35,7 @@ mcp-proxy-mcp \
   --rules-file ./rules.json
 ```
 
-### 設定ファイルで起動
+### Config file
 
 ```bash
 mcp-proxy-mcp --config ./proxy-config.json
@@ -49,9 +52,9 @@ proxy-config.json:
 }
 ```
 
-## ルール設定
+## Rule Configuration
 
-### ルールファイル (rules.json)
+### Rule File (rules.json)
 
 ```json
 {
@@ -64,82 +67,102 @@ proxy-config.json:
       "conditions": [
         { "param": "ref", "operator": "contains", "value": "delete" }
       ],
-      "description": "deleteを含むボタンのクリックを禁止"
+      "description": "Block clicking delete buttons"
     },
     {
       "id": "allow-browser-tools",
       "priority": 50,
       "action": "allow",
       "toolPattern": "browser_*",
-      "description": "その他のブラウザ操作は許可"
+      "description": "Allow other browser operations"
     }
   ],
   "defaultAction": "deny"
 }
 ```
 
-### アクションの種類
+### Action Types
 
-| action | 説明 |
-|--------|------|
-| `allow` | ツール呼び出しを許可（そのまま実行） |
-| `deny` | ツール呼び出しを拒否（ブロック） |
-| `ask` | ユーザーに確認を求める（承認後に実行） |
+| Action | Description |
+|--------|-------------|
+| `allow` | Allow the tool call (execute as-is) |
+| `deny` | Deny the tool call (block) |
+| `ask` | Require user approval (execute after approval) |
 
-### ルールの評価順序
+### Rule Evaluation Order
 
-1. ルールを優先度順（高い方から）に評価
-2. `toolPattern` がマッチするかチェック
-3. `conditions` が全て満たされるかチェック（AND結合）
-4. 最初にマッチしたルールの `action` を適用
-5. どのルールにもマッチしない場合は `defaultAction` を適用
+1. Evaluate rules in priority order (highest first)
+2. Check if `toolPattern` matches
+3. Check if all `conditions` are satisfied (AND logic)
+4. Apply the `action` of the first matching rule
+5. If no rule matches, apply `defaultAction`
 
 ### toolPattern
 
-globパターンでツール名をマッチ：
+Glob patterns for matching tool names:
 
-| パターン | マッチ例 |
-|----------|----------|
-| `browser_click` | `browser_click` のみ |
+| Pattern | Matches |
+|---------|---------|
+| `browser_click` | `browser_click` only |
 | `browser_*` | `browser_click`, `browser_navigate`, ... |
-| `*` | すべてのツール |
+| `*` | All tools |
 
-### conditions
+### Conditions
 
-パラメータ条件（複数指定時はAND結合）：
+Parameter conditions (multiple conditions use AND logic):
 
-| operator | 説明 | 例 |
-|----------|------|-----|
-| `equals` | 完全一致 | `{ "param": "ref", "operator": "equals", "value": "btn-1" }` |
-| `contains` | 部分一致 | `{ "param": "ref", "operator": "contains", "value": "delete" }` |
-| `matches` | 正規表現 | `{ "param": "url", "operator": "matches", "value": "^https://evil" }` |
-| `exists` | 存在確認 | `{ "param": "force", "operator": "exists" }` |
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `equals` | Exact match | `{ "param": "ref", "operator": "equals", "value": "btn-1" }` |
+| `contains` | Substring match | `{ "param": "ref", "operator": "contains", "value": "delete" }` |
+| `matches` | Regex match | `{ "param": "url", "operator": "matches", "value": "^https://evil" }` |
+| `exists` | Existence check | `{ "param": "force", "operator": "exists" }` |
 
-ネストしたパラメータはドット記法で指定：
+### Parameter Access Patterns
+
+#### Dot notation for nested objects
 ```json
-{ "param": "options.method", "operator": "equals", "value": "DELETE" }
+{ "param": "options.profile", "operator": "equals", "value": "prod" }
 ```
 
-## 提供ツール
+#### Array index access
+```json
+{ "param": "args[0]", "operator": "equals", "value": "push" }
+{ "param": "args[2]", "operator": "equals", "value": "main" }
+```
 
-プロキシ自体が提供する管理ツール：
+#### Nested array access
+```json
+{ "param": "options.volume[0]", "operator": "contains", "value": "/etc" }
+```
 
-| ツール | 説明 |
-|--------|------|
-| `proxy_rule_list` | ルール一覧を表示 |
-| `proxy_rule_add` | ルールを追加 |
-| `proxy_rule_remove` | ルールを削除 |
-| `proxy_rule_update` | ルールを更新 |
-| `proxy_rule_test` | ルール評価をテスト |
-| `proxy_status` | プロキシ状態を確認 |
-| `proxy_set_default` | デフォルトアクションを設定 |
-| `proxy_pending` | 承認待ちのツール呼び出し一覧 |
-| `proxy_approve` | 承認待ちのツール呼び出しを承認 |
-| `proxy_reject` | 承認待ちのツール呼び出しを拒否 |
+#### Array contains (checks any element)
+```json
+{ "param": "args", "operator": "contains", "value": "--force" }
+```
+This matches if ANY element in the `args` array contains "--force".
 
-## 使用例
+## Provided Tools
 
-### Playwright MCPをラップ
+Proxy management tools:
+
+| Tool | Description |
+|------|-------------|
+| `proxy_execute` | Execute a tool through the proxy |
+| `proxy_rule_list` | List all rules |
+| `proxy_rule_add` | Add a rule |
+| `proxy_rule_remove` | Remove a rule |
+| `proxy_rule_update` | Update a rule |
+| `proxy_rule_test` | Test rule evaluation |
+| `proxy_status` | Check proxy status |
+| `proxy_set_default` | Set default action |
+| `proxy_pending` | List pending approval requests |
+| `proxy_approve` | Approve a pending request |
+| `proxy_reject` | Reject a pending request |
+
+## Examples
+
+### Wrap Playwright MCP
 
 ```json
 {
@@ -152,7 +175,7 @@ globパターンでツール名をマッチ：
       "conditions": [
         { "param": "ref", "operator": "matches", "value": "delete|remove|destroy" }
       ],
-      "description": "危険なボタンのクリックを禁止"
+      "description": "Block clicking dangerous buttons"
     },
     {
       "id": "block-external-navigation",
@@ -162,28 +185,81 @@ globパターンでツール名をマッチ：
       "conditions": [
         { "param": "url", "operator": "matches", "value": "^https?://(?!localhost)" }
       ],
-      "description": "外部サイトへのナビゲーション禁止"
+      "description": "Block navigation to external sites"
     },
     {
       "id": "block-js-eval",
       "priority": 80,
       "action": "deny",
       "toolPattern": "browser_evaluate",
-      "description": "JavaScript実行を禁止"
+      "description": "Block JavaScript execution"
     },
     {
       "id": "allow-all-browser",
       "priority": 10,
       "action": "allow",
       "toolPattern": "browser_*",
-      "description": "その他は許可"
+      "description": "Allow other browser operations"
     }
   ],
   "defaultAction": "deny"
 }
 ```
 
-### 実行時にルールを追加
+### Wrap cli-to-mcp for AWS Access Control
+
+```json
+{
+  "rules": [
+    {
+      "id": "block-aws-prod",
+      "priority": 100,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "aws" },
+        { "param": "options.profile", "operator": "equals", "value": "prod" }
+      ],
+      "description": "Block AWS commands with production profile"
+    },
+    {
+      "id": "allow-aws-dev",
+      "priority": 50,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "aws" }
+      ],
+      "description": "Allow AWS commands with other profiles"
+    }
+  ],
+  "defaultAction": "deny"
+}
+```
+
+### Block Git Force Push to Main
+
+```json
+{
+  "rules": [
+    {
+      "id": "block-force-push-main",
+      "priority": 100,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "git" },
+        { "param": "args[0]", "operator": "equals", "value": "push" },
+        { "param": "args", "operator": "contains", "value": "--force" },
+        { "param": "args[2]", "operator": "equals", "value": "main" }
+      ],
+      "description": "Block force push to main branch"
+    }
+  ]
+}
+```
+
+### Add Rules at Runtime
 
 ```
 proxy_rule_add({
@@ -191,13 +267,13 @@ proxy_rule_add({
   action: "deny",
   toolPattern: "browser_click",
   conditions: [{ param: "ref", operator: "contains", value: "payment" }],
-  description: "支払いボタンを一時的にブロック"
+  description: "Temporarily block payment buttons"
 })
 ```
 
-## Ask機能（承認フロー）
+## Ask Workflow (Approval Flow)
 
-危険な操作を実行前にユーザーに確認を求める機能：
+Require user approval before executing dangerous operations:
 
 ```json
 {
@@ -210,42 +286,42 @@ proxy_rule_add({
       "conditions": [
         { "param": "ref", "operator": "contains", "value": "delete" }
       ],
-      "description": "削除ボタンは確認してから実行"
+      "description": "Confirm before clicking delete buttons"
     }
   ]
 }
 ```
 
-### Askの動作フロー
+### Ask Workflow Steps
 
-1. ツール呼び出しが `ask` ルールにマッチ
-2. デスクトップ通知で承認トークンを表示
-3. 呼び出し元に「承認待ち」レスポンスを返す（Request IDを含む）
-4. ユーザーが `proxy_approve` で承認するか `proxy_reject` で拒否
-5. 承認された場合のみ、元のツールが実行される
+1. Tool call matches an `ask` rule
+2. Desktop notification displays approval token
+3. Response returns "approval required" with Request ID
+4. User calls `proxy_approve` or `proxy_reject`
+5. If approved, original tool is executed
 
-### 承認コマンド例
+### Approval Commands
 
 ```
-// 承認待ち一覧を確認
+// List pending approvals
 proxy_pending()
 
-// 承認（トークンはデスクトップ通知に表示される）
+// Approve (token is shown in desktop notification)
 proxy_approve({ requestId: "01ABC...", approvalToken: "1234" })
 
-// 拒否
+// Reject
 proxy_reject({ requestId: "01ABC..." })
 ```
 
-## Dry-runモード
+## Dry-run Mode
 
-ルールをテストしたいときに、実際にブロックせずにログだけ出力するモード：
+Test rules without actually blocking - log only:
 
 ```bash
 mcp-proxy-mcp --config ./proxy-config.json --dry-run
 ```
 
-または設定ファイルで：
+Or in config file:
 
 ```json
 {
@@ -255,12 +331,59 @@ mcp-proxy-mcp --config ./proxy-config.json --dry-run
 }
 ```
 
-Dry-runモードでは：
-- ブロック対象の呼び出しがログに出力される（stderr）
-- 実際にはブロックされず、ツールは実行される
-- 結果に `[DRY-RUN NOTE]` が付与される
+In dry-run mode:
+- Blocked calls are logged (stderr)
+- Tools are executed anyway
+- Results include `[DRY-RUN NOTE]`
 
-## Claude Code設定例
+## Audit Log
+
+Record all tool call decisions to a JSON Lines file:
+
+```bash
+mcp-proxy-mcp --config ./proxy-config.json --audit-log ./audit.jsonl
+```
+
+Or in config file:
+
+```json
+{
+  "target": { "command": "npx", "args": ["@anthropic/mcp-playwright"] },
+  "rulesFile": "./rules.json",
+  "auditLog": "./audit.jsonl"
+}
+```
+
+### Log Entry Format
+
+Each line is a JSON object:
+
+```json
+{
+  "timestamp": "2025-01-15T10:30:00.000Z",
+  "toolName": "browser_click",
+  "args": { "ref": "btn-1" },
+  "action": "allow",
+  "ruleId": "allow-browser-tools",
+  "reason": "Matched rule: allow-browser-tools",
+  "result": "executed"
+}
+```
+
+### Log Fields
+
+| Field | Description |
+|-------|-------------|
+| `timestamp` | ISO 8601 timestamp |
+| `toolName` | Tool that was called |
+| `args` | Arguments passed to the tool |
+| `action` | Rule action: `allow`, `deny`, `ask`, or `error` |
+| `ruleId` | ID of the matched rule (if any) |
+| `reason` | Human-readable reason for the decision |
+| `result` | Outcome: `executed`, `blocked`, `pending`, or `error` |
+| `error` | Error message (only for `error` action) |
+
+## Claude Code Configuration
 
 ```json
 {

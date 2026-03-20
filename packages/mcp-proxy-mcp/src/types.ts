@@ -54,6 +54,7 @@ export const ProxyConfigSchema = z.object({
   rulesFile: z.string(),
   defaultAction: RuleActionSchema.optional(),
   dryRun: z.boolean().optional(),
+  auditLog: z.string().optional(),
 });
 export type ProxyConfig = z.infer<typeof ProxyConfigSchema>;
 
@@ -64,6 +65,7 @@ export interface CliArgs {
   rulesFile?: string;
   config?: string;
   dryRun?: boolean;
+  auditLog?: string;
 }
 
 // Rule evaluation result
