@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { SetStatusHandler } from "../tools/draft/handlers/set-status-handler.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import * as fs from "fs";
@@ -227,5 +227,39 @@ description: Test
         expect(readDraft("test-doc")).toContain(`status: ${status}`);
       });
     }
+  });
+
+  describe("error handling", () => {
+    it("should handle updateDocument failure in batch (lines 106-107)", async () => {
+      createDraft("doc1", `---
+description: Doc 1
+---
+
+# Doc 1`);
+
+      createDraft("doc2", `---
+description: Doc 2
+---
+
+# Doc 2`);
+
+      // Mock updateDocument to fail for second document
+      const updateSpy = vi.spyOn(reader, "updateDocument");
+      updateSpy.mockResolvedValueOnce({ success: true }); // First doc succeeds
+      updateSpy.mockResolvedValueOnce({ success: false, error: "Permission denied" }); // Second doc fails
+
+      const result = await handler.execute({
+        actionParams: { ids: "doc1,doc2", status: "editing" },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text as string;
+      expect(text).toContain("1 succeeded");
+      expect(text).toContain("1 failed");
+      expect(text).toContain("Permission denied");
+
+      updateSpy.mockRestore();
+    });
   });
 });

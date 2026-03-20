@@ -507,6 +507,37 @@ describe("Integration Tests", () => {
         expect(result.isError).toBeFalsy();
         expect(result.content[0].text).toContain("No drafts available");
       });
+
+      it("should error when renameDocument fails during promotion (line 43)", async () => {
+        // Create a draft first
+        await draftAddHandler.execute({
+          actionParams: {
+            id: "promote-fail-test",
+            content: "# Promote Fail\n\nContent.",
+            description: "Test promote failure",
+            whenToUse: ["Testing"],
+          },
+          context: draftContext,
+        });
+
+        // Mock renameDocument to fail
+        const renameSpy = vi.spyOn(reader, "renameDocument").mockResolvedValueOnce({
+          success: false,
+          error: "Filesystem error: disk full",
+        });
+
+        const result = await promoteHandler.execute({
+          actionParams: { draftId: "promote-fail-test" },
+          context: applyContext,
+        });
+
+        expect(result.isError).toBe(true);
+        const text = result.content[0].type === "text" ? result.content[0].text : "";
+        expect(text).toContain("Error:");
+        expect(text).toContain("Filesystem error: disk full");
+
+        renameSpy.mockRestore();
+      });
     });
   });
 

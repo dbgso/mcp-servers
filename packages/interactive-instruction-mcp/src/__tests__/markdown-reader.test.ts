@@ -516,6 +516,52 @@ describe("MarkdownReader", () => {
       const content = await reader.getDocumentContent("target");
       expect(content).toContain("Source content.");
     });
+
+    it("should update backlinks when updateBacklinks is true (lines 417-427)", async () => {
+      const reader = new MarkdownReader(tempDir);
+
+      // Create document with relatedDocs pointing to old-doc
+      await reader.addDocument({
+        id: "old-doc",
+        content: `---
+description: Old document
+---
+
+# Old Doc
+
+Content.`,
+      });
+
+      await reader.addDocument({
+        id: "referencing-doc",
+        content: `---
+description: Referencing document
+relatedDocs:
+  - old-doc
+---
+
+# Referencing Doc
+
+This references old-doc.`,
+      });
+
+      // Rename with backlinks update
+      const result = await reader.renameDocument({
+        oldId: "old-doc",
+        newId: "new-doc",
+        updateBacklinks: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.updatedBacklinks).toContain("referencing-doc");
+
+      // Verify the backlink was updated in relatedDocs (not body text)
+      const refContent = await reader.getDocumentContent("referencing-doc");
+      expect(refContent).toContain("relatedDocs:");
+      expect(refContent).toContain("- new-doc");
+      // The old reference should no longer be in relatedDocs
+      expect(refContent).not.toContain("- old-doc");
+    });
   });
 
   describe("parseDescription", () => {

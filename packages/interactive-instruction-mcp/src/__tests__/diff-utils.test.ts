@@ -6,7 +6,7 @@ describe("diff-utils", () => {
   describe("generateDiff", () => {
     it("returns empty string when content is identical", () => {
       const content = "line1\nline2\nline3";
-      const result = generateDiff(content, content);
+      const result = generateDiff({ original: content, updated: content });
       expect(result).toBe("");
     });
 
@@ -14,7 +14,7 @@ describe("diff-utils", () => {
       const original = "line1\nline2\nline3";
       const updated = "line1\nmodified\nline3";
 
-      const result = generateDiff(original, updated);
+      const result = generateDiff({ original, updated });
 
       expect(result).toContain("-line2");
       expect(result).toContain("+modified");
@@ -24,9 +24,13 @@ describe("diff-utils", () => {
       const original = "old content";
       const updated = "new content";
 
-      const result = generateDiff(original, updated, {
-        originalName: "docs/original.md",
-        newName: "docs/draft.md",
+      const result = generateDiff({
+        original,
+        updated,
+        options: {
+          originalName: "docs/original.md",
+          newName: "docs/draft.md",
+        },
       });
 
       expect(result).toContain("--- docs/original.md");
@@ -37,7 +41,7 @@ describe("diff-utils", () => {
       const original = "line1\nline2";
       const updated = "line1\nline2\nline3\nline4";
 
-      const result = generateDiff(original, updated);
+      const result = generateDiff({ original, updated });
 
       expect(result).toContain("+line3");
       expect(result).toContain("+line4");
@@ -47,7 +51,7 @@ describe("diff-utils", () => {
       const original = "line1\nline2\nline3";
       const updated = "line1";
 
-      const result = generateDiff(original, updated);
+      const result = generateDiff({ original, updated });
 
       expect(result).toContain("-line2");
       expect(result).toContain("-line3");

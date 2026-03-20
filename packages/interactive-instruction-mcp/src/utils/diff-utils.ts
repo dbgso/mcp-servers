@@ -18,11 +18,12 @@ export interface DiffOptions {
  * Generate unified diff between two strings.
  * Returns empty string if no differences.
  */
-export function generateDiff(
-  original: string,
-  updated: string,
-  options: DiffOptions = {}
-): string {
+export function generateDiff(params: {
+  original: string;
+  updated: string;
+  options?: DiffOptions;
+}): string {
+  const { original, updated, options = {} } = params;
   const {
     originalName = "original",
     newName = "draft",

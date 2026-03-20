@@ -3,6 +3,7 @@ import { DRAFT_PREFIX } from "../../../constants.js";
 import { draftWorkflowManager } from "../../../workflows/draft-workflow.js";
 import { updateFrontmatter, parseFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { generateDiff, writeDiffToFile } from "../../../utils/diff-utils.js";
+import { savePendingUpdate } from "../../../utils/pending-update.js";
 
 export class UpdateHandler implements DraftActionHandler {
   async execute(params: {
@@ -24,13 +25,127 @@ export class UpdateHandler implements DraftActionHandler {
       };
     }
 
+    // Check if original document exists (not draft)
+    const originalContent = await reader.getDocumentContent(id);
+    const originalPath = reader.getFilePath(id);
+
+    // If original exists, use new pending flow (no draft file)
+    if (originalContent) {
+      return this.handleExistingDocUpdate({
+        id,
+        content,
+        description,
+        whenToUse,
+        originalContent,
+        originalPath,
+        reader,
+      });
+    }
+
+    // Otherwise, use legacy draft flow
+    return this.handleDraftUpdate({
+      id,
+      content,
+      description,
+      whenToUse,
+      reader,
+    });
+  }
+
+  /**
+   * Handle update for existing document (new flow).
+   * Creates diff and pending update, no draft file.
+   */
+  private async handleExistingDocUpdate(params: {
+    id: string;
+    content: string;
+    description?: string;
+    whenToUse?: string[];
+    originalContent: string;
+    originalPath: string;
+    reader: DraftActionContext["reader"];
+  }): Promise<ToolResult> {
+    const { id, content, description, whenToUse, originalContent, originalPath } = params;
+
+    // Preserve existing frontmatter if not overridden
+    const existingFrontmatter = parseFrontmatter(originalContent);
+
+    const finalContent = this.generateContentWithFrontmatter({
+      content,
+      description,
+      whenToUse,
+      existingFrontmatter,
+    });
+
+    // Generate diff
+    const diff = generateDiff({
+      original: originalContent,
+      updated: finalContent,
+      options: {
+        originalName: `original: ${id}`,
+        newName: `updated: ${id}`,
+      },
+    });
+
+    if (!diff) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `No changes detected for "${id}".`,
+          },
+        ],
+      };
+    }
+
+    // Write diff to file
+    const diffPath = await writeDiffToFile({ diff, id });
+
+    // Save pending update
+    await savePendingUpdate({
+      id,
+      content: finalContent,
+      originalPath,
+      diffPath,
+    });
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `Update prepared for "${id}".
+
+**Diff:** ${diffPath}
+
+---
+
+To apply this update:
+\`draft(action: "apply", id: "${id}")\`
+
+To cancel:
+\`draft(action: "cancel", id: "${id}")\``,
+        },
+      ],
+    };
+  }
+
+  /**
+   * Handle update for draft (legacy flow).
+   */
+  private async handleDraftUpdate(params: {
+    id: string;
+    content: string;
+    description?: string;
+    whenToUse?: string[];
+    reader: DraftActionContext["reader"];
+  }): Promise<ToolResult> {
+    const { id, content, description, whenToUse, reader } = params;
     const draftId = DRAFT_PREFIX + id;
 
-    // Get existing content to preserve frontmatter if not overridden
+    // Get existing draft content to preserve frontmatter if not overridden
     const existingContent = await reader.getDocumentContent(draftId);
     const existingFrontmatter = existingContent ? parseFrontmatter(existingContent) : {};
 
-    // Generate content with frontmatter
     const finalContent = this.generateContentWithFrontmatter({
       content,
       description,
@@ -62,15 +177,12 @@ export class UpdateHandler implements DraftActionHandler {
       ? `\n**Workflow:** reset → ${workflowResult.to}`
       : "";
 
-    // Generate diff against original document if it exists
-    const diffSection = await this.generateDiffSection({ id, finalContent, reader });
-
     return {
       content: [
         {
           type: "text" as const,
           text: `Draft "${id}" updated successfully.
-Path: ${result.path}${workflowStatus}${diffSection}
+Path: ${result.path}${workflowStatus}
 
 ---
 
@@ -83,37 +195,6 @@ Path: ${result.path}${workflowStatus}${diffSection}
         },
       ],
     };
-  }
-
-  /**
-   * Generate diff section comparing original document with draft.
-   * Writes diff to temp file and returns path.
-   * Returns empty string if original document doesn't exist.
-   */
-  private async generateDiffSection(params: {
-    id: string;
-    finalContent: string;
-    reader: DraftActionContext["reader"];
-  }): Promise<string> {
-    const { id, finalContent, reader } = params;
-
-    // Get original document (without draft prefix)
-    const originalContent = await reader.getDocumentContent(id);
-    if (!originalContent) {
-      return "";
-    }
-
-    const diff = generateDiff(originalContent, finalContent, {
-      originalName: `original: ${id}`,
-      newName: `draft: ${id}`,
-    });
-
-    if (!diff) {
-      return "\n\n**Diff:** No changes from original.";
-    }
-
-    const diffPath = await writeDiffToFile({ diff, id });
-    return `\n\n**Diff:** ${diffPath}`;
   }
 
   /**

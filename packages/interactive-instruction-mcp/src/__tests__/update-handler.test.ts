@@ -4,7 +4,6 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { UpdateHandler } from "../tools/draft/handlers/update-handler.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
-import { DRAFT_PREFIX } from "../constants.js";
 
 describe("UpdateHandler", () => {
   let tempDir: string;
@@ -116,6 +115,193 @@ describe("UpdateHandler", () => {
         "utf-8"
       );
       expect(updatedContent).toContain("New content");
+    });
+
+    it("detects no changes when content is identical to original", async () => {
+      // Create original document with full frontmatter
+      const content = `---
+description: Test description
+whenToUse:
+  - Testing
+---
+
+# Test
+
+Same content here.`;
+      await fs.writeFile(path.join(docsDir, "same-content.md"), content);
+
+      // Create draft with same content
+      await fs.writeFile(path.join(draftsDir, "same-content.md"), content);
+
+      // Update with identical content (the body part only, handler will preserve frontmatter)
+      const result = await handler.execute({
+        actionParams: {
+          action: "update",
+          id: "same-content",
+          content: content,  // same as original including frontmatter
+        },
+        context: { reader },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].type === "text" ? result.content[0].text : "";
+      expect(text).toContain("No changes detected");
+    });
+  });
+
+  describe("inferDescription branches", () => {
+    it("skips empty lines before title (line 246)", async () => {
+      // Create draft with empty lines before title, no frontmatter
+      await fs.writeFile(path.join(draftsDir, "empty-before-title.md"), "# Old");
+
+      // Update with content that has empty lines before title
+      const content = `
+
+# Title
+
+This is the description paragraph.`;
+
+      const result = await handler.execute({
+        actionParams: {
+          action: "update",
+          id: "empty-before-title",
+          content,
+        },
+        context: { reader },
+      });
+
+      expect(result.isError).toBeFalsy();
+      // Should infer description from first paragraph
+      const updatedContent = await fs.readFile(
+        path.join(draftsDir, "empty-before-title.md"),
+        "utf-8"
+      );
+      expect(updatedContent).toContain("description: This is the description paragraph.");
+    });
+
+    it("stops at sub-heading (line 253 # branch)", async () => {
+      // Create draft without frontmatter
+      await fs.writeFile(path.join(draftsDir, "sub-heading.md"), "# Old");
+
+      // Update with content that has a sub-heading after first paragraph
+      const content = `# Title
+
+First paragraph.
+
+## Sub-heading
+
+More content.`;
+
+      const result = await handler.execute({
+        actionParams: {
+          action: "update",
+          id: "sub-heading",
+          content,
+        },
+        context: { reader },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const updatedContent = await fs.readFile(
+        path.join(draftsDir, "sub-heading.md"),
+        "utf-8"
+      );
+      // Should only include first paragraph in description, not content after sub-heading
+      expect(updatedContent).toContain("description: First paragraph.");
+      // Description should not contain text after sub-heading
+      expect(updatedContent).not.toContain("description: First paragraph. More content");
+    });
+
+    it("stops at code block (line 253 ``` branch)", async () => {
+      // Create draft without frontmatter
+      await fs.writeFile(path.join(draftsDir, "code-block.md"), "# Old");
+
+      // Update with content that has code block after paragraph
+      const content = `# Title
+
+Description text.
+
+\`\`\`typescript
+code here
+\`\`\``;
+
+      const result = await handler.execute({
+        actionParams: {
+          action: "update",
+          id: "code-block",
+          content,
+        },
+        context: { reader },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const updatedContent = await fs.readFile(
+        path.join(draftsDir, "code-block.md"),
+        "utf-8"
+      );
+      expect(updatedContent).toContain("description: Description text.");
+    });
+
+    it("collects multiple lines in first paragraph (line 254)", async () => {
+      // Create draft without frontmatter
+      await fs.writeFile(path.join(draftsDir, "multi-line.md"), "# Old");
+
+      // Update with multi-line paragraph
+      const content = `# Title
+
+Line one of paragraph.
+Line two of paragraph.
+Line three of paragraph.
+
+Next section.`;
+
+      const result = await handler.execute({
+        actionParams: {
+          action: "update",
+          id: "multi-line",
+          content,
+        },
+        context: { reader },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const updatedContent = await fs.readFile(
+        path.join(draftsDir, "multi-line.md"),
+        "utf-8"
+      );
+      // Should join all lines with space
+      expect(updatedContent).toContain("description: Line one of paragraph. Line two of paragraph. Line three of paragraph.");
+    });
+
+    it("stops at empty line after paragraph (line 256)", async () => {
+      // Create draft without frontmatter
+      await fs.writeFile(path.join(draftsDir, "empty-after.md"), "# Old");
+
+      // Update with content that has empty line after paragraph
+      const content = `# Title
+
+First paragraph content.
+
+This should not be included.`;
+
+      const result = await handler.execute({
+        actionParams: {
+          action: "update",
+          id: "empty-after",
+          content,
+        },
+        context: { reader },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const updatedContent = await fs.readFile(
+        path.join(draftsDir, "empty-after.md"),
+        "utf-8"
+      );
+      // Description should only be first paragraph
+      expect(updatedContent).toContain("description: First paragraph content.");
+      // Description should not include second paragraph
+      expect(updatedContent).not.toContain("description: First paragraph content. This should not be included");
     });
   });
 });

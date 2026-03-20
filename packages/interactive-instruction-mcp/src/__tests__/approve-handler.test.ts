@@ -125,6 +125,30 @@ describe("ApproveHandler", () => {
     });
   }
 
+  describe("AddHandler validations", () => {
+    it("should require whenToUse for add action", async () => {
+      const id = getTestId("test-no-when");
+      const result = await addHandler.execute({
+        actionParams: { id, content: "# Test", description: "Test description" },
+        context,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("whenToUse is required");
+    });
+
+    it("should reject empty whenToUse array", async () => {
+      const id = getTestId("test-empty-when");
+      const result = await addHandler.execute({
+        actionParams: { id, content: "# Test", description: "Test desc", whenToUse: [] },
+        context,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("whenToUse is required");
+    });
+  });
+
   describe("Single draft approval", () => {
     it("should require id or ids parameter", async () => {
       const result = await approveHandler.execute({
@@ -412,6 +436,31 @@ describe("ApproveHandler", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("No valid IDs");
     });
+
+    it("should handle rename error in batch approval", async () => {
+      const id1 = getTestId("test-draft-1");
+      await createDraftAtState(id1, "pending_approval");
+
+      // Mock renameDocument to fail
+      const renameSpy = vi.spyOn(reader, "renameDocument").mockResolvedValueOnce({
+        success: false,
+        error: "Batch rename error",
+      });
+
+      const result = await approveHandler.execute({
+        actionParams: {
+          ids: id1,
+          approvalToken: "valid-token",
+        },
+        context,
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain("❌");
+      expect(result.content[0].text).toContain("Batch rename error");
+
+      renameSpy.mockRestore();
+    });
   });
 
   describe("Single draft approval with token (handleApprovalWithToken)", () => {
@@ -509,6 +558,28 @@ describe("ApproveHandler", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("not found");
+    });
+
+    it("should return error when renameDocument fails during approval", async () => {
+      const id = getTestId("test-draft-rename-fail");
+      await createDraftAtState(id, "pending_approval");
+
+      // Mock renameDocument to simulate failure
+      const renameSpy = vi.spyOn(reader, "renameDocument").mockResolvedValueOnce({
+        success: false,
+        error: "Filesystem error: permission denied",
+      });
+
+      const result = await approveHandler.execute({
+        actionParams: { id, approvalToken: "valid-token" },
+        context,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Error:");
+      expect(result.content[0].text).toContain("Filesystem error: permission denied");
+
+      renameSpy.mockRestore();
     });
 
   });
@@ -718,6 +789,212 @@ describe("ApproveHandler", () => {
       expect(result.content[0].text).toContain("Update");
       // Should show added lines with "+" prefix
       expect(result.content[0].text).toContain("+");
+    });
+  });
+
+  describe("Recently confirmed drafts detection", () => {
+    it("should detect recently confirmed drafts and suggest batch approval", async () => {
+      const id1 = getTestId("test-draft-1");
+      const id2 = getTestId("test-draft-2");
+
+      // Create first draft and confirm it (sets confirmedAt)
+      await createDraftAtState(id1, "pending_approval");
+
+      // Create second draft at user_reviewing
+      await createDraftAtState(id2, "user_reviewing");
+
+      // Try to confirm second draft without force
+      // Should detect id1 as recently confirmed and return warning
+      const result = await approveHandler.execute({
+        actionParams: { id: id2, confirmed: true },
+        context,
+      });
+
+      // Warning is returned as isError: true with batch suggestion
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("batch");
+      expect(result.content[0].text).toContain("Consecutive");
+    });
+
+    it("should skip recently confirmed check with force: true", async () => {
+      const id1 = getTestId("test-draft-1");
+      const id2 = getTestId("test-draft-2");
+
+      // Create first draft and confirm it
+      await createDraftAtState(id1, "pending_approval");
+
+      // Create second draft at user_reviewing
+      await createDraftAtState(id2, "user_reviewing");
+
+      // Confirm with force: true
+      const result = await approveHandler.execute({
+        actionParams: { id: id2, confirmed: true, force: true },
+        context,
+      });
+
+      expect(result.isError).toBeFalsy();
+      // Should not mention batch, should proceed with approval
+      expect(result.content[0].text).toContain("Approval Requested");
+    });
+  });
+
+  describe("Diff generation branch coverage", () => {
+    it("should show context lines after changed lines (line 370 branch)", async () => {
+      const id = getTestId("test-diff-context-after");
+
+      // Create original with consistent structure
+      const originalContent = `---
+description: Original doc
+whenToUse:
+  - Testing
+---
+
+# Title
+
+Line A
+Line B
+Line C`;
+
+      // Create draft with change in middle - Line B changed
+      const draftContent = `---
+description: Original doc
+whenToUse:
+  - Testing
+---
+
+# Title
+
+Line A
+CHANGED Line B
+Line C`;
+
+      // Write original document
+      await fs.writeFile(path.join(docsDir, `${id}.md`), originalContent, "utf-8");
+
+      // Write draft directly (bypassing addHandler to control content exactly)
+      await fs.writeFile(path.join(docsDir, DRAFT_DIR, `${id}.md`), draftContent, "utf-8");
+
+      // Initialize workflow at user_reviewing
+      draftWorkflowManager.clear({ id });
+      await draftWorkflowManager.trigger({ id, triggerParams: { action: "submit", content: draftContent } });
+      await draftWorkflowManager.trigger({ id, triggerParams: { action: "review_complete", notes: "Reviewed" } });
+
+      const result = await approveHandler.execute({
+        actionParams: { id, confirmed: true, force: true },
+        context,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text as string;
+      expect(text).toContain("Update");
+      // Line C should appear as context after the change
+      expect(text).toContain("Line C");
+    });
+
+    it("should show context lines before changed lines (line 372 branch)", async () => {
+      const id = getTestId("test-diff-context-before");
+
+      // Create original - Line A is unchanged, Line B is changed
+      const originalContent = `---
+description: Test doc
+whenToUse:
+  - Testing
+---
+
+# Title
+
+Unchanged Line
+Line to change`;
+
+      // Create draft with change at the end
+      const draftContent = `---
+description: Test doc
+whenToUse:
+  - Testing
+---
+
+# Title
+
+Unchanged Line
+CHANGED line`;
+
+      // Write original document
+      await fs.writeFile(path.join(docsDir, `${id}.md`), originalContent, "utf-8");
+
+      // Write draft directly
+      await fs.writeFile(path.join(docsDir, DRAFT_DIR, `${id}.md`), draftContent, "utf-8");
+
+      // Initialize workflow at user_reviewing
+      draftWorkflowManager.clear({ id });
+      await draftWorkflowManager.trigger({ id, triggerParams: { action: "submit", content: draftContent } });
+      await draftWorkflowManager.trigger({ id, triggerParams: { action: "review_complete", notes: "Reviewed" } });
+
+      const result = await approveHandler.execute({
+        actionParams: { id, confirmed: true, force: true },
+        context,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text as string;
+      expect(text).toContain("Update");
+      // Should show - and + for the changed line
+      expect(text).toContain("- Line to change");
+      expect(text).toContain("+ CHANGED line");
+    });
+
+    it("should show removed lines when new content has fewer lines (line 359 branch)", async () => {
+      const id = getTestId("test-diff-removed-lines");
+
+      // Original has extra lines at the end
+      const originalContent = `---
+description: Test doc
+whenToUse:
+  - Testing
+---
+
+# Title
+
+Line 1
+Line 2
+Line 3 to be removed
+Line 4 to be removed`;
+
+      // Draft has fewer lines
+      const draftContent = `---
+description: Test doc
+whenToUse:
+  - Testing
+---
+
+# Title
+
+Line 1
+Line 2`;
+
+      // Write original document
+      await fs.writeFile(path.join(docsDir, `${id}.md`), originalContent, "utf-8");
+
+      // Write draft directly
+      await fs.writeFile(path.join(docsDir, DRAFT_DIR, `${id}.md`), draftContent, "utf-8");
+
+      // Initialize workflow at user_reviewing
+      draftWorkflowManager.clear({ id });
+      await draftWorkflowManager.trigger({ id, triggerParams: { action: "submit", content: draftContent } });
+      await draftWorkflowManager.trigger({ id, triggerParams: { action: "review_complete", notes: "Reviewed" } });
+
+      const result = await approveHandler.execute({
+        actionParams: { id, confirmed: true, force: true },
+        context,
+      });
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text as string;
+      expect(text).toContain("Update");
+      // Should show removed lines
+      expect(text).toContain("- Line 3 to be removed");
+      expect(text).toContain("- Line 4 to be removed");
+      // Summary should show removed count
+      expect(text).toMatch(/-\d+/);
     });
   });
 });

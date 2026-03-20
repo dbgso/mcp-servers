@@ -55,7 +55,7 @@ whenToUse:
       expect(result.whenToUse).toEqual(["Trigger A", "Trigger B"]);
     });
 
-    it("should handle inline array syntax", () => {
+    it("should handle inline array syntax for whenToUse", () => {
       const content = `---
 description: Test
 whenToUse: [a, b, c]
@@ -66,6 +66,87 @@ whenToUse: [a, b, c]
       const result = parseFrontmatter(content);
       expect(result.description).toBe("Test");
       expect(result.whenToUse).toEqual(["a", "b", "c"]);
+    });
+
+    it("should handle inline array syntax for relatedDocs (line 65-66 branch)", () => {
+      const content = `---
+description: Test
+relatedDocs: [doc-a, doc-b, doc-c]
+---
+
+# Title`;
+
+      const result = parseFrontmatter(content);
+      expect(result.description).toBe("Test");
+      expect(result.relatedDocs).toEqual(["doc-a", "doc-b", "doc-c"]);
+    });
+
+    it("should ignore unknown keys in frontmatter (line 120 branch)", () => {
+      const content = `---
+description: Test
+author: John Doe
+customField: some value
+whenToUse:
+  - Testing
+---
+
+# Title`;
+
+      const result = parseFrontmatter(content);
+      expect(result.description).toBe("Test");
+      expect(result.whenToUse).toEqual(["Testing"]);
+      // Unknown keys should be ignored - not present in result
+      expect(result).not.toHaveProperty("author");
+      expect(result).not.toHaveProperty("customField");
+    });
+
+    it("should parse multi-line relatedDocs array (line 39 branch)", () => {
+      const content = `---
+description: Test document
+relatedDocs:
+  - doc-a
+  - doc-b
+  - doc-c
+---
+
+# Title`;
+
+      const result = parseFrontmatter(content);
+      expect(result.description).toBe("Test document");
+      expect(result.relatedDocs).toEqual(["doc-a", "doc-b", "doc-c"]);
+    });
+
+    it("should save relatedDocs when followed by another key (line 39 branch)", () => {
+      // This tests saveCurrentArray() when relatedDocs is followed by another key
+      const content = `---
+relatedDocs:
+  - doc-a
+  - doc-b
+description: After relatedDocs
+---
+
+# Title`;
+
+      const result = parseFrontmatter(content);
+      expect(result.relatedDocs).toEqual(["doc-a", "doc-b"]);
+      expect(result.description).toBe("After relatedDocs");
+    });
+
+    it("should skip lines without colon or with colon at start (line 92 false branch)", () => {
+      // This tests when colonIndex <= 0: no colon or colon at position 0
+      const content = `---
+description: Valid description
+:invalidKeyStartsWithColon
+noColonLineHere
+whenToUse:
+  - Valid use
+---
+
+# Title`;
+
+      const result = parseFrontmatter(content);
+      expect(result.description).toBe("Valid description");
+      expect(result.whenToUse).toEqual(["Valid use"]);
     });
 
     it("should handle single inline whenToUse value", () => {

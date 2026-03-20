@@ -473,5 +473,136 @@ description: Document B
       const updatedContent = fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8");
       expect(updatedContent).not.toContain("doc-b");
     });
+
+    it("should return no change when removing docs not in relatedDocs", async () => {
+      createDoc("doc-a", `---
+description: Document A
+relatedDocs:
+  - doc-c
+---
+
+# Doc A`);
+
+      createDoc("doc-b", `---
+description: Document B
+---
+
+# Doc B`);
+
+      const result = await handler.execute({
+        actionParams: {
+          action: "link_remove",
+          id: "doc-a",
+          relatedDocs: ["doc-b"],  // doc-b is not in doc-a's relatedDocs
+        },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text as string;
+      expect(text).toContain("None of the specified documents are in relatedDocs");
+    });
+
+    it("should return error when no pending change found for approval", async () => {
+      createDoc("doc-a", `---
+description: Document A
+---
+
+# Doc A`);
+
+      createDoc("doc-b", `---
+description: Document B
+---
+
+# Doc B`);
+
+      // Try to apply token without first requesting approval
+      const result = await handler.execute({
+        actionParams: {
+          action: "link_add",
+          id: "doc-a",
+          relatedDocs: ["doc-b"],
+          approvalToken: "some-token",
+        },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(result.isError).toBe(true);
+      const text = result.content[0].text as string;
+      expect(text).toContain("No pending change found");
+    });
+
+    it("should return no change when all docs are already in relatedDocs (line 199)", async () => {
+      createDoc("doc-a", `---
+description: Document A
+relatedDocs:
+  - doc-b
+---
+
+# Doc A`);
+
+      createDoc("doc-b", `---
+description: Document B
+---
+
+# Doc B`);
+
+      // Try to add doc-b which is already in doc-a's relatedDocs
+      const result = await handler.execute({
+        actionParams: {
+          action: "link_add",
+          id: "doc-a",
+          relatedDocs: ["doc-b"],
+        },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text as string;
+      expect(text).toContain("All specified documents are already in relatedDocs");
+    });
+
+    it("should return error when approval token is invalid", async () => {
+      createDoc("doc-a", `---
+description: Document A
+---
+
+# Doc A`);
+
+      createDoc("doc-b", `---
+description: Document B
+---
+
+# Doc B`);
+
+      // First request approval
+      await handler.execute({
+        actionParams: {
+          action: "link_add",
+          id: "doc-a",
+          relatedDocs: ["doc-b"],
+          confirmed: true,
+        },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      // Mock validateApproval to return invalid
+      vi.mocked(validateApproval).mockReturnValueOnce({ valid: false, reason: "Token expired" });
+
+      // Then try with invalid token
+      const result = await handler.execute({
+        actionParams: {
+          action: "link_add",
+          id: "doc-a",
+          relatedDocs: ["doc-b"],
+          approvalToken: "invalid-token",
+        },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(result.isError).toBe(true);
+      const text = result.content[0].text as string;
+      expect(text).toContain("Token expired");
+    });
   });
 });
