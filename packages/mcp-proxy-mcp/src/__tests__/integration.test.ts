@@ -287,8 +287,12 @@ describe("mcp-proxy-mcp Integration Tests", () => {
       const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
       const parsed = JSON.parse(text);
 
-      expect(parsed.action).toBe("deny");
-      expect(parsed.matchedRule.id).toBe("block-log");
+      expect(parsed.result.action).toBe("deny");
+      expect(parsed.result.matchedRule.id).toBe("block-log");
+      // New detailed output should include evaluation details
+      expect(parsed.evaluationDetails).toBeDefined();
+      expect(parsed.summary).toBeDefined();
+      expect(parsed.summary.appliedRule).toBe("block-log");
     });
   });
 

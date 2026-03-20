@@ -174,30 +174,56 @@ export function registerRuleTools(params: RegisterRuleToolsParams): void {
       }),
     },
     async (testArgs) => {
-      const result = ruleEngine.evaluate(
+      const args = (testArgs.args as Record<string, unknown>) ?? {};
+      const { finalAction, evaluatedRules } = ruleEngine.evaluateAll(
         testArgs.toolName,
-        (testArgs.args as Record<string, unknown>) ?? {}
+        args
       );
+
+      // Build detailed output
+      const output = {
+        result: {
+          action: finalAction.action,
+          reason: finalAction.reason,
+          matchedRule: finalAction.matchedRule
+            ? {
+                id: finalAction.matchedRule.id,
+                priority: finalAction.matchedRule.priority,
+                description: finalAction.matchedRule.description,
+              }
+            : null,
+        },
+        evaluationDetails: evaluatedRules.map((er) => ({
+          order: er.order,
+          ruleId: er.rule.id,
+          priority: er.rule.priority,
+          action: er.rule.action,
+          toolPattern: er.rule.toolPattern,
+          patternMatch: er.patternMatch,
+          matches: er.matches,
+          wouldApply: er.wouldApply,
+          conditions: er.conditionResults.length > 0
+            ? er.conditionResults.map((cr) => ({
+                param: cr.condition.param,
+                operator: cr.condition.operator,
+                expected: cr.condition.value,
+                actual: cr.actualValue,
+                matches: cr.matches,
+              }))
+            : undefined,
+        })),
+        summary: {
+          totalRules: evaluatedRules.length,
+          matchingRules: evaluatedRules.filter((r) => r.matches).length,
+          appliedRule: evaluatedRules.find((r) => r.wouldApply)?.rule.id ?? "(default action)",
+        },
+      };
 
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(
-              {
-                action: result.action,
-                reason: result.reason,
-                matchedRule: result.matchedRule
-                  ? {
-                      id: result.matchedRule.id,
-                      toolPattern: result.matchedRule.toolPattern,
-                      description: result.matchedRule.description,
-                    }
-                  : null,
-              },
-              null,
-              2
-            ),
+            text: JSON.stringify(output, null, 2),
           },
         ],
       };
@@ -227,6 +253,8 @@ export function registerRuleTools(params: RegisterRuleToolsParams): void {
         rulesCount: ruleStore.count(),
         defaultAction: ruleStore.getDefaultAction(),
         proxiedToolsCount: targetTools?.length ?? 0,
+        pendingCount: pendingStore.count(),
+        pendingTtlMs: pendingStore.getTtlMs(),
       };
 
       return {
@@ -272,16 +300,24 @@ export function registerRuleTools(params: RegisterRuleToolsParams): void {
     },
     async () => {
       const pending = pendingStore.list();
+      const now = Date.now();
 
       const output = {
         count: pending.length,
-        pending: pending.map((p) => ({
-          id: p.id,
-          toolName: p.toolName,
-          args: p.args,
-          rule: p.matchedRule.description ?? p.matchedRule.id,
-          createdAt: new Date(p.createdAt).toISOString(),
-        })),
+        ttlMs: pendingStore.getTtlMs(),
+        pending: pending.map((p) => {
+          const remainingMs = p.expiresAt - now;
+          const remainingSec = Math.ceil(remainingMs / 1000);
+          return {
+            id: p.id,
+            toolName: p.toolName,
+            args: p.args,
+            rule: p.matchedRule.description ?? p.matchedRule.id,
+            createdAt: new Date(p.createdAt).toISOString(),
+            expiresAt: new Date(p.expiresAt).toISOString(),
+            remainingSec,
+          };
+        }),
       };
 
       return {

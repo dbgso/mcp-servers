@@ -504,4 +504,78 @@ describe("RuleEngine", () => {
       expect(result.conditionResults[0].matches).toBe(true);
     });
   });
+
+  describe("evaluateAll", () => {
+    test("should return all rules with evaluation details", () => {
+      const rules: Rule[] = [
+        { id: "rule1", priority: 100, action: "deny", toolPattern: "browser_click", conditions: [{ param: "ref", operator: "contains", value: "delete" }] },
+        { id: "rule2", priority: 50, action: "allow", toolPattern: "browser_*" },
+        { id: "rule3", priority: 10, action: "deny", toolPattern: "*" },
+      ];
+      const store = createMockRuleStore(rules);
+      const engine = new RuleEngine(store);
+
+      const result = engine.evaluateAll("browser_click", { ref: "submit-btn" });
+
+      expect(result.evaluatedRules).toHaveLength(3);
+      // rule1 doesn't match (condition fails)
+      expect(result.evaluatedRules[0].matches).toBe(false);
+      expect(result.evaluatedRules[0].patternMatch).toBe(true);
+      expect(result.evaluatedRules[0].wouldApply).toBe(false);
+      // rule2 matches and would apply (first match)
+      expect(result.evaluatedRules[1].matches).toBe(true);
+      expect(result.evaluatedRules[1].wouldApply).toBe(true);
+      // rule3 matches but wouldn't apply (rule2 matched first)
+      expect(result.evaluatedRules[2].matches).toBe(true);
+      expect(result.evaluatedRules[2].wouldApply).toBe(false);
+
+      expect(result.finalAction.action).toBe("allow");
+      expect(result.finalAction.matchedRule?.id).toBe("rule2");
+    });
+
+    test("should show actual values in condition results", () => {
+      const rules: Rule[] = [
+        { id: "rule1", priority: 100, action: "deny", toolPattern: "cli_execute", conditions: [{ param: "options.profile", operator: "equals", value: "prod" }] },
+      ];
+      const store = createMockRuleStore(rules);
+      const engine = new RuleEngine(store);
+
+      const result = engine.evaluateAll("cli_execute", { options: { profile: "dev" } });
+
+      expect(result.evaluatedRules[0].conditionResults[0].actualValue).toBe("dev");
+      expect(result.evaluatedRules[0].conditionResults[0].matches).toBe(false);
+    });
+
+    test("should use default action when no rules match", () => {
+      const rules: Rule[] = [
+        { id: "rule1", priority: 100, action: "allow", toolPattern: "browser_*" },
+      ];
+      const store = createMockRuleStore(rules, "deny");
+      const engine = new RuleEngine(store);
+
+      const result = engine.evaluateAll("cli_execute", {});
+
+      expect(result.finalAction.action).toBe("deny");
+      expect(result.finalAction.matchedRule).toBeUndefined();
+      expect(result.evaluatedRules[0].matches).toBe(false);
+      expect(result.evaluatedRules[0].wouldApply).toBe(false);
+    });
+
+    test("should include order number for each rule", () => {
+      const rules: Rule[] = [
+        { id: "high", priority: 100, action: "deny", toolPattern: "*" },
+        { id: "medium", priority: 50, action: "allow", toolPattern: "*" },
+        { id: "low", priority: 10, action: "ask", toolPattern: "*" },
+      ];
+      const store = createMockRuleStore(rules);
+      const engine = new RuleEngine(store);
+
+      const result = engine.evaluateAll("any_tool", {});
+
+      expect(result.evaluatedRules[0].order).toBe(1);
+      expect(result.evaluatedRules[0].rule.id).toBe("high");
+      expect(result.evaluatedRules[1].order).toBe(2);
+      expect(result.evaluatedRules[2].order).toBe(3);
+    });
+  });
 });

@@ -194,4 +194,68 @@ export class RuleEngine {
       conditionResults,
     };
   }
+
+  /**
+   * Evaluate all rules and return detailed results for each
+   * Useful for debugging and understanding rule evaluation order
+   */
+  evaluateAll(
+    toolName: string,
+    args: Record<string, unknown>
+  ): {
+    finalAction: EvaluationResult;
+    evaluatedRules: Array<{
+      rule: Rule;
+      order: number;
+      matches: boolean;
+      patternMatch: boolean;
+      conditionResults: Array<{
+        condition: Condition;
+        matches: boolean;
+        actualValue: unknown;
+      }>;
+      wouldApply: boolean;
+    }>;
+  } {
+    const rules = this.ruleStore.getRules();
+    let firstMatch: EvaluationResult | null = null;
+
+    const evaluatedRules = rules.map((rule, index) => {
+      const patternMatch = this.matchesPattern(rule.toolPattern, toolName);
+
+      const conditionResults = (rule.conditions ?? []).map((condition) => ({
+        condition,
+        matches: this.matchesCondition(condition, args),
+        actualValue: this.getNestedValue(args, condition.param),
+      }));
+
+      const matches = this.matchesRule(rule, toolName, args);
+
+      // Track if this is the first matching rule (the one that would apply)
+      const wouldApply = matches && !firstMatch;
+      if (wouldApply) {
+        firstMatch = {
+          action: rule.action,
+          matchedRule: rule,
+          reason: rule.description ?? `Matched rule: ${rule.id}`,
+        };
+      }
+
+      return {
+        rule,
+        order: index + 1,
+        matches,
+        patternMatch,
+        conditionResults,
+        wouldApply,
+      };
+    });
+
+    const finalAction = firstMatch ?? {
+      action: this.ruleStore.getDefaultAction(),
+      reason: `No matching rule, using default action: ${this.ruleStore.getDefaultAction()}`,
+    };
+
+    return { finalAction, evaluatedRules };
+  }
 }

@@ -66,6 +66,8 @@ export interface CliArgs {
   config?: string;
   dryRun?: boolean;
   auditLog?: string;
+  preset?: string;
+  listPresets?: boolean;
 }
 
 // Rule evaluation result
@@ -82,4 +84,5 @@ export interface PendingToolCall {
   args: Record<string, unknown>;
   matchedRule: Rule;
   createdAt: number;
+  expiresAt: number;
 }

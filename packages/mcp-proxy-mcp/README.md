@@ -35,6 +35,19 @@ mcp-proxy-mcp \
   --rules-file ./rules.json
 ```
 
+### Using presets
+
+```bash
+# List available presets
+mcp-proxy-mcp --list-presets
+
+# Use a preset
+mcp-proxy-mcp \
+  --command npx \
+  --args @anthropic/mcp-playwright \
+  --preset playwright-safe
+```
+
 ### Config file
 
 ```bash
