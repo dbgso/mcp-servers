@@ -339,6 +339,71 @@ describe("registerHelpTool", () => {
     expect(result.content[0].text).toContain("has-desc");
     expect(result.content[0].text).toContain("no-meta");
   });
+
+  it("should filter documents with missing description", async () => {
+    await fs.writeFile(
+      path.join(tempBase, "test-doc.md"),
+      "---\ndescription: Has description\n---\n# Test"
+    );
+
+    const mockServer = createMockServer();
+    registerHelpTool({
+      server: mockServer as unknown as Parameters<typeof registerHelpTool>[0]["server"],
+      reader,
+      config: defaultConfig,
+    });
+
+    const tool = mockServer.getTool("help");
+    const result = await tool!.handler({ missingMeta: "description" });
+    // Should return search results format (exercises the code path for missingMeta: "description")
+    expect(result.content[0].text).toContain("Search results");
+    expect(result.content[0].text).toContain("missing: description");
+  });
+
+  it("should find backlinks to a document", async () => {
+    await fs.writeFile(
+      path.join(tempBase, "main-doc.md"),
+      "---\ndescription: Main document\n---\n# Main Doc"
+    );
+    await fs.writeFile(
+      path.join(tempBase, "referencing-doc.md"),
+      "---\ndescription: References main doc\nrelatedDocs:\n  - main-doc\n---\n# Referencing Doc"
+    );
+    await fs.writeFile(
+      path.join(tempBase, "another-doc.md"),
+      "---\ndescription: Another doc\n---\n# Another Doc"
+    );
+
+    const mockServer = createMockServer();
+    registerHelpTool({
+      server: mockServer as unknown as Parameters<typeof registerHelpTool>[0]["server"],
+      reader,
+      config: defaultConfig,
+    });
+
+    const tool = mockServer.getTool("help");
+    const result = await tool!.handler({ id: "main-doc", backlinks: true });
+    expect(result.content[0].text).toContain("referencing-doc");
+    expect(result.content[0].text).not.toContain("another-doc");
+  });
+
+  it("should return message when no backlinks found", async () => {
+    await fs.writeFile(
+      path.join(tempBase, "orphan-doc.md"),
+      "---\ndescription: Orphan document\n---\n# Orphan Doc"
+    );
+
+    const mockServer = createMockServer();
+    registerHelpTool({
+      server: mockServer as unknown as Parameters<typeof registerHelpTool>[0]["server"],
+      reader,
+      config: defaultConfig,
+    });
+
+    const tool = mockServer.getTool("help");
+    const result = await tool!.handler({ id: "orphan-doc", backlinks: true });
+    expect(result.content[0].text).toContain("No documents reference");
+  });
 });
 
 describe("registerStderrTestTool", () => {

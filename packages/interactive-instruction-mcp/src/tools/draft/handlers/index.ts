@@ -8,3 +8,5 @@ export { ApproveHandler } from "./approve-handler.js";
 export { LinkHandler } from "./link-handler.js";
 export { LintHandler } from "./lint-handler.js";
 export { SetStatusHandler } from "./set-status-handler.js";
+export { ApplyHandler } from "./apply-handler.js";
+export { CancelHandler } from "./cancel-handler.js";

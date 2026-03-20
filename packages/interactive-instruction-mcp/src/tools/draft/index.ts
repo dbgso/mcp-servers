@@ -14,6 +14,8 @@ import {
   LinkHandler,
   LintHandler,
   SetStatusHandler,
+  ApplyHandler,
+  CancelHandler,
 } from "./handlers/index.js";
 
 const DRAFT_HELP = `# Draft Tool
@@ -58,6 +60,16 @@ coding__testing         ← About testing rules
 - \`draft(action: "lint")\` - Check all documents for quality issues (missing metadata, orphans, duplicates)
 - \`draft(action: "set_status", id: "<id>", status: "<status>")\` - Set status for a single draft
 - \`draft(action: "set_status", ids: "id1,id2,id3", status: "<status>")\` - Batch set status for multiple drafts
+- \`draft(action: "apply", id: "<id>")\` - Apply pending update to existing document
+- \`draft(action: "cancel", id: "<id>")\` - Cancel pending update
+
+## Update Existing Documents (Simplified Flow)
+
+When updating an existing (non-draft) document:
+1. \`draft(action: "update", id: "<existing-doc>", content: "...")\` - Creates diff, no draft file
+2. Review the diff file
+3. \`draft(action: "apply", id: "<existing-doc>")\` - Apply the update
+   OR \`draft(action: "cancel", id: "<existing-doc>")\` - Cancel
 
 ## Consecutive Approval Warning
 
@@ -122,6 +134,8 @@ const actionHandlers: Record<string, DraftActionHandler> = {
   link_remove: linkHandler,
   lint: new LintHandler(),
   set_status: new SetStatusHandler(),
+  apply: new ApplyHandler(),
+  cancel: new CancelHandler(),
 };
 
 export function registerDraftTool(params: {
@@ -142,7 +156,7 @@ export function registerDraftTool(params: {
           .optional()
           .describe("Show help"),
         action: z
-          .enum(["list", "read", "add", "update", "delete", "rename", "approve", "link_add", "link_remove", "lint", "set_status"])
+          .enum(["list", "read", "add", "update", "delete", "rename", "approve", "link_add", "link_remove", "lint", "set_status", "apply", "cancel"])
           .optional()
           .describe("Action to perform. Omit to show help."),
         id: z

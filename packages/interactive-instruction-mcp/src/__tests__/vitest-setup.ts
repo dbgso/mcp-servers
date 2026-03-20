@@ -16,7 +16,11 @@ try {
 } catch {
   // Directory might not exist, ignore
 }
-await fs.mkdir(PERSIST_DIR, { recursive: true });
+try {
+  await fs.mkdir(PERSIST_DIR, { recursive: true });
+} catch {
+  // Directory might already exist, ignore
+}
 
 // Clean up approval directory
 const APPROVAL_DIR = path.join(os.tmpdir(), "mcp-approval");
