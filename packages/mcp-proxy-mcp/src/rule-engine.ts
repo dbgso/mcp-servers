@@ -81,22 +81,42 @@ export class RuleEngine {
       case "equals":
         return value === condition.value;
 
-      case "contains":
-        if (typeof value === "string" && typeof condition.value === "string") {
-          return value.includes(condition.value);
+      case "contains": {
+        const searchValue = condition.value;
+        if (typeof searchValue === "string") {
+          if (typeof value === "string") {
+            return value.includes(searchValue);
+          }
+          if (Array.isArray(value)) {
+            // Check if any element contains the value
+            return value.some((item) =>
+              typeof item === "string" && item.includes(searchValue)
+            );
+          }
         }
         return false;
+      }
 
-      case "matches":
-        if (typeof value === "string" && typeof condition.value === "string") {
+      case "matches": {
+        const pattern = condition.value;
+        if (typeof pattern === "string") {
           try {
-            const regex = new RegExp(condition.value);
-            return regex.test(value);
+            const regex = new RegExp(pattern);
+            if (typeof value === "string") {
+              return regex.test(value);
+            }
+            if (Array.isArray(value)) {
+              // Check if any element matches the regex
+              return value.some((item) =>
+                typeof item === "string" && regex.test(item)
+              );
+            }
           } catch {
             return false;
           }
         }
         return false;
+      }
 
       default:
         return false;
@@ -104,24 +124,47 @@ export class RuleEngine {
   }
 
   /**
-   * Get nested value from object using dot notation
+   * Get nested value from object using dot notation and array index
    * e.g., "args.ref" -> obj.args.ref
+   * e.g., "args[0]" -> obj.args[0]
+   * e.g., "options.volume[1]" -> obj.options.volume[1]
    */
   private getNestedValue(
     obj: Record<string, unknown>,
     path: string
   ): unknown {
-    const parts = path.split(".");
+    // Parse path into segments, handling both dot notation and array indices
+    // e.g., "args[0]" -> ["args", 0]
+    // e.g., "options.profile" -> ["options", "profile"]
+    // e.g., "options.volume[1]" -> ["options", "volume", 1]
+    const segments: (string | number)[] = [];
+    const regex = /([^.\[\]]+)|\[(\d+)\]/g;
+    let match;
+    while ((match = regex.exec(path)) !== null) {
+      if (match[1] !== undefined) {
+        segments.push(match[1]);
+      } else if (match[2] !== undefined) {
+        segments.push(parseInt(match[2], 10));
+      }
+    }
+
     let current: unknown = obj;
 
-    for (const part of parts) {
+    for (const segment of segments) {
       if (current === null || current === undefined) {
         return undefined;
       }
-      if (typeof current !== "object") {
-        return undefined;
+      if (typeof segment === "number") {
+        if (!Array.isArray(current)) {
+          return undefined;
+        }
+        current = current[segment];
+      } else {
+        if (typeof current !== "object") {
+          return undefined;
+        }
+        current = (current as Record<string, unknown>)[segment];
       }
-      current = (current as Record<string, unknown>)[part];
     }
 
     return current;

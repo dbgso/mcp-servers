@@ -242,11 +242,149 @@ describe("RuleEngine", () => {
         const store = createMockRuleStore([rule], "allow");
         const engine = new RuleEngine(store);
 
-        // Object/array value with matches should not match (type mismatch)
+        // Object value with matches should not match (type mismatch)
         expect(engine.evaluate("api_call", { data: { name: "test" } }).action).toBe("allow");
-        expect(engine.evaluate("api_call", { data: ["test"] }).action).toBe("allow");
         // String value should work
         expect(engine.evaluate("api_call", { data: "test123" }).action).toBe("deny");
+      });
+
+      test("should handle array value for contains operator", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "cli_execute",
+          conditions: [{ param: "args", operator: "contains", value: "--force" }],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // Array with matching element should match
+        expect(engine.evaluate("cli_execute", { args: ["hello", "--force", "world"] }).action).toBe("deny");
+        expect(engine.evaluate("cli_execute", { args: ["--force-push"] }).action).toBe("deny");
+        // Array without matching element should not match
+        expect(engine.evaluate("cli_execute", { args: ["hello", "world"] }).action).toBe("allow");
+        // String value should still work
+        expect(engine.evaluate("cli_execute", { args: "hello --force world" }).action).toBe("deny");
+      });
+
+      test("should handle array value for matches operator", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "cli_execute",
+          conditions: [{ param: "args", operator: "matches", value: "^--profile$" }],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // Array with matching element should match
+        expect(engine.evaluate("cli_execute", { args: ["s3", "ls", "--profile", "prod"] }).action).toBe("deny");
+        // Array without matching element should not match
+        expect(engine.evaluate("cli_execute", { args: ["s3", "ls"] }).action).toBe("allow");
+        // Partial match should not work with exact regex
+        expect(engine.evaluate("cli_execute", { args: ["--profile-name"] }).action).toBe("allow");
+      });
+
+      test("should handle array index access args[N]", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "cli_execute",
+          conditions: [
+            { param: "args[0]", operator: "equals", value: "push" },
+            { param: "args[2]", operator: "equals", value: "main" },
+          ],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // git push origin main should be denied
+        expect(engine.evaluate("cli_execute", { args: ["push", "origin", "main"] }).action).toBe("deny");
+        // git push origin feature should be allowed
+        expect(engine.evaluate("cli_execute", { args: ["push", "origin", "feature"] }).action).toBe("allow");
+        // git pull origin main should be allowed (args[0] != "push")
+        expect(engine.evaluate("cli_execute", { args: ["pull", "origin", "main"] }).action).toBe("allow");
+      });
+
+      test("should handle nested array index access options.volume[0]", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "cli_execute",
+          conditions: [
+            { param: "options.volume[0]", operator: "contains", value: "/etc" },
+          ],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // First volume mounting /etc should be denied
+        expect(engine.evaluate("cli_execute", {
+          options: { volume: ["/etc:/etc", "/var:/var"] }
+        }).action).toBe("deny");
+        // First volume not mounting /etc should be allowed
+        expect(engine.evaluate("cli_execute", {
+          options: { volume: ["/tmp:/tmp", "/etc:/etc"] }
+        }).action).toBe("allow");
+      });
+
+      test("should handle options.profile access", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "cli_execute",
+          conditions: [
+            { param: "command", operator: "equals", value: "aws" },
+            { param: "options.profile", operator: "equals", value: "prod" },
+          ],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // aws with profile=prod should be denied
+        expect(engine.evaluate("cli_execute", {
+          command: "aws",
+          args: ["s3", "ls"],
+          options: { profile: "prod" }
+        }).action).toBe("deny");
+        // aws with profile=dev should be allowed
+        expect(engine.evaluate("cli_execute", {
+          command: "aws",
+          args: ["s3", "ls"],
+          options: { profile: "dev" }
+        }).action).toBe("allow");
+      });
+
+      test("should handle boolean options", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "cli_execute",
+          conditions: [
+            { param: "options.force", operator: "equals", value: true },
+          ],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // force=true should be denied
+        expect(engine.evaluate("cli_execute", {
+          options: { force: true }
+        }).action).toBe("deny");
+        // force=false should be allowed
+        expect(engine.evaluate("cli_execute", {
+          options: { force: false }
+        }).action).toBe("allow");
+        // no force option should be allowed
+        expect(engine.evaluate("cli_execute", {
+          options: {}
+        }).action).toBe("allow");
       });
 
       test("should handle missing param value", () => {
@@ -263,6 +401,83 @@ describe("RuleEngine", () => {
         // Missing param should not match (undefined != "test")
         expect(engine.evaluate("api_call", {}).action).toBe("allow");
         expect(engine.evaluate("api_call", { missing: {} }).action).toBe("allow");
+      });
+
+      test("should handle unknown operator gracefully", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "api_call",
+          conditions: [{ param: "value", operator: "unknown_op" as "equals", value: "test" }],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // Unknown operator should not match
+        expect(engine.evaluate("api_call", { value: "test" }).action).toBe("allow");
+      });
+
+      test("should handle array index on non-array", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "cli_execute",
+          conditions: [{ param: "args[0]", operator: "equals", value: "push" }],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // args is a string, not an array - should not match
+        expect(engine.evaluate("cli_execute", { args: "push origin main" }).action).toBe("allow");
+      });
+
+      test("should handle dot notation on non-object", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "cli_execute",
+          conditions: [{ param: "options.profile", operator: "equals", value: "prod" }],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // options is a string, not an object - should not match
+        expect(engine.evaluate("cli_execute", { options: "some-string" }).action).toBe("allow");
+      });
+
+      test("should handle non-string value in contains condition", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "api_call",
+          // Cast to test non-string value edge case
+          conditions: [{ param: "data", operator: "contains", value: 123 as unknown as string }],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // Non-string condition value should not match
+        expect(engine.evaluate("api_call", { data: "123" }).action).toBe("allow");
+      });
+
+      test("should handle non-string value in matches condition", () => {
+        const rule: Rule = {
+          id: "rule1",
+          priority: 0,
+          action: "deny",
+          toolPattern: "api_call",
+          // Cast to test non-string value edge case
+          conditions: [{ param: "data", operator: "matches", value: 123 as unknown as string }],
+        };
+        const store = createMockRuleStore([rule], "allow");
+        const engine = new RuleEngine(store);
+
+        // Non-string condition value should not match
+        expect(engine.evaluate("api_call", { data: "123" }).action).toBe("allow");
       });
     });
   });

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { join } from "node:path";
-import { writeFileSync, unlinkSync, existsSync } from "node:fs";
+import { writeFileSync, unlinkSync, existsSync, readFileSync } from "node:fs";
 
 const DIST_DIR = join(import.meta.dirname, "../../dist");
 const FIXTURES_DIR = join(import.meta.dirname, "fixtures");
@@ -513,6 +513,40 @@ describe("mcp-proxy-mcp Ask Action", () => {
     expect(approveResult.isError).toBe(true);
     const approveText = (approveResult.content as Array<{ type: string; text: string }>)[0]?.text;
     expect(approveText).toContain("[APPROVAL FAILED]");
+  });
+
+  it("should successfully approve with valid token from fallback file", async () => {
+    // Trigger an ask rule
+    const askResult = await client.callTool({
+      name: "proxy_execute",
+      arguments: { toolName: "git_execute", args: { operation: "log", params: { limit: 5 } } },
+    });
+
+    // Extract request ID and fallback path
+    const askText = (askResult.content as Array<{ type: string; text: string }>)[0]?.text;
+    const requestIdMatch = askText.match(/Request ID:\s*(\S+)/);
+    const requestId = requestIdMatch?.[1];
+    expect(requestId).toBeDefined();
+
+    const fallbackPathMatch = askText.match(/check:\s*(\S+)/);
+    const fallbackPath = fallbackPathMatch?.[1];
+    expect(fallbackPath).toBeDefined();
+
+    // Read the token from the fallback file
+    const tokenContent = readFileSync(fallbackPath!, "utf-8");
+    const tokenMatch = tokenContent.match(/Token:\s*(\d+)/);
+    const approvalToken = tokenMatch?.[1];
+    expect(approvalToken).toBeDefined();
+
+    // Approve with valid token
+    const approveResult = await client.callTool({
+      name: "proxy_approve",
+      arguments: { requestId, approvalToken },
+    });
+
+    expect(approveResult.isError).toBeFalsy();
+    const approveText = (approveResult.content as Array<{ type: string; text: string }>)[0]?.text;
+    expect(approveText).toContain("[APPROVED]");
   });
 
   it("should list proxy management tools including ask-related tools", async () => {

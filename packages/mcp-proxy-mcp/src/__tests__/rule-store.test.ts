@@ -163,4 +163,39 @@ describe("RuleStore", () => {
       expect(store2.getDefaultAction()).toBe("allow");
     });
   });
+
+  describe("getRule", () => {
+    test("should return rule by id", async () => {
+      const store = new RuleStore(rulesFile);
+      await store.load();
+
+      const rule = await store.addRule({
+        priority: 100,
+        action: "allow",
+        toolPattern: "browser_*",
+      });
+
+      const found = store.getRule(rule.id);
+      expect(found).toBeDefined();
+      expect(found?.id).toBe(rule.id);
+      expect(found?.toolPattern).toBe("browser_*");
+    });
+
+    test("should return undefined for non-existent id", async () => {
+      const store = new RuleStore(rulesFile);
+      await store.load();
+
+      const found = store.getRule("non-existent-id");
+      expect(found).toBeUndefined();
+    });
+  });
+
+  describe("getFilePath", () => {
+    test("should return the rules file path", async () => {
+      const store = new RuleStore(rulesFile);
+      await store.load();
+
+      expect(store.getFilePath()).toBe(rulesFile);
+    });
+  });
 });
