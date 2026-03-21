@@ -2,13 +2,24 @@
 
 A generic MCP server for executing any CLI command with structured arguments and options.
 
+## Use Cases
+
+Combine with [mcp-firewall](https://www.npmjs.com/package/mcp-firewall) to safely expose CLI tools:
+
+| Use Case | What it does |
+|----------|-------------|
+| AWS access control | Block `--profile prod`, allow read-only operations |
+| GitHub API safety | Block DELETE/PUT, require approval for POST |
+| Git protection | Block force push to main |
+| Docker safety | Block privileged containers |
+
 ## Features
 
 - Execute any CLI command through MCP
 - Structured `options` parameter for reliable rule-based filtering
 - String or array format for arguments
 - Configurable timeout and working directory
-- Integration with mcp-firewall for access control
+- **Designed for use with mcp-firewall** for access control
 
 ## Installation
 
@@ -96,7 +107,47 @@ Get CLI executor status (current working directory, timeout).
 
 cli-to-mcp is designed to work with mcp-firewall for rule-based access control.
 
+**⚠️ Important:** cli-to-mcp has no built-in security. Use mcp-firewall to control access.
+
+### Quick Start with Presets
+
+mcp-firewall provides pre-configured rule sets:
+
+```bash
+# List available presets
+npx mcp-firewall --list-presets
+
+# Use AWS guard preset
+npx mcp-firewall \
+  --command npx \
+  --args cli-to-mcp \
+  --preset cli-aws-guard
+```
+
+Available presets:
+- `cli-aws-guard` - Block production profile, destructive operations
+- `cli-git-safe` - Block force push to main
+- `cli-docker-safe` - Block privileged containers
+
 ### Claude Code Configuration
+
+```json
+{
+  "mcpServers": {
+    "cli-filtered": {
+      "command": "npx",
+      "args": [
+        "mcp-firewall",
+        "--command", "npx",
+        "--args", "cli-to-mcp",
+        "--preset", "cli-aws-guard"
+      ]
+    }
+  }
+}
+```
+
+Or with custom rules file:
 
 ```json
 {
@@ -116,7 +167,7 @@ cli-to-mcp is designed to work with mcp-firewall for rule-based access control.
 
 ### Rule Examples
 
-#### Block production AWS profile
+#### AWS: Block production profile
 
 ```json
 {
@@ -128,9 +179,77 @@ cli-to-mcp is designed to work with mcp-firewall for rule-based access control.
       "toolPattern": "cli_execute",
       "conditions": [
         { "param": "command", "operator": "equals", "value": "aws" },
-        { "param": "options.profile", "operator": "equals", "value": "prod" }
+        { "param": "options.profile", "operator": "matches", "value": "(?i)^(prod|production)$" }
       ],
       "description": "Block AWS commands with production profile"
+    },
+    {
+      "id": "allow-aws-readonly",
+      "priority": 50,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "aws" },
+        { "param": "args", "operator": "matches", "value": "(?i)(describe|list|get)" }
+      ],
+      "description": "Allow read-only AWS operations"
+    }
+  ],
+  "defaultAction": "deny"
+}
+```
+
+#### GitHub CLI: Block destructive API calls
+
+```json
+{
+  "rules": [
+    {
+      "id": "block-gh-api-delete",
+      "priority": 100,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "gh" },
+        { "param": "args[0]", "operator": "equals", "value": "api" },
+        { "param": "options.method", "operator": "matches", "value": "(?i)^(DELETE|PUT)$" }
+      ],
+      "description": "Block destructive GitHub API calls"
+    },
+    {
+      "id": "ask-gh-api-post",
+      "priority": 90,
+      "action": "ask",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "gh" },
+        { "param": "args[0]", "operator": "equals", "value": "api" },
+        { "param": "options.method", "operator": "equals", "value": "POST" }
+      ],
+      "description": "Require approval for POST requests"
+    },
+    {
+      "id": "allow-gh-api-get",
+      "priority": 50,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "gh" },
+        { "param": "args[0]", "operator": "equals", "value": "api" }
+      ],
+      "description": "Allow GET requests (default method)"
+    },
+    {
+      "id": "allow-gh-readonly",
+      "priority": 40,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "gh" },
+        { "param": "args[0]", "operator": "matches", "value": "^(pr|issue|repo|run)$" },
+        { "param": "args[1]", "operator": "matches", "value": "^(list|view|status)$" }
+      ],
+      "description": "Allow gh pr list, gh issue view, etc."
     }
   ],
   "defaultAction": "deny"
