@@ -1,14 +1,15 @@
 {
-  "name": "mcp-proxy-mcp",
+  "name": "mcp-firewall",
   "version": "0.1.0",
-  "description": "MCP proxy server that wraps existing MCP servers with rule-based filtering",
+  "description": "Rule-based firewall for MCP servers - allow, deny, or require approval for tool calls",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mcp-proxy-mcp": "./dist/index.js"
+    "mcp-firewall": "./dist/index.js"
   },
   "files": [
     "dist",
+    "presets",
     "README.md",
     "LICENSE"
   ],
@@ -23,9 +24,11 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
+    "firewall",
     "proxy",
     "filter",
     "security",
+    "rules",
     "claude",
     "ai",
     "llm"
@@ -35,11 +38,11 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dbgso/mcp-servers.git",
-    "directory": "packages/mcp-proxy-mcp"
+    "directory": "packages/mcp-firewall"
   },
-  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/mcp-proxy-mcp#readme",
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/mcp-firewall#readme",
   "bugs": {
-    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:mcp-proxy-mcp"
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:mcp-firewall"
   },
   "publishConfig": {
     "access": "public",

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test script for mcp-proxy-mcp
+// Test script for mcp-firewall
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fileURLToPath } from "node:url";

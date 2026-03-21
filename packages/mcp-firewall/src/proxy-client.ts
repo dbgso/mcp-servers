@@ -26,7 +26,7 @@ export class ProxyClient {
 
     this.client = new Client(
       {
-        name: "mcp-proxy-mcp",
+        name: "mcp-firewall",
         version: "0.1.0",
       },
       {

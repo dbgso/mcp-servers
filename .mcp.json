@@ -1,5 +1,15 @@
 {
   "mcpServers": {
+    "playwright-proxy": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "./packages/mcp-firewall/src/index.ts",
+        "--command", "npx",
+        "--args", "@playwright/mcp",
+        "--rules-file", "./packages/mcp-firewall/playwright-rules.json"
+      ]
+    },
     "git-repo-explorer-mcp": {
       "command": "npx",
       "args": ["tsx", "./packages/git-repo-explorer-mcp/src/index.ts", "/tmp/mcp-git-repos", "--remind-mcp"]
@@ -63,6 +73,19 @@
     "interactive-instruction-mcp-docs": {
       "command": "npx",
       "args": ["tsx", "./packages/interactive-instruction-mcp/src/index.ts", "./packages/interactive-instruction-mcp/docs"]
+    },
+    "cli-to-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/cli-to-mcp/src/index.ts"]
+    },
+    "cli-proxy": {
+      "command": "npx",
+      "args": [
+        "tsx", "./packages/mcp-firewall/src/index.ts",
+        "--command", "npx",
+        "--args", "tsx ./packages/cli-to-mcp/src/index.ts",
+        "--rules-file", "./packages/cli-to-mcp/aws-rules.json"
+      ]
     }
   }
 }

@@ -66,12 +66,12 @@ function parseArgs(args: string[]): CliArgs {
 
 function printHelp(): void {
   console.log(`
-mcp-proxy-mcp - MCP proxy server with rule-based filtering
+mcp-firewall - Rule-based firewall for MCP servers
 
 Usage:
-  mcp-proxy-mcp --command <cmd> --args <arg1> <arg2> ... --rules-file <path>
-  mcp-proxy-mcp --command <cmd> --args <arg1> <arg2> ... --preset <name>
-  mcp-proxy-mcp --config <path>
+  mcp-firewall --command <cmd> --args <arg1> <arg2> ... --rules-file <path>
+  mcp-firewall --command <cmd> --args <arg1> <arg2> ... --preset <name>
+  mcp-firewall --config <path>
 
 Options:
   --command       Command to execute the target MCP server
@@ -86,19 +86,19 @@ Options:
 
 Examples:
   # Using CLI arguments with rules file
-  mcp-proxy-mcp --command npx --args @anthropic/mcp-playwright --rules-file ./rules.json
+  mcp-firewall --command npx --args @anthropic/mcp-playwright --rules-file ./rules.json
 
   # Using a preset
-  mcp-proxy-mcp --command npx --args @anthropic/mcp-playwright --preset playwright-safe
+  mcp-firewall --command npx --args @anthropic/mcp-playwright --preset playwright-safe
 
   # Using config file
-  mcp-proxy-mcp --config ./proxy-config.json
+  mcp-firewall --config ./firewall-config.json
 
   # Dry-run mode (test rules without blocking)
-  mcp-proxy-mcp --config ./proxy-config.json --dry-run
+  mcp-firewall --config ./firewall-config.json --dry-run
 
   # List available presets
-  mcp-proxy-mcp --list-presets
+  mcp-firewall --list-presets
 `);
 }
 
@@ -227,7 +227,7 @@ function setupSignalHandlers(): void {
 
   for (const signal of signals) {
     process.on(signal, async () => {
-      console.error(`\n[mcp-proxy] Received ${signal}, shutting down...`);
+      console.error(`\n[mcp-firewall] Received ${signal}, shutting down...`);
       if (cleanup) {
         await cleanup();
       }
@@ -251,11 +251,11 @@ async function main(): Promise<void> {
   const { target, rulesFile, dryRun, auditLog } = loadConfig(cliArgs);
 
   if (dryRun) {
-    console.error("[mcp-proxy] Running in DRY-RUN mode - blocked calls will be logged but not blocked");
+    console.error("[mcp-firewall] Running in DRY-RUN mode - blocked calls will be logged but not blocked");
   }
 
   if (auditLog) {
-    console.error(`[mcp-proxy] Audit logging enabled: ${auditLog}`);
+    console.error(`[mcp-firewall] Audit logging enabled: ${auditLog}`);
   }
 
   const { server, proxyClient } = await createServer({ target, rulesFile, dryRun, auditLog });

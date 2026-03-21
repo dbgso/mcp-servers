@@ -1,6 +1,6 @@
-# mcp-proxy-mcp
+# mcp-firewall
 
-A generic proxy MCP server that wraps existing MCP servers and provides rule-based filtering for tool calls.
+A rule-based firewall for MCP servers. Wrap any MCP server and control tool access with allow/deny/ask rules.
 
 ## Features
 
@@ -21,7 +21,7 @@ A generic proxy MCP server that wraps existing MCP servers and provides rule-bas
 ## Installation
 
 ```bash
-npm install mcp-proxy-mcp
+npm install mcp-firewall
 ```
 
 ## Usage
@@ -29,7 +29,7 @@ npm install mcp-proxy-mcp
 ### CLI arguments
 
 ```bash
-mcp-proxy-mcp \
+mcp-firewall \
   --command npx \
   --args @anthropic/mcp-playwright \
   --rules-file ./rules.json
@@ -39,10 +39,10 @@ mcp-proxy-mcp \
 
 ```bash
 # List available presets
-mcp-proxy-mcp --list-presets
+mcp-firewall --list-presets
 
 # Use a preset
-mcp-proxy-mcp \
+mcp-firewall \
   --command npx \
   --args @anthropic/mcp-playwright \
   --preset playwright-safe
@@ -51,7 +51,7 @@ mcp-proxy-mcp \
 ### Config file
 
 ```bash
-mcp-proxy-mcp --config ./proxy-config.json
+mcp-firewall --config ./proxy-config.json
 ```
 
 proxy-config.json:
@@ -331,7 +331,7 @@ proxy_reject({ requestId: "01ABC..." })
 Test rules without actually blocking - log only:
 
 ```bash
-mcp-proxy-mcp --config ./proxy-config.json --dry-run
+mcp-firewall --config ./proxy-config.json --dry-run
 ```
 
 Or in config file:
@@ -354,7 +354,7 @@ In dry-run mode:
 Record all tool call decisions to a JSON Lines file:
 
 ```bash
-mcp-proxy-mcp --config ./proxy-config.json --audit-log ./audit.jsonl
+mcp-firewall --config ./proxy-config.json --audit-log ./audit.jsonl
 ```
 
 Or in config file:
@@ -404,7 +404,7 @@ Each line is a JSON object:
     "playwright-filtered": {
       "command": "npx",
       "args": [
-        "mcp-proxy-mcp",
+        "mcp-firewall",
         "--command", "npx",
         "--args", "@anthropic/mcp-playwright",
         "--rules-file", "./playwright-rules.json"

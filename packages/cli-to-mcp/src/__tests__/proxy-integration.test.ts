@@ -6,9 +6,9 @@ import { writeFileSync, unlinkSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const CLI_TO_MCP_DIR = join(import.meta.dirname, "../../dist");
-const MCP_PROXY_DIR = join(import.meta.dirname, "../../../mcp-proxy-mcp/dist");
+const MCP_FIREWALL_DIR = join(import.meta.dirname, "../../../mcp-firewall/dist");
 
-describe("cli-to-mcp with mcp-proxy-mcp", () => {
+describe("cli-to-mcp with mcp-firewall", () => {
   let client: Client;
   let transport: StdioClientTransport;
   let rulesPath: string;
@@ -69,7 +69,7 @@ describe("cli-to-mcp with mcp-proxy-mcp", () => {
     transport = new StdioClientTransport({
       command: "node",
       args: [
-        join(MCP_PROXY_DIR, "index.js"),
+        join(MCP_FIREWALL_DIR, "index.js"),
         "--command", "node",
         "--args", join(CLI_TO_MCP_DIR, "index.js"),
         "--rules-file", rulesPath
@@ -255,7 +255,7 @@ describe("cli-to-mcp proxy with options parameter", () => {
     transport = new StdioClientTransport({
       command: "node",
       args: [
-        join(MCP_PROXY_DIR, "index.js"),
+        join(MCP_FIREWALL_DIR, "index.js"),
         "--command", "node",
         "--args", join(CLI_TO_MCP_DIR, "index.js"),
         "--rules-file", rulesPath
@@ -383,7 +383,7 @@ describe("cli-to-mcp proxy with array args handling", () => {
     transport = new StdioClientTransport({
       command: "node",
       args: [
-        join(MCP_PROXY_DIR, "index.js"),
+        join(MCP_FIREWALL_DIR, "index.js"),
         "--command", "node",
         "--args", join(CLI_TO_MCP_DIR, "index.js"),
         "--rules-file", rulesPath

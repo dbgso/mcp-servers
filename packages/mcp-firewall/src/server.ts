@@ -45,7 +45,7 @@ export async function createServer(
 
   // Create proxy server
   const server = new McpServer({
-    name: "mcp-proxy-mcp",
+    name: "mcp-firewall",
     version: "0.1.0",
   });
 

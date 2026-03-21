@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Simple test MCP server for testing mcp-proxy-mcp
+// Simple test MCP server for testing mcp-firewall
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";

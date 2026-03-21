@@ -36,7 +36,7 @@ const TEST_RULES = {
   defaultAction: "deny",
 };
 
-describe("mcp-proxy-mcp Integration Tests", () => {
+describe("mcp-firewall Integration Tests", () => {
   let client: Client;
   let transport: StdioClientTransport;
   let rulesFilePath: string;
@@ -315,7 +315,7 @@ describe("mcp-proxy-mcp Integration Tests", () => {
   });
 });
 
-describe("mcp-proxy-mcp Dry-run Mode", () => {
+describe("mcp-firewall Dry-run Mode", () => {
   let client: Client;
   let transport: StdioClientTransport;
   let rulesFilePath: string;
@@ -401,7 +401,7 @@ const ASK_RULES = {
   defaultAction: "deny",
 };
 
-describe("mcp-proxy-mcp Ask Action", () => {
+describe("mcp-firewall Ask Action", () => {
   let client: Client;
   let transport: StdioClientTransport;
   let rulesFilePath: string;
