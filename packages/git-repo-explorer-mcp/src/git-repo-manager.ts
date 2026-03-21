@@ -1,11 +1,30 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 
 const execFileAsync = promisify(execFile);
 
-const BASE_DIR = "/tmp/git-grep-repos";
+// Default to ~/.cache/git-repo-explorer-mcp (persistent across reboots)
+const DEFAULT_BASE_DIR = path.join(homedir(), ".cache", "git-repo-explorer-mcp");
+
+let baseDir = process.env.GIT_REPO_EXPLORER_BASE_DIR || DEFAULT_BASE_DIR;
+
+/**
+ * Set the base directory for cloned repositories.
+ * Call this before any repository operations.
+ */
+export function setBaseDir(dir: string): void {
+  baseDir = dir;
+}
+
+/**
+ * Get the current base directory for cloned repositories.
+ */
+export function getBaseDir(): string {
+  return baseDir;
+}
 
 /**
  * Resolve repository path and name.
@@ -68,28 +87,44 @@ export function extractRepoName(repoUrl: string): string {
  */
 export function getRepoPath(repoUrl: string): string {
   const repoName = extractRepoName(repoUrl);
-  return path.join(BASE_DIR, repoName);
+  return path.join(baseDir, repoName);
+}
+
+/**
+ * Clone a repository as a bare repo.
+ */
+async function cloneRepo(repoUrl: string, repoPath: string): Promise<void> {
+  await execFileAsync("git", ["clone", "--bare", repoUrl, repoPath], {
+    timeout: 120_000,
+  });
 }
 
 /**
  * Ensure the repository is available locally.
  * Clones as bare repo if not present, fetches if already present.
+ * If fetch fails (e.g., repo was deleted from /tmp), re-clones automatically.
  * Returns the path to the bare repository.
  */
 export async function ensureRepo(repoUrl: string): Promise<string> {
   const repoPath = getRepoPath(repoUrl);
 
   if (existsSync(repoPath)) {
-    // Fetch latest changes
-    await execFileAsync("git", ["fetch", "--all", "--prune"], {
-      cwd: repoPath,
-      timeout: 60_000,
-    });
+    try {
+      // Fetch latest changes
+      await execFileAsync("git", ["fetch", "--all", "--prune"], {
+        cwd: repoPath,
+        timeout: 60_000,
+      });
+    } catch (error) {
+      // Fetch failed - repository may be corrupted or incomplete
+      // Remove and re-clone
+      console.error(`Fetch failed for ${repoPath}, re-cloning...`);
+      rmSync(repoPath, { recursive: true, force: true });
+      await cloneRepo(repoUrl, repoPath);
+    }
   } else {
     // Clone as bare repo
-    await execFileAsync("git", ["clone", "--bare", repoUrl, repoPath], {
-      timeout: 120_000,
-    });
+    await cloneRepo(repoUrl, repoPath);
   }
 
   return repoPath;
