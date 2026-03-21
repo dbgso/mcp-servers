@@ -159,11 +159,12 @@ describe("Integration Tests", () => {
         expect(result.content[0].text).toContain("Some text here");
       });
 
-      it("should update a draft", async () => {
-        await draftAddHandler.execute({
-          actionParams: { id: "to-update", content: "# Original\n\nOriginal content.", description: "Original", whenToUse: ["Testing"] },
-          context: draftContext,
-        });
+      it("should update an existing document", async () => {
+        // Create existing document (not draft)
+        await fs.writeFile(
+          path.join(docsDir, "to-update.md"),
+          "# Original\n\nOriginal content."
+        );
 
         const result = await draftUpdateHandler.execute({
           actionParams: { id: "to-update", content: "# Updated Content\n\nThis has been updated." },
@@ -171,14 +172,20 @@ describe("Integration Tests", () => {
         });
 
         expect(result.isError).toBeFalsy();
-        expect(result.content[0].text).toContain("updated");
+        expect(result.content[0].text).toContain("Update prepared");
+        expect(result.content[0].text).toContain("```diff");
+      });
 
-        // Verify content changed
-        const readResult = await draftReadHandler.execute({
-          actionParams: { id: "to-update" },
+      it("should return error when updating non-existent document", async () => {
+        const result = await draftUpdateHandler.execute({
+          actionParams: { id: "non-existent", content: "# New\n\nNew content." },
           context: draftContext,
         });
-        expect(readResult.content[0].text).toContain("Updated Content");
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toBe(`Error: Document "non-existent" does not exist.
+
+Use \`draft(action: "add", ...)\` to create a new document.`);
       });
 
       it("should delete a draft", async () => {
@@ -566,39 +573,38 @@ describe("Integration Tests", () => {
       expect(readResult.isError).toBeFalsy();
       expect(readResult.content[0].text).toContain("Workflow Test");
 
-      // Step 3: Update draft
-      const updateResult = await draftUpdateHandler.execute({
-        actionParams: {
-          id: "workflow-test",
-          content: "# Workflow Test\n\nUpdated content after review.",
-        },
-        context: draftContext,
-      });
-      expect(updateResult.isError).toBeFalsy();
-
-      // Step 4: Check draft appears in apply list
+      // Step 3: Check draft appears in apply list
       const listResult = await applyListHandler.execute({
         actionParams: {},
         context: applyContext,
       });
       expect(listResult.content[0].text).toContain("workflow-test");
 
-      // Step 5: Promote draft
+      // Step 4: Promote draft
       const promoteResult = await promoteHandler.execute({
         actionParams: { draftId: "workflow-test" },
         context: applyContext,
       });
       expect(promoteResult.isError).toBeFalsy();
 
-      // Step 6: Verify draft is gone
+      // Step 5: Verify draft is gone
       const draftPath = path.join(docsDir, DRAFT_DIR, "workflow-test.md");
       const draftExists = await fs.access(draftPath).then(() => true).catch(() => false);
       expect(draftExists).toBe(false);
 
-      // Step 7: Verify confirmed doc exists with updated content
+      // Step 6: Verify confirmed doc exists
       const confirmedPath = path.join(docsDir, "workflow-test.md");
       const content = await fs.readFile(confirmedPath, "utf-8");
-      expect(content).toContain("Updated content after review");
+      expect(content).toBe(`---
+description: Workflow test
+whenToUse:
+  - Testing workflow
+status: editing
+---
+
+# Workflow Test
+
+This is a test document.`);
     });
 
     it("should handle multiple drafts independently", async () => {

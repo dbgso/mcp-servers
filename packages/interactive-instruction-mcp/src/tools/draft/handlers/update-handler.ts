@@ -1,6 +1,4 @@
 import type { ToolResult, DraftActionHandler, DraftActionParams, DraftActionContext } from "../../../types/index.js";
-import { DRAFT_PREFIX } from "../../../constants.js";
-import { draftWorkflowManager } from "../../../workflows/draft-workflow.js";
 import { updateFrontmatter, parseFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { generateDiff, writeDiffToFile } from "../../../utils/diff-utils.js";
 import { savePendingUpdate } from "../../../utils/pending-update.js";
@@ -29,25 +27,29 @@ export class UpdateHandler implements DraftActionHandler {
     const originalContent = await reader.getDocumentContent(id);
     const originalPath = reader.getFilePath(id);
 
-    // If original exists, use new pending flow (no draft file)
-    if (originalContent) {
-      return this.handleExistingDocUpdate({
-        id,
-        content,
-        description,
-        whenToUse,
-        originalContent,
-        originalPath,
-        reader,
-      });
+    // If original doesn't exist, return error
+    if (!originalContent) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: Document "${id}" does not exist.
+
+Use \`draft(action: "add", ...)\` to create a new document.`,
+          },
+        ],
+        isError: true,
+      };
     }
 
-    // Otherwise, use legacy draft flow
-    return this.handleDraftUpdate({
+    // Use pending flow for existing document updates
+    return this.handleExistingDocUpdate({
       id,
       content,
       description,
       whenToUse,
+      originalContent,
+      originalPath,
       reader,
     });
   }
@@ -125,74 +127,6 @@ To apply this update:
 
 To cancel:
 \`draft(action: "cancel", id: "${id}")\``,
-        },
-      ],
-    };
-  }
-
-  /**
-   * Handle update for draft (legacy flow).
-   */
-  private async handleDraftUpdate(params: {
-    id: string;
-    content: string;
-    description?: string;
-    whenToUse?: string[];
-    reader: DraftActionContext["reader"];
-  }): Promise<ToolResult> {
-    const { id, content, description, whenToUse, reader } = params;
-    const draftId = DRAFT_PREFIX + id;
-
-    // Get existing draft content to preserve frontmatter if not overridden
-    const existingContent = await reader.getDocumentContent(draftId);
-    const existingFrontmatter = existingContent ? parseFrontmatter(existingContent) : {};
-
-    const finalContent = this.generateContentWithFrontmatter({
-      content,
-      description,
-      whenToUse,
-      existingFrontmatter,
-    });
-
-    const result = await reader.updateDocument({ id: draftId, content: finalContent });
-    if (!result.success) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error: ${result.error}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    // Reset workflow to self_review (content changed, need re-review)
-    draftWorkflowManager.clear({ id });
-    const workflowResult = await draftWorkflowManager.trigger({
-      id,
-      triggerParams: { action: "submit", content },
-    });
-
-    const workflowStatus = workflowResult.ok
-      ? `\n**Workflow:** reset → ${workflowResult.to}`
-      : "";
-
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Draft "${id}" updated successfully.
-Path: ${result.path}${workflowStatus}
-
----
-
-## Next: Approval Workflow
-
-1. \`draft(action: "approve", id: "${id}", notes: "<self-review>")\`
-2. Explain to user (see \`help(id: "_mcp-interactive-instruction__draft-approval")\`)
-3. \`draft(action: "approve", id: "${id}", confirmed: true)\`
-4. User provides token → applied`,
         },
       ],
     };
