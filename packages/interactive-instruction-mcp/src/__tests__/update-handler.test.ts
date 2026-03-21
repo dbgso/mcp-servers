@@ -28,7 +28,7 @@ describe("UpdateHandler", () => {
   });
 
   describe("diff generation", () => {
-    it("writes diff to file when original document exists", async () => {
+    it("shows inline diff when original document exists", async () => {
       // Create original document
       const originalContent = "# Test\n\nOriginal content here.";
       await fs.writeFile(path.join(docsDir, "test-doc.md"), originalContent);
@@ -48,18 +48,10 @@ describe("UpdateHandler", () => {
 
       const text = result.content[0].type === "text" ? result.content[0].text : "";
 
-      // Check that diff file path is returned
-      expect(text).toContain("**Diff:**");
-      expect(text).toContain(".diff");
-
-      // Extract diff file path and verify content
-      const diffPathMatch = text.match(/\*\*Diff:\*\* (.+\.diff)/);
-      expect(diffPathMatch).not.toBeNull();
-
-      const diffPath = diffPathMatch![1];
-      const diffContent = await fs.readFile(diffPath, "utf-8");
-      expect(diffContent).toContain("-Original content here.");
-      expect(diffContent).toContain("+Modified content here.");
+      // Check that diff content is returned inline
+      expect(text).toContain("```diff");
+      expect(text).toContain("-Original content here.");
+      expect(text).toContain("+Modified content here.");
     });
 
     it("does not show diff when original document does not exist", async () => {

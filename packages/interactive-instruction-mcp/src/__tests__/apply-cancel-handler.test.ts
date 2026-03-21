@@ -4,6 +4,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { ApplyHandler } from "../tools/draft/handlers/apply-handler.js";
 import { CancelHandler } from "../tools/draft/handlers/cancel-handler.js";
+import { UpdateHandler } from "../tools/draft/handlers/update-handler.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import { savePendingUpdate, getPendingUpdate, deletePendingUpdate } from "../utils/pending-update.js";
 
@@ -186,5 +187,125 @@ describe("CancelHandler", () => {
     // Verify pending was cleaned up
     const pending = await getPendingUpdate("test-doc");
     expect(pending).toBeNull();
+  });
+});
+
+describe("Update → Apply/Cancel integration", () => {
+  let tempDir: string;
+  let docsDir: string;
+  let reader: MarkdownReader;
+  let updateHandler: UpdateHandler;
+  let applyHandler: ApplyHandler;
+  let cancelHandler: CancelHandler;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "update-apply-integration-"));
+    docsDir = path.join(tempDir, "docs");
+    await fs.mkdir(docsDir, { recursive: true });
+
+    reader = new MarkdownReader(docsDir);
+    updateHandler = new UpdateHandler();
+    applyHandler = new ApplyHandler();
+    cancelHandler = new CancelHandler();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("update → apply: full flow for existing document", async () => {
+    // Step 1: Create existing document
+    const docPath = path.join(docsDir, "existing-doc.md");
+    await fs.writeFile(docPath, `---
+description: Original description
+---
+
+# Existing Doc
+
+Original content here.`);
+
+    // Step 2: Call update (creates pending + diff)
+    const updateResult = await updateHandler.execute({
+      actionParams: {
+        action: "update",
+        id: "existing-doc",
+        content: `---
+description: Original description
+---
+
+# Existing Doc
+
+Updated content here.`,
+      },
+      context: { reader },
+    });
+
+    expect(updateResult.isError).toBeFalsy();
+    const updateText = updateResult.content[0].type === "text" ? updateResult.content[0].text : "";
+    expect(updateText).toContain("Update prepared");
+    expect(updateText).toContain("```diff");
+    expect(updateText).toContain("-Original content here.");
+    expect(updateText).toContain("+Updated content here.");
+
+    // Step 3: Call apply
+    const applyResult = await applyHandler.execute({
+      actionParams: { action: "apply", id: "existing-doc" },
+      context: { reader },
+    });
+
+    expect(applyResult.isError).toBeFalsy();
+    const applyText = applyResult.content[0].type === "text" ? applyResult.content[0].text : "";
+    expect(applyText).toContain("Update applied successfully");
+
+    // Step 4: Verify file was updated
+    const finalContent = await fs.readFile(docPath, "utf-8");
+    expect(finalContent).toContain("Updated content here.");
+    expect(finalContent).not.toContain("Original content here.");
+  });
+
+  it("update → cancel: discards changes", async () => {
+    // Step 1: Create existing document
+    const docPath = path.join(docsDir, "cancel-test.md");
+    const originalContent = `---
+description: Test doc
+---
+
+# Cancel Test
+
+Original content.`;
+    await fs.writeFile(docPath, originalContent);
+
+    // Step 2: Call update
+    const updateResult = await updateHandler.execute({
+      actionParams: {
+        action: "update",
+        id: "cancel-test",
+        content: `---
+description: Test doc
+---
+
+# Cancel Test
+
+This change will be cancelled.`,
+      },
+      context: { reader },
+    });
+
+    expect(updateResult.isError).toBeFalsy();
+
+    // Step 3: Call cancel
+    const cancelResult = await cancelHandler.execute({
+      actionParams: { action: "cancel", id: "cancel-test" },
+      context: { reader },
+    });
+
+    expect(cancelResult.isError).toBeFalsy();
+    const cancelText = cancelResult.content[0].type === "text" ? cancelResult.content[0].text : "";
+    expect(cancelText).toContain("cancelled");
+
+    // Step 4: Verify file was NOT changed
+    const finalContent = await fs.readFile(docPath, "utf-8");
+    expect(finalContent).toContain("Original content.");
+    expect(finalContent).not.toContain("This change will be cancelled.");
   });
 });

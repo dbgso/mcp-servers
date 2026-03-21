@@ -115,7 +115,8 @@ export class UpdateHandler implements DraftActionHandler {
           type: "text" as const,
           text: `Update prepared for "${id}".
 
-**Diff:** ${diffPath}
+\`\`\`diff
+${diff}\`\`\`
 
 ---
 
