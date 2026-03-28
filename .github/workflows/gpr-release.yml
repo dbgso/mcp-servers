@@ -1,0 +1,88 @@
+name: GitHub Packages Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to publish (e.g. interactive-instruction-mcp)'
+        required: true
+        type: choice
+        options:
+          - interactive-instruction-mcp
+          - git-repo-explorer-mcp
+          - kroki-mcp
+      tag:
+        description: 'Pre-release tag (default: snapshot)'
+        required: false
+        default: 'snapshot'
+        type: string
+
+env:
+  REGISTRY: https://npm.pkg.github.com
+  SCOPE: '@dbgso'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: ${{ env.REGISTRY }}
+          scope: ${{ env.SCOPE }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag || 'snapshot' }}"
+          PKG="${{ inputs.package }}"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          TIMESTAMP="$(date +%Y%m%d%H%M%S)"
+          PRE_VERSION="0.0.0-${TAG}.${TIMESTAMP}.${SHORT_SHA}"
+
+          PKG_DIR="packages/${PKG}"
+          if [ ! -d "$PKG_DIR" ]; then
+            echo "::error::Package directory not found: $PKG_DIR"
+            exit 1
+          fi
+
+          ORIGINAL_NAME=$(jq -r .name "${PKG_DIR}/package.json")
+          SCOPED_NAME="${SCOPE}/${ORIGINAL_NAME}"
+
+          echo "📦 Publishing ${SCOPED_NAME}@${PRE_VERSION}"
+
+          # Temporarily update package.json for GitHub Packages
+          jq --arg name "$SCOPED_NAME" \
+             --arg version "$PRE_VERSION" \
+             --arg registry "${{ env.REGISTRY }}" \
+             '.name = $name | .version = $version | .publishConfig = { "registry": $registry, "access": "public" }' \
+             "${PKG_DIR}/package.json" > "${PKG_DIR}/package.json.tmp"
+          mv "${PKG_DIR}/package.json.tmp" "${PKG_DIR}/package.json"
+
+          # Publish
+          cd "$PKG_DIR"
+          npm publish --tag "$TAG"
+
+          echo "✅ Published ${SCOPED_NAME}@${PRE_VERSION}"
