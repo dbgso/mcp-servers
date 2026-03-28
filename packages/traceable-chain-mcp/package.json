@@ -12,7 +12,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "tsx src/index.ts",

@@ -15,7 +15,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -b",
     "test": "vitest run",
     "lint": "eslint src/"
   },
