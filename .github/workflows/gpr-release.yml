@@ -44,10 +44,10 @@ jobs:
           echo "dir=${PKG_DIR}" >> $GITHUB_OUTPUT
 
       - name: Build
-        run: pnpm --filter ...${{ steps.pkg.outputs.name }} build
+        run: pnpm --filter "...${{ steps.pkg.outputs.name }}..." build
 
       - name: Test
-        run: pnpm --filter ...${{ steps.pkg.outputs.name }} test
+        run: pnpm --filter "...${{ steps.pkg.outputs.name }}..." test
 
       - name: Publish to GitHub Packages
         env:
