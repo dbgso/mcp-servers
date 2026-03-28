@@ -6,11 +6,7 @@ on:
       package:
         description: 'Package to publish (e.g. interactive-instruction-mcp)'
         required: true
-        type: choice
-        options:
-          - interactive-instruction-mcp
-          - git-repo-explorer-mcp
-          - kroki-mcp
+        type: string
       tag:
         description: 'Pre-release tag (default: snapshot)'
         required: false
