@@ -838,6 +838,268 @@ describe("ApproveHandler", () => {
     });
   });
 
+  describe("Workflow state transition loop bug", () => {
+    /**
+     * Bug reproduction test:
+     * 1. approve with notes → should transition to user_reviewing
+     * 2. approve with confirmed: true → should transition to pending_approval
+     *
+     * Reported issue:
+     * - approve with notes returns to self_review
+     * - confirmed: true alone says notes are required
+     * This creates an infinite loop.
+     */
+    it("should complete full workflow: self_review → user_reviewing → pending_approval", async () => {
+      const id = getTestId("test-workflow-loop");
+
+      // Step 1: Create draft (goes to self_review automatically)
+      await addHandler.execute({
+        actionParams: {
+          id,
+          content: `# ${id}\n\nTest content.`,
+          description: "Test workflow",
+          whenToUse: ["Testing workflow"],
+        },
+        context,
+      });
+
+      // Verify initial state is self_review
+      const status1 = await draftWorkflowManager.getStatus({ id });
+      expect(status1?.state).toBe("self_review");
+
+      // Step 2: Approve with notes → should go to user_reviewing
+      const result2 = await approveHandler.execute({
+        actionParams: { id, notes: "Self-review: content looks good" },
+        context,
+      });
+
+      expect(result2.isError).toBeFalsy();
+      const status2 = await draftWorkflowManager.getStatus({ id });
+      expect(status2?.state).toBe("user_reviewing");
+
+      // Step 3: Approve with confirmed: true → should go to pending_approval
+      const result3 = await approveHandler.execute({
+        actionParams: { id, confirmed: true, force: true },
+        context,
+      });
+
+      expect(result3.isError).toBeFalsy();
+      const status3 = await draftWorkflowManager.getStatus({ id });
+      expect(status3?.state).toBe("pending_approval");
+    });
+
+    it("should NOT require notes when in user_reviewing state", async () => {
+      const id = getTestId("test-no-notes-needed");
+
+      // Create draft and progress to user_reviewing
+      await addHandler.execute({
+        actionParams: {
+          id,
+          content: `# ${id}\n\nTest content.`,
+          description: "Test no notes",
+          whenToUse: ["Testing"],
+        },
+        context,
+      });
+
+      // Progress through self_review
+      await approveHandler.execute({
+        actionParams: { id, notes: "Self-review done" },
+        context,
+      });
+
+      // Verify we're in user_reviewing
+      const status = await draftWorkflowManager.getStatus({ id });
+      expect(status?.state).toBe("user_reviewing");
+
+      // Now approve with confirmed: true (no notes) - should NOT error
+      const result = await approveHandler.execute({
+        actionParams: { id, confirmed: true, force: true },
+        context,
+      });
+
+      // Should succeed, not ask for notes (i.e., not require notes to proceed)
+      expect(result.isError).toBeFalsy();
+      // Should NOT say "must provide notes" or similar error
+      expect(result.content[0].text).not.toContain("must provide");
+      expect(result.content[0].text).not.toContain("notes is required");
+      expect(result.content[0].text).toContain("Approval Requested");
+    });
+
+    it("should NOT return to self_review after providing notes", async () => {
+      const id = getTestId("test-no-return-self-review");
+
+      // Create draft
+      await addHandler.execute({
+        actionParams: {
+          id,
+          content: `# ${id}\n\nContent.`,
+          description: "Test no return",
+          whenToUse: ["Testing"],
+        },
+        context,
+      });
+
+      // Approve with notes
+      const result = await approveHandler.execute({
+        actionParams: { id, notes: "Self-review complete" },
+        context,
+      });
+
+      // Should NOT be in self_review anymore
+      const status = await draftWorkflowManager.getStatus({ id });
+      expect(status?.state).not.toBe("self_review");
+      expect(status?.state).toBe("user_reviewing");
+
+      // Response should indicate transition to user_reviewing
+      expect(result.content[0].text).toContain("user_reviewing");
+    });
+
+    it("should update frontmatter status to user_reviewing after notes transition", async () => {
+      const id = getTestId("test-frontmatter-status");
+
+      // Create draft
+      await addHandler.execute({
+        actionParams: {
+          id,
+          content: `# ${id}\n\nContent.`,
+          description: "Test frontmatter",
+          whenToUse: ["Testing"],
+        },
+        context,
+      });
+
+      // Approve with notes
+      await approveHandler.execute({
+        actionParams: { id, notes: "Self-review complete" },
+        context,
+      });
+
+      // Check frontmatter status in the draft file
+      const draftContent = await reader.getDocumentContent(`_mcp_drafts__${id}`);
+      expect(draftContent).not.toBeNull();
+      // Frontmatter should have status: user_reviewing (not self_review!)
+      expect(draftContent).toContain("status: user_reviewing");
+    });
+
+    it("should persist workflow state across getStatus calls", async () => {
+      const id = getTestId("test-persist-state");
+
+      // Create draft
+      await addHandler.execute({
+        actionParams: {
+          id,
+          content: `# ${id}\n\nContent.`,
+          description: "Test persist",
+          whenToUse: ["Testing"],
+        },
+        context,
+      });
+
+      // Transition to user_reviewing
+      await approveHandler.execute({
+        actionParams: { id, notes: "Self-review complete" },
+        context,
+      });
+
+      // Clear the in-memory cache to force reload from disk
+      draftWorkflowManager.clear({ id });
+
+      // Re-fetch status (should reload from persisted file)
+      const status = await draftWorkflowManager.getStatus({ id });
+      expect(status?.state).toBe("user_reviewing");
+    });
+
+    it("should handle multiple approve calls without regression", async () => {
+      const id = getTestId("test-multiple-calls");
+
+      // Create draft
+      await addHandler.execute({
+        actionParams: {
+          id,
+          content: `# ${id}\n\nContent.`,
+          description: "Test multiple",
+          whenToUse: ["Testing"],
+        },
+        context,
+      });
+
+      // First approve with notes → should go to user_reviewing
+      const result1 = await approveHandler.execute({
+        actionParams: { id, notes: "First review" },
+        context,
+      });
+      expect(result1.isError).toBeFalsy();
+
+      const status1 = await draftWorkflowManager.getStatus({ id });
+      expect(status1?.state).toBe("user_reviewing");
+
+      // Second approve with notes (already in user_reviewing, should error or handle gracefully)
+      const result2 = await approveHandler.execute({
+        actionParams: { id, notes: "Second review" },
+        context,
+      });
+      // In user_reviewing, notes are not expected - should ask for confirmed
+      expect(result2.isError).toBe(true);
+      expect(result2.content[0].text).toContain("confirmed");
+
+      // State should still be user_reviewing
+      const status2 = await draftWorkflowManager.getStatus({ id });
+      expect(status2?.state).toBe("user_reviewing");
+    });
+
+    it("should batch confirm multiple drafts after individual notes via approveHandler", async () => {
+      const id1 = getTestId("test-batch-via-handler-1");
+      const id2 = getTestId("test-batch-via-handler-2");
+      const id3 = getTestId("test-batch-via-handler-3");
+
+      // Create 3 drafts
+      for (const id of [id1, id2, id3]) {
+        await addHandler.execute({
+          actionParams: {
+            id,
+            content: `# ${id}\n\nContent for ${id}.`,
+            description: `Test ${id}`,
+            whenToUse: ["Testing batch"],
+          },
+          context,
+        });
+      }
+
+      // Progress each draft to user_reviewing via approveHandler (not direct trigger)
+      for (const id of [id1, id2, id3]) {
+        const result = await approveHandler.execute({
+          actionParams: { id, notes: `Self-review for ${id}` },
+          context,
+        });
+        expect(result.isError).toBeFalsy();
+        expect(result.content[0].text).toContain("user_reviewing");
+      }
+
+      // Verify all are in user_reviewing state
+      for (const id of [id1, id2, id3]) {
+        const status = await draftWorkflowManager.getStatus({ id });
+        expect(status?.state).toBe("user_reviewing");
+      }
+
+      // Now batch confirm
+      const batchResult = await approveHandler.execute({
+        actionParams: { ids: `${id1},${id2},${id3}`, confirmed: true },
+        context,
+      });
+
+      expect(batchResult.isError).toBeFalsy();
+      expect(batchResult.content[0].text).toContain("Batch Approval Requested");
+      expect(batchResult.content[0].text).toContain("3 drafts");
+
+      // Verify all transitioned to pending_approval
+      for (const id of [id1, id2, id3]) {
+        const status = await draftWorkflowManager.getStatus({ id });
+        expect(status?.state).toBe("pending_approval");
+      }
+    });
+  });
+
   describe("Diff generation branch coverage", () => {
     it("should show context lines after changed lines (line 370 branch)", async () => {
       const id = getTestId("test-diff-context-after");

@@ -107,10 +107,10 @@ draft(action: "approve", id: "${id}", notes: "Reviewed: covers X and Y, ready fo
         };
       }
 
-      // Update frontmatter with self_review status and notes
+      // Update frontmatter with user_reviewing status and notes
       await this.updateDraftFrontmatterStatus({
         id,
-        status: "self_review",
+        status: "user_reviewing",
         selfReviewNotes: notes,
         reader,
       });
