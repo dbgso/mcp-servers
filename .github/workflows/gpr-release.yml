@@ -25,28 +25,17 @@ jobs:
       packages: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
         with:
-          node-version: 22
-          cache: pnpm
           registry-url: ${{ env.REGISTRY }}
           scope: ${{ env.SCOPE }}
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Build
-        run: pnpm build
+        run: pnpm --filter ...${{ inputs.package }} build
 
       - name: Test
-        run: pnpm test
+        run: pnpm --filter ...${{ inputs.package }} test
 
       - name: Publish to GitHub Packages
         env:
