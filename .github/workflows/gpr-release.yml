@@ -66,8 +66,8 @@ jobs:
              "${PKG_DIR}/package.json" > "${PKG_DIR}/package.json.tmp"
           mv "${PKG_DIR}/package.json.tmp" "${PKG_DIR}/package.json"
 
-          # Publish
+          # Publish (pnpm resolves catalog: and workspace: protocols)
           cd "$PKG_DIR"
-          npm publish --tag "$TAG"
+          pnpm publish --no-git-checks --tag "$TAG"
 
           echo "✅ Published ${SCOPED_NAME}@${PRE_VERSION}"
