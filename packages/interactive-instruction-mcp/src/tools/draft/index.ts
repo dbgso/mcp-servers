@@ -10,6 +10,12 @@ import {
   UpdateHandler,
   DeleteHandler,
   RenameHandler,
+  ApproveHandler,
+  LinkHandler,
+  LintHandler,
+  SetStatusHandler,
+  ApplyHandler,
+  CancelHandler,
 } from "./handlers/index.js";
 
 const DRAFT_HELP = `# Draft Tool
@@ -40,10 +46,45 @@ coding__testing         ← About testing rules
 - \`draft()\` - Show this help
 - \`draft(action: "list")\` - List all drafts
 - \`draft(action: "read", id: "<id>")\` - Read a draft
-- \`draft(action: "add", id: "<id>", content: "<content>")\` - Create new draft
+- \`draft(action: "add", id: "<id>", content: "<content>", description: "...", whenToUse: [...], relatedDocs: [...])\` - Create new draft
 - \`draft(action: "update", id: "<id>", content: "<content>")\` - Update existing draft (same topic only!)
 - \`draft(action: "delete", id: "<id>")\` - Delete a draft
 - \`draft(action: "rename", id: "<oldId>", newId: "<newId>")\` - Rename/move a draft (safe reorganization)
+- \`draft(action: "approve", id: "<id>", notes: "<self-review>")\` - Complete self-review, then explain to user
+- \`draft(action: "approve", id: "<id>", confirmed: true)\` - After user confirms explanation, show diff/summary and request approval
+- \`draft(action: "approve", id: "<id>", approvalToken: "<token>")\` - Approve and promote with token
+- \`draft(action: "approve", ids: "id1,id2,id3", confirmed: true)\` - **Batch confirm** multiple drafts (recommended when multiple ready)
+- \`draft(action: "approve", ids: "id1,id2,id3", approvalToken: "<token>")\` - Batch approve multiple drafts with single token
+- \`draft(action: "link_add", id: "<id>", relatedDocs: ["doc1", "doc2"])\` - Add relatedDocs to promoted document
+- \`draft(action: "link_remove", id: "<id>", relatedDocs: ["doc1"])\` - Remove relatedDocs from promoted document
+- \`draft(action: "lint")\` - Check all documents for quality issues (missing metadata, orphans, duplicates)
+- \`draft(action: "set_status", id: "<id>", status: "<status>")\` - Set status for a single draft
+- \`draft(action: "set_status", ids: "id1,id2,id3", status: "<status>")\` - Batch set status for multiple drafts
+- \`draft(action: "apply", id: "<id>")\` - Apply pending update to existing document
+- \`draft(action: "cancel", id: "<id>")\` - Cancel pending update
+
+## Update Existing Documents (Simplified Flow)
+
+When updating an existing (non-draft) document:
+1. \`draft(action: "update", id: "<existing-doc>", content: "...")\` - Creates diff, no draft file
+2. Review the diff file
+3. \`draft(action: "apply", id: "<existing-doc>")\` - Apply the update
+   OR \`draft(action: "cancel", id: "<existing-doc>")\` - Cancel
+
+## Consecutive Approval Warning
+
+When using \`confirmed: true\` with a single \`id\`, the tool checks if other drafts were confirmed within the last 10 seconds.
+If so, it will recommend using batch approval with \`ids\` to confirm multiple drafts together.
+Use \`force: true\` to skip this warning and proceed with single approval.
+
+## Approval Workflow
+
+Before a draft can be applied, the AI must:
+1. **Self-review** the content (provide \`notes\`)
+2. **Explain to user** what the draft contains **in your own words** (tool does NOT show content)
+3. **User confirms** they understand, then call with \`confirmed: true\`
+4. Tool shows diff/summary + sends notification
+5. **User approves** with the token from desktop notification
 
 ## Examples
 
@@ -58,7 +99,28 @@ draft(action: "add", id: "coding__testing", content: "# Testing Rules\\n\\nServi
 \`\`\`
 Note: This is a NEW topic, so use "add" not "update"!
 
-Drafts are stored under \`_mcp_drafts/\` directory. Use \`apply\` tool to promote to confirmed docs.`;
+## Metadata (Frontmatter) - REQUIRED
+
+All drafts must include metadata:
+- **description** (required): Brief summary of the document
+- **whenToUse** (required): List of situations when to reference this document
+- **relatedDocs** (optional): List of related document IDs
+
+Example:
+\`\`\`
+draft(action: "add", id: "coding__error-handling",
+  description: "Error handling patterns for async operations",
+  whenToUse: ["Writing try-catch blocks", "Handling Promise rejections"],
+  relatedDocs: ["coding__typescript", "coding__testing"],
+  content: "# Error Handling\\n\\nAlways use try-catch..."
+)
+\`\`\`
+
+Drafts are stored under \`_mcp_drafts/\` directory. Use \`apply\` tool to promote to confirmed docs.
+
+**[IMPORTANT]** After creating a draft, you MUST explain the content to the user and wait for their approval before applying.`;
+
+const linkHandler = new LinkHandler();
 
 const actionHandlers: Record<string, DraftActionHandler> = {
   list: new ListHandler(),
@@ -67,6 +129,13 @@ const actionHandlers: Record<string, DraftActionHandler> = {
   update: new UpdateHandler(),
   delete: new DeleteHandler(),
   rename: new RenameHandler(),
+  approve: new ApproveHandler(),
+  link_add: linkHandler,
+  link_remove: linkHandler,
+  lint: new LintHandler(),
+  set_status: new SetStatusHandler(),
+  apply: new ApplyHandler(),
+  cancel: new CancelHandler(),
 };
 
 export function registerDraftTool(params: {
@@ -80,28 +149,72 @@ export function registerDraftTool(params: {
     "draft",
     {
       description:
-        "Manage temporary documentation drafts. AI should freely use this to record any new information learned from user instructions. No permission needed - update drafts whenever you learn something new. Keep one topic per file for easy retrieval. IMPORTANT: New topic = new file (add), NOT update existing. Use hierarchy like 'coding__testing' to group related topics.",
+        "Manage documentation drafts. Call without args for help.",
       inputSchema: {
+        help: z
+          .boolean()
+          .optional()
+          .describe("Show help"),
         action: z
-          .enum(["list", "read", "add", "update", "delete", "rename"])
+          .enum(["list", "read", "add", "update", "delete", "rename", "approve", "link_add", "link_remove", "lint", "set_status", "apply", "cancel"])
           .optional()
           .describe("Action to perform. Omit to show help."),
         id: z
           .string()
           .optional()
           .describe("Draft ID (without '_mcp_drafts__' prefix)"),
+        ids: z
+          .string()
+          .optional()
+          .describe("Comma-separated draft IDs for batch approve"),
         content: z
           .string()
           .optional()
           .describe("Markdown content for add/update actions"),
+        description: z
+          .string()
+          .optional()
+          .describe("Brief description of the document (REQUIRED for add action)"),
+        whenToUse: z
+          .array(z.string())
+          .optional()
+          .describe("List of situations when to use this document (REQUIRED for add action)"),
+        relatedDocs: z
+          .array(z.string())
+          .optional()
+          .describe("List of related document IDs (optional)"),
         newId: z
           .string()
           .optional()
           .describe("New draft ID for rename action"),
+        targetId: z
+          .string()
+          .optional()
+          .describe("Target ID for approve action (if different from draft ID)"),
+        approvalToken: z
+          .string()
+          .optional()
+          .describe("Approval token from desktop notification (for approve action)"),
+        notes: z
+          .string()
+          .optional()
+          .describe("Self-review notes (required for approve action)"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Confirm user has seen AI's explanation (required after explaining to user)"),
+        force: z
+          .boolean()
+          .optional()
+          .describe("Skip warning when other drafts are also ready for approval"),
+        status: z
+          .enum(["editing", "self_review", "user_reviewing", "pending_approval"])
+          .optional()
+          .describe("Status to set for set_status action"),
       },
     },
-    async ({ action, id, content, newId }) => {
-      if (!action) {
+    async ({ help, action, id, ids, content, description, whenToUse, relatedDocs, newId, targetId, approvalToken, notes, confirmed, force, status }) => {
+      if (help || !action) {
         return wrapResponse({
           result: {
             content: [{ type: "text" as const, text: DRAFT_HELP }],
@@ -124,7 +237,7 @@ export function registerDraftTool(params: {
       }
 
       const result = await handler.execute({
-        actionParams: { id, content, newId },
+        actionParams: { action, id, ids, content, description, whenToUse, relatedDocs, newId, targetId, approvalToken, notes, confirmed, force, status },
         context: { reader, config },
       });
       return wrapResponse({ result, config });

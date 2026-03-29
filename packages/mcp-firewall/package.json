@@ -1,0 +1,66 @@
+{
+  "name": "mcp-firewall",
+  "version": "0.1.0",
+  "description": "Rule-based firewall for MCP servers - allow, deny, or require approval for tool calls",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-firewall": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "presets",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "firewall",
+    "proxy",
+    "filter",
+    "security",
+    "rules",
+    "claude",
+    "ai",
+    "llm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/mcp-firewall"
+  },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/mcp-firewall#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:mcp-firewall"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "mcp-shared": "workspace:*",
+    "minimatch": "^10.0.1",
+    "ulid": "^2.3.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "git-repo-explorer-mcp": "workspace:*",
+    "vitest": "catalog:"
+  }
+}

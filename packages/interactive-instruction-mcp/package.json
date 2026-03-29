@@ -9,11 +9,12 @@
   },
   "files": [
     "dist",
+    "templates",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build",
@@ -49,11 +50,14 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
-    "zod": "^3.25.0"
+    "@modelcontextprotocol/sdk": "catalog:",
+    "diff": "^8.0.3",
+    "mcp-shared": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.0.18",
-    "vitest": "^4.0.18"
+    "@types/diff": "^8.0.0",
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
   }
 }

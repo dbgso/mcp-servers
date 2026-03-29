@@ -7,6 +7,8 @@ import {
   NotExistsValidator,
   ExistsValidator,
 } from "./validators.js";
+import { parseFrontmatter, updateFrontmatter } from "../utils/frontmatter-parser.js";
+import { formatDocumentListItem } from "../utils/string-utils.js";
 
 export interface AddResult {
   success: boolean;
@@ -46,6 +48,13 @@ export class MarkdownReader {
   }
 
   /**
+   * Get the file path for a document ID (public accessor)
+   */
+  getFilePath(id: string): string {
+    return this.idToPath(id);
+  }
+
+  /**
    * Convert file path to hierarchical ID
    * "git/workflow.md" -> "git__workflow"
    */
@@ -72,8 +81,13 @@ export class MarkdownReader {
           summaries.push(...subDocs);
         } else if (entry.isFile() && entry.name.endsWith(".md")) {
           const id = this.pathToId(fullPath);
-          const description = await this.extractDescription(fullPath);
-          summaries.push({ id, description });
+          const metadata = await this.extractMetadata(fullPath);
+          summaries.push({
+            id,
+            description: metadata.description,
+            whenToUse: metadata.whenToUse,
+            relatedDocs: metadata.relatedDocs,
+          });
         }
       }
     } catch (error) {
@@ -216,7 +230,12 @@ export class MarkdownReader {
         lines.push("**Documents:**");
       }
       for (const doc of documents) {
-        lines.push(`- **${doc.id}**: ${doc.description}`);
+        lines.push(formatDocumentListItem({
+          id: doc.id,
+          description: doc.description,
+          whenToUse: doc.whenToUse,
+          relatedDocs: doc.relatedDocs,
+        }));
       }
     }
 
@@ -340,12 +359,23 @@ export class MarkdownReader {
     }
   }
 
+  /**
+   * Find documents that reference the given ID in their relatedDocs
+   */
+  async findBacklinks(id: string): Promise<MarkdownSummary[]> {
+    const cache = await this.getCache();
+    return cache.documents.filter(
+      (doc) => doc.relatedDocs?.includes(id)
+    );
+  }
+
   async renameDocument(params: {
     oldId: string;
     newId: string;
     overwrite?: boolean;
-  }): Promise<AddResult> {
-    const { oldId, newId, overwrite = false } = params;
+    updateBacklinks?: boolean;
+  }): Promise<AddResult & { updatedBacklinks?: string[] }> {
+    const { oldId, newId, overwrite = false, updateBacklinks = true } = params;
     const oldExists = await this.documentExists(oldId);
     if (!oldExists) {
       return {
@@ -382,14 +412,56 @@ export class MarkdownReader {
       const oldDir = path.dirname(oldPath);
       await this.removeEmptyDirs(oldDir);
 
+      // Update backlinks if enabled
+      const updatedBacklinks: string[] = [];
+      if (updateBacklinks) {
+        const backlinks = await this.findBacklinks(oldId);
+        for (const doc of backlinks) {
+          const updated = await this.updateRelatedDocsReference({
+            docId: doc.id,
+            oldRef: oldId,
+            newRef: newId,
+          });
+          if (updated) {
+            updatedBacklinks.push(doc.id);
+          }
+        }
+      }
+
       this.invalidateCache();
-      return { success: true };
+      return { success: true, updatedBacklinks };
     } catch (error) {
       return {
         success: false,
         error: `Failed to rename document: ${(error as Error).message}`,
       };
     }
+  }
+
+  /**
+   * Update a reference in a document's relatedDocs
+   */
+  private async updateRelatedDocsReference(params: {
+    docId: string;
+    oldRef: string;
+    newRef: string;
+  }): Promise<boolean> {
+    const { docId, oldRef, newRef } = params;
+    const content = await this.getDocumentContent(docId);
+    if (!content) return false;
+
+    const frontmatter = parseFrontmatter(content);
+    if (!frontmatter.relatedDocs?.includes(oldRef)) return false;
+
+    // Replace old reference with new
+    frontmatter.relatedDocs = frontmatter.relatedDocs.map((ref) =>
+      ref === oldRef ? newRef : ref
+    );
+
+    const newContent = updateFrontmatter({ content, frontmatter });
+    const filePath = this.idToPath(docId);
+    await fs.writeFile(filePath, newContent, "utf-8");
+    return true;
   }
 
   private async removeEmptyDirs(dir: string): Promise<void> {
@@ -410,16 +482,52 @@ export class MarkdownReader {
     }
   }
 
-  private async extractDescription(filePath: string): Promise<string> {
+  private async extractMetadata(
+    filePath: string
+  ): Promise<{ description: string; whenToUse?: string[]; relatedDocs?: string[] }> {
     try {
       const content = await fs.readFile(filePath, "utf-8");
-      return this.parseDescription(content);
+      return this.parseMetadata(content);
     } catch {
-      return "(Unable to read file)";
+      return { description: "(Unable to read file)" };
     }
   }
 
-  private parseDescription(content: string): string {
+  /**
+   * Parse metadata from content (frontmatter or first paragraph)
+   */
+  parseMetadata(content: string): {
+    description: string;
+    whenToUse?: string[];
+    relatedDocs?: string[];
+  } {
+    // Try frontmatter first
+    const frontmatter = parseFrontmatter(content);
+    if (frontmatter.description) {
+      return {
+        description: this.truncateDescription(frontmatter.description),
+        whenToUse: frontmatter.whenToUse,
+        relatedDocs: frontmatter.relatedDocs,
+      };
+    }
+
+    // Fallback to first paragraph after title (but still include metadata from frontmatter)
+    const description = this.parseDescriptionFromBody(content);
+    return {
+      description,
+      whenToUse: frontmatter.whenToUse,
+      relatedDocs: frontmatter.relatedDocs,
+    };
+  }
+
+  /**
+   * For validation - get just the description
+   */
+  parseDescription(content: string): string {
+    return this.parseMetadata(content).description;
+  }
+
+  private parseDescriptionFromBody(content: string): string {
     const lines = content.split("\n");
     let foundTitle = false;
     const descriptionLines: string[] = [];
@@ -452,7 +560,10 @@ export class MarkdownReader {
       return "(No description)";
     }
 
-    const description = descriptionLines.join(" ");
+    return this.truncateDescription(descriptionLines.join(" "));
+  }
+
+  private truncateDescription(description: string): string {
     const maxLength = 150;
     if (description.length > maxLength) {
       return description.slice(0, maxLength - 3) + "...";

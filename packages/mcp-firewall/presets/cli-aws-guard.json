@@ -1,0 +1,51 @@
+{
+  "name": "cli-aws-guard",
+  "description": "AWS CLI protection - blocks production profile and destructive operations",
+  "rules": [
+    {
+      "id": "block-aws-prod-profile",
+      "priority": 100,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "aws" },
+        { "param": "options.profile", "operator": "matches", "value": "(?i)^(prod|production|prd)$" }
+      ],
+      "description": "Block AWS commands with production profile"
+    },
+    {
+      "id": "block-aws-delete-operations",
+      "priority": 95,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "aws" },
+        { "param": "args", "operator": "matches", "value": "(?i)(delete|remove|terminate|destroy)" }
+      ],
+      "description": "Block destructive AWS operations"
+    },
+    {
+      "id": "ask-aws-modify-operations",
+      "priority": 90,
+      "action": "ask",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "aws" },
+        { "param": "args", "operator": "matches", "value": "(?i)(create|update|put|modify|stop|start)" }
+      ],
+      "description": "Require approval for AWS modify operations"
+    },
+    {
+      "id": "allow-aws-read-operations",
+      "priority": 50,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "aws" },
+        { "param": "args", "operator": "matches", "value": "(?i)(describe|list|get|show|ls)" }
+      ],
+      "description": "Allow AWS read-only operations"
+    }
+  ],
+  "defaultAction": "deny"
+}

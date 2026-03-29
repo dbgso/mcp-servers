@@ -31,27 +31,34 @@ jobs:
           registry-url: ${{ env.REGISTRY }}
           scope: ${{ env.SCOPE }}
 
+      - name: Resolve package name
+        id: pkg
+        run: |
+          PKG_DIR="packages/${{ inputs.package }}"
+          if [ ! -d "$PKG_DIR" ]; then
+            echo "::error::Package directory not found: $PKG_DIR"
+            exit 1
+          fi
+          PKG_NAME=$(jq -r .name "${PKG_DIR}/package.json")
+          echo "name=${PKG_NAME}" >> $GITHUB_OUTPUT
+          echo "dir=${PKG_DIR}" >> $GITHUB_OUTPUT
+
       - name: Build
-        run: pnpm --filter ...${{ inputs.package }} build
+        run: pnpm --filter "...${{ steps.pkg.outputs.name }}..." build
 
       - name: Test
-        run: pnpm --filter ...${{ inputs.package }} test
+        run: pnpm --filter "...${{ steps.pkg.outputs.name }}..." test
 
       - name: Publish to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.tag || 'snapshot' }}"
-          PKG="${{ inputs.package }}"
           SHORT_SHA="${GITHUB_SHA:0:7}"
           TIMESTAMP="$(date +%Y%m%d%H%M%S)"
           PRE_VERSION="0.0.0-${TAG}.${TIMESTAMP}.${SHORT_SHA}"
 
-          PKG_DIR="packages/${PKG}"
-          if [ ! -d "$PKG_DIR" ]; then
-            echo "::error::Package directory not found: $PKG_DIR"
-            exit 1
-          fi
+          PKG_DIR="${{ steps.pkg.outputs.dir }}"
 
           ORIGINAL_NAME=$(jq -r .name "${PKG_DIR}/package.json")
           SCOPED_NAME="${SCOPE}/${ORIGINAL_NAME}"

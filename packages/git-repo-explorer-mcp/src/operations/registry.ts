@@ -40,7 +40,7 @@ export function getOperationsByCategory(): Record<string, GitOperation[]> {
   const grouped: Record<string, GitOperation[]> = {};
   for (const op of allOperations) {
     if (!grouped[op.category]) grouped[op.category] = [];
-    grouped[op.category]!.push(op);
+    grouped[op.category].push(op);
   }
   return grouped;
 }

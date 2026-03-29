@@ -1,0 +1,19 @@
+= Lint Code Test
+
+This file has a code block without language.
+
+== Code Section
+
+This block has no language specified:
+
+----
+const x = 1;
+console.log(x);
+----
+
+This block has language:
+
+[source,javascript]
+----
+const y = 2;
+----

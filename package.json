@@ -8,7 +8,10 @@
   ],
   "scripts": {
     "build": "pnpm -r build",
+    "typecheck": "pnpm -r --parallel exec tsc --noEmit",
+    "lint": "eslint packages/*/src/**/*.ts",
     "test": "pnpm -r test",
+    "coverage": "pnpm -r --parallel exec vitest run --coverage",
     "dev": "pnpm -r --parallel dev",
     "changeset": "changeset",
     "version": "changeset version",
@@ -17,6 +20,9 @@
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
     "@types/node": "^22.15.21",
+    "@typescript-eslint/eslint-plugin": "^8.32.0",
+    "@typescript-eslint/parser": "^8.32.0",
+    "eslint": "^9.27.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   },

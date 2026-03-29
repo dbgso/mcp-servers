@@ -25,7 +25,7 @@ export function parseMarkdown(content: string): { meta: Record<string, unknown>;
 /**
  * Serialize document to markdown with frontmatter
  */
-export function serializeMarkdown(meta: DocumentMeta, content: string): string {
+export function serializeMarkdown({ meta, content }: { meta: DocumentMeta; content: string }): string {
   const frontmatter = stringifyYaml(meta);
   return `---\n${frontmatter}---\n\n${content}\n`;
 }
@@ -64,7 +64,7 @@ export class MarkdownStorage {
   /**
    * Get file path for a document type and ID
    */
-  private getFilePath(type: string, id: string): string {
+  private getFilePath({ type, id }: { type: string; id: string }): string {
     const typeDir = path.join(this.basePath, type);
     if (!existsSync(typeDir)) {
       mkdirSync(typeDir, { recursive: true });
@@ -80,7 +80,7 @@ export class MarkdownStorage {
     const types = this.getTypes();
 
     for (const type of types) {
-      const filePath = this.getFilePath(type, id);
+      const filePath = this.getFilePath({ type: type, id: id });
       if (existsSync(filePath)) {
         const content = readFileSync(filePath, "utf-8");
         const { meta, body } = parseMarkdown(content);
@@ -125,10 +125,7 @@ export class MarkdownStorage {
    * Create a new document
    */
   async create(
-    type: string,
-    title: string,
-    content: string,
-    requires?: string,
+    { type, title, content, requires }: { type: string; title: string; content: string; requires?: string },
   ): Promise<Document> {
     const id = generateId();
     const timestamp = now();
@@ -142,8 +139,8 @@ export class MarkdownStorage {
       updated: timestamp,
     };
 
-    const filePath = this.getFilePath(type, id);
-    const markdown = serializeMarkdown(meta, content);
+    const filePath = this.getFilePath({ type: type, id: id });
+    const markdown = serializeMarkdown({ meta: meta, content: content });
     writeFileSync(filePath, markdown, "utf-8");
 
     return { ...meta, content, filePath };
@@ -153,8 +150,7 @@ export class MarkdownStorage {
    * Update an existing document
    */
   async update(
-    id: string,
-    updates: { title?: string; content?: string },
+    { id, updates }: { id: string; updates: { title?: string; content?: string } },
   ): Promise<Document | null> {
     const doc = await this.read(id);
     if (!doc) return null;
@@ -167,8 +163,8 @@ export class MarkdownStorage {
     };
 
     const newContent = updates.content ?? doc.content;
-    const markdown = serializeMarkdown(newMeta, newContent);
-    const filePath = this.getFilePath(doc.type, id);
+    const markdown = serializeMarkdown({ meta: newMeta, content: newContent });
+    const filePath = this.getFilePath({ type: doc.type, id: id });
     writeFileSync(filePath, markdown, "utf-8");
 
     return { ...newMeta, content: newContent, filePath };

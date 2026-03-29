@@ -45,8 +45,12 @@ export function registerApplyTool(params: {
     "apply",
     {
       description:
-        "Promote drafts to confirmed documentation. Use this after user approves a draft. Moves document from drafts/ to the main documentation.",
+        "Promote drafts to docs. Call without args for help.",
       inputSchema: {
+        help: z
+          .boolean()
+          .optional()
+          .describe("Show help"),
         action: z
           .enum(["list", "promote"])
           .optional()
@@ -63,8 +67,8 @@ export function registerApplyTool(params: {
           ),
       },
     },
-    async ({ action, draftId, targetId }) => {
-      if (!action) {
+    async ({ help, action, draftId, targetId }) => {
+      if (help || !action) {
         return wrapResponse({
           result: {
             content: [{ type: "text" as const, text: APPLY_HELP }],
