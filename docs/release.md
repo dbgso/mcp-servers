@@ -90,6 +90,33 @@ Option 2: Add to `.changeset/config.json` ignore list
 }
 ```
 
+Use `private` for something that is not a published package at all (the shared
+libraries). Use `ignore` for something that *will* be published, but not yet —
+it says "later", where `private` says "never".
+
+## Releasing a package for the first time
+
+**Every publishable package is currently in `ignore`.** That is deliberate:
+`changeset publish` decides what to publish by comparing each package's version
+against the registry, not by looking at which changesets were merged. A package
+whose name is not yet registered therefore looks like "needs publishing" on
+every run, and one push to `main` would publish the whole set at once.
+
+So a package stays in `ignore` until it is genuinely ready, and releasing it is
+a deliberate act:
+
+1. Confirm the name is available and yours — `node scripts/bootstrap-npm-names.mjs`
+   reports `ours` / `free` / `TAKEN`. A `TAKEN` name belongs to another account
+   and can never be published to; it needs a rename or a scope first.
+2. Claim it and configure Trusted Publishing — see [npm bootstrap](./release/npm-bootstrap.md).
+3. Remove the package from `ignore` in `.changeset/config.json`.
+4. From then on it follows the normal flow: a changeset bumps it, the version PR
+   merges, and the release workflow publishes it.
+
+Removing a package from `ignore` publishes it on the next push to `main` if its
+version is ahead of the registry. Check that the version is the one you mean to
+release before you do.
+
 ## Commands
 
 | Command | Description |
