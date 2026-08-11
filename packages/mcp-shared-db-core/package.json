@@ -1,0 +1,35 @@
+{
+  "name": "mcp-shared-db-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DB-agnostic shared concepts (PII redaction, whitelist, list_tables/describe_table) for MCP database tools",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "mcp-shared": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "graph-math-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lightweight MCP server for graph theory calculations (topological sort, critical path, cycle detection) using NetworkX",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/graph-math-mcp"
+  }
+}

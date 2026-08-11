@@ -1,0 +1,35 @@
+= Document with Preserved Elements
+:toc:
+:sectnums:
+:author: Test Author
+:version: 1.0.0
+
+// This is a single-line comment
+
+This is the preamble paragraph.
+
+== First Section
+
+Some content here.
+
+include::partial.adoc[]
+
+More content after include.
+
+// Another comment
+
+=== Subsection
+
+////
+This is a block comment.
+It spans multiple lines.
+////
+
+List of items:
+
+* Item one
+* Item two
+
+== Second Section
+
+Final paragraph.

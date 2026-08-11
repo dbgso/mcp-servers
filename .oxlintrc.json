@@ -1,0 +1,45 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "jsPlugins": ["./eslint-rules/index.js"],
+  "ignorePatterns": [
+    "node_modules/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "eslint-rules/**",
+    "packages/ast-typescript-mcp/**"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "builtin": true
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "prefer-const": "error",
+    "custom/single-params-object": [
+      "error",
+      {
+        "maxParams": 1,
+        "ignoreConstructors": true,
+        "ignoreMethods": ["execute", "action", "check"]
+      }
+    ],
+    "no-useless-escape": "off",
+    "typescript/no-this-alias": "off",
+    "unicorn/prefer-string-starts-ends-with": "off"
+  },
+  "overrides": [
+    {
+      "files": ["packages/**/__tests__/**/*.ts", "packages/**/*.test.ts"],
+      "rules": {
+        "custom/single-params-object": "off",
+        "typescript/no-non-null-assertion": "off"
+      }
+    }
+  ]
+}

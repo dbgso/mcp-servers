@@ -1,0 +1,9 @@
+= DX Auth Documentation
+
+Documentation index with Antora-style xrefs.
+
+== Architecture
+
+* xref:architecture/overview.adoc[Overview]
+* xref:architecture/auth0.adoc[Auth0]
+* xref:architecture/backend.adoc[Backend]

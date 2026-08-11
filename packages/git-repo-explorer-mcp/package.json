@@ -1,0 +1,57 @@
+{
+  "name": "git-repo-explorer-mcp",
+  "version": "0.1.1",
+  "description": "MCP server for exploring git repositories with worktree support",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "git-repo-explorer-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && tsup && node ../../scripts/verify-bundle.mjs .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "git",
+    "repository",
+    "worktree",
+    "model-context-protocol"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/git-repo-explorer-mcp"
+  },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/main/packages/git-repo-explorer-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:git-repo-explorer-mcp"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "catalog:",
+    "zod-to-json-schema": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:",
+    "mcp-shared": "workspace:*",
+    "tsup": "catalog:"
+  }
+}

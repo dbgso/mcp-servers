@@ -1,0 +1,58 @@
+{
+  "name": "playwright-safe",
+  "description": "Safe Playwright browser automation - blocks dangerous operations",
+  "rules": [
+    {
+      "id": "block-dangerous-buttons",
+      "priority": 100,
+      "action": "deny",
+      "toolPattern": "browser_click",
+      "conditions": [
+        { "param": "element", "operator": "matches", "value": "(?i)(delete|remove|destroy|drop|reset|clear all)" }
+      ],
+      "description": "Block clicking dangerous buttons"
+    },
+    {
+      "id": "ask-form-submit",
+      "priority": 90,
+      "action": "ask",
+      "toolPattern": "browser_click",
+      "conditions": [
+        { "param": "element", "operator": "matches", "value": "(?i)(submit|confirm|proceed|checkout|pay)" }
+      ],
+      "description": "Require approval for form submissions"
+    },
+    {
+      "id": "block-external-navigation",
+      "priority": 80,
+      "action": "deny",
+      "toolPattern": "browser_navigate",
+      "conditions": [
+        { "param": "url", "operator": "matches", "value": "^https?://(?!localhost|127\\.0\\.0\\.1)" }
+      ],
+      "description": "Block navigation to external sites (allow localhost only)"
+    },
+    {
+      "id": "block-js-eval",
+      "priority": 70,
+      "action": "deny",
+      "toolPattern": "browser_evaluate",
+      "description": "Block arbitrary JavaScript execution"
+    },
+    {
+      "id": "block-file-upload",
+      "priority": 60,
+      "action": "ask",
+      "toolPattern": "browser_file_upload",
+      "description": "Require approval for file uploads"
+    },
+    {
+      "id": "allow-safe-operations",
+      "priority": 10,
+      "action": "allow",
+      "toolPattern": "browser_*",
+      "description": "Allow other browser operations"
+    }
+  ],
+  "defaultAction": "deny"
+}

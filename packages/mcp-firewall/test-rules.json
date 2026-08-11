@@ -1,0 +1,29 @@
+{
+  "rules": [
+    {
+      "id": "allow-describe",
+      "priority": 100,
+      "action": "allow",
+      "toolPattern": "git_describe",
+      "description": "Allow git_describe"
+    },
+    {
+      "id": "block-log",
+      "priority": 90,
+      "action": "deny",
+      "toolPattern": "git_execute",
+      "conditions": [
+        { "param": "operation", "operator": "equals", "value": "log" }
+      ],
+      "description": "Block git log operation"
+    },
+    {
+      "id": "allow-git-execute",
+      "priority": 50,
+      "action": "allow",
+      "toolPattern": "git_execute",
+      "description": "Allow other git operations"
+    }
+  ],
+  "defaultAction": "deny"
+}

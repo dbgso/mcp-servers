@@ -1,0 +1,29 @@
+# Local cloud emulator for tests — real engines, not mocks.
+#
+# floci runs the AWS API surface on :4566 (LocalStack-compatible). Tests that
+# exercise the real `aws` CLI / SDK path (e.g. mcp-shared-secrets) point at it
+# via AWS_ENDPOINT_URL=http://localhost:4566 with dummy creds, instead of
+# injecting a fake spawnFn. CI brings this up before the test job.
+#
+#   docker compose up -d floci
+#   export AWS_ENDPOINT_URL=http://localhost:4566 AWS_ACCESS_KEY_ID=test \
+#          AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1
+services:
+  floci:
+    # Pinned (not :latest) for reproducible CI. Update tag+digest deliberately.
+    image: floci/floci:1.6.0@sha256:eab36252ea43a4a73928423f0372219052c5c6f87207f6c4754db14b91d6ed30
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    # Lets `docker compose up --wait floci` block until the emulator is ready,
+    # so callers never hand-roll a polling loop. curl ships in the image.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4566/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 2s

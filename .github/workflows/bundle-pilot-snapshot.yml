@@ -1,0 +1,26 @@
+name: Bundle Pilot Snapshot
+
+# Publishes the tsup-bundled pilot package to GitHub Packages on every push to
+# the pilot branch, so the bundle can be exercised as a real registry install
+# rather than only as a local `pnpm pack` tarball.
+#
+# Temporary: delete this workflow once the bundling rollout is merged and
+# `release.yml` publishes the whole set.
+on:
+  push:
+    branches:
+      - chore/npm-bundle-publish
+
+concurrency:
+  group: bundle-pilot-snapshot
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/gpr-release.yml
+    with:
+      package: kroki-mcp
+      tag: bundle-pilot

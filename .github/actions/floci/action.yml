@@ -1,0 +1,40 @@
+name: "floci AWS emulator"
+description: >
+  Start the floci local AWS emulator via docker compose, wait until it is
+  healthy, and export AWS_* environment variables pointing at it so subsequent
+  steps exercise the real AWS path (not mocks). Reusable across workflows.
+
+inputs:
+  compose-file:
+    description: "Path to the compose file that defines the `floci` service."
+    required: false
+    default: compose.yaml
+  endpoint:
+    description: "Endpoint URL to export as AWS_ENDPOINT_URL."
+    required: false
+    default: http://localhost:4566
+  region:
+    description: "Value to export as AWS_REGION."
+    required: false
+    default: us-east-1
+
+runs:
+  using: composite
+  steps:
+    # `--wait` blocks on the service healthcheck (defined in the compose file),
+    # so there is no hand-rolled readiness loop and no fixed sleep.
+    - name: Start floci and wait until healthy
+      shell: bash
+      run: docker compose -f "${{ inputs.compose-file }}" up -d --wait floci
+
+    # Dummy creds — floci accepts anything. Exported to $GITHUB_ENV so every
+    # later step in the job sees the emulator.
+    - name: Export AWS environment for the emulator
+      shell: bash
+      run: |
+        {
+          echo "AWS_ENDPOINT_URL=${{ inputs.endpoint }}"
+          echo "AWS_ACCESS_KEY_ID=test"
+          echo "AWS_SECRET_ACCESS_KEY=test"
+          echo "AWS_REGION=${{ inputs.region }}"
+        } >> "$GITHUB_ENV"

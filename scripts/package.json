@@ -1,0 +1,14 @@
+{
+  "name": "mcp-servers-scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Repository build/verification scripts (never published)",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "catalog:"
+  }
+}

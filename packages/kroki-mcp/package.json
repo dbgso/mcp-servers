@@ -1,0 +1,58 @@
+{
+  "name": "kroki-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for diagram rendering via Kroki with usage guidelines",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "kroki-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && tsup && node ../../scripts/verify-bundle.mjs .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "kroki",
+    "diagram",
+    "mermaid",
+    "plantuml",
+    "d2",
+    "model-context-protocol"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/kroki-mcp"
+  },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/main/packages/kroki-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:kroki-mcp"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "mcp-shared": "workspace:*",
+    "tsup": "catalog:",
+    "vitest": "catalog:"
+  }
+}

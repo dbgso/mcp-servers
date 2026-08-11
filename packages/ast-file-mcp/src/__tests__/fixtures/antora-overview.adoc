@@ -1,0 +1,24 @@
+= System Overview
+
+Overview of the system architecture.
+
+== Components
+
+=== Frontend
+
+The frontend application.
+
+See xref:frontend.adoc[Frontend Architecture] for details.
+
+=== Backend
+
+The backend services.
+
+== Data Flow
+
+include::partial$data-flow.adoc[]
+
+== Related
+
+* xref:auth0.adoc[Auth0 Architecture]
+* xref:infrastructure.adoc[Infrastructure]

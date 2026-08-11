@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          registry-url: 'https://registry.npmjs.org'
+
+      # Kept even though pnpm now drives the publish: OIDC trusted publishing is
+      # an npm-CLI capability, and pnpm 10.x has none of its own (pnpm gained it
+      # in 11.x). If the first real release fails to authenticate, that version
+      # gap is the first thing to check.
+      - name: Update npm for OIDC support
+        run: npm install -g npm@latest && npm --version
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      # One step covers both halves of the release: with changesets pending it
+      # opens the version PR, and once that PR is merged it publishes. `pnpm
+      # release` is the documented entry point (build + changeset publish), and
+      # changesets runs `pnpm publish` in a pnpm workspace -- which is what
+      # replaces the `catalog:` and `workspace:` specifiers with real versions.
+      - name: Create Release Pull Request or Publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm run version
+          publish: pnpm release
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Create Docker release tags
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          # Find packages with Dockerfile and create git tags
+          for pkg_dir in packages/*/; do
+            if [ -f "${pkg_dir}Dockerfile" ] && [ -f "${pkg_dir}package.json" ]; then
+              name=$(basename "$pkg_dir")
+              version=$(jq -r .version "${pkg_dir}package.json")
+              tag="${name}-v${version}"
+
+              # Check if tag already exists
+              if ! git rev-parse "$tag" >/dev/null 2>&1; then
+                echo "Creating tag: $tag"
+                git tag "$tag"
+                git push origin "$tag"
+              else
+                echo "Tag already exists: $tag"
+              fi
+            fi
+          done

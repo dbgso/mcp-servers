@@ -1,0 +1,46 @@
+{
+  "rules": [
+    {
+      "id": "block-prod-profile",
+      "priority": 100,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "args", "operator": "contains", "value": "prod" }
+      ],
+      "description": "prodプロファイルは禁止"
+    },
+    {
+      "id": "allow-cloudwatch-dev",
+      "priority": 90,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "aws" },
+        { "param": "args", "operator": "contains", "value": "logs" }
+      ],
+      "description": "CloudWatch Logsは許可"
+    },
+    {
+      "id": "allow-stats-count",
+      "priority": 80,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "args", "operator": "contains", "value": "stats count" }
+      ],
+      "description": "stats countは許可"
+    },
+    {
+      "id": "allow-ls-commands",
+      "priority": 70,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "matches", "value": "^(ls|echo|pwd)$" }
+      ],
+      "description": "安全なコマンドは許可"
+    }
+  ],
+  "defaultAction": "deny"
+}

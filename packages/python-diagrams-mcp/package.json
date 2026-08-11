@@ -1,0 +1,12 @@
+{
+  "name": "python-diagrams-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server for rendering Python diagrams library code via Docker (versioned by Changesets, published to DockerHub)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/python-diagrams-mcp"
+  }
+}

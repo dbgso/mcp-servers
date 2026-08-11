@@ -1,0 +1,46 @@
+{
+  "name": "mcp-shared-db-codegen",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DB schema introspection and codegen library for metadata.ts / selectable-fields.ts templates",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "mcp-shared": "workspace:*",
+    "mcp-shared-db-core": "workspace:*",
+    "pg": "8.11.0",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "mysql2": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "mysql2": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "mysql2": ">=3.0.0",
+    "vitest": "catalog:"
+  }
+}

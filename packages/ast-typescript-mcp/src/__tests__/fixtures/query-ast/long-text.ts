@@ -1,0 +1,4 @@
+// Fixture for text truncation test
+if (someVeryLongVariableNameThatExceedsTwoHundredCharactersWhenCombinedWithTheRestOfTheExpressionAndEvenMoreText instanceof SomeVeryLongClassNameThatAlsoExceedsTwoHundredCharactersWhenCombinedWithTheRestOfTheExpressionAndExtraChars) {
+  doSomething();
+}

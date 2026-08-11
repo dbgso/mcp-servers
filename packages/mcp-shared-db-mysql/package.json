@@ -1,0 +1,47 @@
+{
+  "name": "mcp-shared-db-mysql",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MySQL DataSource implementation for mcp-shared-db, backed by mysql2",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "mcp-shared-db": "workspace:*",
+    "mcp-shared-db-core": "workspace:*",
+    "mcp-shared-db-sql": "workspace:*"
+  },
+  "peerDependencies": {
+    "mysql2": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "mysql2": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "mcp-shared": "workspace:*",
+    "mcp-shared-db-codegen": "workspace:*",
+    "mcp-shared-secrets": "workspace:*",
+    "vitest": "catalog:"
+  }
+}

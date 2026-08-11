@@ -1,0 +1,89 @@
+{
+  "name": "cli-git-safe",
+  "description": "Git CLI safeguards - prevents force push and destructive operations",
+  "rules": [
+    {
+      "id": "block-force-push-main",
+      "priority": 100,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "git" },
+        { "param": "args[0]", "operator": "equals", "value": "push" },
+        { "param": "args", "operator": "contains", "value": "--force" },
+        { "param": "args", "operator": "matches", "value": "(main|master)" }
+      ],
+      "description": "Block force push to main/master branch"
+    },
+    {
+      "id": "block-force-push-f",
+      "priority": 99,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "git" },
+        { "param": "args[0]", "operator": "equals", "value": "push" },
+        { "param": "args", "operator": "contains", "value": "-f" },
+        { "param": "args", "operator": "matches", "value": "(main|master)" }
+      ],
+      "description": "Block force push (-f) to main/master branch"
+    },
+    {
+      "id": "block-hard-reset",
+      "priority": 95,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "git" },
+        { "param": "args[0]", "operator": "equals", "value": "reset" },
+        { "param": "args", "operator": "contains", "value": "--hard" }
+      ],
+      "description": "Block git reset --hard"
+    },
+    {
+      "id": "ask-push-to-remote",
+      "priority": 80,
+      "action": "ask",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "git" },
+        { "param": "args[0]", "operator": "equals", "value": "push" }
+      ],
+      "description": "Require approval for git push"
+    },
+    {
+      "id": "ask-rebase",
+      "priority": 75,
+      "action": "ask",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "git" },
+        { "param": "args[0]", "operator": "equals", "value": "rebase" }
+      ],
+      "description": "Require approval for git rebase"
+    },
+    {
+      "id": "allow-git-read-operations",
+      "priority": 50,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "git" },
+        { "param": "args[0]", "operator": "matches", "value": "^(status|log|diff|show|branch|remote|fetch|ls-files)$" }
+      ],
+      "description": "Allow git read-only operations"
+    },
+    {
+      "id": "allow-git-local-operations",
+      "priority": 40,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "git" },
+        { "param": "args[0]", "operator": "matches", "value": "^(add|commit|checkout|stash|pull)$" }
+      ],
+      "description": "Allow git local operations"
+    }
+  ],
+  "defaultAction": "deny"
+}

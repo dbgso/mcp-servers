@@ -1,0 +1,71 @@
+{
+  "name": "db-read-mcp",
+  "version": "0.1.0",
+  "description": "MCP server: read-only relational DB access driven by user-supplied metadata.ts + selectable-fields.ts",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "db-read-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && tsup && node ../../scripts/verify-bundle.mjs .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "database",
+    "postgres",
+    "read-only",
+    "metadata"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/db-read-mcp"
+  },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/main/packages/db-read-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:db-read-mcp"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:"
+  },
+  "peerDependencies": {
+    "mysql2": ">=3.0.0",
+    "pg": "8.11.0"
+  },
+  "peerDependenciesMeta": {
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "mcp-shared": "workspace:*",
+    "mcp-shared-db": "workspace:*",
+    "mcp-shared-db-core": "workspace:*",
+    "mcp-shared-db-mysql": "workspace:*",
+    "mcp-shared-db-postgres": "workspace:*",
+    "mcp-shared-secrets": "workspace:*",
+    "tsup": "catalog:",
+    "vitest": "catalog:"
+  }
+}

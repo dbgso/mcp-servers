@@ -1,0 +1,40 @@
+{
+  "rules": [
+    {
+      "priority": 100,
+      "action": "allow",
+      "toolPattern": "browser_navigate",
+      "conditions": [
+        {
+          "param": "url",
+          "operator": "contains",
+          "value": "google"
+        }
+      ],
+      "description": "Googleへのアクセスを許可",
+      "id": "01KKQYZSC99CDHZHPBV3345BNC"
+    },
+    {
+      "priority": 100,
+      "action": "allow",
+      "toolPattern": "browser_click",
+      "conditions": [
+        {
+          "param": "element",
+          "operator": "contains",
+          "value": "Feeling Lucky"
+        }
+      ],
+      "description": "Feeling Luckyボタンのみクリック許可",
+      "id": "01KKQZ00DF8R2FX9TQAYSB7G5E"
+    },
+    {
+      "priority": 50,
+      "action": "allow",
+      "toolPattern": "browser_snapshot",
+      "description": "スナップショット取得を許可",
+      "id": "01KKQZ05AY9TH6E6Y8B6P47ZQV"
+    }
+  ],
+  "defaultAction": "deny"
+}

@@ -1,0 +1,118 @@
+name: GitHub Packages Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to publish (e.g. interactive-instruction-mcp)'
+        required: true
+        type: string
+      tag:
+        description: 'Pre-release tag (default: snapshot)'
+        required: false
+        default: 'snapshot'
+        type: string
+  # Callable so branch-scoped workflows can publish a snapshot without
+  # duplicating the publish logic.
+  workflow_call:
+    inputs:
+      package:
+        description: 'Package to publish (e.g. interactive-instruction-mcp)'
+        required: true
+        type: string
+      tag:
+        description: 'Pre-release tag (default: snapshot)'
+        required: false
+        default: 'snapshot'
+        type: string
+
+env:
+  REGISTRY: https://npm.pkg.github.com
+  SCOPE: '@dbgso'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          registry-url: ${{ env.REGISTRY }}
+          scope: ${{ env.SCOPE }}
+
+      - name: Resolve package name
+        id: pkg
+        run: |
+          PKG_DIR="packages/${{ inputs.package }}"
+          if [ ! -d "$PKG_DIR" ]; then
+            echo "::error::Package directory not found: $PKG_DIR"
+            exit 1
+          fi
+          PKG_NAME=$(jq -r .name "${PKG_DIR}/package.json")
+          {
+            echo "name=${PKG_NAME}"
+            echo "dir=${PKG_DIR}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: pnpm --filter "...${{ steps.pkg.outputs.name }}..." build
+
+      - name: Test
+        run: pnpm --filter "...${{ steps.pkg.outputs.name }}..." test
+
+      - name: Publish to GitHub Packages
+        id: publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag || 'snapshot' }}"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          TIMESTAMP="$(date +%Y%m%d%H%M%S)"
+          PRE_VERSION="0.0.0-${TAG}.${TIMESTAMP}.${SHORT_SHA}"
+
+          PKG_DIR="${{ steps.pkg.outputs.dir }}"
+
+          ORIGINAL_NAME=$(jq -r .name "${PKG_DIR}/package.json")
+          SCOPED_NAME="${SCOPE}/${ORIGINAL_NAME}"
+
+          echo "📦 Publishing ${SCOPED_NAME}@${PRE_VERSION}"
+
+          # Temporarily update package.json for GitHub Packages
+          jq --arg name "$SCOPED_NAME" \
+             --arg version "$PRE_VERSION" \
+             --arg registry "${{ env.REGISTRY }}" \
+             '.name = $name | .version = $version | .publishConfig = { "registry": $registry, "access": "public" }' \
+             "${PKG_DIR}/package.json" > "${PKG_DIR}/package.json.tmp"
+          mv "${PKG_DIR}/package.json.tmp" "${PKG_DIR}/package.json"
+
+          # Publish (pnpm resolves catalog: and workspace: protocols)
+          cd "$PKG_DIR"
+          pnpm publish --no-git-checks --tag "$TAG"
+
+          echo "✅ Published ${SCOPED_NAME}@${PRE_VERSION}"
+          {
+            echo "name=${SCOPED_NAME}"
+            echo "version=${PRE_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
+      # The point of a snapshot is trying it, so hand over a command that runs
+      # as-is against GitHub Packages (which always requires auth, even public).
+      - name: Summary
+        env:
+          PKG: ${{ steps.publish.outputs.name }}@${{ steps.publish.outputs.version }}
+        run: |
+          # \$(gh auth token) stays literal: it is for the reader to run, not us.
+          NPX_CMD="npx --yes --${SCOPE}:registry=${REGISTRY} --${REGISTRY#https:}/:_authToken=\$(gh auth token) ${PKG}"
+          {
+            echo "## Published \`${PKG}\`"
+            echo
+            echo "Run it standalone (GitHub Packages requires a token even for public packages):"
+            echo
+            echo '```sh'
+            echo "${NPX_CMD}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

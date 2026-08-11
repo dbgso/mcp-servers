@@ -1,0 +1,47 @@
+{
+  "name": "traceable-chain-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server for traceable document chains with enforced dependencies",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "traceable-chain-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "traceable",
+    "document",
+    "chain",
+    "workflow"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "mcp-shared": "workspace:*",
+    "ulid": "catalog:",
+    "yaml": "2.7.0",
+    "zod": "catalog:",
+    "zod-to-json-schema": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
+  }
+}

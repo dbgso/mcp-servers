@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mcp-git-repo-explorer": {
+      "command": "npx",
+      "args": ["tsx", "./src/index.ts", "/tmp/mcp-git-repos", "--remind-mcp"]
+    }
+  }
+}

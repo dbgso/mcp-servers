@@ -1,0 +1,59 @@
+{
+  "name": "duckdb-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for DuckDB SQL queries on CSV/JSON/Parquet files",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "duckdb-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && tsup && node ../../scripts/verify-bundle.mjs .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "duckdb",
+    "sql",
+    "csv",
+    "json",
+    "parquet",
+    "model-context-protocol"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/duckdb-mcp"
+  },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/main/packages/duckdb-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:duckdb-mcp"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "catalog:",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "mcp-shared": "workspace:*",
+    "tsup": "catalog:",
+    "vitest": "catalog:"
+  }
+}

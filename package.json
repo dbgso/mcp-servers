@@ -1,0 +1,32 @@
+{
+  "name": "mcp-servers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo for MCP servers",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "clean": "pnpm -r --parallel exec sh -c 'rm -rf dist tsconfig.tsbuildinfo'",
+    "typecheck": "pnpm build && pnpm -r --parallel exec sh -c '[ -f tsconfig.json ] || exit 0; exec tsc --noEmit'",
+    "lint": "oxlint packages/*/src",
+    "test": "pnpm -r test",
+    "coverage": "pnpm -r --parallel exec vitest run --coverage",
+    "dev": "pnpm -r --parallel dev",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "catalog:",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  },
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "name": "cli-docker-safe",
+  "description": "Docker CLI safeguards - prevents privileged containers and dangerous mounts",
+  "rules": [
+    {
+      "id": "block-privileged-containers",
+      "priority": 100,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "docker" },
+        { "param": "options.privileged", "operator": "equals", "value": true }
+      ],
+      "description": "Block privileged Docker containers"
+    },
+    {
+      "id": "block-host-network",
+      "priority": 95,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "docker" },
+        { "param": "options.network", "operator": "equals", "value": "host" }
+      ],
+      "description": "Block host network mode"
+    },
+    {
+      "id": "block-dangerous-mounts",
+      "priority": 90,
+      "action": "deny",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "docker" },
+        { "param": "options.volume", "operator": "matches", "value": "(/etc|/var/run/docker.sock|/root|/home)" }
+      ],
+      "description": "Block mounting sensitive host paths"
+    },
+    {
+      "id": "ask-docker-run",
+      "priority": 80,
+      "action": "ask",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "docker" },
+        { "param": "args[0]", "operator": "equals", "value": "run" }
+      ],
+      "description": "Require approval for docker run"
+    },
+    {
+      "id": "ask-docker-exec",
+      "priority": 75,
+      "action": "ask",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "docker" },
+        { "param": "args[0]", "operator": "equals", "value": "exec" }
+      ],
+      "description": "Require approval for docker exec"
+    },
+    {
+      "id": "allow-docker-info-operations",
+      "priority": 50,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "docker" },
+        { "param": "args[0]", "operator": "matches", "value": "^(ps|images|logs|inspect|stats|version|info)$" }
+      ],
+      "description": "Allow docker info/read operations"
+    },
+    {
+      "id": "allow-docker-build",
+      "priority": 40,
+      "action": "allow",
+      "toolPattern": "cli_execute",
+      "conditions": [
+        { "param": "command", "operator": "equals", "value": "docker" },
+        { "param": "args[0]", "operator": "equals", "value": "build" }
+      ],
+      "description": "Allow docker build"
+    }
+  ],
+  "defaultAction": "deny"
+}
