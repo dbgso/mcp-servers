@@ -1,6 +1,7 @@
 {
   "name": "mcp-firewall",
   "version": "0.1.0",
+  "private": true,
   "description": "Rule-based firewall for MCP servers - allow, deny, or require approval for tool calls",
   "type": "module",
   "main": "dist/index.js",

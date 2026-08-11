@@ -7,19 +7,7 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": [
-    "ast-file-mcp",
-    "ast-typescript-mcp",
-    "cli-to-mcp",
-    "db-codegen-mcp",
-    "db-read-mcp",
-    "duckdb-mcp",
-    "git-repo-explorer-mcp",
-    "interactive-pdca-mcp",
-    "kroki-mcp",
-    "mcp-firewall",
-    "mcp-interactive-instruction"
-  ],
+  "ignore": [],
   "privatePackages": {
     "version": true,
     "tag": false

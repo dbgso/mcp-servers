@@ -1,6 +1,7 @@
 {
   "name": "ast-typescript-mcp",
   "version": "0.1.0",
+  "private": true,
   "description": "MCP server for TypeScript AST read/write using ts-morph",
   "type": "module",
   "main": "dist/index.js",

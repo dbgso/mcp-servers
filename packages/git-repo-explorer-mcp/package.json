@@ -1,6 +1,7 @@
 {
   "name": "git-repo-explorer-mcp",
   "version": "0.1.1",
+  "private": true,
   "description": "MCP server for exploring git repositories with worktree support",
   "type": "module",
   "main": "dist/index.js",

@@ -1,6 +1,7 @@
 {
   "name": "db-read-mcp",
   "version": "0.1.0",
+  "private": true,
   "description": "MCP server: read-only relational DB access driven by user-supplied metadata.ts + selectable-fields.ts",
   "type": "module",
   "main": "dist/index.js",

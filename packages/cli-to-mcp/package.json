@@ -1,6 +1,7 @@
 {
   "name": "cli-to-mcp",
   "version": "0.1.0",
+  "private": true,
   "description": "Expose CLI commands as MCP tools",
   "type": "module",
   "main": "dist/index.js",

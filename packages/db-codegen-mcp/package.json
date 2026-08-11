@@ -1,6 +1,7 @@
 {
   "name": "db-codegen-mcp",
   "version": "0.1.0",
+  "private": true,
   "description": "MCP server: read-only DB schema introspection + metadata.ts / selectable-fields.ts codegen",
   "type": "module",
   "main": "dist/index.js",

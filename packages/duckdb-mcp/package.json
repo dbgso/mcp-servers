@@ -1,6 +1,7 @@
 {
   "name": "duckdb-mcp",
   "version": "0.1.0",
+  "private": true,
   "description": "MCP server for DuckDB SQL queries on CSV/JSON/Parquet files",
   "type": "module",
   "main": "dist/index.js",
