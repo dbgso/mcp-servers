@@ -65,6 +65,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # A published version is immutable here the way it is on npm. Without this,
+      # a re-tag -- or a tag created while reconciling versions with what is
+      # already released -- rebuilds from whatever the source looks like now and
+      # overwrites an image someone may already be running under that number.
+      - name: Refuse to overwrite a published version
+        run: |
+          image="${{ steps.parse.outputs.image }}"
+          version="${{ steps.parse.outputs.version }}"
+          if docker manifest inspect "${image}:${version}" >/dev/null 2>&1; then
+            echo "::error::${image}:${version} is already published. Bump the version to release again."
+            exit 1
+          fi
+          echo "${image}:${version} is not published yet; proceeding."
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
