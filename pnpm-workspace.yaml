@@ -4,6 +4,12 @@ packages:
   # everything else; private, so it is never published.
   - scripts
 
+# pnpm 11 refuses to install while a dependency's build script is neither
+# approved nor declined. esbuild's puts its platform binary in place, and tsup
+# runs on esbuild, so the publishable bundles depend on it.
+allowBuilds:
+  esbuild: true
+
 catalog:
   '@duckdb/node-api': 1.5.2-r.1
   '@changesets/cli': 2.29.8
