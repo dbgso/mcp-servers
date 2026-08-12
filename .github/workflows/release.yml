@@ -17,6 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The Docker tagging step compares each version against the previous
+          # commit, so the parent has to be fetched.
+          fetch-depth: 2
       - uses: ./.github/actions/setup-node-pnpm
         with:
           registry-url: 'https://registry.npmjs.org'
@@ -51,23 +55,35 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
 
-      - name: Create Docker release tags
-        if: steps.changesets.outputs.hasChangesets == 'false'
+      # A version bump is what makes a release, for a Docker package as much as
+      # for an npm one -- so this tags only what this push actually bumped, and
+      # the tag is what docker-release.yml builds from.
+      #
+      # Reacting to the push itself instead would tag on every merge to main,
+      # and on a repository whose tags do not exist yet it would tag everything
+      # at once the first time it ran.
+      - name: Tag Docker packages whose version changed
         run: |
-          # Find packages with Dockerfile and create git tags
           for pkg_dir in packages/*/; do
-            if [ -f "${pkg_dir}Dockerfile" ] && [ -f "${pkg_dir}package.json" ]; then
-              name=$(basename "$pkg_dir")
-              version=$(jq -r .version "${pkg_dir}package.json")
-              tag="${name}-v${version}"
+            [ -f "${pkg_dir}Dockerfile" ] || continue
+            [ -f "${pkg_dir}package.json" ] || continue
 
-              # Check if tag already exists
-              if ! git rev-parse "$tag" >/dev/null 2>&1; then
-                echo "Creating tag: $tag"
-                git tag "$tag"
-                git push origin "$tag"
-              else
-                echo "Tag already exists: $tag"
-              fi
+            name=$(basename "$pkg_dir")
+            version=$(jq -r .version "${pkg_dir}package.json")
+            previous=$(git show "HEAD^:${pkg_dir}package.json" 2>/dev/null | jq -r .version 2>/dev/null || true)
+
+            if [ "$version" = "$previous" ]; then
+              echo "$name: unchanged at $version"
+              continue
             fi
+
+            tag="${name}-v${version}"
+            if git rev-parse "$tag" >/dev/null 2>&1; then
+              echo "$name: $tag already exists"
+              continue
+            fi
+
+            echo "$name: ${previous:-none} -> $version, tagging $tag"
+            git tag "$tag"
+            git push origin "$tag"
           done
