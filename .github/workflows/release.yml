@@ -43,22 +43,20 @@ jobs:
           fi
           echo "No static npm credential in scope; the publish will authenticate over OIDC."
 
-      # pnpm 11 runs the OIDC exchange itself, so the runner's npm is not in the
-      # publish path. Kept as a cheap fallback for any code path that still
-      # shells out to npm; the runner ships a version too old to do OIDC.
-      - name: Update npm for OIDC support
-        run: npm install -g npm@latest && npm --version
-
       # A rejected publish comes back as `E404 undefined`, which reads as "no
       # such package" but means "this identity may not write here" -- npm hides
       # which. Worse, pnpm treats a failed exchange as a warning and publishes
-      # unauthenticated anyway, so the misconfiguration only ever surfaces as
-      # that same 404 at the very end of a release.
+      # unauthenticated anyway, so the misconfiguration surfaces only as that
+      # same 404, minutes later, from inside output changesets captured.
       #
-      # This is the exact call pnpm makes, run early and reported plainly, so
-      # the trusted-publisher setup is distinguishable from the release itself.
-      # It only reports: a release with no publishable packages must not fail
-      # over npm configuration, and the publish reports its own failure.
+      # This is the exact exchange pnpm performs, run early and reported
+      # plainly. On success it says one line per package; on refusal it prints
+      # the claims npm matched against, because npm names neither the claim
+      # that disagreed nor what it expected. Claims are signed metadata, not
+      # credentials, and the token itself stays masked.
+      #
+      # It reports rather than gates: a release that publishes nothing must not
+      # fail over npm configuration, and the publish reports its own failure.
       - name: Check whether npm accepts our OIDC identity
         env:
           REGISTRY: https://registry.npmjs.org
@@ -66,27 +64,6 @@ jobs:
           id_token=$(curl -fsS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" | jq -r .value)
           echo "::add-mask::$id_token"
-
-          # npm matches a trusted publisher against these claims and will not
-          # say which one disagreed -- it answers "package not found" either
-          # way. Printing them turns "npm refuses us" into a value-by-value
-          # comparison against the form on the package's access page. They are
-          # signed metadata, not credentials; the token itself stays masked.
-          #
-          # The ids matter as much as the names here. This repository replaced
-          # an earlier one of the same name, so `dbgso/mcp-servers` has meant
-          # two different repositories -- and only one of them is the one a
-          # configuration written before the rebuild would be pinned to.
-          if [ -n "$id_token" ] && [ "$id_token" != "null" ]; then
-            echo "The identity npm is being asked to trust:"
-            ID_TOKEN="$id_token" node -e '
-              const c = JSON.parse(Buffer.from(process.env.ID_TOKEN.split(".")[1], "base64url").toString());
-              for (const k of ["repository", "repository_id", "repository_owner", "repository_owner_id", "workflow_ref", "job_workflow_ref", "ref", "environment", "repository_visibility"]) {
-                console.log("  " + k + ": " + (c[k] ?? "(absent)"));
-              }
-            '
-          fi
-
           if [ -z "$id_token" ] || [ "$id_token" = "null" ]; then
             echo "::warning::GitHub issued no OIDC token; the publish cannot authenticate."
             exit 0
@@ -105,9 +82,16 @@ jobs:
 
             if [ "$status" = "200" ]; then
               echo "$name: npm accepted this workflow as a trusted publisher"
-            else
-              echo "::warning::$name: npm refused this workflow (HTTP $status) -- $(jq -r '.error // .message // "no detail"' "$body" 2>/dev/null). Check the Trusted Publisher on https://www.npmjs.com/package/$name/access: repository and workflow filename must match this one exactly."
+              continue
             fi
+
+            echo "::warning::$name: npm refused this workflow (HTTP $status) -- $(jq -r '.error // .message // "no detail"' "$body" 2>/dev/null). Compare the claims below against https://www.npmjs.com/package/$name/access"
+            ID_TOKEN="$id_token" node -e '
+              const c = JSON.parse(Buffer.from(process.env.ID_TOKEN.split(".")[1], "base64url").toString());
+              for (const k of ["repository", "repository_id", "repository_owner", "repository_owner_id", "workflow_ref", "environment", "repository_visibility"]) {
+                console.log("  " + k + ": " + (c[k] ?? "(absent)"));
+              }
+            '
           done
 
       - name: Build
@@ -131,16 +115,12 @@ jobs:
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # npm cannot attest a build it cannot show anyone: provenance is
-          # rejected outright for a private source repository, whatever the
-          # package's own visibility. Asking for it anyway does not degrade to
-          # publishing without it -- the publish fails, and by the time the
-          # error has passed through changesets it no longer mentions
-          # provenance at all.
-          #
-          # So it follows the repository rather than being asserted: off while
-          # private, on the moment it goes public, with no release-day edit.
-          NPM_CONFIG_PROVENANCE: ${{ !github.event.repository.private }}
+          # Deliberately no NPM_CONFIG_PROVENANCE. Setting it either way stops
+          # pnpm deciding for itself -- `if (options.provenance != null) return`
+          # -- and its own answer is better than one written here: it turns
+          # provenance on when the token says the repository is public *and*
+          # the registry says the package is public, which a workflow cannot
+          # check. Left unset, this repository going public is enough.
 
       # A version bump is what makes a release, for a Docker package as much as
       # for an npm one -- so this tags only what this push actually bumped, and
