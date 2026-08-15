@@ -38,8 +38,7 @@
     "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:ast-typescript-mcp"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -66,6 +66,22 @@ jobs:
           id_token=$(curl -fsS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" | jq -r .value)
           echo "::add-mask::$id_token"
+
+          # npm matches a trusted publisher against these claims and will not
+          # say which one disagreed -- it answers "package not found" either
+          # way. Printing them turns "npm refuses us" into a value-by-value
+          # comparison against the form on the package's access page. They are
+          # signed metadata, not credentials; the token itself stays masked.
+          if [ -n "$id_token" ] && [ "$id_token" != "null" ]; then
+            echo "The identity npm is being asked to trust:"
+            ID_TOKEN="$id_token" node -e '
+              const c = JSON.parse(Buffer.from(process.env.ID_TOKEN.split(".")[1], "base64url").toString());
+              for (const k of ["repository", "repository_owner", "workflow_ref", "job_workflow_ref", "ref", "environment", "repository_visibility"]) {
+                console.log("  " + k + ": " + (c[k] ?? "(absent)"));
+              }
+            '
+          fi
+
           if [ -z "$id_token" ] || [ "$id_token" = "null" ]; then
             echo "::warning::GitHub issued no OIDC token; the publish cannot authenticate."
             exit 0
@@ -110,7 +126,16 @@ jobs:
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
+          # npm cannot attest a build it cannot show anyone: provenance is
+          # rejected outright for a private source repository, whatever the
+          # package's own visibility. Asking for it anyway does not degrade to
+          # publishing without it -- the publish fails, and by the time the
+          # error has passed through changesets it no longer mentions
+          # provenance at all.
+          #
+          # So it follows the repository rather than being asserted: off while
+          # private, on the moment it goes public, with no release-day edit.
+          NPM_CONFIG_PROVENANCE: ${{ !github.event.repository.private }}
 
       # A version bump is what makes a release, for a Docker package as much as
       # for an npm one -- so this tags only what this push actually bumped, and
