@@ -21,14 +21,31 @@ jobs:
           # The Docker tagging step compares each version against the previous
           # commit, so the parent has to be fetched.
           fetch-depth: 2
+      # Deliberately no `registry-url`. Passing one makes actions/setup-node
+      # write `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` into an
+      # .npmrc and export NODE_AUTH_TOKEN as its placeholder,
+      # `XXXXX-XXXXX-XXXXX-XXXXX`. npm's own OIDC flow overrides a configured
+      # credential, so this is invisible on npm -- but pnpm 11 publishes
+      # directly instead of shelling out to npm, sends the placeholder as a
+      # bearer token, and the registry answers 404. registry.npmjs.org is the
+      # default anyway, so nothing needs the setting.
       - uses: ./.github/actions/setup-node-pnpm
-        with:
-          registry-url: 'https://registry.npmjs.org'
 
-      # Kept even though pnpm now drives the publish: OIDC trusted publishing is
-      # an npm-CLI capability, and pnpm 10.x has none of its own (pnpm gained it
-      # in 11.x). If the first real release fails to authenticate, that version
-      # gap is the first thing to check.
+      # The point above is a silent failure -- a credential in scope does not
+      # announce itself, it just turns into an unexplained 404 at the very end
+      # of a release. So assert it rather than rely on the comment.
+      - name: Refuse to publish with a static npm credential in scope
+        run: |
+          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          if [ -f "$npmrc" ] && grep -q '_authToken' "$npmrc"; then
+            echo "::error::$npmrc sets _authToken. Trusted publishing needs no credential, and pnpm sends this one instead -- npm rejects it as 404."
+            exit 1
+          fi
+          echo "No static npm credential in scope; the publish will authenticate over OIDC."
+
+      # pnpm 11 runs the OIDC exchange itself, so the runner's npm is not in the
+      # publish path. Kept as a cheap fallback for any code path that still
+      # shells out to npm; the runner ships a version too old to do OIDC.
       - name: Update npm for OIDC support
         run: npm install -g npm@latest && npm --version
 
