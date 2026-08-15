@@ -72,11 +72,16 @@ jobs:
           # way. Printing them turns "npm refuses us" into a value-by-value
           # comparison against the form on the package's access page. They are
           # signed metadata, not credentials; the token itself stays masked.
+          #
+          # The ids matter as much as the names here. This repository replaced
+          # an earlier one of the same name, so `dbgso/mcp-servers` has meant
+          # two different repositories -- and only one of them is the one a
+          # configuration written before the rebuild would be pinned to.
           if [ -n "$id_token" ] && [ "$id_token" != "null" ]; then
             echo "The identity npm is being asked to trust:"
             ID_TOKEN="$id_token" node -e '
               const c = JSON.parse(Buffer.from(process.env.ID_TOKEN.split(".")[1], "base64url").toString());
-              for (const k of ["repository", "repository_owner", "workflow_ref", "job_workflow_ref", "ref", "environment", "repository_visibility"]) {
+              for (const k of ["repository", "repository_id", "repository_owner", "repository_owner_id", "workflow_ref", "job_workflow_ref", "ref", "environment", "repository_visibility"]) {
                 console.log("  " + k + ": " + (c[k] ?? "(absent)"));
               }
             '
