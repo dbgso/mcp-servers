@@ -132,13 +132,19 @@ export const nextActionHints: Record<DraftState, string> = {
   applied: "Workflow complete",
 };
 
-// Persistence directory
-const PERSIST_DIR = path.join(os.tmpdir(), "mcp-draft-workflows");
+// Persistence directory. A fixed path is right for a server -- one machine, one
+// set of drafts, surviving restarts -- but wrong for anything running many
+// instances side by side. The test suite does exactly that, so it overrides
+// this to keep each file's state out of every other file's reach.
+// Exported because a test that wants to reset persisted state has to reset the
+// same directory the manager writes to. Rebuilding the path at the call site is
+// how they drift apart, and a test resetting the wrong directory still passes.
+export const DRAFT_PERSIST_DIR = process.env.MCP_DRAFT_PERSIST_DIR ?? path.join(os.tmpdir(), "mcp-draft-workflows");
 
 // Workflow manager instance
 export const draftWorkflowManager = new WorkflowManager<DraftState, DraftContext, DraftParams>({
   definition: draftWorkflow,
-  persistDir: PERSIST_DIR,
+  persistDir: DRAFT_PERSIST_DIR,
   createInitialContext: (id) => ({
     draftId: id,
     content: "",
