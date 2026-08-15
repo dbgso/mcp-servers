@@ -46,8 +46,7 @@
     "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:mcp-firewall"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "engines": {
     "node": ">=18"
