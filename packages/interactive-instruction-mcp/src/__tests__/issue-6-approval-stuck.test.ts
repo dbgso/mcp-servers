@@ -16,7 +16,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import * as os from "node:os";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import type { ReminderConfig } from "../types/index.js";
 import type { InstructionContext } from "../tools/instruction/types.js";
@@ -27,7 +26,7 @@ import {
   ApproveHandler,
   SetStatusHandler,
 } from "../tools/instruction/handlers/index.js";
-import { draftWorkflowManager } from "../workflows/draft-workflow.js";
+import { draftWorkflowManager, DRAFT_PERSIST_DIR } from "../workflows/draft-workflow.js";
 
 // Import mocked functions from mcp-shared (mocked globally in vitest-setup.ts)
 import { requestApproval, validateApproval } from "mcp-shared/approval";
@@ -38,8 +37,6 @@ const mockValidateApproval = vi.mocked(validateApproval);
 const tempBase = path.join(process.cwd(), "src/__tests__/temp-issue6");
 const docsDir = tempBase;
 
-// Persist dir used by draftWorkflowManager
-const PERSIST_DIR = path.join(os.tmpdir(), "mcp-draft-workflows");
 
 describe("Issue #6: Approval workflow stuck in pending_approval", () => {
   let reader: MarkdownReader;
@@ -73,8 +70,8 @@ describe("Issue #6: Approval workflow stuck in pending_approval", () => {
     draftWorkflowManager.clear({ id: "test-doc" });
     // Also clean persisted workflow state to prevent leaking between test cases
     try {
-      await fs.rm(PERSIST_DIR, { recursive: true, force: true });
-      await fs.mkdir(PERSIST_DIR, { recursive: true });
+      await fs.rm(DRAFT_PERSIST_DIR, { recursive: true, force: true });
+      await fs.mkdir(DRAFT_PERSIST_DIR, { recursive: true });
     } catch {
       // Ignore
     }

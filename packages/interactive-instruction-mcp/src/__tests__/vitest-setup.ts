@@ -9,22 +9,23 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 
-// Clean up persisted workflow states
-const PERSIST_DIR = path.join(os.tmpdir(), "mcp-draft-workflows");
-try {
-  await fs.rm(PERSIST_DIR, { recursive: true, force: true });
-} catch {
-  // Directory might not exist, ignore
-}
-try {
-  await fs.mkdir(PERSIST_DIR, { recursive: true });
-} catch {
-  // Directory might already exist, ignore
-}
+// Give this file its own directory for persisted workflow state.
+//
+// This file runs once per test file, and vitest runs test files in parallel.
+// Pointing them all at one directory and deleting it here meant a file starting
+// up erased state a file already running was about to read back -- a workflow
+// would reload as `editing` after having been approved. Measured on a single
+// run of this suite, the shared directory was destroyed and recreated 11 times
+// while tests were using it.
+//
+// A fresh directory per file removes the sharing rather than the symptom, and
+// needs no cleanup: the OS owns temporary directories.
+process.env.MCP_DRAFT_PERSIST_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "mcp-draft-workflows-"));
 
-// Clean up approval directory
-const APPROVAL_DIR = path.join(os.tmpdir(), "mcp-approval");
-await fs.rm(APPROVAL_DIR, { recursive: true, force: true }).catch(() => {});
+// Nothing wipes the approval directory here any more. `mcp-shared/approval` is
+// mocked below, so this package never reads it -- but `pnpm -r test` runs
+// packages concurrently, and mcp-shared's own approval tests do use the default
+// path. Deleting it from here reached into another package's test run.
 
 // Mock node-notifier to prevent desktop notifications
 vi.mock("node-notifier", () => ({
