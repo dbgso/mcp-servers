@@ -1,6 +1,6 @@
 {
   "name": "kroki-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for diagram rendering via Kroki with usage guidelines",
   "type": "module",
   "main": "dist/index.js",
