@@ -1,5 +1,8 @@
 packages:
   - packages/*
+  # New nested layout (additions only): shared/<area>[/<engine>]
+  - packages/shared/*
+  - packages/shared/*/*
   # Repository tooling. A workspace package so `pnpm -r test` covers it like
   # everything else; private, so it is never published.
   - scripts
