@@ -10,7 +10,8 @@ import {
 } from "../utils/pending-update.js";
 
 describe("pending-update", () => {
-  const pendingDir = path.join(os.tmpdir(), "mcp-instruction-pending");
+  const pendingDir =
+    process.env.MCP_INSTRUCTION_PENDING_DIR ?? path.join(os.tmpdir(), "mcp-instruction-pending");
 
   beforeEach(async () => {
     // Clean up pending directory

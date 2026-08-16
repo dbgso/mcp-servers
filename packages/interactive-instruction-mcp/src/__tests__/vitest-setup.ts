@@ -9,20 +9,31 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 
-// Clean up persisted workflow states
-const PERSIST_DIR = path.join(os.tmpdir(), "mcp-draft-workflows");
-try {
-  await fs.rm(PERSIST_DIR, { recursive: true, force: true });
-} catch {
-  // Directory might not exist, ignore
-}
-try {
-  await fs.mkdir(PERSIST_DIR, { recursive: true });
-} catch {
-  // Directory might already exist, ignore
+// Give each parallel vitest worker its OWN persisted-workflow store. The store
+// is on disk (WorkflowManager.listAll reads it), so a single shared dir lets
+// one worker's per-file wipe delete another worker's in-flight state → flaky
+// "recently confirmed" / state-persistence failures. Set the env BEFORE any
+// test module imports draft-workflow so the manager picks up the isolated dir.
+const workerId = process.env.VITEST_WORKER_ID ?? process.env.VITEST_POOL_ID ?? "0";
+const workerTmp = (name: string) => path.join(os.tmpdir(), `${name}-${workerId}`);
+
+// All three of these are process-global on-disk stores read via listAll()/getXxx.
+// A single shared dir lets a parallel worker's per-file wipe delete another
+// worker's in-flight state → flaky failures. Isolate per worker via env, set
+// BEFORE any test module imports the modules that read these dirs.
+const PERSIST_DIR = workerTmp("mcp-draft-workflows");
+const PENDING_DIR = workerTmp("mcp-instruction-pending");
+const DIFF_DIR = workerTmp("mcp-instruction-diffs");
+process.env.MCP_DRAFT_PERSIST_DIR = PERSIST_DIR;
+process.env.MCP_INSTRUCTION_PENDING_DIR = PENDING_DIR;
+process.env.MCP_INSTRUCTION_DIFF_DIR = DIFF_DIR;
+for (const dir of [PERSIST_DIR, PENDING_DIR, DIFF_DIR]) {
+  await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  await fs.mkdir(dir, { recursive: true }).catch(() => {});
 }
 
-// Clean up approval directory
+// Clean up approval directory (approval itself is mocked below, so the shared
+// dir is only cosmetic here).
 const APPROVAL_DIR = path.join(os.tmpdir(), "mcp-approval");
 await fs.rm(APPROVAL_DIR, { recursive: true, force: true }).catch(() => {});
 

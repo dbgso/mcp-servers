@@ -39,7 +39,8 @@ const tempBase = path.join(process.cwd(), "src/__tests__/temp-issue6");
 const docsDir = tempBase;
 
 // Persist dir used by draftWorkflowManager
-const PERSIST_DIR = path.join(os.tmpdir(), "mcp-draft-workflows");
+const PERSIST_DIR =
+  process.env.MCP_DRAFT_PERSIST_DIR ?? path.join(os.tmpdir(), "mcp-draft-workflows");
 
 describe("Issue #6: Approval workflow stuck in pending_approval", () => {
   let reader: MarkdownReader;
