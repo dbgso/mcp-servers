@@ -3,7 +3,9 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 
-const DIFF_DIR = path.join(os.tmpdir(), "mcp-instruction-diffs");
+// Overridable via env so parallel test workers can each get an isolated store.
+const DIFF_DIR =
+  process.env.MCP_INSTRUCTION_DIFF_DIR ?? path.join(os.tmpdir(), "mcp-instruction-diffs");
 
 export interface DiffOptions {
   /** Original file name for header */

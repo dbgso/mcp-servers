@@ -2,7 +2,9 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 
-const PENDING_DIR = path.join(os.tmpdir(), "mcp-instruction-pending");
+// Overridable via env so parallel test workers can each get an isolated store.
+const PENDING_DIR =
+  process.env.MCP_INSTRUCTION_PENDING_DIR ?? path.join(os.tmpdir(), "mcp-instruction-pending");
 
 export interface PendingUpdate {
   id: string;
