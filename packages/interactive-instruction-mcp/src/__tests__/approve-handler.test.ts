@@ -72,9 +72,12 @@ describe("ApproveHandler", () => {
   afterEach(async () => {
     vi.clearAllMocks();
 
-    // Clear workflow states for all IDs used in this test
+    // Remove workflow states for all IDs used in this test. Use delete() (not
+    // clear()) so the on-disk persisted state is removed too — otherwise a
+    // confirmed draft lingers on disk within the 10s window and pollutes a
+    // later test's getRecentlyConfirmedDrafts scan.
     for (const id of testIds) {
-      draftWorkflowManager.clear({ id });
+      await draftWorkflowManager.delete({ id });
     }
 
     try {

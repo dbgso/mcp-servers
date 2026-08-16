@@ -132,8 +132,10 @@ export const nextActionHints: Record<DraftState, string> = {
   applied: "Workflow complete",
 };
 
-// Persistence directory
-const PERSIST_DIR = path.join(os.tmpdir(), "mcp-draft-workflows");
+// Persistence directory. Overridable via env so parallel test workers can each
+// get an isolated store (the default is a single shared tmp dir).
+const PERSIST_DIR =
+  process.env.MCP_DRAFT_PERSIST_DIR ?? path.join(os.tmpdir(), "mcp-draft-workflows");
 
 // Workflow manager instance
 export const draftWorkflowManager = new WorkflowManager<DraftState, DraftContext, DraftParams>({
