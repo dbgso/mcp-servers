@@ -5,3 +5,5 @@ dist/
 coverage/
 *.tsbuildinfo
 tmp
+# Throwaway keypair for the SSH tunnel smoke test (ci/db/gen-ssh-key.sh).
+ci/ssh/

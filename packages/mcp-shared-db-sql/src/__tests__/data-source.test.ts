@@ -202,7 +202,8 @@ describe("createSqlDataSource", () => {
     expect(out).toEqual(rows);
     expect(query).toHaveBeenCalledWith({
       sql: expect.stringContaining("#>>"),
-      values: [1, ["foo"], 5],
+      // segments, value, limit -- emission order.
+      values: [["foo"], 1, 5],
     });
   });
 

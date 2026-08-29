@@ -30,3 +30,66 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  # Separate job, not a step in `test`: it needs two database servers, and the
+  # drivers it installs would break the unit tests that mock them. Runs in
+  # parallel, so it costs wall-clock only if it is the slower of the two.
+  db-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+
+      # Before the bastion starts: compose mounts the public key into it.
+      - name: Generate the bastion keypair
+        run: ./ci/db/gen-ssh-key.sh
+
+      # `--wait` blocks on each service's healthcheck, so nothing here polls or
+      # sleeps. Postgres reports ready on its bootstrap database before the
+      # seed has run, which is why its healthcheck names the database.
+      - name: Start Postgres, MySQL and the SSH bastion
+        run: docker compose -f compose.yaml up -d --wait postgres mysql bastion
+
+      # The smoke scripts import the libraries' build output, not their source.
+      - name: Build
+        run: pnpm build
+
+      - name: Install database drivers
+        run: ./ci/db/install-drivers.sh
+
+      # Each asserts nothing about a particular schema: it introspects, picks a
+      # table, probes a real value out of it, and runs every read operation
+      # against what it found. The seed exists to give it something to find.
+      - name: Postgres smoke test
+        run: pnpm --filter mcp-shared-db-postgres smoke
+
+      - name: MySQL smoke test
+        run: pnpm --filter mcp-shared-db-mysql smoke
+
+      # The read-only guarantee is a property of the session, so no unit test
+      # can reach it: these issue a write on a guarded connection and require
+      # the engine to refuse. Both probes are harmless if the guard is missing
+      # -- a temporary table that dies with the connection, and an UPDATE whose
+      # WHERE clause matches nothing.
+      - name: Read-only guarantee (Postgres)
+        run: pnpm --filter db-read-mcp smoke:readonly:pg
+
+      - name: Read-only guarantee (MySQL)
+        run: pnpm --filter db-read-mcp smoke:readonly:mysql
+
+      # Drives the real `ssh` binary against a real server. The URL names the
+      # database by a hostname only the bastion can resolve, so a tunnel that
+      # is not actually carrying the connection cannot pass by reaching the
+      # database some other way.
+      - name: SSH tunnel (Postgres through a bastion)
+        run: pnpm --filter db-read-mcp smoke:tunnel
+
+      # The unit tests for this run against rows the test wrote itself. A real
+      # driver decides the shape of a row -- numerics arrive as strings, JSON
+      # as objects -- and the policy has to hold for whatever comes back.
+      - name: Field visibility policy (Postgres)
+        run: pnpm --filter db-read-mcp smoke:visibility
+
+      - name: Database logs on failure
+        if: failure()
+        run: docker compose -f compose.yaml logs --no-color --tail=100 postgres mysql bastion

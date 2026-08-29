@@ -111,7 +111,11 @@ describe("buildFindByRange", () => {
 });
 
 describe("buildFindByJsonPath", () => {
-  it("pg dialect pushes segments placeholder after the value", () => {
+  // The ordering assertions below are the point of these tests. `?`-style
+  // engines bind by textual position, so a placeholder allocated out of order
+  // receives its neighbour's value -- and the resulting statement is either
+  // rejected by the engine or, worse, silently answers the wrong question.
+  it("binds placeholders in the order the dialect emits them (pg)", () => {
     const built = buildFindByJsonPath({
       dialect: pgFakeDialect,
       table: "users",
@@ -121,11 +125,11 @@ describe("buildFindByJsonPath", () => {
       columns: ["id", "meta"],
       limit: 5,
     });
-    // Order: value ($1), segments ($2), limit ($3).
+    // Order: segments ($1), value ($2), limit ($3) -- left to right.
     expect(built.sql).toBe(
-      'SELECT "id", "meta" FROM "users" WHERE "meta" #>> $2 = $1 LIMIT $3',
+      'SELECT "id", "meta" FROM "users" WHERE "meta" #>> $1 = $2 LIMIT $3',
     );
-    expect(built.values).toEqual(["x", ["foo", "bar"], 5]);
+    expect(built.values).toEqual([["foo", "bar"], "x", 5]);
   });
 
   it("pg dialect produces empty segments for root path", () => {
@@ -138,10 +142,10 @@ describe("buildFindByJsonPath", () => {
       columns: ["id"],
       limit: 1,
     });
-    expect(built.values[1]).toEqual([]);
+    expect(built.values[0]).toEqual([]);
   });
 
-  it("mysql dialect inlines the raw path literal", () => {
+  it("binds placeholders in the order the dialect emits them (mysql)", () => {
     const built = buildFindByJsonPath({
       dialect: mysqlFakeDialect,
       table: "users",
@@ -151,10 +155,13 @@ describe("buildFindByJsonPath", () => {
       columns: ["id", "meta"],
       limit: 5,
     });
+    // Every `?` is anonymous, so this list *is* the mapping. Reverse the
+    // first two and MySQL reads "$.foo.bar" as the value and "x" as the
+    // JSON path, which it rejects with ER_INVALID_JSON_PATH.
     expect(built.sql).toBe(
-      "SELECT `id`, `meta` FROM `users` WHERE JSON_EXTRACT(`meta`, '$.foo.bar') = ? LIMIT ?",
+      "SELECT `id`, `meta` FROM `users` WHERE JSON_EXTRACT(`meta`, ?) = ? LIMIT ?",
     );
-    expect(built.values).toEqual(["x", 5]);
+    expect(built.values).toEqual(["$.foo.bar", "x", 5]);
   });
 });
 

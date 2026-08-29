@@ -18,7 +18,8 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke": "tsx scripts/smoke-test-postgres.ts ../../ci/db/smoke-postgres.env"
   },
   "license": "MIT",
   "engines": {

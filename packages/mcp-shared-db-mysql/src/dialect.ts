@@ -144,12 +144,14 @@ export const mysqlDialect: Dialect = {
   placeholder(): string {
     return "?";
   },
-  jsonPathEquals({ columnSql, path, valuePlaceholder, params }) {
-    // Bind the path — never interpolate `path.raw` into the SQL. The
-    // op-layer Zod regex is defense-in-depth; the bind is the load-bearing
+  jsonPathEquals({ columnSql, path, value }) {
+    // The path is a bound value, never interpolated into the SQL — the
+    // op-layer Zod regex is defense-in-depth; this is the load-bearing
     // defence. Lock-tested in dialect.test.ts.
-    const pathPh = params.add(path.raw);
-    return `JSON_UNQUOTE(JSON_EXTRACT(${columnSql}, ${pathPh})) = ${valuePlaceholder}`;
+    return {
+      sql: [`JSON_UNQUOTE(JSON_EXTRACT(${columnSql}, `, ")) = ", ""],
+      values: [path.raw, value],
+    };
   },
   explainPrefix(): string {
     return "EXPLAIN FORMAT=JSON";
