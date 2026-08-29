@@ -40,11 +40,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-node-pnpm
 
+      # Before the bastion starts: compose mounts the public key into it.
+      - name: Generate the bastion keypair
+        run: ./ci/db/gen-ssh-key.sh
+
       # `--wait` blocks on each service's healthcheck, so nothing here polls or
       # sleeps. Postgres reports ready on its bootstrap database before the
       # seed has run, which is why its healthcheck names the database.
-      - name: Start Postgres and MySQL
-        run: docker compose -f compose.yaml up -d --wait postgres mysql
+      - name: Start Postgres, MySQL and the SSH bastion
+        run: docker compose -f compose.yaml up -d --wait postgres mysql bastion
 
       # The smoke scripts import the libraries' build output, not their source.
       - name: Build
@@ -73,6 +77,13 @@ jobs:
       - name: Read-only guarantee (MySQL)
         run: pnpm --filter db-read-mcp smoke:readonly:mysql
 
+      # Drives the real `ssh` binary against a real server. The URL names the
+      # database by a hostname only the bastion can resolve, so a tunnel that
+      # is not actually carrying the connection cannot pass by reaching the
+      # database some other way.
+      - name: SSH tunnel (Postgres through a bastion)
+        run: pnpm --filter db-read-mcp smoke:tunnel
+
       - name: Database logs on failure
         if: failure()
-        run: docker compose -f compose.yaml logs --no-color --tail=100 postgres mysql
+        run: docker compose -f compose.yaml logs --no-color --tail=100 postgres mysql bastion

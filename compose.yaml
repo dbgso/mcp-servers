@@ -76,3 +76,33 @@ services:
       timeout: 5s
       retries: 40
       start_period: 10s
+
+  # A bastion for the SSH tunnel smoke test: db-read-mcp can reach a database
+  # through `ssh -L`, and that path was only ever exercised with a fake spawn.
+  # Here it forwards to the postgres service on this network, so the test
+  # drives the real ssh binary against a real server.
+  #
+  #   ./ci/db/gen-ssh-key.sh
+  #   docker compose up -d --wait bastion
+  #   pnpm --filter db-read-mcp smoke:tunnel
+  #
+  # Built rather than pulled. The obvious off-the-shelf image ships
+  # `AllowTcpForwarding no` -- a sensible default for a general SSH server and
+  # exactly wrong for one whose only job is forwarding.
+  bastion:
+    build:
+      context: ./ci/db
+      dockerfile: bastion.Dockerfile
+    ports:
+      - "52222:22"
+    volumes:
+      - ./ci/ssh/id_ed25519.pub:/run/bastion/authorized_key.pub:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 22"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 2s
