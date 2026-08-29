@@ -62,6 +62,17 @@ jobs:
       - name: MySQL smoke test
         run: pnpm --filter mcp-shared-db-mysql smoke
 
+      # The read-only guarantee is a property of the session, so no unit test
+      # can reach it: these issue a write on a guarded connection and require
+      # the engine to refuse. Both probes are harmless if the guard is missing
+      # -- a temporary table that dies with the connection, and an UPDATE whose
+      # WHERE clause matches nothing.
+      - name: Read-only guarantee (Postgres)
+        run: pnpm --filter db-read-mcp smoke:readonly:pg
+
+      - name: Read-only guarantee (MySQL)
+        run: pnpm --filter db-read-mcp smoke:readonly:mysql
+
       - name: Database logs on failure
         if: failure()
         run: docker compose -f compose.yaml logs --no-color --tail=100 postgres mysql

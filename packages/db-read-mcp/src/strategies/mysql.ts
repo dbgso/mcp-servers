@@ -62,6 +62,34 @@ export function parseTimeoutMs(input: string | undefined): number {
   return Math.round(value * 60_000);
 }
 
+/**
+ * Put the session behind the two guards the read-only server depends on: a
+ * bounded statement runtime, and a session marked read-only.
+ *
+ * Exported so the guarantee can be tested against a real engine. Read-only is
+ * a property of the *session*, so nothing observable through `DataSource`
+ * proves it -- the only way to know is to issue a write on the same
+ * connection and be refused. That needs the raw client, which the strategy
+ * deliberately does not hand out, so the smoke test calls this instead and
+ * gets the same session the strategy would have built.
+ */
+export async function applyMysqlSessionGuards(args: {
+  client: MysqlQueryClient;
+  env: NodeJS.ProcessEnv;
+}): Promise<void> {
+  const timeoutMs = parseTimeoutMs(args.env.DBREAD_STATEMENT_TIMEOUT);
+  // max_execution_time is integer ms; bind it parametrically so the `SET`
+  // statement stays a single token (multi-statement is already wire-rejected,
+  // but this keeps the SQL boring).
+  await args.client.query({
+    text: "SET SESSION max_execution_time = ?",
+    values: [timeoutMs],
+  });
+  await args.client.query({
+    text: "SET SESSION transaction_read_only = 1",
+  });
+}
+
 export const mysqlStrategy: EngineStrategy = {
   engine: "mysql",
 
@@ -91,17 +119,9 @@ export const mysqlStrategy: EngineStrategy = {
       client.onError((err) => {
         console.error("[db-read-mcp] mysql client error:", err.message);
       });
-      const env = args.env ?? process.env;
-      const timeoutMs = parseTimeoutMs(env.DBREAD_STATEMENT_TIMEOUT);
-      // max_execution_time is integer ms; bind it parametrically so the
-      // `SET` statement stays a single token (multi-statement is already
-      // wire-rejected, but this keeps the SQL boring).
-      await client.query({
-        text: "SET SESSION max_execution_time = ?",
-        values: [timeoutMs],
-      });
-      await client.query({
-        text: "SET SESSION transaction_read_only = 1",
+      await applyMysqlSessionGuards({
+        client,
+        env: args.env ?? process.env,
       });
     } catch (err) {
       if (client) await client.end().catch(() => undefined);
