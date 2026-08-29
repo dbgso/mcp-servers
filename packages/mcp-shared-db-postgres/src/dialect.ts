@@ -76,11 +76,12 @@ export const postgresDialect: Dialect = {
   placeholder(index: number): string {
     return `$${index}`;
   },
-  jsonPathEquals({ columnSql, path, value, params }) {
-    // Allocation order must match emission order -- see `Dialect`.
-    const segmentsPh = params.add(path.segments);
-    const valuePh = params.add(value);
-    return `${columnSql} #>> ${segmentsPh} = ${valuePh}`;
+  jsonPathEquals({ columnSql, path, value }) {
+    // Segments travel as a JS array; `pg` serialises that as a `text[]`.
+    return {
+      sql: [`${columnSql} #>> `, " = ", ""],
+      values: [path.segments, value],
+    };
   },
   explainPrefix(): string {
     return "EXPLAIN (FORMAT JSON)";

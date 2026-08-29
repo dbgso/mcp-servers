@@ -20,7 +20,8 @@
     "prepublishOnly": "npm run build",
     "smoke:readonly:pg": "tsx scripts/smoke-test-readonly.ts ../../ci/db/readonly-postgres.env",
     "smoke:readonly:mysql": "tsx scripts/smoke-test-readonly.ts ../../ci/db/readonly-mysql.env",
-    "smoke:tunnel": "tsx scripts/smoke-test-tunnel.ts ../../ci/db/tunnel-postgres.env"
+    "smoke:tunnel": "tsx scripts/smoke-test-tunnel.ts ../../ci/db/tunnel-postgres.env",
+    "smoke:visibility": "tsx scripts/smoke-test-visibility.ts ../../ci/db/visibility-postgres.env"
   },
   "keywords": [
     "mcp",

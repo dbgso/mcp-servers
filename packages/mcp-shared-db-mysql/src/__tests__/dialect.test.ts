@@ -24,33 +24,29 @@ describe("mysqlDialect.jsonPathEquals", () => {
     // value MUST go through params.add() and appear in the build() output as
     // a separately-bound value. A regression that interpolates path.raw
     // straight into the SQL would break this assertion.
-    const params = new ParamBuilderImpl(mysqlDialect);
     const fragment = mysqlDialect.jsonPathEquals({
       columnSql: "`meta`",
       path: { raw: "$.foo.bar", segments: ["foo", "bar"] },
       value: "z",
-      params,
     });
-    expect(fragment).toBe(
-      "JSON_UNQUOTE(JSON_EXTRACT(`meta`, ?)) = ?",
-    );
-    // Path first, then value -- `?` binds by position, so this list is the
-    // mapping. Swapped, MySQL reads "z" as the JSON path and rejects it.
-    expect(params.build()).toEqual(["$.foo.bar", "z"]);
+    expect(fragment.sql).toEqual([
+      "JSON_UNQUOTE(JSON_EXTRACT(`meta`, ",
+      ")) = ",
+      "",
+    ]);
+    // The path is a value, not text spliced into the SQL. Path first, then
+    // value: `?` binds by position, and the builder places one placeholder per
+    // seam, so this list is the mapping.
+    expect(fragment.values).toEqual(["$.foo.bar", "z"]);
   });
 
   it("binds the root path '$' too", () => {
-    const params = new ParamBuilderImpl(mysqlDialect);
     const fragment = mysqlDialect.jsonPathEquals({
       columnSql: "`meta`",
       path: { raw: "$", segments: [] },
       value: 1,
-      params,
     });
-    expect(fragment).toBe(
-      "JSON_UNQUOTE(JSON_EXTRACT(`meta`, ?)) = ?",
-    );
-    expect(params.build()).toEqual(["$", 1]);
+    expect(fragment.values).toEqual(["$", 1]);
   });
 });
 

@@ -84,6 +84,12 @@ jobs:
       - name: SSH tunnel (Postgres through a bastion)
         run: pnpm --filter db-read-mcp smoke:tunnel
 
+      # The unit tests for this run against rows the test wrote itself. A real
+      # driver decides the shape of a row -- numerics arrive as strings, JSON
+      # as objects -- and the policy has to hold for whatever comes back.
+      - name: Field visibility policy (Postgres)
+        run: pnpm --filter db-read-mcp smoke:visibility
+
       - name: Database logs on failure
         if: failure()
         run: docker compose -f compose.yaml logs --no-color --tail=100 postgres mysql bastion

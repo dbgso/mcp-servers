@@ -40,6 +40,16 @@ export interface ParamBuilder {
  * `mcp-shared-db` — re-declared here only to keep the SQL package free of
  * a dependency on the operations layer's interfaces.
  */
+/**
+ * Literal SQL interleaved with the values to bind, in the order they appear.
+ * `sql.length === values.length + 1` — the builder alternates the two, so the
+ * binding order is the array order and cannot disagree with the text.
+ */
+export interface JsonPathFragment {
+  sql: string[];
+  values: unknown[];
+}
+
 export interface DialectExplainResult {
   estimatedRows: number | null;
   totalCost: number | null;
@@ -60,27 +70,29 @@ export interface Dialect {
    */
   placeholder(index: number): string;
   /**
-   * Build a SQL fragment that compares the JSON value at `path` on the
-   * already-quoted `columnSql` to `value`.
+   * Describe the comparison of the JSON value at `path` on the already-quoted
+   * `columnSql` against `value`, as literal SQL interleaved with the values to
+   * bind.
    *
-   * The dialect allocates **every** placeholder it emits, and must allocate
-   * them in the order they appear in the returned fragment. That ordering is
-   * not a style preference: `?`-style engines bind positionally by textual
-   * order, so a placeholder allocated out of order silently receives its
-   * neighbour's value. Handing the dialect a pre-allocated placeholder for
-   * the value used to make that mistake easy to write and invisible on
-   * Postgres, whose numbered placeholders carry their own position.
+   * Returned as parts rather than a finished string on purpose. The dialect
+   * gets no `ParamBuilder`, so it cannot allocate a placeholder at all, and
+   * the one thing that used to go wrong here -- allocating in an order other
+   * than the one the fragment emits -- has no way to be expressed. `?`-style
+   * engines bind positionally, so a misordered allocation silently gave a
+   * placeholder its neighbour's value, and Postgres hid it because numbered
+   * placeholders carry their own position.
+   *
+   * `sql` must hold exactly one more element than `values`: the builder joins
+   * them alternately, starting and ending with SQL.
    */
   jsonPathEquals(input: {
     /** Already-quoted column reference (output of `quoteIdent`). */
     columnSql: string;
     /** Normalised JSON path with helper segments. */
     path: JsonPathInput;
-    /** Comparison value. Bind it via `params.add` at its textual position. */
+    /** Comparison value. */
     value: unknown;
-    /** Used to allocate placeholders, in emission order. */
-    params: ParamBuilder;
-  }): string;
+  }): JsonPathFragment;
   /**
    * SQL prefix that, when prepended to a `SELECT`, returns the planner's
    * cost estimate instead of executing the query for real. Engine-specific:

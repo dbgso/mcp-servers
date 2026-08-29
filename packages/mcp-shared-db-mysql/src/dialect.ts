@@ -144,16 +144,14 @@ export const mysqlDialect: Dialect = {
   placeholder(): string {
     return "?";
   },
-  jsonPathEquals({ columnSql, path, value, params }) {
-    // Bind the path — never interpolate `path.raw` into the SQL. The
-    // op-layer Zod regex is defense-in-depth; the bind is the load-bearing
+  jsonPathEquals({ columnSql, path, value }) {
+    // The path is a bound value, never interpolated into the SQL — the
+    // op-layer Zod regex is defense-in-depth; this is the load-bearing
     // defence. Lock-tested in dialect.test.ts.
-    //
-    // Path first, then value: `?` binds by textual position, so these two
-    // allocations must happen in the order they appear below.
-    const pathPh = params.add(path.raw);
-    const valuePh = params.add(value);
-    return `JSON_UNQUOTE(JSON_EXTRACT(${columnSql}, ${pathPh})) = ${valuePh}`;
+    return {
+      sql: [`JSON_UNQUOTE(JSON_EXTRACT(${columnSql}, `, ")) = ", ""],
+      values: [path.raw, value],
+    };
   },
   explainPrefix(): string {
     return "EXPLAIN FORMAT=JSON";

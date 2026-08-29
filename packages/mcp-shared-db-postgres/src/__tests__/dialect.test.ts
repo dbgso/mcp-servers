@@ -23,32 +23,25 @@ describe("postgresDialect.placeholder", () => {
 });
 
 describe("postgresDialect.jsonPathEquals", () => {
-  it("emits #>> with a separately-bound text[] segments param", () => {
-    const params = new ParamBuilderImpl(postgresDialect);
+  it("emits #>> with the segments array bound before the value", () => {
     const fragment = postgresDialect.jsonPathEquals({
       columnSql: '"meta"',
       path: { raw: "$.foo.bar", segments: ["foo", "bar"] },
       value: "z",
-      params,
     });
-    // Segments first, value second -- the order they appear in the fragment.
-    expect(fragment).toBe('"meta" #>> $1 = $2');
-    expect(params.build()).toEqual([["foo", "bar"], "z"]);
+    // SQL parts and values interleave; the builder puts a placeholder at each
+    // seam, so this ordering *is* the binding order.
+    expect(fragment.sql).toEqual(['"meta" #>> ', " = ", ""]);
+    expect(fragment.values).toEqual([["foo", "bar"], "z"]);
   });
 
   it("passes empty segments array for the root path", () => {
-    const params = new ParamBuilderImpl(postgresDialect);
-    // A placeholder allocated by the caller beforehand, so the assertion also
-    // covers the dialect numbering from wherever the builder left off.
-    params.add(1);
     const fragment = postgresDialect.jsonPathEquals({
       columnSql: '"meta"',
       path: { raw: "$", segments: [] },
       value: "z",
-      params,
     });
-    expect(fragment).toBe('"meta" #>> $2 = $3');
-    expect(params.build()).toEqual([1, [], "z"]);
+    expect(fragment.values).toEqual([[], "z"]);
   });
 });
 
