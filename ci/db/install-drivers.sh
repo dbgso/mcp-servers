@@ -13,8 +13,14 @@
 # resolution walks up from their own directory.
 #
 # Running this in a working copy will therefore break `pnpm test` for
-# db-read-mcp until the two directories are removed again. CI throws the whole
-# runner away, so it does not care.
+# db-read-mcp until they are removed again -- and it is the drivers plus their
+# dependencies, around two dozen directories, not just the two named below.
+# `pnpm install` does not prune them, so `rm -rf node_modules && pnpm install`
+# is the way back. CI throws the whole runner away, so it does not care.
+#
+# Verified not to collide: on a clean install this workspace's root
+# node_modules holds only its own devDependencies, and none of them share a
+# name with anything in the drivers' tree.
 set -euo pipefail
 
 PG_VERSION="${PG_VERSION:-8.13.1}"
