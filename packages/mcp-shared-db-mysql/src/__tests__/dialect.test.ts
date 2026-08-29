@@ -25,32 +25,32 @@ describe("mysqlDialect.jsonPathEquals", () => {
     // a separately-bound value. A regression that interpolates path.raw
     // straight into the SQL would break this assertion.
     const params = new ParamBuilderImpl(mysqlDialect);
-    const valuePh = params.add("z");
     const fragment = mysqlDialect.jsonPathEquals({
       columnSql: "`meta`",
       path: { raw: "$.foo.bar", segments: ["foo", "bar"] },
-      valuePlaceholder: valuePh,
+      value: "z",
       params,
     });
     expect(fragment).toBe(
       "JSON_UNQUOTE(JSON_EXTRACT(`meta`, ?)) = ?",
     );
-    expect(params.build()).toEqual(["z", "$.foo.bar"]);
+    // Path first, then value -- `?` binds by position, so this list is the
+    // mapping. Swapped, MySQL reads "z" as the JSON path and rejects it.
+    expect(params.build()).toEqual(["$.foo.bar", "z"]);
   });
 
   it("binds the root path '$' too", () => {
     const params = new ParamBuilderImpl(mysqlDialect);
-    const valuePh = params.add(1);
     const fragment = mysqlDialect.jsonPathEquals({
       columnSql: "`meta`",
       path: { raw: "$", segments: [] },
-      valuePlaceholder: valuePh,
+      value: 1,
       params,
     });
     expect(fragment).toBe(
       "JSON_UNQUOTE(JSON_EXTRACT(`meta`, ?)) = ?",
     );
-    expect(params.build()).toEqual([1, "$"]);
+    expect(params.build()).toEqual(["$", 1]);
   });
 });
 

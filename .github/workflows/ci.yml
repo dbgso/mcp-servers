@@ -30,3 +30,38 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  # Separate job, not a step in `test`: it needs two database servers, and the
+  # drivers it installs would break the unit tests that mock them. Runs in
+  # parallel, so it costs wall-clock only if it is the slower of the two.
+  db-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+
+      # `--wait` blocks on each service's healthcheck, so nothing here polls or
+      # sleeps. Postgres reports ready on its bootstrap database before the
+      # seed has run, which is why its healthcheck names the database.
+      - name: Start Postgres and MySQL
+        run: docker compose -f compose.yaml up -d --wait postgres mysql
+
+      # The smoke scripts import the libraries' build output, not their source.
+      - name: Build
+        run: pnpm build
+
+      - name: Install database drivers
+        run: ./ci/db/install-drivers.sh
+
+      # Each asserts nothing about a particular schema: it introspects, picks a
+      # table, probes a real value out of it, and runs every read operation
+      # against what it found. The seed exists to give it something to find.
+      - name: Postgres smoke test
+        run: pnpm --filter mcp-shared-db-postgres smoke
+
+      - name: MySQL smoke test
+        run: pnpm --filter mcp-shared-db-mysql smoke
+
+      - name: Database logs on failure
+        if: failure()
+        run: docker compose -f compose.yaml logs --no-color --tail=100 postgres mysql

@@ -27,3 +27,52 @@ services:
       timeout: 3s
       retries: 15
       start_period: 2s
+
+  # Real engines for the DB smoke tests. The unit suites run against fakes and
+  # verify the SQL that gets built; these verify the engines accept it. Every
+  # dialect difference the builder papers over is invisible until something
+  # actually parses the statement.
+  #
+  #   docker compose up -d --wait postgres mysql
+  #   pnpm --filter mcp-shared-db-postgres smoke
+  #   pnpm --filter mcp-shared-db-mysql smoke
+  #
+  # Credentials are local-only fixtures and are checked in deliberately, so the
+  # smoke tests run with no setup. Nothing here is reachable off this machine.
+  postgres:
+    # Pinned (not :latest) for reproducible CI. Update tag+digest deliberately.
+    image: postgres:16.4-alpine@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c
+    ports:
+      - "55432:5432"
+    environment:
+      POSTGRES_USER: smoke
+      POSTGRES_PASSWORD: smoke
+      POSTGRES_DB: smoke
+    volumes:
+      - ./ci/db/postgres-init.sql:/docker-entrypoint-initdb.d/10-seed.sql:ro
+    healthcheck:
+      # `-d smoke` matters: pg_isready reports ready on the bootstrap database
+      # before the seed has run, and the smoke test would then find no tables.
+      test: ["CMD-SHELL", "pg_isready -U smoke -d smoke"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+
+  mysql:
+    image: mysql:8.4.3@sha256:106d5197fd8e4892980469ad42eb20f7a336bd81509aae4ee175d852f5cc4565
+    ports:
+      - "53306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: smoke
+      MYSQL_USER: smoke
+      MYSQL_PASSWORD: smoke
+      MYSQL_DATABASE: smoke
+    volumes:
+      - ./ci/db/mysql-init.sql:/docker-entrypoint-initdb.d/10-seed.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-usmoke", "-psmoke"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 10s

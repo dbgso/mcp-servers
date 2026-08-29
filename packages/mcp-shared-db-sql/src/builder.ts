@@ -116,14 +116,15 @@ export function buildFindByJsonPath(params: BuildFindByJsonPathParams): BuiltSql
   const tableSql = params.dialect.quoteIdent(params.table);
   const fieldSql = params.dialect.quoteIdent(params.field);
   const path = parseJsonPath(params.path);
-  // Allocate the value placeholder before letting the dialect push extras —
-  // this keeps `?`-style engines (which reuse a single token) consistent
-  // with the value's logical position in the binding sequence.
-  const valuePh = pb.add(params.value);
+  // The dialect allocates both the path and the value, in the order it emits
+  // them. Allocating the value here instead put it first in the bind list
+  // while both dialects emit the path first -- correct on Postgres, whose
+  // placeholders are numbered, and silently swapped on MySQL, whose `?`
+  // binds by position.
   const condition = params.dialect.jsonPathEquals({
     columnSql: fieldSql,
     path,
-    valuePlaceholder: valuePh,
+    value: params.value,
     params: pb,
   });
   const limitPh = pb.add(params.limit);

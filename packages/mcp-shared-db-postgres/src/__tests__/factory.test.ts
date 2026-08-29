@@ -115,12 +115,16 @@ describe("createPostgresDataSource", () => {
       limit: 5,
     });
     expect(calls[0]?.sql).toBe(
-      'SELECT "id", "meta" FROM "users" WHERE "meta" #>> $2 = $1 LIMIT $3',
+      'SELECT "id", "meta" FROM "users" WHERE "meta" #>> $1 = $2 LIMIT $3',
     );
+    // Segments, value, limit -- placeholders numbered in the order they are
+    // emitted. Postgres tolerates any binding order because `$n` carries its
+    // own position; MySQL does not, so the dialects allocate in emission
+    // order and this assertion pins that.
     // The segments go in as a JS array; pg will coerce that to a text[]
     // bind value at the protocol layer.
-    expect(calls[0]?.values).toEqual(["z", ["foo", "bar"], 5]);
-    expect(Array.isArray((calls[0]?.values ?? [])[1])).toBe(true);
+    expect(calls[0]?.values).toEqual([["foo", "bar"], "z", 5]);
+    expect(Array.isArray((calls[0]?.values ?? [])[0])).toBe(true);
   });
 
   it("tripwire: still throws if a future regression somehow surfaces Result[] from the driver", async () => {

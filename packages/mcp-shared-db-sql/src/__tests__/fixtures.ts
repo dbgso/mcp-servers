@@ -16,9 +16,10 @@ export const pgFakeDialect: Dialect = {
   placeholder(index) {
     return `$${index}`;
   },
-  jsonPathEquals({ columnSql, path, valuePlaceholder, params }) {
+  jsonPathEquals({ columnSql, path, value, params }) {
     const segmentsPh = params.add(path.segments);
-    return `${columnSql} #>> ${segmentsPh} = ${valuePlaceholder}`;
+    const valuePh = params.add(value);
+    return `${columnSql} #>> ${segmentsPh} = ${valuePh}`;
   },
   explainPrefix() {
     return "EXPLAIN (FORMAT JSON)";
@@ -44,9 +45,14 @@ export const mysqlFakeDialect: Dialect = {
   placeholder() {
     return "?";
   },
-  jsonPathEquals({ columnSql, path, valuePlaceholder }) {
-    // MySQL takes the raw `$.foo.bar` literal — no extra placeholders.
-    return `JSON_EXTRACT(${columnSql}, '${path.raw}') = ${valuePlaceholder}`;
+  jsonPathEquals({ columnSql, path, value, params }) {
+    // Binds the path, like the real dialect. An earlier version of this fake
+    // interpolated `path.raw` instead, which meant no builder test ever
+    // exercised `?` ordering -- and a swapped bind went unnoticed until a
+    // real MySQL rejected the statement.
+    const pathPh = params.add(path.raw);
+    const valuePh = params.add(value);
+    return `JSON_EXTRACT(${columnSql}, ${pathPh}) = ${valuePh}`;
   },
   explainPrefix() {
     return "EXPLAIN FORMAT=JSON";

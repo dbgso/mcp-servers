@@ -61,18 +61,24 @@ export interface Dialect {
   placeholder(index: number): string;
   /**
    * Build a SQL fragment that compares the JSON value at `path` on the
-   * already-quoted `columnSql` to `valuePlaceholder`. The dialect may call
-   * `params.add(...)` to allocate further placeholders (e.g. Postgres pushes
-   * the segments as a `text[]`).
+   * already-quoted `columnSql` to `value`.
+   *
+   * The dialect allocates **every** placeholder it emits, and must allocate
+   * them in the order they appear in the returned fragment. That ordering is
+   * not a style preference: `?`-style engines bind positionally by textual
+   * order, so a placeholder allocated out of order silently receives its
+   * neighbour's value. Handing the dialect a pre-allocated placeholder for
+   * the value used to make that mistake easy to write and invisible on
+   * Postgres, whose numbered placeholders carry their own position.
    */
   jsonPathEquals(input: {
     /** Already-quoted column reference (output of `quoteIdent`). */
     columnSql: string;
     /** Normalised JSON path with helper segments. */
     path: JsonPathInput;
-    /** Pre-allocated placeholder for the comparison value. */
-    valuePlaceholder: string;
-    /** Used to allocate further placeholders. */
+    /** Comparison value. Bind it via `params.add` at its textual position. */
+    value: unknown;
+    /** Used to allocate placeholders, in emission order. */
     params: ParamBuilder;
   }): string;
   /**

@@ -147,6 +147,12 @@ async function main(): Promise<void> {
   try {
     console.log("[smoke] opening pg connection (runtime client)");
     const client = await createPgClient(tunneledUrl);
+    // `createPgClient` constructs a pg.Client and stops there, matching what
+    // db-read-mcp's strategy does before it connects. Querying an unconnected
+    // client does not throw -- pg queues the query against a connection that
+    // will never open -- so leaving this out hangs rather than fails.
+    await client.connect();
+    client.on("error", (err) => console.error("[smoke] pg client error:", err.message));
     try {
       console.log("[smoke] opening introspector connection (codegen client)");
       const introClient = await createIntrospectorPgClient(tunneledUrl);
