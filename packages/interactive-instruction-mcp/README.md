@@ -8,6 +8,33 @@ MCP server for interactive instruction documents. AI agents discover usage throu
 - **Single source of truth**: Each handler defines its own schema — no manual sync needed
 - **Human oversight**: Draft edits are free. Promoted documents are gated — promotion, deletion, rename and link changes need a one-time token delivered out-of-band; content updates go through a diff you explicitly apply or cancel
 
+## Compared to skill files
+
+Skills, `AGENTS.md`, `CLAUDE.md` and friends cover much of the same ground: project
+knowledge an agent should follow. Two differences decide which one fits.
+
+**How it loads.** A skill file is context. Something — the harness, or its own frontmatter —
+decides it is relevant and puts it in the session, whole. That is exactly what you want for
+a rule that applies to everything, and awkward for a body of documents where any one task
+needs three of forty: the rest occupy context anyway, and an agent that read them early
+gradually stops acting on them. Here the documents stay on disk and are fetched by
+`instruction(action: "read", id: "...")` when something calls for them. `list` returns only
+ids, descriptions and `whenToUse`, so choosing what to read costs a summary rather than the
+documents. Responses carry a freshness reminder, so an agent re-reads instead of trusting
+what it saw an hour ago.
+
+**Who can reach it.** A skill belongs to the session it was loaded into. Spawn a sub agent
+and it starts with its own context — whatever the parent loaded does not travel with it, so
+work delegated to sub agents runs without the rules the parent was following. An MCP server
+is a tool endpoint, not context: every session configured with it can call it, sub agents
+included. The same documents, and the same approval gate, reach the whole tree.
+
+The flip side is that nothing here loads itself. An agent that never calls the tool never
+sees a rule. `--topic-for-every-task` exists for that: it names one document the responses
+keep pointing back at. For a short rule that must apply unconditionally, a skill file is
+simply the better instrument — and the two compose, since that file can be the thing that
+tells an agent to check here.
+
 ## Tools
 
 Only 2 tools. AI discovers everything through responses.
