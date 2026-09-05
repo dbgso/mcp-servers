@@ -61,18 +61,24 @@ export function renderHtml(params: RenderParams & HtmlRendererOptions): string {
 /**
  * The page as a renderer.
  *
- * Its settings are bound here, the way `ssmSource({ region })` binds a secret
- * source's, so `render` takes nothing but the shared `RenderParams`.
+ * What differs between formats is settled by the constructor; `render` is the
+ * same call for every one of them. That split is the whole reason a caller can
+ * hold a `Renderer` without knowing which format it has.
+ *
+ * `render` is an arrow property, not a method: TypeScript checks method
+ * parameters bivariantly, so a renderer quietly demanding more than
+ * `RenderParams` would slip into a `Record<string, Renderer>` unnoticed.
  */
-export function createHtmlRenderer(options: HtmlRendererOptions = {}): Renderer {
-  return {
-    format: "html",
-    render: (params) => renderHtml({ ...params, ...options }),
-  };
+export class HtmlRenderer implements Renderer {
+  readonly format = "html";
+
+  constructor(private readonly options: HtmlRendererOptions = {}) {}
+
+  render = (params: RenderParams): string => renderHtml({ ...params, ...this.options });
 }
 
 /** The page with default settings. */
-export const htmlRenderer: Renderer = createHtmlRenderer();
+export const htmlRenderer: Renderer = new HtmlRenderer();
 
 export { buildCytoscapeStyle, MAX_LABEL_WIDTH_PX } from "./style.js";
 export { escapeScriptJson, escapeXml } from "./escape.js";

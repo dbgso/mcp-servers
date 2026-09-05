@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { createHtmlRenderer, htmlRenderer } from "../../renderers/html/index.js";
+import { htmlRenderer, HtmlRenderer } from "../../renderers/html/index.js";
 import type { Renderer } from "../../renderers/types.js";
 
 const RENDERERS_DIR = "src/renderers";
@@ -98,19 +98,19 @@ describe("polymorphism through the contract", () => {
     expect(output).toContain("<h1>t</h1>");
   });
 
-  it("binds the format's own settings at construction", () => {
-    const renderer = createHtmlRenderer({ cytoscapeUrl: "/vendor/cytoscape.js" });
+  it("settles what differs in the constructor", () => {
+    const renderer = new HtmlRenderer({ cytoscapeUrl: "/vendor/cytoscape.js" });
     const output = renderer.render({ graph });
     expect(output).toContain("/vendor/cytoscape.js");
     expect(output).not.toContain("cdnjs.cloudflare.com/ajax/libs/cytoscape");
   });
 
   it("binds the layout's scripts too", () => {
-    const renderer = createHtmlRenderer({ layoutScriptUrls: ["/vendor/dagre.js"] });
+    const renderer = new HtmlRenderer({ layoutScriptUrls: ["/vendor/dagre.js"] });
     expect(renderer.render({ graph })).toContain("/vendor/dagre.js");
   });
 
   it("defaults to the CDN when nothing is bound", () => {
-    expect(createHtmlRenderer().render({ graph })).toContain("cdnjs.cloudflare.com");
+    expect(new HtmlRenderer().render({ graph })).toContain("cdnjs.cloudflare.com");
   });
 });

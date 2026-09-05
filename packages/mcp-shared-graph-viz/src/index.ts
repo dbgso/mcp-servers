@@ -13,8 +13,8 @@ export { renderHtml as renderGraphHtml } from "./renderers/html/index.js";
 export {
   buildCytoscapeStyle,
   DEFAULT_CYTOSCAPE_URL,
-  createHtmlRenderer,
   htmlRenderer,
+  HtmlRenderer,
   MAX_LABEL_WIDTH_PX,
 } from "./renderers/html/index.js";
 

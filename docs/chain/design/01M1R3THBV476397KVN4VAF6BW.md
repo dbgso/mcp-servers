@@ -4,7 +4,7 @@ type: design
 title: mcp-shared-graph-viz 実装設計
 requires: 01M1R3GH8CWAPDCSEM3WQTTZ81
 created: 2026-09-05T06:24:18.811Z
-updated: 2026-09-05T12:26:45.681Z
+updated: 2026-09-05T12:31:41.919Z
 ---
 
 # mcp-shared-graph-viz 実装設計
@@ -86,11 +86,19 @@ interface Renderer<TOutput = string> {
 **形式固有の設定は `render` の引数にしない。** 構築時に束縛する。
 
 ```ts
-const offline = createHtmlRenderer({ cytoscapeUrl: "/vendor/cytoscape.js" });
-offline.render({ graph });        // 署名は共通のまま
+class HtmlRenderer implements Renderer {
+  readonly format = "html";
+  constructor(private readonly options: HtmlRendererOptions = {}) {}
+  render = (params: RenderParams): string => renderHtml({ ...params, ...this.options });
+}
+
+const offline = new HtmlRenderer({ cytoscapeUrl: "/vendor/cytoscape.js" });
+offline.render({ graph });        // 呼び出しは共通のまま
 ```
 
-これは `ssmSource({ region })` → `source.fetch(path)` と同じ形である。固有設定を render の引数に混ぜると、形式を知らない呼び出し側が `Renderer` 型のまま呼べなくなり、**多態が成立しない**。
+**形式ごとに違う部分はコンストラクタで決め、`render` はどの形式でも同じ呼び出しにする。** 固有設定を render の引数に混ぜると、形式を知らない呼び出し側が `Renderer` 型のまま呼べなくなり、**多態が成立しない**。
+
+実装はクラスで与える（`coding-rules__polymorphism` の Good Example に倣う）。コンストラクタが「違いを吸収する場所」として構文上はっきりするため。
 
 - `TOutput` を型引数にしているのは、戻り値が最も変わりやすいため（ラスタはバイト列、フォント取得やブラウザ起動を伴うものは Promise）
 - `render` をメソッドではなくプロパティ構文で宣言しているのは、TypeScript の反変チェックを効かせるため。メソッド構文は双変なので、`RenderParams` より多くを要求するレンダラが素通りする（実測確認済み）

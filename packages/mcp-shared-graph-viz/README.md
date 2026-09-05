@@ -175,17 +175,25 @@ the renderer is built, so every renderer answers the same signature and a
 caller that does not know the format can still drive it:
 
 ```ts
-const renderers: Record<string, Renderer> = { html: htmlRenderer };
-renderers[format].render({ graph, title });          // nothing format-specific here
-
-const offline = createHtmlRenderer({ cytoscapeUrl: "/vendor/cytoscape.js" });
-offline.render({ graph });                            // same signature
+class HtmlRenderer implements Renderer {
+  readonly format = "html";
+  constructor(private readonly options: HtmlRendererOptions = {}) {}
+  render = (params: RenderParams): string => renderHtml({ ...params, ...this.options });
+}
 ```
 
-This mirrors `ssmSource({ region })` in mcp-shared-secrets: configuration at
-construction, a uniform operation afterwards. Putting `cytoscapeUrl` in the
-render params instead would leave `Renderer` unusable through its own type,
-which is to say not polymorphic at all.
+```ts
+const renderers: Record<string, Renderer> = { html: htmlRenderer };
+renderers[format].render({ graph, title });                  // nothing format-specific here
+
+const offline = new HtmlRenderer({ cytoscapeUrl: "/vendor/cytoscape.js" });
+offline.render({ graph });                                    // same call
+```
+
+What differs between formats is settled by the constructor; `render` is the
+same call for every one of them. Putting `cytoscapeUrl` in the render params
+instead would leave `Renderer` unusable through its own type, which is to say
+not polymorphic at all.
 
 `renderGraphHtml` still takes both, for callers that know they want HTML and
 never go through a `Renderer`.
