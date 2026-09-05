@@ -1,10 +1,11 @@
 import type { GraphInput, LayoutOptions, ThemeOptions } from "../types.js";
 
 /**
- * What every renderer needs, whatever it emits.
+ * What a renderer is asked to draw.
  *
- * A format's own options extend this, so what is common to all renderers and
- * what belongs to one of them stay visibly apart.
+ * This is the whole of it. A format's own settings are not arguments here —
+ * they are given when the renderer is built, so every renderer can be called
+ * through the same signature.
  */
 export interface RenderParams {
   graph: GraphInput;
@@ -19,13 +20,16 @@ export interface RenderParams {
 /**
  * One output format.
  *
- * `TOutput` is a type parameter rather than `string` because that is the part
- * most likely to differ: a raster format returns bytes, and a renderer that
- * has to fetch a font or drive a browser returns a promise. Every renderer
- * takes exactly one params object, and that much does not change.
+ * `render` is declared as a property rather than a method so TypeScript checks
+ * it contravariantly: a renderer that quietly demanded more than `RenderParams`
+ * would be rejected instead of slipping through.
+ *
+ * `TOutput` is a type parameter because that is the part that genuinely
+ * differs: a raster format returns bytes, and a renderer that has to fetch a
+ * font or drive a browser returns a promise.
  */
-export interface Renderer<TParams extends RenderParams = RenderParams, TOutput = string> {
-  /** Identifies the format in messages and file extensions; not used to look it up. */
+export interface Renderer<TOutput = string> {
+  /** Identifies the format in messages and file extensions. */
   readonly format: string;
-  render(params: TParams): TOutput;
+  render: (params: RenderParams) => TOutput;
 }

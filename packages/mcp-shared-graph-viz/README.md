@@ -156,7 +156,7 @@ union without adding its layout is a compile error.
 `renderers/html/` is one output format, and it says so in the type:
 
 ```ts
-interface RenderParams {                 // what every renderer needs
+interface RenderParams {          // the whole of what a renderer is asked to draw
   graph: GraphInput;
   layout?: LayoutOptions;
   theme?: ThemeOptions;
@@ -164,25 +164,40 @@ interface RenderParams {                 // what every renderer needs
   legend?: boolean;
 }
 
-interface Renderer<TParams extends RenderParams = RenderParams, TOutput = string> {
+interface Renderer<TOutput = string> {
   readonly format: string;
-  render(params: TParams): TOutput;
+  render: (params: RenderParams) => TOutput;
 }
-
-export const htmlRenderer: Renderer<RenderGraphHtmlParams> = {
-  format: "html",
-  render: renderHtml,
-};
 ```
+
+A format's own settings are **not** arguments to `render` — they are bound when
+the renderer is built, so every renderer answers the same signature and a
+caller that does not know the format can still drive it:
+
+```ts
+const renderers: Record<string, Renderer> = { html: htmlRenderer };
+renderers[format].render({ graph, title });          // nothing format-specific here
+
+const offline = createHtmlRenderer({ cytoscapeUrl: "/vendor/cytoscape.js" });
+offline.render({ graph });                            // same signature
+```
+
+This mirrors `ssmSource({ region })` in mcp-shared-secrets: configuration at
+construction, a uniform operation afterwards. Putting `cytoscapeUrl` in the
+render params instead would leave `Renderer` unusable through its own type,
+which is to say not polymorphic at all.
+
+`renderGraphHtml` still takes both, for callers that know they want HTML and
+never go through a `Renderer`.
 
 `TOutput` is a type parameter rather than `string` because that is the part
 most likely to differ: a raster format returns bytes, and a renderer that has
 to fetch a font or drive a browser returns a promise. Adding either widens the
 type instead of breaking it.
 
-Splitting `RenderParams` out is worth it even with one renderer: it keeps what
-every format needs visibly apart from what the page alone needs
-(`cytoscapeUrl`, `layoutScriptUrls`).
+`render` is a property rather than a method so TypeScript checks it
+contravariantly — a renderer that quietly demanded more than `RenderParams`
+is rejected instead of slipping through.
 
 A test walks `renderers/*/` and asserts each directory's entry point exports a
 `Renderer`, so a second format cannot quietly arrive as a bare function beside

@@ -5,7 +5,8 @@ import { resolveTheme } from "../../theme.js";
 import { buildDocument } from "./document.js";
 import { buildCytoscapeStyle } from "./style.js";
 import type { Renderer } from "../types.js";
-import type { RenderGraphHtmlParams } from "./types.js";
+import type { HtmlRendererOptions } from "./types.js";
+import type { RenderParams } from "../types.js";
 
 export const DEFAULT_CYTOSCAPE_URL =
   "https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.34.2/cytoscape.min.js";
@@ -17,7 +18,7 @@ export const DEFAULT_CYTOSCAPE_URL =
  * Synchronous because the layout runs in the browser's cytoscape; this
  * function only assembles the document.
  */
-export function renderHtml(params: RenderGraphHtmlParams): string {
+export function renderHtml(params: RenderParams & HtmlRendererOptions): string {
   const {
     graph,
     layout: layoutOptions,
@@ -57,12 +58,22 @@ export function renderHtml(params: RenderGraphHtmlParams): string {
   });
 }
 
-/** The HTML page as a renderer, the way a dialect or a secret source is given. */
-export const htmlRenderer: Renderer<RenderGraphHtmlParams> = {
-  format: "html",
-  render: renderHtml,
-};
+/**
+ * The page as a renderer.
+ *
+ * Its settings are bound here, the way `ssmSource({ region })` binds a secret
+ * source's, so `render` takes nothing but the shared `RenderParams`.
+ */
+export function createHtmlRenderer(options: HtmlRendererOptions = {}): Renderer {
+  return {
+    format: "html",
+    render: (params) => renderHtml({ ...params, ...options }),
+  };
+}
+
+/** The page with default settings. */
+export const htmlRenderer: Renderer = createHtmlRenderer();
 
 export { buildCytoscapeStyle, MAX_LABEL_WIDTH_PX } from "./style.js";
 export { escapeScriptJson, escapeXml } from "./escape.js";
-export type { RenderGraphHtmlParams } from "./types.js";
+export type { HtmlRendererOptions } from "./types.js";

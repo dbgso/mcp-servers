@@ -13,6 +13,7 @@ export { renderHtml as renderGraphHtml } from "./renderers/html/index.js";
 export {
   buildCytoscapeStyle,
   DEFAULT_CYTOSCAPE_URL,
+  createHtmlRenderer,
   htmlRenderer,
   MAX_LABEL_WIDTH_PX,
 } from "./renderers/html/index.js";
@@ -25,7 +26,7 @@ export { DEFAULT_PALETTE, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE } from "./theme
 export type { CytoscapeElement } from "./elements.js";
 export type { Layout, LayoutSpec } from "./layouts/index.js";
 export type { Renderer, RenderParams } from "./renderers/types.js";
-export type { RenderGraphHtmlParams } from "./renderers/html/index.js";
+export type { HtmlRendererOptions } from "./renderers/html/index.js";
 export type {
   GraphEdge,
   GraphInput,

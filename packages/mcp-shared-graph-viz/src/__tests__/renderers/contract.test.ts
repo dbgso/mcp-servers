@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { htmlRenderer } from "../../renderers/html/index.js";
+import { createHtmlRenderer, htmlRenderer } from "../../renderers/html/index.js";
 import type { Renderer } from "../../renderers/types.js";
 
 const RENDERERS_DIR = "src/renderers";
@@ -32,7 +32,7 @@ describe("renderers/", () => {
       const module = (await import(entry)) as Record<string, unknown>;
 
       const renderers = Object.values(module).filter(
-        (value): value is Renderer<never, unknown> =>
+        (value): value is Renderer<unknown> =>
           typeof value === "object" &&
           value !== null &&
           typeof (value as { format?: unknown }).format === "string" &&
@@ -70,5 +70,47 @@ describe("htmlRenderer", () => {
     });
     expect(output).toContain('"name":"grid"');
     expect(output).not.toContain(">g</span>");
+  });
+});
+
+/**
+ * The point of moving a format's settings to construction: a caller that does
+ * not know the format can still drive it through the shared signature.
+ */
+describe("polymorphism through the contract", () => {
+  const graph = { nodes: [{ id: "a", label: "Alpha" }], edges: [] };
+
+  it("holds renderers of any format in one map", () => {
+    const registry: Record<string, Renderer> = { html: htmlRenderer };
+    expect(registry.html.render({ graph })).toContain("<!doctype html>");
+  });
+
+  it("renders from the shared params alone", () => {
+    const renderer: Renderer = htmlRenderer;
+    const output = renderer.render({
+      graph,
+      layout: { name: "grid" },
+      theme: { fontSize: 20 },
+      title: "t",
+      legend: false,
+    });
+    expect(output).toContain('"name":"grid"');
+    expect(output).toContain("<h1>t</h1>");
+  });
+
+  it("binds the format's own settings at construction", () => {
+    const renderer = createHtmlRenderer({ cytoscapeUrl: "/vendor/cytoscape.js" });
+    const output = renderer.render({ graph });
+    expect(output).toContain("/vendor/cytoscape.js");
+    expect(output).not.toContain("cdnjs.cloudflare.com/ajax/libs/cytoscape");
+  });
+
+  it("binds the layout's scripts too", () => {
+    const renderer = createHtmlRenderer({ layoutScriptUrls: ["/vendor/dagre.js"] });
+    expect(renderer.render({ graph })).toContain("/vendor/dagre.js");
+  });
+
+  it("defaults to the CDN when nothing is bound", () => {
+    expect(createHtmlRenderer().render({ graph })).toContain("cdnjs.cloudflare.com");
   });
 });

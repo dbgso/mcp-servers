@@ -4,7 +4,7 @@ type: design
 title: mcp-shared-graph-viz 実装設計
 requires: 01M1R3GH8CWAPDCSEM3WQTTZ81
 created: 2026-09-05T06:24:18.811Z
-updated: 2026-09-05T11:10:56.055Z
+updated: 2026-09-05T12:26:45.681Z
 ---
 
 # mcp-shared-graph-viz 実装設計
@@ -69,7 +69,7 @@ src/
 `renderers/html` は**出力形式の1つ**であり、それを型で表明する。
 
 ```ts
-interface RenderParams {                  // どのレンダラにも要るもの
+interface RenderParams {          // レンダラに描かせるものの全て
   graph: GraphInput;
   layout?: LayoutOptions;
   theme?: ThemeOptions;
@@ -77,24 +77,23 @@ interface RenderParams {                  // どのレンダラにも要るも�
   legend?: boolean;
 }
 
-interface Renderer<TParams extends RenderParams = RenderParams, TOutput = string> {
+interface Renderer<TOutput = string> {
   readonly format: string;
-  render(params: TParams): TOutput;
+  render: (params: RenderParams) => TOutput;
 }
 ```
 
-`TOutput` を `string` で決め打たず型引数にしているのは、**戻り値が最も変わりやすい**ため。ラスタ形式はバイト列を返し、フォント取得やブラウザ起動を伴うレンダラは Promise を返す。どちらも型を壊さず広げるだけで入る。
-
-`RenderParams` を切り出すことは、レンダラが1つでも意味がある。「どの形式にも要るもの」と「ページ固有のもの」（`cytoscapeUrl` / `layoutScriptUrls`）が型として分かれるため。
-
-実装の与え方は `Dialect` / `SecretSource` / `ApprovalStrategy` と同じく、クラスではなくオブジェクトリテラル:
+**形式固有の設定は `render` の引数にしない。** 構築時に束縛する。
 
 ```ts
-export const htmlRenderer: Renderer<RenderGraphHtmlParams> = {
-  format: "html",
-  render: renderHtml,
-};
+const offline = createHtmlRenderer({ cytoscapeUrl: "/vendor/cytoscape.js" });
+offline.render({ graph });        // 署名は共通のまま
 ```
+
+これは `ssmSource({ region })` → `source.fetch(path)` と同じ形である。固有設定を render の引数に混ぜると、形式を知らない呼び出し側が `Renderer` 型のまま呼べなくなり、**多態が成立しない**。
+
+- `TOutput` を型引数にしているのは、戻り値が最も変わりやすいため（ラスタはバイト列、フォント取得やブラウザ起動を伴うものは Promise）
+- `render` をメソッドではなくプロパティ構文で宣言しているのは、TypeScript の反変チェックを効かせるため。メソッド構文は双変なので、`RenderParams` より多くを要求するレンダラが素通りする（実測確認済み）
 
 **レジストリは置かない。** `Dialect` と同様、利用側が1つ選んで使うだけで、複数を同時に扱う必要がないため。
 

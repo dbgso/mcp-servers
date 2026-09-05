@@ -1,7 +1,11 @@
-import type { RenderParams } from "../types.js";
-
-/** The HTML page's own options, on top of what every renderer takes. */
-export interface RenderGraphHtmlParams extends RenderParams {
+/**
+ * The page's own settings.
+ *
+ * Given when the renderer is built, so `Renderer.render` keeps the shared
+ * signature. `renderHtml` also accepts them per call, for callers that know
+ * they want HTML and never go through a renderer.
+ */
+export interface HtmlRendererOptions {
   /** cytoscape script URL embedded in the page. */
   cytoscapeUrl?: string;
   /**
