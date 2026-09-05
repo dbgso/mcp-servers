@@ -110,3 +110,21 @@ export function assertKnownLayout(params: { name: string }): void {
     );
   }
 }
+
+/**
+ * Every node needs a position under the `preset` layout.
+ *
+ * Without one cytoscape places the node at the origin, so opting into `preset`
+ * with incomplete coordinates would silently pile nodes on top of each other.
+ */
+export function assertPresetPositions(params: {
+  nodes: { id: string; position?: unknown }[];
+}): void {
+  const { nodes } = params;
+  const missing = nodes.filter((node) => node.position === undefined).map((node) => node.id);
+  if (missing.length > 0) {
+    throw new GraphVizError(
+      `The "preset" layout requires a position on every node. Missing: ${missing.join(", ")}`,
+    );
+  }
+}

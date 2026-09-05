@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_NODE_SHAPE, prepareGraph, preparedToElements, toCytoscapeElements } from "../elements.js";
+import {
+  CYTOSCAPE_SHAPES,
+  DEFAULT_NODE_SHAPE,
+  prepareGraph,
+  preparedToElements,
+  presetPositions,
+  toCytoscapeElements,
+} from "../elements.js";
 import { GraphVizError } from "../errors.js";
 import { DEFAULT_PALETTE } from "../theme.js";
-import type { GraphInput } from "../types.js";
+import type { GraphInput, NodeShape } from "../types.js";
 
 const simple: GraphInput = {
   nodes: [
@@ -15,19 +22,15 @@ const simple: GraphInput = {
 
 describe("prepareGraph", () => {
   it("falls back to the id when no label is given", () => {
-    const prepared = prepareGraph({ graph: simple });
-    expect(prepared.nodes.map((node) => node.label)).toEqual(["Alpha", "b"]);
+    expect(prepareGraph({ graph: simple }).nodes.map((node) => node.label)).toEqual(["Alpha", "b"]);
   });
 
   it("applies the default shape", () => {
-    const prepared = prepareGraph({ graph: simple });
-    expect(prepared.nodes[0].shape).toBe(DEFAULT_NODE_SHAPE);
+    expect(prepareGraph({ graph: simple }).nodes[0].shape).toBe(DEFAULT_NODE_SHAPE);
   });
 
   it("keeps an explicit shape", () => {
-    const prepared = prepareGraph({
-      graph: { nodes: [{ id: "a", shape: "diamond" }], edges: [] },
-    });
+    const prepared = prepareGraph({ graph: { nodes: [{ id: "a", shape: "diamond" }], edges: [] } });
     expect(prepared.nodes[0].shape).toBe("diamond");
   });
 
@@ -42,13 +45,19 @@ describe("prepareGraph", () => {
   });
 
   it("defaults edges to directed and derives ids", () => {
-    const prepared = prepareGraph({ graph: simple });
-    expect(prepared.edges[0]).toMatchObject({ id: "a->b#0", directed: true, label: "to" });
+    expect(prepareGraph({ graph: simple }).edges[0]).toMatchObject({
+      id: "a->b#0",
+      directed: true,
+      label: "to",
+    });
   });
 
   it("keeps an explicit undirected flag", () => {
     const prepared = prepareGraph({
-      graph: { nodes: [{ id: "a" }, { id: "b" }], edges: [{ source: "a", target: "b", directed: false }] },
+      graph: {
+        nodes: [{ id: "a" }, { id: "b" }],
+        edges: [{ source: "a", target: "b", directed: false }],
+      },
     });
     expect(prepared.edges[0].directed).toBe(false);
   });
@@ -59,18 +68,24 @@ describe("prepareGraph", () => {
     expect(prepared.nodes[0].data).toBe(data);
   });
 
-  it("uses a caller-supplied measure function", () => {
-    const prepared = prepareGraph({
-      graph: { nodes: [{ id: "a", label: "wide" }], edges: [] },
-      measureLabel: () => 400,
-    });
-    expect(prepared.nodes[0].width).toBeGreaterThan(400);
-  });
-
   it("rejects an invalid graph", () => {
     expect(() => prepareGraph({ graph: { nodes: [], edges: [{ source: "x", target: "y" }] } })).toThrow(
       GraphVizError,
     );
+  });
+});
+
+describe("CYTOSCAPE_SHAPES", () => {
+  type Case = { shape: NodeShape; expected: string };
+  const cases: Case[] = [
+    { shape: "roundRect", expected: "round-rectangle" },
+    { shape: "rect", expected: "rectangle" },
+    { shape: "ellipse", expected: "ellipse" },
+    { shape: "diamond", expected: "diamond" },
+  ];
+
+  it.each(cases)("maps $shape to $expected", ({ shape, expected }) => {
+    expect(CYTOSCAPE_SHAPES[shape]).toBe(expected);
   });
 });
 
@@ -81,6 +96,18 @@ describe("preparedToElements", () => {
     expect(elements.filter((element) => element.group === "edges")).toHaveLength(1);
   });
 
+  /** The browser measures the label, so no size is emitted unless asked for. */
+  it("omits size unless the caller fixed it", () => {
+    const elements = preparedToElements({ prepared: prepareGraph({ graph: simple }) });
+    expect(elements[0].data).not.toHaveProperty("width");
+    expect(elements[0].data).not.toHaveProperty("height");
+  });
+
+  it("carries a fixed size when given", () => {
+    const prepared = prepareGraph({ graph: { nodes: [{ id: "a", width: 200, height: 60 }], edges: [] } });
+    expect(preparedToElements({ prepared })[0].data).toMatchObject({ width: 200, height: 60 });
+  });
+
   it("omits the parent key for ordinary nodes", () => {
     const elements = preparedToElements({ prepared: prepareGraph({ graph: simple }) });
     expect(elements[0].data).not.toHaveProperty("parent");
@@ -88,30 +115,53 @@ describe("preparedToElements", () => {
 
   it("carries the parent key for compound nodes", () => {
     const graph: GraphInput = { nodes: [{ id: "box" }, { id: "a", parent: "box" }], edges: [] };
-    const elements = preparedToElements({ prepared: prepareGraph({ graph }) });
-    expect(elements[1].data.parent).toBe("box");
+    expect(preparedToElements({ prepared: prepareGraph({ graph }) })[1].data.parent).toBe("box");
   });
 
-  it("includes a position only when one was supplied", () => {
+  it("carries href and tooltip only when set", () => {
     const graph: GraphInput = {
-      nodes: [{ id: "a", position: { x: 5, y: 6 } }, { id: "b" }],
+      nodes: [{ id: "a", href: "https://example.com", tooltip: "hint" }, { id: "b" }],
       edges: [],
     };
     const elements = preparedToElements({ prepared: prepareGraph({ graph }) });
-    expect(elements[0].position).toEqual({ x: 5, y: 6 });
-    expect(elements[1].position).toBeUndefined();
+    expect(elements[0].data).toMatchObject({ href: "https://example.com", tooltip: "hint" });
+    expect(elements[1].data).not.toHaveProperty("href");
+    expect(elements[1].data).not.toHaveProperty("tooltip");
   });
 
-  it("carries the measured size into the element data", () => {
-    const elements = preparedToElements({ prepared: prepareGraph({ graph: simple }) });
-    expect(elements[0].data.width).toBeGreaterThan(0);
-    expect(elements[0].data.height).toBeGreaterThan(0);
+  it("marks direction on the edge so the arrow style can select it", () => {
+    const graph: GraphInput = {
+      nodes: [{ id: "a" }, { id: "b" }],
+      edges: [
+        { source: "a", target: "b" },
+        { source: "b", target: "a", directed: false, kind: "related" },
+      ],
+    };
+    const edges = preparedToElements({ prepared: prepareGraph({ graph }) }).filter(
+      (element) => element.group === "edges",
+    );
+    expect(edges[0].data.directed).toBe(true);
+    expect(edges[1].data).toMatchObject({ directed: false, kind: "related" });
+  });
+});
+
+describe("presetPositions", () => {
+  it("collects only the nodes that carry a position", () => {
+    const graph: GraphInput = {
+      nodes: [{ id: "a", position: { x: 1, y: 2 } }, { id: "b" }],
+      edges: [],
+    };
+    const positions = presetPositions({ prepared: prepareGraph({ graph }) });
+    expect([...positions]).toEqual([["a", { x: 1, y: 2 }]]);
   });
 });
 
 describe("toCytoscapeElements", () => {
   it("is the escape hatch from graph input to cytoscape elements", () => {
-    const elements = toCytoscapeElements({ graph: simple });
-    expect(elements.map((element) => element.data.id)).toEqual(["a", "b", "a->b#0"]);
+    expect(toCytoscapeElements({ graph: simple }).map((element) => element.data.id)).toEqual([
+      "a",
+      "b",
+      "a->b#0",
+    ]);
   });
 });

@@ -1,8 +1,8 @@
 import type { GraphInput, Palette, Swatch, ThemeOptions } from "./types.js";
 
 /**
- * Light, print-friendly palette. Fill is pale so labels stay readable, stroke
- * is the saturated counterpart so shapes remain distinguishable in grayscale.
+ * Light palette. Fill is pale so labels stay readable, stroke is the saturated
+ * counterpart so shapes remain distinguishable in grayscale.
  */
 export const DEFAULT_PALETTE: Palette = {
   swatches: [
@@ -31,7 +31,6 @@ export interface ResolvedTheme {
   palette: Palette;
   fontFamily: string;
   fontSize: number;
-  drawBackground: boolean;
 }
 
 export function resolveTheme(params: { theme?: ThemeOptions }): ResolvedTheme {
@@ -40,7 +39,6 @@ export function resolveTheme(params: { theme?: ThemeOptions }): ResolvedTheme {
     palette: theme?.palette ?? DEFAULT_PALETTE,
     fontFamily: theme?.fontFamily ?? DEFAULT_FONT_FAMILY,
     fontSize: theme?.fontSize ?? DEFAULT_FONT_SIZE,
-    drawBackground: theme?.drawBackground ?? true,
   };
 }
 

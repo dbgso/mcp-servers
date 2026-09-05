@@ -14,12 +14,8 @@ catalog:
   '@duckdb/node-api': 1.5.2-r.1
   '@changesets/cli': 2.29.8
   '@modelcontextprotocol/sdk': 1.26.0
-  '@types/cytoscape': 3.31.0
-  '@types/cytoscape-dagre': 2.3.4
   '@types/node': 22.15.21
   '@vitest/coverage-v8': 4.0.18
-  cytoscape: 3.34.2
-  cytoscape-dagre: 4.0.1
   'node-notifier': 10.0.1
   oxlint: 1.63.0
   tsup: 8.5.0

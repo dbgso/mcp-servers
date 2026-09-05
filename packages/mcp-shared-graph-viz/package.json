@@ -2,7 +2,7 @@
   "name": "mcp-shared-graph-viz",
   "version": "0.1.0",
   "private": true,
-  "description": "Turn nodes and edges into a diagram. Layout via headless cytoscape, rendering as self-contained SVG or interactive HTML.",
+  "description": "Turn nodes and edges into an interactive cytoscape page. Zero runtime dependencies: cytoscape runs in the browser.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,20 +27,14 @@
     "shared",
     "graph",
     "cytoscape",
-    "svg",
+    "html",
     "visualization"
   ],
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {
-    "cytoscape": "catalog:",
-    "cytoscape-dagre": "catalog:"
-  },
   "devDependencies": {
-    "@types/cytoscape": "catalog:",
-    "@types/cytoscape-dagre": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"
   }

@@ -17,15 +17,16 @@ describe("resolveTheme", () => {
       palette: DEFAULT_PALETTE,
       fontFamily: DEFAULT_FONT_FAMILY,
       fontSize: DEFAULT_FONT_SIZE,
-      drawBackground: true,
     });
   });
 
   it("keeps caller overrides", () => {
     const palette: Palette = { ...DEFAULT_PALETTE, background: "#000000" };
-    expect(
-      resolveTheme({ theme: { palette, fontFamily: "serif", fontSize: 20, drawBackground: false } }),
-    ).toEqual({ palette, fontFamily: "serif", fontSize: 20, drawBackground: false });
+    expect(resolveTheme({ theme: { palette, fontFamily: "serif", fontSize: 20 } })).toEqual({
+      palette,
+      fontFamily: "serif",
+      fontSize: 20,
+    });
   });
 });
 

@@ -1,62 +1,34 @@
-import { layoutGraph } from "./layout.js";
-import { renderSvg } from "./svg/render.js";
-import type { LaidOutGraph, RenderGraphSvgParams } from "./types.js";
-
 /**
  * mcp-shared-graph-viz
  *
- * Give it nodes and edges, get a diagram. Mapping a domain onto nodes and
- * edges stays with the caller; this library holds no domain knowledge.
+ * Give it nodes and edges, get an interactive page. Mapping a domain onto
+ * nodes and edges stays with the caller; this library holds no domain
+ * knowledge.
+ *
+ * The page runs cytoscape in the browser, which is where cytoscape can both
+ * lay out and draw a graph, so this package has no runtime dependencies.
  */
 
-/** Lay out and render a graph as a self-contained SVG document. */
-export async function renderGraphSvg(params: RenderGraphSvgParams): Promise<string> {
-  const graph: LaidOutGraph = await layoutGraph({
-    graph: params.graph,
-    layout: params.layout,
-    theme: params.theme,
-    measureLabel: params.measureLabel,
-  });
-
-  return renderSvg({
-    graph,
-    padding: params.padding,
-    theme: params.theme,
-    title: params.title,
-    legend: params.legend,
-    measureLabel: params.measureLabel,
-  });
-}
-
-export { layoutGraph } from "./layout.js";
 export { renderHtml as renderGraphHtml } from "./html.js";
+export { buildCytoscapeStyle, DEFAULT_CYTOSCAPE_URL, DEFAULT_DAGRE_URLS } from "./html.js";
 export { toCytoscapeElements } from "./elements.js";
-export { renderSvg } from "./svg/render.js";
-
+export { buildLayoutSpec } from "./layout-spec.js";
 export { GraphVizError } from "./errors.js";
 export { DEFAULT_PALETTE, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE } from "./theme.js";
-export { estimateTextWidth } from "./measure.js";
 
 export type { CytoscapeElement } from "./elements.js";
+export type { LayoutSpec } from "./layout-spec.js";
 export type {
-  Bounds,
   GraphEdge,
   GraphInput,
   GraphNode,
-  LaidOutEdge,
-  LaidOutGraph,
-  LaidOutNode,
   LayoutDirection,
-  LayoutGraphParams,
   LayoutName,
   LayoutOptions,
-  MeasureLabel,
   NodeShape,
   Palette,
   Point,
   RenderGraphHtmlParams,
-  RenderGraphSvgParams,
-  RenderOptions,
   Swatch,
   ThemeOptions,
 } from "./types.js";

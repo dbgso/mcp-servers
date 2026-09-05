@@ -4,90 +4,60 @@ type: design
 title: mcp-shared-graph-viz 実装設計
 requires: 01M1R3GH8CWAPDCSEM3WQTTZ81
 created: 2026-09-05T06:24:18.811Z
-updated: 2026-09-05T06:24:18.811Z
+updated: 2026-09-05T08:28:35.325Z
 ---
 
 # mcp-shared-graph-viz 実装設計
 
 仕様「mcp-shared-graph-viz パッケージ仕様」をどう実装するか。
 
-## 最重要の設計判断: cytoscape はレイアウトエンジンとしてのみ使う
+## 最重要の設計判断: レイアウトも描画もブラウザで行う
 
-cytoscape は本来ブラウザ用ライブラリで、**描画は canvas に依存するため headless では使えない**。一方でレイアウト計算（座標算出）は headless で動くことを実行確認した。
+cytoscape は headless でも**レイアウト計算はできる**。しかし**描画は canvas に依存する**ため headless では動かない。
 
-したがって:
+そこで取りうる形は2つあった。
 
-```
-GraphInput ──▶ cytoscape (headless)  ──▶ LaidOutGraph ──▶ 自前 SVG 生成
-               座標計算のみ                          描画は自分でやる
-```
-
-この分割により canvas / puppeteer / ヘッドレスブラウザへの依存が不要になる。
-
-### 実行して発見した headless 固有の落とし穴（これを吸収するのが本ライブラリの価値）
-
-| 現象 | 原因 | 対策 |
+| 案 | 内容 | 代償 |
 |---|---|---|
-| `breadthfirst` の座標が `a(-4.375e+49, 0)` になる | headless だと `cy.width()/height()` が 0 になり、レイアウトが 0 除算相当の計算をする | 面積ベースのレイアウトにのみ `boundingBox` を明示指定する（下記の訂正を参照） |
-| dagre / cose でノードが重なる | cytoscape はレイアウト結果を `boundingBox` に**リスケール**する。dagre が計算した間隔が箱への引き伸ばしで上書きされる | dagre / cose / preset には `boundingBox` を渡さない |
-| 要素定義の `position` が無視される | headless では反映されない | `preset` は `positions` オプションでレイアウトに直接渡す |
-| Node プロセスが終了しない | cytoscape インスタンスがハンドルを保持する | `try/finally` で必ず `cy.destroy()` |
-| レイアウト完了を待てない | 一部レイアウトは非同期 | `layoutstop` を Promise 化して await |
+| A: 半分だけ Node で | headless でレイアウト → 座標を得て SVG を自前生成 | 描画コードを全部自前で持つ。さらに canvas がないので**文字幅を測れず**、ノードサイズをラベルから推定するしかない |
+| B: 全部ブラウザで | elements / style / レイアウト設定を組み立てて HTML に埋め込む | ページを開くのにブラウザが要る |
 
-呼び出し側はこれらを一切知らなくてよい。
+**B を採る。** 初期要件が「人間がグラフィカルに見たい」である以上、ブラウザで開くことは前提であり、A の代償を払う理由がない。
 
-### 訂正（実装フェーズの検証結果を反映）
+結果として、このパッケージは cytoscape に**ランタイム依存しない**。ページが CDN から読む。
 
-当初この設計は「`boundingBox` を**常に**明示指定する」としていた。これは誤りだった。
+```
+GraphInput ──▶ prepareGraph ──▶ elements / style / layout spec ──▶ HTML
+                （検証・色・ラベル）                                    │
+                                                                       ▼
+                                                     ブラウザの cytoscape がレイアウトと描画
+```
 
-cytoscape はレイアウト結果を `boundingBox` に**リスケール**するため、dagre / cose に渡すと、それらが計算した適切な間隔が固定サイズの箱への引き伸ばしで上書きされ、ノードが重なる。
+### ノードサイズはブラウザに任せる
 
-実測（孤立ノード6件 + a→b、dagre LR）:
+cytoscape の `width: 'label'` / `height: 'label'` と `padding` を使う。ブラウザは実際のフォントでテキストを測れるので、日本語混在でも破綻しない。`GraphNode.width` / `height` が指定された場合のみ `node[width]` / `node[height]` セレクタで上書きする。
 
-| | y 座標 |
-|---|---|
-| boundingBox あり | 0, 133, 267, 400, 533, 667 — 800 を正確に6等分（＝リスケール）。高さ56のノードが重なる |
-| boundingBox なし | 19, 106, 193, 280, 367, 454 — 87px 間隔。`nodeSep` が生きている |
+### preset レイアウトは座標を明示的に渡す
 
-したがって `boundingBox` は**面積ベースのレイアウト**（grid / circle / concentric / breadthfirst）にのみ渡す。さらにその箱も固定 1200x800 ではなく、ノードの総面積から算出する（`estimateBoundingBox`）。固定値だと小さいグラフが引き伸ばされ、大きいグラフが押し込められるため。
+要素定義の `position` は読み戻されないことがあるため、`positions` オプションでレイアウトに直接渡す。座標を持たないノードがあるまま `preset` を選ぶと全ノードが原点に重なるので、その場合は `GraphVizError` で落とす。
 
-詳細は implementation 文書を参照。
-
-## ファイル構成（pure / impure 分離）
+## ファイル構成
 
 ```
 src/
-  types.ts          入力型・出力型・オプション型            [型のみ]
-  errors.ts         入力検証（id 重複・孤立エッジ）              [pure]
-  theme.ts          パレット、group → 色の決定的割当             [pure]
-  measure.ts        ラベル幅推定・折り返し・ノードサイズ算出   [pure]
-  elements.ts       GraphInput → cytoscape elements              [pure]
-  layout.ts         cytoscape headless 実行                       [impure/async]
-  svg/
-    escape.ts       XML エスケープ                                [pure]
-    geometry.ts     境界クリップ・矢印・自己ループ・多重辺     [pure]
-    render.ts       LaidOutGraph → SVG 文字列                    [pure]
-  html.ts           GraphInput → インタラクティブ HTML            [pure]
-  index.ts          公開 API
+  types.ts        入力/出力型・オプション型                [型のみ]
+  errors.ts       入力検証と GraphVizError                [pure]
+  theme.ts        パレット、group → 色の決定的割当         [pure]
+  elements.ts     GraphInput → cytoscape elements         [pure]
+  layout-spec.ts  LayoutOptions → cytoscape layout config [pure]
+  escape.ts       HTML / script JSON エスケープ           [pure]
+  html.ts         ページの組み立て                        [pure]
+  index.ts        公開 API
 ```
 
-**impure は `layout.ts` の 1 ファイルに隔離されている**。ロジックの大半は pure なので、入出力の assert だけでテストできる（`coding__pure-function-extraction`、カバレッジ 95% 要件）。
+**全モジュールが pure。** 副作用も非同期もない。入出力の assert だけでテストできる。
 
 ## 主要アルゴリズム
-
-### ラベル幅推定（measure.ts）
-
-canvas がないので実測不可。コードポイント単位で幅係数を割り当てて合算する。
-
-| 文字種 | 係数 (em) |
-|---|---|
-| CJK（漢字・かな・全角） | 1.0 |
-| 英数・半角記号 | 0.6 |
-| 狭い文字 (i, l, j, ., :, space 等) | 0.3 |
-
-`measureLabel` オプションで差し替え可能にし、フォントの実情に合わない場合の逃げ道を残す。
-
-折り返しは単語境界優先。CJK は単語境界がないため文字単位で切る。
 
 ### 色の決定的割当（theme.ts）
 
@@ -95,64 +65,33 @@ canvas がないので実測不可。コードポイント単位で幅係数を�
 
 パレットは背景（淡色）と線（濃色）のペアで持ち、ラベルの可読性を確保する。
 
-### エッジの境界クリップ（svg/geometry.ts）
+### スタイルの組み立て（html.ts）
 
-ノード中心同士を結ぶ線分を、矩形・楕円の境界でクリップする。
+ベースの `node` / `edge` ルールに加えて、ノードごとに1ルールを出して group の色と形を当てる。矢印は `edge[?directed]` セレクタで有向エッジにのみ付ける。
 
-- 矩形: 中心からの方向ベクトルを半幅/半高でスケールし、小さい方の t を採用
-- 楕円: 楕円の媒介変数表現から交点を直接算出
+### インタラクション
 
-矢印は終点での進行方向から三角形を生成する。
+- `mouseover`/`mouseout` で `closedNeighborhood()` 以外に `.faded` クラスを付け外しする
+- `tap` で `href` を別タブに開く（`noopener`）
+- `window.graphViz = { cy }` を公開する
 
-同じノード対を結ぶエッジが複数ある場合は、中点を法線方向にオフセットした二次ベジェ曲線にする。オフセット量は `±(i+1)/2 × spacing` で左右交互に振る。
+### エスケープ（escape.ts）
 
-自己ループはノード上部の弧として描く（上辺の2点を結ぶ三次ベジェ）。
-
-### レイアウト実行（layout.ts）
-
-```ts
-const cy = cytoscape({ headless: true, styleEnabled: true, elements, style });
-try {
-  // boundingBox は面積ベースのレイアウトにのみ含まれる（buildLayoutSpec が判断）
-  const layout = cy.layout(spec);
-  await new Promise<void>((resolve) => {
-    layout.one("layoutstop", () => resolve());
-    layout.run();
-  });
-  return extractLaidOutGraph({ cy, graph });
-} finally {
-  cy.destroy();  // これがないとプロセスが終わらない
-}
-```
-
-ノードサイズは cytoscape に任せず、`measure.ts` で先に確定させて style として渡す。これによりレイアウトが実寸法を考慮し、描画時にサイズが食い違わない。
-
-`preset` レイアウト（呼び出し側が座標を持っているケース）をサポートし、テストでの完全な決定性確保にも使う。
-
-### HTML 出力（html.ts）
-
-レイアウトをブラウザ側の cytoscape に任せるので同期関数にできる。elements を JSON で埋め込み、cytoscape 本体は CDN から読む。
-
-埋め込み JSON は `</script>` を `<\/script>` に置換してスクリプトブレイクを防ぐ。
-
-## 依存の扱い
-
-`cytoscape` / `cytoscape-dagre` / `@types/cytoscape` を pnpm-workspace.yaml の catalog に追加し、バージョンを集中管理する（既存の依存全てが catalog 経由のため）。
-
-`cytoscape.use(dagre)` は二重登録すると警告が出るので、モジュールロード時に1回だけ実行する（フラグでガード）。
+- HTML に直接入る文字列（ラベル、タイトル、URL）は XML エスケープ
+- `<script>` に埋め込む JSON は `<` `>` と U+2028/U+2029 をエスケープし、`</script>` でタグが閉じないようにする
 
 ## テスト方針
 
 - pure 関数は `it.each` + 型付きテストデータ変数（`coding-rules__typescript`）
-- `layout.ts` は決定的レイアウト（`preset` / `grid` / `dagre`）でテスト。`cose` は乱数を使うので座標の厳密比較には使わず、「例外なく完了し座標が有限値」だけを検証
-- SVG は文字列包含ではなく、構造（viewBox、要素数、座標）で検証する
+- HTML は「文字列に含まれるか」ではなく、**埋め込んだ JSON をパースして構造で**検証する
+- **文字列テストだけでは足りない。** 生成したページを実ブラウザで開き、描画とインタラクションを確認する（CDP でホバー・クリックを実際に発火させる）
 
 ## 呼び出し側の使用例（ライブラリには含めない）
 
 ```ts
 // interactive-instruction-mcp 側に置くコード
 // 「何を図示するか」の知識はここにだけある
-const svg = await renderGraphSvg({
+const html = renderGraphHtml({
   graph: {
     nodes: docs.map((d) => ({ id: d.id, label: d.id, group: d.id.split("__")[0] })),
     edges: docs.flatMap((d) =>
@@ -162,4 +101,3 @@ const svg = await renderGraphSvg({
   layout: { name: "cose" },
 });
 ```
-

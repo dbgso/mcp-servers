@@ -23,9 +23,3 @@ export function escapeScriptJson(params: { value: unknown }): string {
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
 }
-
-/** Format a number for SVG output, dropping meaningless decimal noise. */
-export function num(params: { value: number }): string {
-  const { value } = params;
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
-}

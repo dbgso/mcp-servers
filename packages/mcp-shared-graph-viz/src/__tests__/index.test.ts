@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { GraphVizError, renderGraphSvg } from "../index.js";
+import { GraphVizError, renderGraphHtml, toCytoscapeElements } from "../index.js";
 import type { GraphInput } from "../types.js";
 
 /**
  * The public entry point, exercised the way a calling MCP server would use it:
- * hand over nodes and edges, get a diagram back.
+ * hand over nodes and edges, get a page a human can look at.
  */
-describe("renderGraphSvg", () => {
+describe("renderGraphHtml", () => {
   const graph: GraphInput = {
     nodes: [
-      { id: "every-task", label: "every-task", group: "root" },
+      { id: "every-task", label: "every-task", group: "root", href: "https://example.com/t" },
       { id: "plan-tool-required", label: "workflow / plan-tool-required", group: "workflow" },
       { id: "task-planning-tools", label: "workflow / task-planning-tools", group: "workflow" },
     ],
@@ -21,49 +21,42 @@ describe("renderGraphSvg", () => {
     ],
   };
 
-  it("renders with nothing but a graph", async () => {
-    const svg = await renderGraphSvg({ graph });
-    expect(svg.startsWith("<svg")).toBe(true);
+  it("renders with nothing but a graph", () => {
+    expect(renderGraphHtml({ graph }).startsWith("<!doctype html>")).toBe(true);
   });
 
-  it("draws every node and edge", async () => {
-    const svg = await renderGraphSvg({ graph });
+  it("carries every node and edge into the page", () => {
+    const html = renderGraphHtml({ graph });
     for (const node of graph.nodes) {
-      expect(svg).toContain(`data-node-id="${node.id}"`);
+      expect(html).toContain(JSON.stringify(node.id));
     }
-    expect(svg.match(/data-edge-id=/g)).toHaveLength(3);
+    expect(html.match(/"group":"edges"/g)).toHaveLength(3);
   });
 
-  it("passes the title and legend through", async () => {
-    const svg = await renderGraphSvg({ graph, title: "Topic relations" });
-    expect(svg).toContain("Topic relations");
-    expect(svg).toContain(">workflow</text>");
+  it("keeps an href so the node can be clicked through", () => {
+    expect(renderGraphHtml({ graph })).toContain("https://example.com/t");
   });
 
-  it("produces no NaN coordinates for any layout", async () => {
-    for (const name of ["dagre", "grid", "circle", "concentric", "breadthfirst", "cose"] as const) {
-      const svg = await renderGraphSvg({ graph, layout: { name } });
-      expect(svg).not.toContain("NaN");
-    }
+  it("labels the legend with the groups", () => {
+    const html = renderGraphHtml({ graph, title: "Topic relations" });
+    expect(html).toContain("Topic relations");
+    expect(html).toContain(">workflow</span>");
+    expect(html).toContain(">root</span>");
   });
 
-  it("renders an empty graph without throwing", async () => {
-    const svg = await renderGraphSvg({ graph: { nodes: [], edges: [] } });
-    expect(svg.startsWith("<svg")).toBe(true);
+  it("surfaces a caller mapping mistake as an error", () => {
+    expect(() =>
+      renderGraphHtml({ graph: { nodes: [{ id: "a" }], edges: [{ source: "a", target: "ghost" }] } }),
+    ).toThrow(GraphVizError);
   });
+});
 
-  it("surfaces a caller mapping mistake as an error", async () => {
-    await expect(
-      renderGraphSvg({ graph: { nodes: [{ id: "a" }], edges: [{ source: "a", target: "ghost" }] } }),
-    ).rejects.toThrow(GraphVizError);
-  });
-
-  it("honours explicit node sizes and shapes", async () => {
-    const svg = await renderGraphSvg({
-      graph: { nodes: [{ id: "a", width: 200, height: 100, shape: "ellipse" }], edges: [] },
-      layout: { name: "grid" },
+describe("toCytoscapeElements", () => {
+  it("hands back plain cytoscape elements for callers that drive cytoscape themselves", () => {
+    const elements = toCytoscapeElements({
+      graph: { nodes: [{ id: "a" }, { id: "b" }], edges: [{ source: "a", target: "b" }] },
     });
-    expect(svg).toContain('rx="100"');
-    expect(svg).toContain('ry="50"');
+    expect(elements).toHaveLength(3);
+    expect(elements[2]).toMatchObject({ group: "edges", data: { source: "a", target: "b" } });
   });
 });

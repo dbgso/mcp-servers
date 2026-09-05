@@ -1,6 +1,6 @@
 # mcp-shared-graph-viz
 
-Give it nodes and edges, get a diagram.
+Give it nodes and edges, get a page a human can look at.
 
 ## Responsibility split
 
@@ -9,14 +9,14 @@ This is the whole point of the package:
 | | Responsibility |
 |---|---|
 | **Caller** (an MCP server) | Map its own domain onto nodes and edges |
-| **This library** | Take nodes and edges, lay them out, draw them |
+| **This library** | Turn nodes and edges into an interactive page |
 
 The library holds no domain knowledge. It has never heard of `relatedDocs`,
 `requires`, or import graphs — those mappings belong to the caller.
 
 ```ts
 // interactive-instruction-mcp: documents linked by relatedDocs
-const svg = await renderGraphSvg({
+const html = renderGraphHtml({
   graph: {
     nodes: docs.map((doc) => ({ id: doc.id, label: doc.id, group: doc.category })),
     edges: docs.flatMap((doc) =>
@@ -29,28 +29,45 @@ const svg = await renderGraphSvg({
 
 ```ts
 // traceable-chain-mcp: requirement -> spec -> design -> adr
-const svg = await renderGraphSvg({
+const html = renderGraphHtml({
   graph: {
-    nodes: documents.map((d) => ({ id: d.id, label: d.title, group: d.type })),
+    nodes: documents.map((d) => ({
+      id: d.id,
+      label: d.title,
+      group: d.type,
+      tooltip: `${d.type}: ${d.id}`,
+      href: urlFor(d),
+    })),
     edges: documents
       .filter((d) => d.requires !== undefined)
-      .map((d) => ({ source: d.requires!, target: d.id, kind: "requires" })),
+      .map((d) => ({ source: d.requires!, target: d.id })),
   },
   layout: { name: "dagre", direction: "LR" },
 });
 ```
 
+Write the string to a file and open it.
+
 ## API
 
 ```ts
-renderGraphSvg(params): Promise<string>    // self-contained SVG
-renderGraphHtml(params): string            // interactive page (cytoscape in the browser)
-layoutGraph(params): Promise<LaidOutGraph> // coordinates only, draw them yourself
-toCytoscapeElements(params): CytoscapeElement[]  // escape hatch
+renderGraphHtml(params): string                  // the page
+toCytoscapeElements(params): CytoscapeElement[]  // elements only, drive cytoscape yourself
+buildLayoutSpec(params): LayoutSpec              // the layout config the page embeds
 ```
 
-Everything except `graph` is optional. `renderGraphSvg({ graph })` produces a
-diagram with no further configuration.
+Everything except `graph` is optional. `renderGraphHtml({ graph })` produces a
+page with no further configuration.
+
+### The page
+
+- pan and zoom
+- hovering a node dims everything outside its immediate neighbourhood
+- a node's `tooltip` (or its label) appears in a corner while hovered
+- a node with an `href` opens it on click
+- a legend of the groups, when any node is grouped
+- `window.graphViz.cy` exposes the cytoscape instance, so the page is a
+  starting point rather than a dead end
 
 ### Input
 
@@ -61,9 +78,9 @@ interface GraphNode {
   group?: string;      // drives color assignment and the legend
   parent?: string;     // compound (container) node
   shape?: "roundRect" | "rect" | "ellipse" | "diamond";
-  width?: number;      // derived from the label when omitted
+  width?: number;      // sized from the label by the browser when omitted
   height?: number;
-  href?: string;       // makes the node a link
+  href?: string;       // clicking the node opens this
   tooltip?: string;
   position?: { x: number; y: number };  // for the "preset" layout
   data?: Record<string, unknown>;       // never interpreted
@@ -90,27 +107,24 @@ interface GraphEdge {
 | Loosely connected clusters | `cose` |
 | Caller already has coordinates | `preset` (every node needs `position`) |
 
-`cose` is randomized, so its output differs between runs. Use `preset`, `grid`
-or `dagre` when you need reproducible output.
-
 ### Options
 
 ```ts
-renderGraphSvg({
+renderGraphHtml({
   graph,
   layout: { name: "dagre", direction: "LR", spacing: 1.2 },
-  theme: { palette, fontFamily, fontSize, drawBackground },
-  padding: 24,
+  theme: { palette, fontFamily, fontSize },
   title: "...",
   legend: true,
-  measureLabel: ({ text, fontSize }) => realFontMetrics(text, fontSize),
+  cytoscapeUrl: "...",   // where the page loads cytoscape from
+  dagreUrls: ["..."],    // and dagre, for that layout only
 });
 ```
 
 ## Errors
 
 An inconsistent graph is a bug in the caller's mapping, so it throws
-`GraphVizError` rather than silently drawing something skewed:
+`GraphVizError` rather than silently drawing something misleading:
 
 - duplicate node ids
 - edges pointing at nodes that do not exist
@@ -118,47 +132,24 @@ An inconsistent graph is a bug in the caller's mapping, so it throws
 - an unknown layout name
 - the `preset` layout with nodes that have no `position`
 
-An empty graph is not an error; it renders as an empty diagram.
+An empty graph is not an error; it renders as an empty page.
 
-## How it works, and why
+## Why the layout runs in the browser
 
-cytoscape is a browser library: its **rendering** needs a canvas and does not
-work headless. Its **layout** engines do. So this package uses cytoscape purely
-as a layout engine and generates the SVG itself.
+cytoscape can lay out a graph headless, but its **rendering needs a canvas**,
+which headless Node does not have. Doing half the work here would mean
+computing coordinates in Node and drawing them by hand — and paying for it:
+without a canvas there is no way to measure text, so node sizes would have to
+be guessed from the label.
 
-```
-GraphInput ──▶ cytoscape (headless) ──▶ LaidOutGraph ──▶ SVG written here
-                 coordinates only
-```
+Running the whole thing in the browser avoids all of that. cytoscape lays out
+*and* draws, and it measures the text itself. This package assembles the page:
+elements, styles, colors, the layout spec, and the interactions.
 
-The consequence is that the only runtime dependencies are `cytoscape` and
-`cytoscape-dagre`. No canvas, no puppeteer, no headless browser.
+The consequence is that it has **no runtime dependencies**. cytoscape is loaded
+by the page from a CDN, pinned to an exact version and overridable via
+`cytoscapeUrl` / `dagreUrls` for an offline or self-hosted copy.
 
-### Headless pitfalls this package absorbs
-
-These are the reason a shared library is worth having; callers never see them.
-
-| Pitfall | What happens | Handled by |
-|---|---|---|
-| `cy.width()`/`cy.height()` are 0 headless | `breadthfirst` produces coordinates around `1e49` | An explicit `boundingBox` for area-based layouts |
-| cytoscape rescales results into `boundingBox` | Passing one to `dagre`/`cose` overrides their spacing and nodes overlap | `boundingBox` only for layouts that need it |
-| Element `position` is ignored headless | `preset` silently stacks everything at the origin | Positions passed to the layout explicitly |
-| The cytoscape instance holds handles | The Node process never exits | `cy.destroy()` in a `finally` |
-| No canvas means no text metrics | Node sizes cannot be measured | Per-code-point width estimation, overridable via `measureLabel` |
-
-### Label sizing
-
-Width is estimated per code point: full-width (CJK) characters count as 1.0em,
-ordinary latin 0.58em, narrow glyphs 0.32em. Labels wrap at word boundaries
-(per character for CJK) and elide with `…` past three lines. Pass
-`measureLabel` to substitute real font metrics, or set `width`/`height` on a
-node to bypass estimation entirely.
-
-## Output
-
-`renderGraphSvg` returns a self-contained SVG: no external references, no
-scripts, system font stack. It displays in a browser, an image viewer, or
-embedded in Markdown.
-
-Writing it to a file is the caller's decision — a several-hundred-node graph
-produces an SVG too large for an MCP response.
+If you need a static image instead — for a Markdown embed, or a reply that
+cannot run a browser — emit DOT or mermaid from the same nodes and edges and
+hand it to `kroki-mcp`.

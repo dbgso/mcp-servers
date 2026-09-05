@@ -15,24 +15,12 @@ catalogs:
     '@modelcontextprotocol/sdk':
       specifier: 1.26.0
       version: 1.26.0
-    '@types/cytoscape':
-      specifier: 3.31.0
-      version: 3.31.0
-    '@types/cytoscape-dagre':
-      specifier: 2.3.4
-      version: 2.3.4
     '@types/node':
       specifier: 22.15.21
       version: 22.15.21
     '@vitest/coverage-v8':
       specifier: 4.0.18
       version: 4.0.18
-    cytoscape:
-      specifier: 3.34.2
-      version: 3.34.2
-    cytoscape-dagre:
-      specifier: 4.0.1
-      version: 4.0.1
     node-notifier:
       specifier: 10.0.1
       version: 10.0.1
@@ -589,20 +577,7 @@ importers:
         version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-graph-viz:
-    dependencies:
-      cytoscape:
-        specifier: 'catalog:'
-        version: 3.34.2
-      cytoscape-dagre:
-        specifier: 'catalog:'
-        version: 4.0.1(cytoscape@3.34.2)
     devDependencies:
-      '@types/cytoscape':
-        specifier: 'catalog:'
-        version: 3.31.0
-      '@types/cytoscape-dagre':
-        specifier: 'catalog:'
-        version: 2.3.4
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.0.18(vitest@4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2))
@@ -1746,13 +1721,6 @@ packages:
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
-  '@types/cytoscape-dagre@2.3.4':
-    resolution: {integrity: sha512-uOGXuPfPLFoKZaegjHl9oj4tqONNJuhUl180FiJgRZ35rVijBs6J4UP1Ah6mA6S46h+7pv4ICqpgfdC3EADZlw==}
-
-  '@types/cytoscape@3.31.0':
-    resolution: {integrity: sha512-EXHOHxqQjGxLDEh5cP4te6J0bi7LbCzmZkzsR6f703igUac8UGMdEohMyU3GHAayCTZrLQOMnaE/lqB2Ekh8Ww==}
-    deprecated: This is a stub types definition. cytoscape provides its own type definitions, so you do not need this installed.
-
   '@types/debug@4.1.12':
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
 
@@ -1990,15 +1958,6 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
-
-  cytoscape-dagre@4.0.1:
-    resolution: {integrity: sha512-hyNdh8Vp1nwzBcjHnM4c71G81bFhPmQYLXD2HM9AZIvl+8TrMzWEOPW45hF/XOBQiEguPcDQzi6VrXR1XBcXOA==}
-    peerDependencies:
-      cytoscape: ^3.2.22
-
-  cytoscape@3.34.2:
-    resolution: {integrity: sha512-Cm2jaj1X/PBNlzV9yH8zcfGOxO7U+CJ/+mxSBVPSchLaugdp4jtlGx5qaHtPRZ6tgiZ5P+o1XoRfJA+ba6KM3g==}
-    engines: {node: '>=0.10'}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -4474,14 +4433,6 @@ snapshots:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
 
-  '@types/cytoscape-dagre@2.3.4':
-    dependencies:
-      cytoscape: 3.34.2
-
-  '@types/cytoscape@3.31.0':
-    dependencies:
-      cytoscape: 3.34.2
-
   '@types/debug@4.1.12':
     dependencies:
       '@types/ms': 2.1.0
@@ -4752,12 +4703,6 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
-
-  cytoscape-dagre@4.0.1(cytoscape@3.34.2):
-    dependencies:
-      cytoscape: 3.34.2
-
-  cytoscape@3.34.2: {}
 
   debug@4.4.3(supports-color@7.2.0):
     dependencies:
