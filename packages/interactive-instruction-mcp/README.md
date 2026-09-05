@@ -48,7 +48,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 **Metadata & Quality**
 - `link_add` / `link_remove` — Manage related document links (approval required, drafts included)
 - `lint` — Check document quality
-- `set_status` — Set draft workflow status (single `id` or batch `ids`)
+- `set_status` — Reset drafts to `editing`, discarding their workflow state (single `id` or batch `ids`)
 - `update_meta` — Generate metadata update prompt (`id` only)
 
 **Seeing the corpus**
@@ -148,13 +148,27 @@ A gated action is approved out-of-band. The token travels **only** through the d
 notification and is never written to disk — the file at `$TMPDIR/mcp-approval/pending.txt`
 records that an approval is pending, without the token — so the agent that requested the
 approval cannot read the token back and approve itself. Tokens are single-use and expire
-after 5 minutes.
+after 5 minutes. If the notification cannot be delivered, the response says so instead of
+claiming one was sent.
+
+**An approval is bound to the change it was granted for.** The tool computes what will
+happen — the promotion target, whether anything gets overwritten, the draft body, the
+resulting `relatedDocs`, the content being deleted — hashes it, and recomputes it when the
+token is spent. Anything else fails with `content_mismatch`. So a token approved for
+"create a new note" cannot be redirected onto an existing document, and a draft rewritten
+after approval cannot be promoted on the strength of the diff the user actually read. The
+notification names the target and says whether it overwrites, because it is the only
+channel the human sees.
 
 | Gate | Actions |
 |---|---|
-| Approval token | `approve`, `delete` (promoted), `rename` (promoted), `link_add`, `link_remove` |
+| Approval token, content-bound | `approve`, `delete` (promoted), `rename` (promoted), `link_add`, `link_remove` |
 | Diff preview, no token | `update` (promoted) → `apply` / `cancel` |
 | None | `add`, `update` (draft), `delete` (draft), `rename` (draft), `list`, `read`, `lint`, `set_status`, `update_meta` |
+
+`update` → `apply` carries no token, but `apply` is not a blind write: it refuses if the
+document changed after the diff was computed, and refuses — discarding the staged update —
+if the document has since been deleted. Staged updates expire after a day.
 
 ### Draft Lifecycle
 
@@ -177,7 +191,12 @@ stateDiagram-v2
 | `self_review` | AI reviews its own draft and records `notes`. |
 | `user_reviewing` | AI explains the draft to the user **in its own words**. The tool deliberately withholds the content here so the explanation cannot be copied from it. |
 | `pending_approval` | User reads the token from the desktop notification and hands it to the AI. |
-| `applied` | Draft moved out of `_mcp_drafts/` into the documentation tree. |
+| `applied` | Draft moved out of `_mcp_drafts/` into the documentation tree, and its workflow state is deleted. |
+
+State is stored per documents directory, so two servers on one machine do not share it.
+`instruction(action: "set_status", id: "...", status: "editing")` resets a draft to the
+start of the flow and discards that state; the later states are reached by going through
+`approve`, not by declaring them.
 
 The same flow as calls:
 
@@ -214,7 +233,41 @@ stateDiagram-v2
 ```
 
 `update` takes no approval parameters at all. On a promoted document it stages the change and
-returns the unified diff; nothing on disk has moved until `apply` is called.
+returns the unified diff; nothing on disk has moved until `apply` is called — and `apply`
+re-reads the document first, so a change made in between is never silently overwritten.
+
+## Upgrading from 1.x
+
+Every tool name changed. 1.x exposed `description`, `help`, `draft` and `apply`; 2.0 exposes
+`instruction_describe` and `instruction`, and everything else is an action on `instruction`.
+Anything naming the old tools — MCP client allow-lists, prompts, project instructions —
+needs rewriting.
+
+| 1.x | 2.0 |
+|---|---|
+| `description()` | `instruction_describe()` |
+| `help()` / `help(recursive: true)` | `instruction(action: "list")` / `… recursive: true` |
+| `help(id: "<id>")` | `instruction(action: "read", id: "<id>")` |
+| `draft(action: "list" \| "read" \| "add" \| "update" \| "delete" \| "rename")` | `instruction(action: <same>)` |
+| `apply(action: "list")` | `instruction(action: "list")` |
+| `apply(action: "promote", draftId, targetId)` | `instruction(action: "approve", …)` — see the approval workflow |
+
+Also worth knowing before you upgrade:
+
+- **`promote` is gone.** Promotion goes through `approve`, which needs a token a human reads
+  from a desktop notification. Anything that promoted drafts unattended will stop.
+- **`add` requires more.** `description` and `whenToUse` are now mandatory.
+- **Updating a promoted document is two steps**: `update` stages a diff, `apply` writes it.
+- **The server writes to your documents directory at startup**, creating
+  `_mcp-interactive-instruction/draft-approval.md` if it is not already there. Existing
+  files are never overwritten.
+- **Approvals raise a desktop notification** through `node-notifier`, which needs a working
+  notification daemon — a headless or SSH session cannot approve anything.
+
+The command line is unchanged, so `.mcp.json` needs no edit. Documents written by 1.x are
+read as they are: frontmatter is optional, and a document without it still gets a
+description from its opening lines. `instruction(action: "list", missingMeta: "any")` finds
+the ones worth filling in.
 
 ## Installation
 
