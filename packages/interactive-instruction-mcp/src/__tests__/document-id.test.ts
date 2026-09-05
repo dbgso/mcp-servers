@@ -126,7 +126,7 @@ describe("handlers refuse to escape the documents directory", () => {
     });
 
     const result = await new ApplyHandler().execute({
-      rawParams: { action: "apply", id: "..__CLAUDE" },
+      rawParams: { action: "apply", id: "..__CLAUDE", explanation: "test: applies the staged update" },
       context: { reader },
     });
 
