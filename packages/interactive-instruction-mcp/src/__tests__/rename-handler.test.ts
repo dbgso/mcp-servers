@@ -5,17 +5,9 @@ import * as os from "node:os";
 import { RenameHandler } from "../tools/instruction/handlers/rename.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 
-// Mock mcp-shared
-vi.mock("mcp-shared/approval", async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    requestApproval: vi.fn().mockResolvedValue({ fallbackPath: "/tmp/token.txt" }),
-    validateApproval: vi.fn().mockReturnValue({ valid: true }),
-    getApprovalRequestedMessage: vi.fn().mockReturnValue("Check desktop notification for token"),
-    getApprovalRejectionMessage: vi.fn().mockReturnValue("Approval rejected"),
-  };
-});
+// The approval module is spied on (not stubbed) in vitest-setup.ts. This file
+// used to stub `validateApproval` to `{ valid: true }`, which meant the rename
+// approval gate was never actually run here.
 
 import { validateApproval } from "mcp-shared/approval";
 
@@ -235,7 +227,33 @@ Content.`;
       expect(newExists).toBe(true);
     });
 
-    it("returns error when no pending rename exists", async () => {
+    it("does not strand the request when the rename itself fails", async () => {
+      await fs.writeFile(path.join(docsDir, "doomed.md"), "---\ndescription: d\n---\n\n# Doomed");
+
+      await handler.execute({
+        rawParams: { action: "rename", id: "doomed", newId: "doomed-renamed", confirmed: true },
+        context: { reader },
+      });
+
+      const renameSpy = vi
+        .spyOn(reader, "renameDocument")
+        .mockResolvedValueOnce({ success: false, error: "simulated disk failure" });
+
+      const result = await handler.execute({
+        rawParams: { action: "rename", id: "doomed", newId: "doomed-renamed", approvalToken: "valid-token" },
+        context: { reader },
+      });
+
+      expect(result.isError).toBe(true);
+      const text = result.content[0].type === "text" ? result.content[0].text : "";
+      expect(text).toContain("simulated disk failure");
+      // The document is untouched, so the caller can request approval again.
+      expect(await reader.getDocumentContent("doomed")).toContain("Doomed");
+
+      renameSpy.mockRestore();
+    });
+
+    it("rejects a token for a rename that was never approved", async () => {
       const content = `---
 description: A document
 ---
@@ -250,9 +268,11 @@ Content.`;
         context: { reader },
       });
 
+      // The side map this used to consult is gone; it duplicated the approval
+      // store, which has never heard of this request.
       expect(result.isError).toBe(true);
       const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("No pending rename found");
+      expect(text).toContain("not_found");
     });
 
     it("returns error when token is invalid", async () => {
@@ -281,7 +301,7 @@ Content.`;
 
       expect(result.isError).toBe(true);
       const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("rejected");
+      expect(text).toContain("Approval Required");
     });
 
     it("updates backlinks when renaming", async () => {

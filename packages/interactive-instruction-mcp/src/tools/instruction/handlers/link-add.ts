@@ -13,7 +13,7 @@ import {
   findInvalidDocs,
   detectCircularReferences,
   calculateNewRelatedDocs,
-  pendingChanges,
+  buildLinkApprovalWhat,
 } from "./link-shared.js";
 
 const schema = z.object({
@@ -83,7 +83,7 @@ export class LinkAddHandler extends BaseActionHandler<Args, InstructionContext> 
 
     // Request approval
     if (confirmed && !approvalToken) {
-      return this.requestLinkApproval({ id, relatedDocs });
+      return this.requestLinkApproval({ id, relatedDocs, newRelated });
     }
 
     // Apply with token
@@ -147,22 +147,17 @@ ${warningSection}` +
   private async requestLinkApproval(params: {
     id: string;
     relatedDocs: string[];
+    newRelated: string[];
   }): Promise<ToolResponse> {
-    const { id, relatedDocs } = params;
+    const { id, relatedDocs, newRelated } = params;
     const requestId = `instruction::link_add::${id}`;
-
-    pendingChanges.set(id, {
-      id,
-      linkAction: "link_add",
-      relatedDocs,
-      timestamp: Date.now(),
-    });
 
     const approvalResult = await requestApproval({
       request: {
         id: requestId,
         operation: "Link add",
-        description: `Add relatedDocs for "${id}"`,
+        description: `Add relatedDocs for "${id}" -> [${newRelated.join(", ")}]`,
+        what: buildLinkApprovalWhat({ linkAction: "link_add", id, newRelated }),
       },
     });
 
@@ -193,14 +188,10 @@ ${getApprovalRequestedMessage(approvalResult)}` +
     const { reader, id, approvalToken, content, frontmatter, newRelated } = params;
     const requestId = `instruction::link_add::${id}`;
 
-    const pending = pendingChanges.get(id);
-    if (!pending) {
-      return errorResponse(`Error: No pending change found for "${id}". Please start the approval workflow again.`);
-    }
-
     const validation = validateApproval({
       requestId,
       providedToken: approvalToken,
+      currentWhat: buildLinkApprovalWhat({ linkAction: "link_add", id, newRelated }),
     });
 
     if (!validation.valid) {
@@ -222,7 +213,6 @@ ${getApprovalRequestedMessage(approvalResult)}` +
     await fs.writeFile(filePath, newContent, "utf-8");
     reader.invalidateCache();
 
-    pendingChanges.delete(id);
 
     return textResponse(
       `Successfully added relatedDocs for "${id}".

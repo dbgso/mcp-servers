@@ -133,13 +133,25 @@ export function calculateNewRelatedDocs(params: {
 }
 
 /**
- * Pending link change for approval workflow.
+ * What a link approval is bound to: the resulting list, not the delta the
+ * caller asked for.
+ *
+ * The applied list used to be recomputed from the apply-time arguments while
+ * the approval was keyed on the document id alone, so a token approved for
+ * `relatedDocs: ["harmless"]` could be spent on `["evil"]` -- and the
+ * notification named neither, so the swap was undetectable from the human's
+ * side. It is in the notification now too.
+ *
+ * There is deliberately no separate pending-change map. The one that used to
+ * live here was keyed by document id and shared between link_add and
+ * link_remove, so two live approvals for one document clobbered each other and
+ * stranded a valid token. The approval store already tracks what is pending.
  */
-export interface PendingLinkChange {
-  id: string;
+export function buildLinkApprovalWhat(params: {
   linkAction: "link_add" | "link_remove";
-  relatedDocs: string[];
-  timestamp: number;
+  id: string;
+  newRelated: string[];
+}): string {
+  const { linkAction, id, newRelated } = params;
+  return [`${linkAction}: ${id}`, `relatedDocs: ${newRelated.join(",")}`].join("\n");
 }
-
-export const pendingChanges = new Map<string, PendingLinkChange>();
