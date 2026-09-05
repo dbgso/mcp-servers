@@ -29,6 +29,7 @@
         "ignoreMethods": ["execute", "action", "check"]
       }
     ],
+    "custom/implement-interface-with-class": "warn",
     "no-useless-escape": "off",
     "typescript/no-this-alias": "off",
     "unicorn/prefer-string-starts-ends-with": "off"
@@ -38,6 +39,7 @@
       "files": ["packages/**/__tests__/**/*.ts", "packages/**/*.test.ts"],
       "rules": {
         "custom/single-params-object": "off",
+        "custom/implement-interface-with-class": "off",
         "typescript/no-non-null-assertion": "off"
       }
     }

@@ -1,9 +1,9 @@
-import { breadthfirstLayout } from "./breadthfirst.js";
-import { circleLayout, gridLayout } from "./geometric.js";
-import { concentricLayout } from "./concentric.js";
-import { coseLayout } from "./cose.js";
-import { dagreLayout } from "./dagre.js";
-import { presetLayout } from "./preset.js";
+import { BreadthfirstLayout } from "./breadthfirst.js";
+import { GeometricLayout } from "./geometric.js";
+import { ConcentricLayout } from "./concentric.js";
+import { CoseLayout } from "./cose.js";
+import { DagreLayout } from "./dagre.js";
+import { PresetLayout } from "./preset.js";
 import type { Layout, LayoutSpec } from "./types.js";
 import { GraphVizError } from "../errors.js";
 import type { LayoutName, LayoutOptions, Point } from "../types.js";
@@ -15,13 +15,13 @@ import type { LayoutName, LayoutOptions, Point } from "../types.js";
  * without adding its layout is a compile error rather than a runtime surprise.
  */
 export const LAYOUTS: Record<LayoutName, Layout> = {
-  dagre: dagreLayout,
-  cose: coseLayout,
-  concentric: concentricLayout,
-  grid: gridLayout,
-  circle: circleLayout,
-  breadthfirst: breadthfirstLayout,
-  preset: presetLayout,
+  dagre: new DagreLayout(),
+  cose: new CoseLayout(),
+  concentric: new ConcentricLayout(),
+  grid: new GeometricLayout("grid"),
+  circle: new GeometricLayout("circle"),
+  breadthfirst: new BreadthfirstLayout(),
+  preset: new PresetLayout(),
 };
 
 export const DEFAULT_LAYOUT: LayoutName = "dagre";

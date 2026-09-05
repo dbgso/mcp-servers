@@ -4,7 +4,7 @@ type: design
 title: mcp-shared-graph-viz 実装設計
 requires: 01M1R3GH8CWAPDCSEM3WQTTZ81
 created: 2026-09-05T06:24:18.811Z
-updated: 2026-09-05T12:31:41.919Z
+updated: 2026-09-05T14:29:52.282Z
 ---
 
 # mcp-shared-graph-viz 実装設計
@@ -53,7 +53,7 @@ src/
     types.ts            Layout インターフェース
     registry.ts         name → Layout。名前一覧の唯一の出所
     dagre.ts / cose.ts / concentric.ts / breadthfirst.ts
-    geometric.ts        grid / circle（形だけで決まるもの）
+    geometric.ts        grid / circle（形だけで決まる。名前をコンストラクタで受ける）
     preset.ts
   renderers/            出力形式1つにつき1ディレクトリ
     html/
@@ -116,7 +116,14 @@ interface Layout {
   readonly requiresPositions: boolean;      // preset だけ true
   buildSpec(params: BuildSpecParams): Record<string, unknown>;
 }
+
+class DagreLayout implements Layout { ... }
+class GeometricLayout implements Layout {  // grid / circle
+  constructor(readonly name: LayoutName) {}
+}
 ```
+
+実装はクラスで与える（`coding-rules__polymorphism`）。`GeometricLayout` のように「名前だけが違う」ものは、その違いをコンストラクタが受ける。
 
 レイアウトを追加する作業は「`layouts/` にファイルを1つ足し、レジストリに1行足す」で閉じる。呼び出し側の変更は不要。
 

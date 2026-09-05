@@ -1,10 +1,11 @@
 import type { Layout } from "./types.js";
 
-export const breadthfirstLayout: Layout = {
-  name: "breadthfirst",
-  scriptUrls: [],
-  requiresPositions: false,
-  buildSpec() {
+export class BreadthfirstLayout implements Layout {
+  readonly name = "breadthfirst";
+  readonly scriptUrls = [];
+  readonly requiresPositions = false;
+
+  buildSpec(): Record<string, unknown> {
     return { directed: true, grid: true };
-  },
-};
+  }
+}
