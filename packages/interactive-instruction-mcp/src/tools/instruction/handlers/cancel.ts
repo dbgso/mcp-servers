@@ -2,8 +2,8 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
-import { getPendingUpdate, deletePendingUpdate } from "../../../utils/pending-update.js";
-import * as fs from "node:fs/promises";
+import { removeDiffFile } from "../../../utils/diff-utils.js";
+import { deletePendingUpdate, getPendingUpdate } from "../../../utils/pending-update.js";
 
 const schema = z.object({
   action: z.literal("cancel"),
@@ -23,9 +23,10 @@ export class CancelHandler extends BaseActionHandler<Args, InstructionContext> {
     context: InstructionContext;
   }): Promise<ToolResponse> {
     const { id } = params.args;
+    const docsDir = params.context.reader.getDirectory();
 
     // Get pending update
-    const pending = await getPendingUpdate(id);
+    const pending = await getPendingUpdate({ docsDir, id });
     if (!pending) {
       return errorResponse(`No pending update found for "${id}".` +
         formatNextActions([{
@@ -36,12 +37,8 @@ export class CancelHandler extends BaseActionHandler<Args, InstructionContext> {
     }
 
     // Clean up pending update and diff file
-    await deletePendingUpdate(id);
-    try {
-      await fs.unlink(pending.diffPath);
-    } catch {
-      // Ignore if diff file already deleted
-    }
+    await deletePendingUpdate({ docsDir, id });
+    await removeDiffFile(pending.diffPath);
 
     return textResponse(
       `Pending update for "${id}" cancelled.` +

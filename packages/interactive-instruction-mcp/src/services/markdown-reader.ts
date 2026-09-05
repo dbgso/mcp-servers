@@ -65,6 +65,15 @@ export class MarkdownReader {
   }
 
   /**
+   * The documents directory this reader serves, resolved. Callers scope their
+   * own per-server state by it, so that two servers on one machine do not share
+   * a store keyed by document id.
+   */
+  getDirectory(): string {
+    return this.directory;
+  }
+
+  /**
    * Get the file path for a document ID (public accessor)
    */
   getFilePath(id: string): string {
