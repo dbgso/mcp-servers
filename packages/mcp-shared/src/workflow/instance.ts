@@ -26,6 +26,35 @@ import { getErrorMessage } from "../utils/error.js";
 const DEFAULT_PERSIST_DIR = path.join(os.tmpdir(), "mcp-workflow");
 
 /**
+ * Filename a workflow instance's state is persisted under.
+ *
+ * Percent-encoding is what makes this safe to reverse: it is injective, so two
+ * ids can never land on the same file, and `instanceIdFromStateFileName` can
+ * recover the id exactly. An earlier version collapsed `__` to `_` on the way
+ * in and doubled every `_` on the way out, which meant state was written under
+ * one name and looked for under another, and ids came back mangled.
+ *
+ * Ids made only of unreserved characters (the common case) encode to
+ * themselves, so this keeps reading the files the old save path wrote.
+ */
+export function workflowStateFileName(instanceId: string): string {
+  return `${encodeURIComponent(instanceId)}.json`;
+}
+
+/**
+ * Inverse of `workflowStateFileName`. Returns null for a name that this module
+ * did not write, rather than guessing at an id.
+ */
+export function instanceIdFromStateFileName(fileName: string): string | null {
+  if (!fileName.endsWith(".json")) return null;
+  try {
+    return decodeURIComponent(fileName.slice(0, -".json".length));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Create a workflow instance
  *
  * @param params.definition - The workflow definition created by defineWorkflow
@@ -288,7 +317,7 @@ export function createWorkflowInstance<
 
     async save(filePath?: string): Promise<string> {
       const targetPath =
-        filePath ?? path.join(persistDir, `${instanceId}.json`);
+        filePath ?? path.join(persistDir, workflowStateFileName(instanceId));
 
       await fs.mkdir(path.dirname(targetPath), { recursive: true });
       const serialized = instance.serialize();
