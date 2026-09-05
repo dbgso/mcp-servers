@@ -9,15 +9,20 @@
  * lay out and draw a graph, so this package has no runtime dependencies.
  */
 
-export { renderHtml as renderGraphHtml } from "./html.js";
-export { buildCytoscapeStyle, DEFAULT_CYTOSCAPE_URL, DEFAULT_DAGRE_URLS } from "./html.js";
+export { renderHtml as renderGraphHtml } from "./renderers/html/index.js";
+export {
+  buildCytoscapeStyle,
+  DEFAULT_CYTOSCAPE_URL,
+  MAX_LABEL_WIDTH_PX,
+} from "./renderers/html/index.js";
+
 export { toCytoscapeElements } from "./elements.js";
-export { buildLayoutSpec } from "./layout-spec.js";
+export { buildLayoutSpec, DEFAULT_LAYOUT, LAYOUTS, layoutNames, resolveLayout } from "./layouts/index.js";
 export { GraphVizError } from "./errors.js";
 export { DEFAULT_PALETTE, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE } from "./theme.js";
 
 export type { CytoscapeElement } from "./elements.js";
-export type { LayoutSpec } from "./layout-spec.js";
+export type { Layout, LayoutSpec } from "./layouts/index.js";
 export type {
   GraphEdge,
   GraphInput,

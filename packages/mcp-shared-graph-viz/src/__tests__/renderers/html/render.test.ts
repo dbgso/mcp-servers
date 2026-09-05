@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { prepareGraph } from "../elements.js";
-import { GraphVizError } from "../errors.js";
+import { prepareGraph } from "../../../elements.js";
+import { GraphVizError } from "../../../errors.js";
+import { DAGRE_SCRIPT_URLS } from "../../../layouts/dagre.js";
 import {
   buildCytoscapeStyle,
   DEFAULT_CYTOSCAPE_URL,
-  DEFAULT_DAGRE_URLS,
   MAX_LABEL_WIDTH_PX,
   renderHtml,
-} from "../html.js";
-import { resolveTheme } from "../theme.js";
-import type { GraphInput } from "../types.js";
+} from "../../../renderers/html/index.js";
+import { resolveTheme } from "../../../theme.js";
+import type { GraphInput } from "../../../types.js";
 
 const graph: GraphInput = {
   nodes: [
@@ -102,15 +102,15 @@ describe("renderHtml", () => {
     const html = renderHtml({
       graph,
       cytoscapeUrl: "https://example.com/cy.js",
-      dagreUrls: ["https://example.com/dagre.js"],
+      layoutScriptUrls: ["https://example.com/dagre.js"],
     });
     expect(html).toContain("https://example.com/cy.js");
     expect(html).toContain("https://example.com/dagre.js");
   });
 
   it("loads dagre only for the dagre layout", () => {
-    expect(renderHtml({ graph, layout: { name: "dagre" } })).toContain(DEFAULT_DAGRE_URLS[1]);
-    expect(renderHtml({ graph, layout: { name: "cose" } })).not.toContain(DEFAULT_DAGRE_URLS[1]);
+    expect(renderHtml({ graph, layout: { name: "dagre" } })).toContain(DAGRE_SCRIPT_URLS[1]);
+    expect(renderHtml({ graph, layout: { name: "cose" } })).not.toContain(DAGRE_SCRIPT_URLS[1]);
   });
 
   it("embeds every node and edge", () => {

@@ -1,4 +1,4 @@
-import type { GraphInput, LayoutName } from "./types.js";
+import type { GraphInput } from "./types.js";
 
 /**
  * Thrown when the caller's node/edge mapping is inconsistent.
@@ -12,16 +12,6 @@ export class GraphVizError extends Error {
     this.name = "GraphVizError";
   }
 }
-
-export const LAYOUT_NAMES: LayoutName[] = [
-  "dagre",
-  "cose",
-  "concentric",
-  "grid",
-  "circle",
-  "breadthfirst",
-  "preset",
-];
 
 export function findDuplicateNodeIds(params: { graph: GraphInput }): string[] {
   const { graph } = params;
@@ -102,29 +92,22 @@ export function assertValidGraph(params: { graph: GraphInput }): void {
   }
 }
 
-export function assertKnownLayout(params: { name: string }): void {
-  const { name } = params;
-  if (!LAYOUT_NAMES.includes(name as LayoutName)) {
-    throw new GraphVizError(
-      `Unknown layout "${name}". Available layouts: ${LAYOUT_NAMES.join(", ")}`,
-    );
-  }
-}
-
 /**
- * Every node needs a position under the `preset` layout.
+ * Every node needs a position for the layouts that place nodes where the
+ * caller says.
  *
- * Without one cytoscape places the node at the origin, so opting into `preset`
- * with incomplete coordinates would silently pile nodes on top of each other.
+ * Without one cytoscape puts the node at the origin, so an incomplete set of
+ * coordinates would silently pile nodes on top of each other.
  */
-export function assertPresetPositions(params: {
+export function assertPositions(params: {
+  layoutName: string;
   nodes: { id: string; position?: unknown }[];
 }): void {
-  const { nodes } = params;
+  const { layoutName, nodes } = params;
   const missing = nodes.filter((node) => node.position === undefined).map((node) => node.id);
   if (missing.length > 0) {
     throw new GraphVizError(
-      `The "preset" layout requires a position on every node. Missing: ${missing.join(", ")}`,
+      `The "${layoutName}" layout requires a position on every node. Missing: ${missing.join(", ")}`,
     );
   }
 }

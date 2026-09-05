@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { escapeScriptJson, escapeXml } from "../escape.js";
+import { escapeScriptJson, escapeXml } from "../../../renderers/html/escape.js";
 
 describe("escapeXml", () => {
   type Case = { name: string; text: string; expected: string };

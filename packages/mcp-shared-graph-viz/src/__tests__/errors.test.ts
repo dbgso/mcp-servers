@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  assertKnownLayout,
+  assertPositions,
   assertValidGraph,
   findDanglingEndpoints,
   findDuplicateNodeIds,
   findMissingParents,
   GraphVizError,
-  LAYOUT_NAMES,
   resolveEdgeId,
 } from "../errors.js";
 import type { GraphInput } from "../types.js";
@@ -121,14 +120,28 @@ describe("assertValidGraph", () => {
   });
 });
 
-describe("assertKnownLayout", () => {
-  it.each(LAYOUT_NAMES.map((name) => ({ name })))("accepts $name", ({ name }) => {
-    expect(() => assertKnownLayout({ name })).not.toThrow();
+describe("assertPositions", () => {
+  it("accepts nodes that all carry a position", () => {
+    expect(() =>
+      assertPositions({
+        layoutName: "preset",
+        nodes: [{ id: "a", position: { x: 0, y: 0 } }],
+      }),
+    ).not.toThrow();
   });
 
-  it("lists the available layouts when the name is unknown", () => {
-    expect(() => assertKnownLayout({ name: "spiral" })).toThrow(
-      /Unknown layout "spiral"\. Available layouts: dagre, cose/,
+  it("names the layout and the nodes that are missing one", () => {
+    expect(() =>
+      assertPositions({
+        layoutName: "preset",
+        nodes: [{ id: "a", position: { x: 0, y: 0 } }, { id: "b" }, { id: "c" }],
+      }),
+    ).toThrow(/The "preset" layout requires a position on every node\. Missing: b, c/);
+  });
+
+  it("throws a GraphVizError", () => {
+    expect(() => assertPositions({ layoutName: "preset", nodes: [{ id: "a" }] })).toThrow(
+      GraphVizError,
     );
   });
 });

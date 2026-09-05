@@ -4,7 +4,7 @@ type: design
 title: mcp-shared-graph-viz 実装設計
 requires: 01M1R3GH8CWAPDCSEM3WQTTZ81
 created: 2026-09-05T06:24:18.811Z
-updated: 2026-09-05T08:28:35.325Z
+updated: 2026-09-05T10:53:25.889Z
 ---
 
 # mcp-shared-graph-viz 実装設計
@@ -45,17 +45,48 @@ cytoscape の `width: 'label'` / `height: 'label'` と `padding` を使う。ブ
 
 ```
 src/
-  types.ts        入力/出力型・オプション型                [型のみ]
-  errors.ts       入力検証と GraphVizError                [pure]
-  theme.ts        パレット、group → 色の決定的割当         [pure]
-  elements.ts     GraphInput → cytoscape elements         [pure]
-  layout-spec.ts  LayoutOptions → cytoscape layout config [pure]
-  escape.ts       HTML / script JSON エスケープ           [pure]
-  html.ts         ページの組み立て                        [pure]
-  index.ts        公開 API
+  types.ts              入力型・オプション型（ドメイン語彙ゼロ）  [型のみ]
+  errors.ts             入力検証と GraphVizError                  [pure]
+  theme.ts              パレット、group → 色の決定的割当           [pure]
+  elements.ts           GraphInput → cytoscape elements           [pure]
+  layouts/              レイアウト1つにつき1モジュール + レジストリ
+    types.ts            Layout インターフェース
+    registry.ts         name → Layout。名前一覧の唯一の出所
+    dagre.ts / cose.ts / concentric.ts / breadthfirst.ts
+    geometric.ts        grid / circle（形だけで決まるもの）
+    preset.ts
+  renderers/            出力形式1つにつき1ディレクトリ
+    html/
+      index.ts          renderHtml
+      style.ts          cytoscape スタイルシート
+      document.ts       ページのテンプレート
+      escape.ts         HTML / script JSON エスケープ
+  index.ts              公開 API
 ```
 
 **全モジュールが pure。** 副作用も非同期もない。入出力の assert だけでテストできる。
+
+`renderers/html` は**出力形式の1つ**である。将来2つ目が要る場合は横に並べる。
+
+## レイアウトの多態化
+
+レイアウトごとの差異は if 連鎖ではなく `Layout` インターフェースの実装に持たせる（`coding-rules__polymorphism`）。
+
+```ts
+interface Layout {
+  readonly name: LayoutName;
+  readonly scriptUrls: readonly string[];   // dagre だけ2本、他はゼロ
+  readonly requiresPositions: boolean;      // preset だけ true
+  buildSpec(params: BuildSpecParams): Record<string, unknown>;
+}
+```
+
+レイアウトを追加する作業は「`layouts/` にファイルを1つ足し、レジストリに1行足す」で閉じる。呼び出し側の変更は不要。
+
+- レジストリを `Record<LayoutName, Layout>` として型付けするので、`LayoutName` に名前を足して実装を忘れると**コンパイルエラー**になる
+- 「dagre のときだけスクリプトを読む」という知識も `Layout.scriptUrls` に持たせ、レンダラは名前を見ない
+- 「preset は座標が要る」も `Layout.requiresPositions` に持たせる
+- `layouts/` の外でレイアウト名と比較していないことを**テストで機械的に検査する**
 
 ## 主要アルゴリズム
 

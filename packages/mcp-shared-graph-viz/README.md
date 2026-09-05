@@ -116,10 +116,45 @@ renderGraphHtml({
   theme: { palette, fontFamily, fontSize },
   title: "...",
   legend: true,
-  cytoscapeUrl: "...",   // where the page loads cytoscape from
-  dagreUrls: ["..."],    // and dagre, for that layout only
+  cytoscapeUrl: "...",       // where the page loads cytoscape from
+  layoutScriptUrls: ["..."], // and whatever the layout needs (only dagre does)
 });
 ```
+
+## Layout of the source
+
+```
+src/
+  types.ts        input types, free of domain vocabulary
+  errors.ts       validation
+  theme.ts        palette, group -> color
+  elements.ts     GraphInput -> cytoscape elements
+  layouts/        one module per layout, plus the registry
+  renderers/
+    html/         one output format: the page
+```
+
+A layout's quirks live in its own module and reach the rest of the package
+through the `Layout` interface:
+
+```ts
+interface Layout {
+  readonly name: LayoutName;
+  readonly scriptUrls: readonly string[];   // dagre needs two, the rest none
+  readonly requiresPositions: boolean;      // only preset does
+  buildSpec(params: BuildSpecParams): Record<string, unknown>;
+}
+```
+
+Adding a layout means adding a file under `layouts/` and one entry in the
+registry. Nothing else branches on the layout name — a test asserts that, by
+searching the sources outside `layouts/` for comparisons against a layout name.
+
+The registry is typed as a total map over `LayoutName`, so adding a name to the
+union without adding its layout is a compile error.
+
+`renderers/html/` is one output format. If a second one is ever added, it goes
+beside it rather than replacing it.
 
 ## Errors
 

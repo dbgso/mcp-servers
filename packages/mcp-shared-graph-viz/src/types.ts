@@ -107,6 +107,9 @@ export interface RenderGraphHtmlParams {
   legend?: boolean;
   /** cytoscape script URL embedded in the page. */
   cytoscapeUrl?: string;
-  /** Scripts providing the dagre layout, loaded only for that layout. */
-  dagreUrls?: string[];
+  /**
+   * Overrides the scripts the chosen layout needs, for an offline or
+   * self-hosted copy. Only dagre needs any.
+   */
+  layoutScriptUrls?: string[];
 }

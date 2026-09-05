@@ -4,7 +4,7 @@ type: spec
 title: mcp-shared-graph-viz パッケージ仕様
 requires: 01M1R3CHVZ5CNGQEDT57RQ4QSH
 created: 2026-09-05T06:18:51.020Z
-updated: 2026-09-05T08:28:35.325Z
+updated: 2026-09-05T10:52:56.636Z
 ---
 
 # mcp-shared-graph-viz パッケージ仕様
@@ -95,7 +95,7 @@ interface RenderGraphHtmlParams {
   title?: string;             // 見出し
   legend?: boolean;           // group 凡例。既定 true
   cytoscapeUrl?: string;      // ページが cytoscape を読む先
-  dagreUrls?: string[];       // dagre レイアウト時のみ読む
+  layoutScriptUrls?: string[];// レイアウトが必要とするスクリプトの差し替え
 }
 ```
 
