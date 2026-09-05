@@ -97,6 +97,23 @@ describe("createDescribeExecuteHandlers", () => {
     expect(result.isError).toBe(true);
   });
 
+  it("an empty prefix yields bare tool names", async () => {
+    const registry = createOperationRegistry<TestCtx>([echoOp as Operation<unknown, TestCtx>]);
+    const [describeHandler, executeHandler] = createDescribeExecuteHandlers({
+      prefix: "",
+      registry,
+      buildContext: () => ({ prefix: "[" }),
+    });
+
+    expect(describeHandler.name).toBe("describe");
+    expect(executeHandler.name).toBe("execute");
+    expect(executeHandler.description).toContain("Execute an operation");
+
+    const text = (await describeHandler.execute({})).content[0] as { text: string };
+    expect(text.text).toContain("# Operations");
+    expect(text.text).toContain("Use `execute` with");
+  });
+
   it("buildContext is called per execute (lazy)", async () => {
     let calls = 0;
     const [, execute] = buildHandlers(() => {
