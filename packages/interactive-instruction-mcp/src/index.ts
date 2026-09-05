@@ -2,6 +2,7 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
 import { ensureSystemDocs } from "./services/system-docs.js";
+import { configureDraftWorkflowPersistence } from "./workflows/draft-workflow.js";
 import type { ReminderConfig } from "./types/index.js";
 import type { DocumentScope } from "./services/document-scope.js";
 
@@ -77,6 +78,10 @@ async function main() {
 
   // Ensure system documentation exists
   await ensureSystemDocs({ docsDir: markdownDir });
+
+  // Keep this server's workflow state apart from any other instance's. Without
+  // it they share one store keyed by document id.
+  configureDraftWorkflowPersistence({ docsDir: markdownDir });
 
   const server = createServer({ markdownDir, config, scope });
   const transport = new StdioServerTransport();

@@ -69,16 +69,16 @@ status: editing
 # Test`);
 
       const result = await handler.execute({
-        rawParams: { action: "set_status", id: "test-doc", status: "self_review" },
+        rawParams: { action: "set_status", id: "test-doc", status: "editing" },
         context: { reader, config: { reminderEnabled: false } },
       });
 
       expect(result.isError).toBeFalsy();
-      expect(result.content[0].text).toContain("editing -> self_review");
+      expect(result.content[0].text).toContain("editing -> editing");
 
       const content = readDraft("test-doc");
-      expect(content).toContain("status: self_review");
-      expect(content).not.toContain("status: editing");
+      expect(content).toContain("status: editing");
+      expect(content).not.toContain("status: self_review");
     });
 
     it("should return error for missing status parameter", async () => {
@@ -94,18 +94,26 @@ description: Test
       });
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Required");
+      // The help travels with every schema rejection, so a caller that gets the
+      // parameter wrong is told what the action is actually for.
+      expect(result.content[0].text).toContain("Only \"editing\" can be set");
     });
 
-    it("should return error for invalid status value", async () => {
+    it.each([
+      ["a state that does not exist", "invalid"],
+      ["a real workflow state", "pending_approval"],
+    ])("rejects %s at the schema, not at call time", async (_label, status) => {
       const result = await handler.execute({
-        // @ts-expect-error - testing invalid status value
-        rawParams: { action: "set_status", id: "test-doc", status: "invalid" },
+        // @ts-expect-error - testing a status the schema does not accept
+        rawParams: { action: "set_status", id: "test-doc", status },
         context: { reader, config: { reminderEnabled: false } },
       });
 
+      // The schema is what the agent is shown. Advertising the later workflow
+      // states and refusing them at call time would keep offering an option
+      // that can never work.
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Invalid enum value");
+      expect(result.content[0].text).toContain("invalid_literal");
     });
 
     it("should return error when draft not found", async () => {
@@ -142,16 +150,16 @@ description: Doc 3
 # Doc 3`);
 
       const result = await handler.execute({
-        rawParams: { action: "set_status", ids: "doc1,doc2,doc3", status: "pending_approval" },
+        rawParams: { action: "set_status", ids: "doc1,doc2,doc3", status: "editing" },
         context: { reader, config: { reminderEnabled: false } },
       });
 
       expect(result.isError).toBeFalsy();
       expect(result.content[0].text).toContain("3 succeeded");
 
-      expect(readDraft("doc1")).toContain("status: pending_approval");
-      expect(readDraft("doc2")).toContain("status: pending_approval");
-      expect(readDraft("doc3")).toContain("status: pending_approval");
+      expect(readDraft("doc1")).toContain("status: editing");
+      expect(readDraft("doc2")).toContain("status: editing");
+      expect(readDraft("doc3")).toContain("status: editing");
     });
 
     it("should handle mixed success and failure in batch", async () => {
@@ -163,14 +171,14 @@ status: editing
 # Existing`);
 
       const result = await handler.execute({
-        rawParams: { action: "set_status", ids: "existing,nonexistent", status: "self_review" },
+        rawParams: { action: "set_status", ids: "existing,nonexistent", status: "editing" },
         context: { reader, config: { reminderEnabled: false } },
       });
 
       expect(result.isError).toBeFalsy();
       expect(result.content[0].text).toContain("1 succeeded");
       expect(result.content[0].text).toContain("1 failed");
-      expect(result.content[0].text).toContain("existing: editing -> self_review");
+      expect(result.content[0].text).toContain("existing: editing -> editing");
       expect(result.content[0].text).toContain("nonexistent: not found");
     });
 
@@ -207,11 +215,28 @@ description: Doc 2
     });
   });
 
-  describe("all valid statuses", () => {
-    const validStatuses = ["editing", "self_review", "user_reviewing", "pending_approval"] as const;
+  describe("only a reset is accepted", () => {
+    it("accepts status: editing", async () => {
+      createDraft("test-doc", `---
+description: Test
+---
 
-    for (const status of validStatuses) {
-      it(`should accept status: ${status}`, async () => {
+# Test`);
+
+      const result = await handler.execute({
+        rawParams: { action: "set_status", id: "test-doc", status: "editing" },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(readDraft("test-doc")).toContain("status: editing");
+    });
+
+    // Writing a later state here only ever changed the frontmatter, which
+    // nothing reads -- the approve handler goes by the workflow manager. The
+    // document and the state machine ended up disagreeing and nothing advanced.
+    for (const status of ["self_review", "user_reviewing", "pending_approval"] as const) {
+      it(`refuses to declare status: ${status}`, async () => {
         createDraft("test-doc", `---
 description: Test
 ---
@@ -223,8 +248,8 @@ description: Test
           context: { reader, config: { reminderEnabled: false } },
         });
 
-        expect(result.isError).toBeFalsy();
-        expect(readDraft("test-doc")).toContain(`status: ${status}`);
+        expect(result.isError).toBe(true);
+        expect(readDraft("test-doc")).not.toContain(`status: ${status}`);
       });
     }
   });

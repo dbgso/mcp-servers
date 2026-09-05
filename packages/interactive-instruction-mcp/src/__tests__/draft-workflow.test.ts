@@ -145,25 +145,32 @@ describe("Draft Workflow", () => {
         });
       });
 
-      it("should require approval (no token = approval_required error)", async () => {
+      /**
+       * The transition itself no longer gates on approval; the approve handler
+       * does, and it binds the approval to the promotion target and the draft
+       * body (see approval-binding.test.ts). The gate that used to be here
+       * validated against a request id of its own making that nothing ever
+       * registered, so it failed `not_found` on every real promotion -- and the
+       * handler discarded that failure and promoted anyway, leaving the state
+       * machine stuck at `pending_approval` forever.
+       */
+      it("completes the transition, leaving approval to the handler", async () => {
         const result = await instance.trigger({
           params: { action: "approve" },
         });
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.errorType).toBe("approval_required");
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.to).toBe("applied");
         }
       });
 
-      it("should fail with invalid approval token", async () => {
-        const result = await instance.trigger({
-          params: { action: "approve" },
-          approvalToken: "invalid-token",
+      it("still refuses to skip the review states", async () => {
+        const fresh = createWorkflowInstance<DraftState, DraftContext, DraftParams>({
+          definition: draftWorkflow,
+          initialContext: { draftId: "unreviewed", content: "" },
         });
+        const result = await fresh.trigger({ params: { action: "approve" } });
         expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.errorType).toBe("approval_invalid");
-        }
       });
     });
 
