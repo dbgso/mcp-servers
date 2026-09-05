@@ -4,7 +4,7 @@ type: design
 title: mcp-shared-graph-viz 実装設計
 requires: 01M1R3GH8CWAPDCSEM3WQTTZ81
 created: 2026-09-05T06:24:18.811Z
-updated: 2026-09-05T10:53:25.889Z
+updated: 2026-09-05T11:10:56.055Z
 ---
 
 # mcp-shared-graph-viz 実装設計
@@ -66,7 +66,37 @@ src/
 
 **全モジュールが pure。** 副作用も非同期もない。入出力の assert だけでテストできる。
 
-`renderers/html` は**出力形式の1つ**である。将来2つ目が要る場合は横に並べる。
+`renderers/html` は**出力形式の1つ**であり、それを型で表明する。
+
+```ts
+interface RenderParams {                  // どのレンダラにも要るもの
+  graph: GraphInput;
+  layout?: LayoutOptions;
+  theme?: ThemeOptions;
+  title?: string;
+  legend?: boolean;
+}
+
+interface Renderer<TParams extends RenderParams = RenderParams, TOutput = string> {
+  readonly format: string;
+  render(params: TParams): TOutput;
+}
+```
+
+`TOutput` を `string` で決め打たず型引数にしているのは、**戻り値が最も変わりやすい**ため。ラスタ形式はバイト列を返し、フォント取得やブラウザ起動を伴うレンダラは Promise を返す。どちらも型を壊さず広げるだけで入る。
+
+`RenderParams` を切り出すことは、レンダラが1つでも意味がある。「どの形式にも要るもの」と「ページ固有のもの」（`cytoscapeUrl` / `layoutScriptUrls`）が型として分かれるため。
+
+実装の与え方は `Dialect` / `SecretSource` / `ApprovalStrategy` と同じく、クラスではなくオブジェクトリテラル:
+
+```ts
+export const htmlRenderer: Renderer<RenderGraphHtmlParams> = {
+  format: "html",
+  render: renderHtml,
+};
+```
+
+**レジストリは置かない。** `Dialect` と同様、利用側が1つ選んで使うだけで、複数を同時に扱う必要がないため。
 
 ## レイアウトの多態化
 

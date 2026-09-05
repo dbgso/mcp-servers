@@ -4,7 +4,8 @@ import { buildLayoutSpec, resolveLayout } from "../../layouts/index.js";
 import { resolveTheme } from "../../theme.js";
 import { buildDocument } from "./document.js";
 import { buildCytoscapeStyle } from "./style.js";
-import type { RenderGraphHtmlParams } from "../../types.js";
+import type { Renderer } from "../types.js";
+import type { RenderGraphHtmlParams } from "./types.js";
 
 export const DEFAULT_CYTOSCAPE_URL =
   "https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.34.2/cytoscape.min.js";
@@ -56,5 +57,12 @@ export function renderHtml(params: RenderGraphHtmlParams): string {
   });
 }
 
+/** The HTML page as a renderer, the way a dialect or a secret source is given. */
+export const htmlRenderer: Renderer<RenderGraphHtmlParams> = {
+  format: "html",
+  render: renderHtml,
+};
+
 export { buildCytoscapeStyle, MAX_LABEL_WIDTH_PX } from "./style.js";
 export { escapeScriptJson, escapeXml } from "./escape.js";
+export type { RenderGraphHtmlParams } from "./types.js";

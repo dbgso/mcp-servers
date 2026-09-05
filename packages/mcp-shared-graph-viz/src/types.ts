@@ -96,20 +96,3 @@ export interface ThemeOptions {
   fontFamily?: string;
   fontSize?: number;
 }
-
-export interface RenderGraphHtmlParams {
-  graph: GraphInput;
-  layout?: LayoutOptions;
-  theme?: ThemeOptions;
-  /** Heading shown above the graph. */
-  title?: string;
-  /** Draw a legend of groups. Defaults to true when groups exist. */
-  legend?: boolean;
-  /** cytoscape script URL embedded in the page. */
-  cytoscapeUrl?: string;
-  /**
-   * Overrides the scripts the chosen layout needs, for an offline or
-   * self-hosted copy. Only dagre needs any.
-   */
-  layoutScriptUrls?: string[];
-}
