@@ -281,7 +281,8 @@ class ExecuteHandler<TCtx> extends BaseToolHandler<{
 export interface CreateDescribeExecuteOptions<TCtx> {
   /**
    * Tool prefix; the factory produces `<prefix>_describe` and `<prefix>_execute`.
-   * Use snake_case (e.g. "db", "dynamodb").
+   * Use snake_case (e.g. "db", "dynamodb"). Pass an empty string to get the bare
+   * names `describe` / `execute`, relying on the MCP server name for namespacing.
    */
   prefix: string;
   /** Operation registry holding the ops the tool pair exposes. */
@@ -301,6 +302,39 @@ export interface CreateDescribeExecuteOptions<TCtx> {
   preamble?: string;
 }
 
+/** Tool name for a suffix; an empty prefix yields the bare name. */
+function toolName(params: { prefix: string; suffix: string }): string {
+  const { prefix, suffix } = params;
+  if (prefix === "") {
+    return suffix;
+  }
+  return `${prefix}_${suffix}`;
+}
+
+/** Prefix as it reads inside a sentence ("db operations" / "operations"). */
+function subjectOf(prefix: string): string {
+  if (prefix === "") {
+    return "";
+  }
+  return `${prefix} `;
+}
+
+/** Article plus prefix for "Execute a db operation" / "Execute an operation". */
+function articleOf(prefix: string): string {
+  if (prefix === "") {
+    return "an";
+  }
+  return `a ${prefix}`;
+}
+
+/** Default markdown title for the operation listing. */
+function defaultListTitle(prefix: string): string {
+  if (prefix === "") {
+    return "Operations";
+  }
+  return `${prefix.charAt(0).toUpperCase()}${prefix.slice(1)} Operations`;
+}
+
 /**
  * Build a describe/execute MCP tool pair backed by an OperationRegistry.
  *
@@ -310,16 +344,16 @@ export interface CreateDescribeExecuteOptions<TCtx> {
 export function createDescribeExecuteHandlers<TCtx>(
   opts: CreateDescribeExecuteOptions<TCtx>,
 ): [BaseToolHandler<{ operation?: string }>, BaseToolHandler<{ operation: string; params?: Record<string, unknown> }>] {
-  const describeName = `${opts.prefix}_describe`;
-  const executeName = `${opts.prefix}_execute`;
-  const titleCase = opts.prefix.charAt(0).toUpperCase() + opts.prefix.slice(1);
-  const listTitle = opts.listTitle ?? `${titleCase} Operations`;
+  const describeName = toolName({ prefix: opts.prefix, suffix: "describe" });
+  const executeName = toolName({ prefix: opts.prefix, suffix: "execute" });
+  const subject = subjectOf(opts.prefix);
+  const listTitle = opts.listTitle ?? defaultListTitle(opts.prefix);
 
   const describe = new DescribeHandler(
     opts.registry,
     describeName,
     opts.describeDescription ??
-      `List/inspect ${opts.prefix} operations. Call without args for the full listing, or pass operation=<id> for one op's schema.`,
+      `List/inspect ${subject}operations. Call without args for the full listing, or pass operation=<id> for one op's schema.`,
     executeName,
     listTitle,
     opts.preamble,
@@ -329,7 +363,7 @@ export function createDescribeExecuteHandlers<TCtx>(
     opts.registry,
     executeName,
     opts.executeDescription ??
-      `Execute a ${opts.prefix} operation. Use ${describeName} to discover ops and parameters.`,
+      `Execute ${articleOf(opts.prefix)} operation. Use ${describeName} to discover ops and parameters.`,
     opts.buildContext,
     describeName,
   );
