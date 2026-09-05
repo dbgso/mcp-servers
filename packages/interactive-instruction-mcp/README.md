@@ -10,30 +10,53 @@ MCP server for interactive instruction documents. AI agents discover usage throu
 
 ## Compared to skill files
 
-Skills, `AGENTS.md`, `CLAUDE.md` and friends cover much of the same ground: project
-knowledge an agent should follow. Two differences decide which one fits.
+Skills, `AGENTS.md`, `CLAUDE.md` and friends cover the same ground: project knowledge an
+agent should follow.
 
-**How it loads.** A skill file is context. Something — the harness, or its own frontmatter —
-decides it is relevant and puts it in the session, whole. That is exactly what you want for
-a rule that applies to everything, and awkward for a body of documents where any one task
-needs three of forty: the rest occupy context anyway, and an agent that read them early
-gradually stops acting on them. Here the documents stay on disk and are fetched by
-`instruction(action: "read", id: "...")` when something calls for them. `list` returns only
-ids, descriptions and `whenToUse`, so choosing what to read costs a summary rather than the
-documents. Responses carry a freshness reminder, so an agent re-reads instead of trusting
-what it saw an hour ago.
+**For getting a document in front of an agent, they are close enough that it is not worth
+choosing between them on that basis.** A skill is selected by its description, its body is
+loaded only when invoked, and a skill whose body points at another skill by name gets
+followed. That last one is worth stating plainly because it is the obvious counter-argument:
+split rules one topic per file, have them reference each other, and skills retrieve about as
+well as this does. Measured, not assumed — three single-topic skills chained two deep, with
+none of their names given to the agent: it picked the first from its description and walked
+the chain on its own.
 
-**Who can reach it.** A skill belongs to the session it was loaded into. Spawn a sub agent
-and it starts with its own context — whatever the parent loaded does not travel with it, so
-work delegated to sub agents runs without the rules the parent was following. An MCP server
-is a tool endpoint, not context: every session configured with it can call it, sub agents
-included. The same documents, and the same approval gate, reach the whole tree.
+The difference is on the writing side.
 
-The flip side is that nothing here loads itself. An agent that never calls the tool never
-sees a rule. `--topic-for-every-task` exists for that: it names one document the responses
-keep pointing back at. For a short rule that must apply unconditionally, a skill file is
-simply the better instrument — and the two compose, since that file can be the thing that
-tells an agent to check here.
+**The corpus is maintained by the agent, under a gate.** A skill file is authored ahead of
+time by a person. An agent that learns something mid-task can only write a file, and nothing
+supervises that. Here it creates a draft, reviews it, explains it to you in its own words,
+and the promotion needs a token you read from a desktop notification — bound to that exact
+content and destination, so what lands is what you approved. The point is not that documents
+can be edited; it is that the agent can add to them and still not be the one who decides.
+
+**Links are data, not prose.** A skill pointing at another skill is a sentence: nothing can
+check it, and nothing else can use it. `relatedDocs` lives in frontmatter, so backlinks stay
+current on both sides, circular references are detected, `lint` reports what is malformed,
+`list(missingMeta: "any")` finds the documents nobody finished, and `list(query: "...")`
+searches descriptions and usage scenarios. At forty documents this is housekeeping; at a
+hundred it is the difference between a corpus and a pile.
+
+**The server can push, not only be pulled.** Every response carries a freshness reminder, so
+an agent re-reads rather than trusting what it saw an hour ago, and `--topic-for-every-task`
+names one document the responses keep steering back to.
+
+Two things it is worse at, both with the same shape: nothing here announces itself.
+
+**An agent that never calls the tool never sees a rule.** The fix is one line somewhere the
+agent does read — `AGENTS.md`, `CLAUDE.md`, a skill file — telling it to check here before
+starting work.
+
+**It is a poor trigger for routine work.** A slash command fires a known procedure on
+request; a document has to be found and read first. The way around it is the same one line:
+define the procedure as a skill whose body is a single pointer to the relevant document here.
+The skill supplies the trigger and the description that gets it selected; this supplies the
+content, which stays reviewable and revisable instead of frozen into the skill file.
+
+So the two compose rather than compete. A short rule that must apply unconditionally belongs
+in a skill file; a body of documents that grows and gets revised belongs here, with a skill
+file pointing at it.
 
 ## Tools
 
