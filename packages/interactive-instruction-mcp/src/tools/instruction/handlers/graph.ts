@@ -67,10 +67,20 @@ const schema = z.object({
     .positive()
     .optional()
     .describe("Multiplier on the gaps between nodes. Defaults to 1."),
+  format: z
+    .enum(["html", "text"])
+    .optional()
+    .describe(
+      "html writes a page for a person to look at; text returns the same graph as an " +
+      "adjacency list in the response, for a caller that has no browser. Defaults to html.",
+    ),
   outputPath: z
     .string()
     .optional()
-    .describe("Where to write the page. Defaults to a file under the system temp directory."),
+    .describe(
+      "Where to write the page. Defaults to a file under the system temp directory. " +
+      "Ignored by format: \"text\", which returns the graph rather than writing it.",
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -84,6 +94,9 @@ Usage:
 - \`instruction(action: "graph", id: "<id>", depth: 2)\` - one document's neighbourhood
 - \`instruction(action: "graph", includeUnlinked: true)\` - also show documents with no relations
 - \`instruction(action: "graph", direction: "LR")\` - lay the hierarchy out left-to-right
+- \`instruction(action: "graph", format: "text")\` - the same graph as an adjacency list
+- \`instruction(action: "graph", id: "<id>", depth: 2, format: "text")\` - what references
+  it and what it references, to that depth
 
 Writes an HTML file and returns its path. Open it in a browser.`;
 
@@ -93,8 +106,16 @@ Writes an HTML file and returns its path. Open it in a browser.`;
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, depth = 1, includeUnlinked = false, layout, direction, spacing, outputPath } =
-      params.args;
+    const {
+      id,
+      depth = 1,
+      includeUnlinked = false,
+      layout,
+      direction,
+      spacing,
+      format = "html",
+      outputPath,
+    } = params.args;
     const { reader } = params.context;
 
     const listed = await reader.listDocuments({ recursive: true });
@@ -119,6 +140,10 @@ Writes an HTML file and returns its path. Open it in a browser.`;
           description: "Relate two documents",
           example: `instruction(action: "link_add", id: "<id>", relatedDocs: ["<other-id>"])`,
         }]));
+    }
+
+    if (format === "text") {
+      return textResponse(formatGraphAsText({ nodes, edges, focusId: id, depth }));
     }
 
     const html = renderGraphHtml({
@@ -277,6 +302,65 @@ function neighbourhood(params: {
   }
 
   return reached;
+}
+
+/**
+ * The same graph the page draws, written out for a caller that cannot open one.
+ *
+ * An adjacency list carries the whole structure in the fewest tokens: one line
+ * per document that references anything, direction preserved. When the graph is
+ * focused on a document, the two questions actually being asked -- what points
+ * here, and what does this point at -- are answered on their own lines first,
+ * so neither has to be recovered by scanning.
+ */
+function formatGraphAsText(params: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  focusId?: string;
+  depth: number;
+}): string {
+  const { nodes, edges, focusId, depth } = params;
+
+  const outgoing = new Map<string, string[]>();
+  for (const edge of edges) {
+    outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]);
+  }
+
+  const adjacency = [...outgoing.entries()].map(([source, targets]) =>
+    `${source} -> ${targets.join(", ")}`,
+  );
+
+  const sections: string[] = [];
+
+  // Focused: say outright what the caller came to find out.
+  if (focusId !== undefined) {
+    const referencedBy = edges.filter((e) => e.target === focusId).map((e) => e.source);
+    const references = outgoing.get(focusId) ?? [];
+    sections.push(
+      `${focusId}, depth ${depth}
+
+referenced by: ${referencedBy.length === 0 ? "(nothing)" : referencedBy.join(", ")}
+references: ${references.length === 0 ? "(nothing)" : references.join(", ")}`,
+    );
+  } else {
+    sections.push(`${nodes.length} documents, ${edges.length} relations`);
+  }
+
+  sections.push(adjacency.join("\n"));
+
+  // Dangling links are the reason to look at the graph at all, so they are said
+  // rather than left to be inferred from ids that appear only as targets.
+  const missing = nodes.filter((node) => node.group === MISSING_GROUP);
+  if (missing.length > 0) {
+    sections.push(`missing (referenced but not present): ${missing.map((n) => n.id).join(", ")}`);
+  }
+
+  const unlinked = nodes.filter((node) => node.group === ORPHAN_GROUP);
+  if (unlinked.length > 0) {
+    sections.push(`unlinked (no relations either way): ${unlinked.map((n) => n.id).join(", ")}`);
+  }
+
+  return sections.join("\n\n");
 }
 
 /**

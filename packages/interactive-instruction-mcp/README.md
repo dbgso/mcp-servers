@@ -52,7 +52,8 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `update_meta` — Generate metadata update prompt (`id` only)
 
 **Seeing the corpus**
-- `graph` — Render the `relatedDocs` graph as an interactive page (optional: `id`, `depth`, `includeUnlinked`, `layout`, `outputPath`)
+- `graph` — Render the `relatedDocs` graph as an interactive page, or return it as text
+  (optional: `id`, `depth`, `includeUnlinked`, `layout`, `direction`, `spacing`, `format`, `outputPath`)
 
 ### Looking at the relations
 
@@ -69,8 +70,52 @@ node to fade everything that is not adjacent to it. Documents are coloured by th
 category, and **links pointing at documents that do not exist are drawn too**, as `(missing)`
 — silently omitting them would make a broken corpus look intact.
 
+`direction` (`TB` / `BT` / `LR` / `RL`) and `spacing` are passed to the layout. A document
+corpus tends to be shallow and wide, so `LR` often reads better than the default `TB`.
+
 Drawing is done by `mcp-shared-graph-viz`, which is given nodes and edges and knows nothing
 about documents; the mapping from `relatedDocs` onto them lives here.
+
+### The same graph as text
+
+A page is for a person. A caller with no browser can ask for the graph itself:
+
+```
+instruction(action: "graph", format: "text")
+```
+
+```
+34 documents, 36 relations
+
+coding-rules__overview -> coding-rules__general, coding-rules__mcp-tool-design, coding-rules__typescript
+coding-rules__mcp-tool-design -> coding-rules__handler-pattern, coding-rules__mcp-tool-approval, ...
+every-task -> coding-rules__overview, trigger__rule-keyword, workflow__dry-principle, ...
+```
+
+One line per document that references anything, direction preserved, nothing written to disk.
+On this repository's own documents that is about an eighth of the bytes of
+`list(recursive: true)`, which carries every description and `whenToUse` alongside.
+
+With `id`, the two questions being asked are answered before the adjacency list, so neither
+has to be recovered by scanning it:
+
+```
+instruction(action: "graph", id: "coding-rules__mcp-tool-design", depth: 2, format: "text")
+```
+
+```
+coding-rules__mcp-tool-design, depth 2
+
+referenced by: coding-rules__overview
+references: coding__mcp-tool-help-pattern, coding-rules__handler-pattern, ...
+
+coding-rules__handler-pattern -> coding-rules__schema-sync
+coding-rules__mcp-tool-design -> coding__mcp-tool-help-pattern, ...
+every-task -> coding-rules__overview
+```
+
+`(missing)` links and, with `includeUnlinked`, documents with no relations are named on their
+own lines rather than left to be inferred.
 
 ### Draft vs Promoted
 

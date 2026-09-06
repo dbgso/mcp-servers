@@ -197,6 +197,92 @@ describe("GraphHandler", () => {
     expect(text).toContain("No relations to draw");
   });
 
+  describe("format: text", () => {
+    const asText = async (rawParams: Record<string, unknown>) => {
+      const result = await handler.execute({
+        rawParams: { action: "graph", format: "text", ...rawParams },
+        context: { reader },
+      });
+      expect(result.isError).toBeFalsy();
+      return result.content[0].type === "text" ? result.content[0].text : "";
+    };
+
+    it("writes one adjacency line per document that references anything", async () => {
+      await write("alpha", ["beta", "gamma"]);
+      await write("beta", ["gamma"]);
+      await write("gamma", []);
+
+      const text = await asText({});
+
+      expect(text).toContain("alpha -> beta, gamma");
+      expect(text).toContain("beta -> gamma");
+      // gamma references nothing, so it gets no line of its own.
+      expect(text).not.toMatch(/^gamma ->/m);
+    });
+
+    it("returns the graph instead of writing a file", async () => {
+      await write("alpha", ["beta"]);
+      await write("beta", []);
+      const outputPath = path.join(tempDir, "graph.html");
+
+      const text = await asText({ outputPath });
+
+      expect(text).toContain("alpha -> beta");
+      await expect(fs.access(outputPath)).rejects.toThrow();
+    });
+
+    it("answers both directions up front when focused", async () => {
+      await write("hub", ["middle"]);
+      await write("middle", ["leaf"]);
+      await write("leaf", []);
+
+      const text = await asText({ id: "middle", depth: 1 });
+
+      expect(text).toContain("middle, depth 1");
+      expect(text).toContain("referenced by: hub");
+      expect(text).toContain("references: leaf");
+    });
+
+    it.each([
+      ["referenced by", "root"],
+      ["references", "tip"],
+    ])("says (nothing) rather than leaving %s blank", async (label, focus) => {
+      await write("root", ["tip"]);
+      await write("tip", []);
+
+      const text = await asText({ id: focus, depth: 1 });
+
+      expect(text).toContain(`${label}: (nothing)`);
+    });
+
+    it("reaches further with depth", async () => {
+      await write("a", ["b"]);
+      await write("b", ["c"]);
+      await write("c", ["d"]);
+      await write("d", []);
+
+      expect(await asText({ id: "b", depth: 1 })).not.toContain("c -> d");
+      expect(await asText({ id: "b", depth: 2 })).toContain("c -> d");
+    });
+
+    it("calls out links that point at nothing", async () => {
+      await write("alpha", ["ghost"]);
+
+      const text = await asText({});
+
+      expect(text).toContain("missing (referenced but not present): ghost");
+    });
+
+    it("names unlinked documents only when they were asked for", async () => {
+      await write("alpha", ["beta"]);
+      await write("beta", []);
+      await write("lonely", []);
+
+      expect(await asText({})).not.toContain("lonely");
+      expect(await asText({ includeUnlinked: true })).toContain("unlinked (no relations either way): lonely");
+    });
+  });
+
   describe("layout", () => {
     const render = async (rawParams: Record<string, unknown>) => {
       await write("alpha", ["beta"]);
