@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -41,7 +41,7 @@ describe("ApplyHandler", () => {
 
   it("returns error when no pending update exists", async () => {
     const result = await handler.execute({
-      rawParams: { action: "apply", id: "nonexistent" },
+      rawParams: { action: "apply", id: "nonexistent", explanation: "test: applies the staged update" },
       context: { reader },
     });
 
@@ -70,8 +70,13 @@ describe("ApplyHandler", () => {
     });
 
     // Apply
+    // The first attempt is refused by design; the second identical one applies.
+    await handler.execute({
+      rawParams: { action: "apply", id: "test-doc", explanation: "test: applies the staged update" },
+      context: { reader },
+    });
     const result = await handler.execute({
-      rawParams: { action: "apply", id: "test-doc" },
+      rawParams: { action: "apply", id: "test-doc", explanation: "test: applies the staged update" },
       context: { reader },
     });
 
@@ -107,7 +112,7 @@ describe("ApplyHandler", () => {
     });
 
     const result = await handler.execute({
-      rawParams: { action: "apply", id: "deleted-doc" },
+      rawParams: { action: "apply", id: "deleted-doc", explanation: "test: applies the staged update" },
       context: { reader },
     });
 
@@ -138,7 +143,12 @@ describe("ApplyHandler", () => {
       diffPath,
     });
 
-    await handler.execute({ rawParams: { action: "apply", id: "cached" }, context: { reader } });
+    // The first attempt is refused by design; the second identical one applies.
+    await handler.execute({
+      rawParams: { action: "apply", id: "cached", explanation: "test: applies the staged update" },
+      context: { reader },
+    });
+    await handler.execute({ rawParams: { action: "apply", id: "cached", explanation: "test: applies the staged update" }, context: { reader } });
 
     // `apply` used to write through raw fs, bypassing the reader, so every
     // other write path invalidated the cache and this one did not -- `list`
@@ -146,6 +156,122 @@ describe("ApplyHandler", () => {
     const listed = await reader.listDocuments({ recursive: true });
     const doc = listed.documents.find((d) => d.id === "cached");
     expect(doc?.description).toBe("NEW DESC");
+  });
+
+  // The gate is a process-wide single slot, so each test here uses its own
+  // document id: a run left behind by one test would otherwise prime the next.
+  describe("the deliberation gate", () => {
+    async function stage(id: string): Promise<void> {
+      const originalPath = path.join(docsDir, `${id}.md`);
+      const originalContent = `# ${id}\n\nv1`;
+      await fs.writeFile(originalPath, originalContent);
+      const diffPath = path.join(tempDir, `${id}.diff`);
+      await fs.writeFile(diffPath, "diff content");
+      await savePendingUpdate({
+        docsDir,
+        id,
+        content: `# ${id}\n\nv2`,
+        originalContent,
+        originalPath,
+        diffPath,
+      });
+    }
+
+    const apply = (id: string, explanation: string) =>
+      handler.execute({
+        rawParams: { action: "apply", id, explanation },
+        context: { reader },
+      });
+
+    const textOf = (response: Awaited<ReturnType<typeof apply>>): string =>
+      response.content[0].type === "text" ? response.content[0].text : "";
+
+    it("refuses the first attempt and tells the caller to explain the change", async () => {
+      await stage("gated-first");
+
+      const first = await apply("gated-first", "Adds the v2 body we discussed.");
+
+      // A refusal is a step in the operation, not a failure of the tool: an
+      // error response invites the caller to look for another way in.
+      expect(first.isError).toBeFalsy();
+      const text = first.content[0].type === "text" ? first.content[0].text : "";
+      expect(text).toContain("Explain to the user");
+      // Refused means refused: nothing was written.
+      expect(await fs.readFile(path.join(docsDir, "gated-first.md"), "utf-8")).toContain("v1");
+    });
+
+    it("applies on the second identical attempt", async () => {
+      await stage("gated-second");
+      const explanation = "Adds the v2 body we discussed.";
+
+      await apply("gated-second", explanation);
+      const second = await apply("gated-second", explanation);
+
+      expect(second.isError).toBeFalsy();
+      expect(await fs.readFile(path.join(docsDir, "gated-second.md"), "utf-8")).toContain("v2");
+    });
+
+    it("starts over when the retry reworks its explanation", async () => {
+      await stage("gated-reworded");
+
+      await apply("gated-reworded", "Adds the v2 body we discussed.");
+      // Retrying with altered arguments is the reflex this gate is built
+      // around: a different explanation is a different attempt.
+      const second = await apply("gated-reworded", "Updating the document.");
+
+      expect(second.isError).toBeFalsy();
+      expect(textOf(second)).toContain("attempt 1 of 2");
+      expect(await fs.readFile(path.join(docsDir, "gated-reworded.md"), "utf-8")).toContain("v1");
+    });
+
+    it("requires the attempts to be consecutive", async () => {
+      await stage("one");
+      await stage("two");
+
+      await apply("one", "Applies one.");
+      await apply("two", "Applies two.");
+      const back = await apply("one", "Applies one.");
+
+      expect(back.isError).toBeFalsy();
+      expect(textOf(back)).toContain("attempt 1 of 2");
+      expect(await fs.readFile(path.join(docsDir, "one.md"), "utf-8")).toContain("v1");
+    });
+
+    it("keeps the run when the write fails, so the user is asked once", async () => {
+      await stage("gated-writefail");
+      const explanation = "Adds the v2 body we discussed.";
+
+      await apply("gated-writefail", explanation);
+      // Passing the gate is not the same as the work being done. A write that
+      // fails after the fact used to consume the run, which sent the caller
+      // back to attempt 1 and made the user sit through the explanation twice.
+      const failing = vi
+        .spyOn(reader, "updateDocument")
+        .mockResolvedValueOnce({ success: false, error: "disk on fire" });
+      const failed = await apply("gated-writefail", explanation);
+
+      expect(failed.isError).toBe(true);
+      expect(textOf(failed)).toContain("disk on fire");
+
+      failing.mockRestore();
+      const retried = await apply("gated-writefail", explanation);
+
+      expect(retried.isError).toBeFalsy();
+      expect(textOf(retried)).not.toContain("Explain to the user");
+      expect(await fs.readFile(path.join(docsDir, "gated-writefail.md"), "utf-8")).toContain("v2");
+    });
+
+    it("rejects a call with no explanation at all", async () => {
+      await stage("gated-noexpl");
+
+      const result = await handler.execute({
+        // @ts-expect-error - explanation is required
+        rawParams: { action: "apply", id: "gated-noexpl" },
+        context: { reader },
+      });
+
+      expect(result.isError).toBe(true);
+    });
   });
 
   it("refuses when the document changed after the update was prepared", async () => {
@@ -169,7 +295,7 @@ describe("ApplyHandler", () => {
     reader.invalidateCache();
 
     const result = await handler.execute({
-      rawParams: { action: "apply", id: "raced" },
+      rawParams: { action: "apply", id: "raced", explanation: "test: applies the staged update" },
       context: { reader },
     });
 
@@ -314,8 +440,13 @@ Updated content here.`,
     expect(updateText).toContain("+Updated content here.");
 
     // Step 3: Call apply
+    // The first attempt is refused by design; the second identical one applies.
+    await applyHandler.execute({
+      rawParams: { action: "apply", id: "existing-doc", explanation: "test: applies the staged update" },
+      context: { reader },
+    });
     const applyResult = await applyHandler.execute({
-      rawParams: { action: "apply", id: "existing-doc" },
+      rawParams: { action: "apply", id: "existing-doc", explanation: "test: applies the staged update" },
       context: { reader },
     });
 
