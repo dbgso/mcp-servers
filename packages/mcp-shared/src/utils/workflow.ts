@@ -37,6 +37,8 @@ export {
 export {
   createWorkflowInstance,
   loadWorkflowInstance,
+  workflowStateFileName,
+  instanceIdFromStateFileName,
 } from "../workflow/instance.js";
 
 // Re-export manager

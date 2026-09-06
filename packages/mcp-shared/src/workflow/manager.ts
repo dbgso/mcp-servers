@@ -9,7 +9,9 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {
   createWorkflowInstance,
+  instanceIdFromStateFileName,
   loadWorkflowInstance,
+  workflowStateFileName,
 } from "./instance.js";
 import type {
   WorkflowDefinition,
@@ -70,11 +72,18 @@ export class WorkflowManager<TState extends string, TContext, TParams> {
       return cached;
     }
 
-    // Try to load from file
-    const filePath = path.join(this.persistDir, `${id.replace(/__/g, "_")}.json`);
+    // Try to load from file.
+    // `options` has to be passed: without it the restored instance falls back
+    // to the module default persist dir, so every save after a reload lands
+    // somewhere this manager never reads and the state appears frozen.
+    const filePath = path.join(this.persistDir, workflowStateFileName(id));
     const loadResult = await loadWorkflowInstance({
       definition: this.definition,
       filePath,
+      options: {
+        instanceId: id,
+        persistDir: this.persistDir,
+      },
     });
 
     if (loadResult.ok) {
@@ -194,10 +203,12 @@ export class WorkflowManager<TState extends string, TContext, TParams> {
         const loadResult = await loadWorkflowInstance({
           definition: this.definition,
           filePath,
+          options: { persistDir: this.persistDir },
         });
 
         if (loadResult.ok) {
-          const id = file.replace(".json", "").replace(/_/g, "__");
+          const id = instanceIdFromStateFileName(file);
+          if (id === null) continue;
           this.instances.set(id, loadResult.instance);
           results.push({
             id,
@@ -221,7 +232,7 @@ export class WorkflowManager<TState extends string, TContext, TParams> {
     const { id } = params;
     this.instances.delete(id);
 
-    const filePath = path.join(this.persistDir, `${id.replace(/__/g, "_")}.json`);
+    const filePath = path.join(this.persistDir, workflowStateFileName(id));
     try {
       await fs.unlink(filePath);
     } catch {
