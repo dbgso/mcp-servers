@@ -4,7 +4,7 @@ type: design
 title: mcp-shared-graph-viz 実装設計
 requires: 01M1R3GH8CWAPDCSEM3WQTTZ81
 created: 2026-09-05T06:24:18.811Z
-updated: 2026-09-05T14:29:52.282Z
+updated: 2026-09-06T05:47:03.266Z
 ---
 
 # mcp-shared-graph-viz 実装設計
@@ -78,17 +78,24 @@ interface RenderParams {          // レンダラに描かせるものの全て
 }
 
 interface Renderer<TOutput = string> {
-  readonly format: string;
+  isSupport: (format: string) => boolean;
   render: (params: RenderParams) => TOutput;
 }
+```
+
+**形式に対応するかはレンダラ自身が答える。** 名前を外に出して呼び出し側に比較させると、「どう照合するか」（別名・拡張子・メディアタイプ）がレンダラの外に漏れる。
+
+```ts
+const renderer = renderers.find((r) => r.isSupport(format));
 ```
 
 **形式固有の設定は `render` の引数にしない。** 構築時に束縛する。
 
 ```ts
 class HtmlRenderer implements Renderer {
-  readonly format = "html";
+  private static readonly FORMATS = ["html", "htm"];
   constructor(private readonly options: HtmlRendererOptions = {}) {}
+  isSupport = (format: string): boolean => HtmlRenderer.FORMATS.includes(format.trim().toLowerCase());
   render = (params: RenderParams): string => renderHtml({ ...params, ...this.options });
 }
 

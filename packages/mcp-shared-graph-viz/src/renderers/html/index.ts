@@ -70,9 +70,13 @@ export function renderHtml(params: RenderParams & HtmlRendererOptions): string {
  * `RenderParams` would slip into a `Record<string, Renderer>` unnoticed.
  */
 export class HtmlRenderer implements Renderer {
-  readonly format = "html";
+  /** Recognised spellings of this format. */
+  private static readonly FORMATS: readonly string[] = ["html", "htm"];
 
   constructor(private readonly options: HtmlRendererOptions = {}) {}
+
+  isSupport = (format: string): boolean =>
+    HtmlRenderer.FORMATS.includes(format.trim().toLowerCase());
 
   render = (params: RenderParams): string => renderHtml({ ...params, ...this.options });
 }

@@ -29,7 +29,14 @@ export interface RenderParams {
  * font or drive a browser returns a promise.
  */
 export interface Renderer<TOutput = string> {
-  /** Identifies the format in messages and file extensions. */
-  readonly format: string;
+  /**
+   * Whether this renderer produces the requested format.
+   *
+   * The renderer decides, rather than exposing a name for something else to
+   * compare against: how a format is recognised — an alias, a file extension,
+   * a media type — is the renderer's business, and a caller matching on a
+   * `format` field would be reaching inside it.
+   */
+  isSupport: (format: string) => boolean;
   render: (params: RenderParams) => TOutput;
 }

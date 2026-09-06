@@ -165,9 +165,18 @@ interface RenderParams {          // the whole of what a renderer is asked to dr
 }
 
 interface Renderer<TOutput = string> {
-  readonly format: string;
+  isSupport: (format: string) => boolean;
   render: (params: RenderParams) => TOutput;
 }
+```
+
+The renderer decides whether it handles a format, rather than exposing a name
+for something else to compare against. How a format is recognised — an alias,
+a file extension, a media type — is the renderer's business; a caller matching
+on a `format` field would be reaching inside it.
+
+```ts
+const renderer = renderers.find((r) => r.isSupport(format));
 ```
 
 A format's own settings are **not** arguments to `render` — they are bound when
@@ -176,8 +185,9 @@ caller that does not know the format can still drive it:
 
 ```ts
 class HtmlRenderer implements Renderer {
-  readonly format = "html";
+  private static readonly FORMATS = ["html", "htm"];
   constructor(private readonly options: HtmlRendererOptions = {}) {}
+  isSupport = (format: string): boolean => HtmlRenderer.FORMATS.includes(format.trim().toLowerCase());
   render = (params: RenderParams): string => renderHtml({ ...params, ...this.options });
 }
 ```
@@ -208,8 +218,8 @@ contravariantly — a renderer that quietly demanded more than `RenderParams`
 is rejected instead of slipping through.
 
 A test walks `renderers/*/` and asserts each directory's entry point exports a
-`Renderer`, so a second format cannot quietly arrive as a bare function beside
-the seam instead of through it.
+`Renderer` that answers to the directory's name, so a second format cannot
+quietly arrive as a bare function beside the seam instead of through it.
 
 ## Errors
 
