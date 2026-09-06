@@ -259,9 +259,14 @@ renderGraphHtml({ graph: whole,   groupOrder: GROUP_ORDER });
 renderGraphHtml({ graph: closeUp, groupOrder: GROUP_ORDER });   // same colours
 ```
 
-Groups the list omits fall in behind it, so an incomplete list degrades instead
-of throwing, and a listed group absent from this view keeps its colour reserved
-without appearing in the legend.
+Groups the list omits fall in behind it, by name, so an incomplete list
+degrades instead of throwing; a listed group absent from this view keeps its
+colour reserved without appearing in the legend.
+
+**List every group your mapping can produce**, including the ones it produces
+only sometimes — a bucket for documents nothing links to, say. The fallback
+orders what it was not told about, but a group that comes and goes still shifts
+whatever trails it, which is the drift `groupOrder` is there to stop.
 
 Hashing the name would be steady without any of this, but three groups over
 eight swatches share a colour about a third of the time, and two groups drawn

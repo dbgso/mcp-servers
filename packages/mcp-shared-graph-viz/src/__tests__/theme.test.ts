@@ -105,6 +105,35 @@ describe("collectGroups with a caller-supplied order", () => {
     ]);
   });
 
+  /**
+   * The tail is by name, so two views holding the same forgotten groups agree
+   * even if their nodes arrive in a different order.
+   */
+  it("orders forgotten groups by name, not by where they turned up", () => {
+    const oneWay: GraphInput = {
+      nodes: [{ id: "a", group: "(unlinked)" }, { id: "b", group: "(missing)" }],
+      edges: [],
+    };
+    const otherWay: GraphInput = {
+      nodes: [{ id: "b", group: "(missing)" }, { id: "a", group: "(unlinked)" }],
+      edges: [],
+    };
+    expect(collectGroups({ graph: oneWay, groupOrder: ["spec"] })).toEqual(
+      collectGroups({ graph: otherWay, groupOrder: ["spec"] }),
+    );
+  });
+
+  /** How far the fallback does not go: list a group that comes and goes. */
+  it("still shifts a forgotten group when another one is absent", () => {
+    const both: GraphInput = {
+      nodes: [{ id: "a", group: "(missing)" }, { id: "b", group: "(unlinked)" }],
+      edges: [],
+    };
+    const one: GraphInput = { nodes: [{ id: "b", group: "(unlinked)" }], edges: [] };
+    expect(collectGroups({ graph: both, groupOrder: ["spec"] }).indexOf("(unlinked)")).toBe(2);
+    expect(collectGroups({ graph: one, groupOrder: ["spec"] }).indexOf("(unlinked)")).toBe(1);
+  });
+
   it("does not repeat a group the caller listed twice over", () => {
     const graph: GraphInput = { nodes: [{ id: "a", group: "spec" }], edges: [] };
     expect(collectGroups({ graph, groupOrder: ["spec", "adr"] })).toEqual(["spec", "adr"]);

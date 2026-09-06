@@ -62,8 +62,11 @@ export function resolveTheme(params: { theme?: ThemeOptions }): ResolvedTheme {
  * elsewhere. Position it stays, and a caller that knows the whole corpus can
  * pass `groupOrder` once and get both.
  *
- * Groups absent from `groupOrder` keep their colours after the ones in it, so
- * an incomplete list degrades rather than throws.
+ * Groups absent from `groupOrder` follow the ones in it, by name rather than by
+ * where they turned up, so an incomplete list degrades rather than throws. It
+ * degrades only so far: a group that appears in some views and not others still
+ * shifts whatever trails it, so a group the mapping can produce belongs in the
+ * list even when it often produces nothing.
  */
 export function collectGroups(params: { graph: GraphInput; groupOrder?: readonly string[] }): string[] {
   const { graph, groupOrder } = params;
@@ -84,7 +87,8 @@ export function collectGroups(params: { graph: GraphInput; groupOrder?: readonly
   // Every name the caller listed keeps its slot, whether or not this view has
   // it, so the colour of a group does not depend on which others turned up.
   const ordered = [...groupOrder];
-  return [...ordered, ...appearance.filter((group) => !ordered.includes(group))];
+  const rest = appearance.filter((group) => !ordered.includes(group)).sort();
+  return [...ordered, ...rest];
 }
 
 export function buildSwatchMap(params: {
