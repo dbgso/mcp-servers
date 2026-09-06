@@ -1,0 +1,41 @@
+{
+  "name": "mcp-shared-graph-viz",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turn nodes and edges into an interactive cytoscape page. Zero runtime dependencies: cytoscape runs in the browser.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "oxlint src/"
+  },
+  "keywords": [
+    "mcp",
+    "shared",
+    "graph",
+    "cytoscape",
+    "html",
+    "visualization"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
+  }
+}
