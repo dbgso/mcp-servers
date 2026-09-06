@@ -197,6 +197,49 @@ describe("GraphHandler", () => {
     expect(text).toContain("No relations to draw");
   });
 
+  describe("layout", () => {
+    const render = async (rawParams: Record<string, unknown>) => {
+      await write("alpha", ["beta"]);
+      await write("beta", []);
+      const outputPath = path.join(tempDir, "graph.html");
+      await handler.execute({
+        rawParams: { action: "graph", outputPath, ...rawParams },
+        context: { reader },
+      });
+      return fs.readFile(outputPath, "utf-8");
+    };
+
+    it("draws top-to-bottom with dagre when nothing is asked for", async () => {
+      const html = await render({});
+      expect(html).toContain('"name":"dagre"');
+      expect(html).toContain('rankDir":"TB"');
+    });
+
+    it.each([["LR"], ["RL"], ["BT"], ["TB"]])("passes direction %s to dagre", async (direction) => {
+      const html = await render({ direction });
+      expect(html).toContain(`rankDir":"${direction}"`);
+    });
+
+    it("passes spacing through", async () => {
+      const html = await render({ spacing: 2 });
+      expect(html).toContain("spacingFactor\":2");
+    });
+
+    it("still honours a named layout when a direction is also given", async () => {
+      // breadthfirst ignores rankDir; naming it must not be overridden by direction.
+      const html = await render({ layout: "breadthfirst", direction: "LR" });
+      expect(html).toContain('"name":"breadthfirst"');
+    });
+
+    it("rejects a direction that is not a rank direction", async () => {
+      const result = await handler.execute({
+        rawParams: { action: "graph", direction: "sideways" },
+        context: { reader },
+      });
+      expect(result.isError).toBeTruthy();
+    });
+  });
+
   it("rejects a focus on a document that does not exist", async () => {
     await write("alpha", ["beta"]);
     await write("beta", []);

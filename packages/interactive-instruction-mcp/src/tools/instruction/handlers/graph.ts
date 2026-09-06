@@ -3,7 +3,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { renderGraphHtml, type GraphEdge, type GraphNode } from "mcp-shared-graph-viz";
+import {
+  renderGraphHtml,
+  type GraphEdge,
+  type GraphNode,
+  type LayoutDirection,
+  type LayoutName,
+  type LayoutOptions,
+} from "mcp-shared-graph-viz";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
 import { DRAFT_DIR } from "../../../constants.js";
@@ -49,6 +56,17 @@ const schema = z.object({
     .enum(["dagre", "cose", "concentric", "grid", "circle", "breadthfirst"])
     .optional()
     .describe("Layout algorithm. Defaults to dagre."),
+  direction: z
+    .enum(["TB", "BT", "LR", "RL"])
+    .optional()
+    .describe(
+      "Rank direction for dagre. Defaults to TB. LR reads better for a wide, shallow graph.",
+    ),
+  spacing: z
+    .number()
+    .positive()
+    .optional()
+    .describe("Multiplier on the gaps between nodes. Defaults to 1."),
   outputPath: z
     .string()
     .optional()
@@ -65,6 +83,7 @@ Usage:
 - \`instruction(action: "graph")\` - the whole corpus
 - \`instruction(action: "graph", id: "<id>", depth: 2)\` - one document's neighbourhood
 - \`instruction(action: "graph", includeUnlinked: true)\` - also show documents with no relations
+- \`instruction(action: "graph", direction: "LR")\` - lay the hierarchy out left-to-right
 
 Writes an HTML file and returns its path. Open it in a browser.`;
 
@@ -74,7 +93,8 @@ Writes an HTML file and returns its path. Open it in a browser.`;
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, depth = 1, includeUnlinked = false, layout, outputPath } = params.args;
+    const { id, depth = 1, includeUnlinked = false, layout, direction, spacing, outputPath } =
+      params.args;
     const { reader } = params.context;
 
     const listed = await reader.listDocuments({ recursive: true });
@@ -103,7 +123,7 @@ Writes an HTML file and returns its path. Open it in a browser.`;
 
     const html = renderGraphHtml({
       graph: { nodes, edges },
-      layout: layout === undefined ? undefined : { name: layout },
+      layout: toLayoutOptions({ layout, direction, spacing }),
       title: id === undefined ? "Document relations" : `Relations around ${id}`,
     });
 
@@ -257,6 +277,23 @@ function neighbourhood(params: {
   }
 
   return reached;
+}
+
+/**
+ * Undefined unless something was actually asked for, so the renderer keeps its
+ * own defaults rather than being handed a layout object full of undefined.
+ */
+function toLayoutOptions(params: {
+  layout?: LayoutName;
+  direction?: LayoutDirection;
+  spacing?: number;
+}): LayoutOptions | undefined {
+  const { layout, direction, spacing } = params;
+
+  // Nothing to say -- let the renderer decide.
+  if (layout === undefined && direction === undefined && spacing === undefined) return undefined;
+
+  return { name: layout, direction, spacing };
 }
 
 function defaultOutputPath(focusId?: string): string {
