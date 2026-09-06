@@ -224,7 +224,9 @@ describe("ApplyHandler", () => {
       expect(await fs.readFile(path.join(docsDir, "gated-reworded.md"), "utf-8")).toContain("v1");
     });
 
-    it("requires the attempts to be consecutive", async () => {
+    it("survives another document being applied in between", async () => {
+      // Runs are held per change, so working through several documents at once
+      // is ordinary rather than a way to never finish any of them.
       await stage("one");
       await stage("two");
 
@@ -233,8 +235,8 @@ describe("ApplyHandler", () => {
       const back = await apply("one", "Applies one.");
 
       expect(back.isError).toBeFalsy();
-      expect(textOf(back)).toContain("attempt 1 of 2");
-      expect(await fs.readFile(path.join(docsDir, "one.md"), "utf-8")).toContain("v1");
+      expect(textOf(back)).toContain("applied successfully");
+      expect(await fs.readFile(path.join(docsDir, "one.md"), "utf-8")).toContain("v2");
     });
 
     it("keeps the run when the write fails, so the user is asked once", async () => {
