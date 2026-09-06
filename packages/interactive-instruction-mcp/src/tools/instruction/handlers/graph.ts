@@ -3,7 +3,15 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { renderGraphHtml, type GraphEdge, type GraphNode } from "mcp-shared-graph-viz";
+import {
+  renderGraphHtml,
+  type GraphEdge,
+  type GraphNode,
+  type EdgeStyle,
+  type LayoutDirection,
+  type LayoutName,
+  type LayoutOptions,
+} from "mcp-shared-graph-viz";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
 import { DRAFT_DIR } from "../../../constants.js";
@@ -29,6 +37,32 @@ const GRAPH_BASE = "mcp-instruction-graphs";
 const ORPHAN_GROUP = "(unlinked)";
 const MISSING_GROUP = "(missing)";
 
+/**
+ * Every layout the renderer offers except `preset`, which places nodes where
+ * the caller says and so is not something to pick from a menu -- this handler
+ * has no positions to give it.
+ *
+ * Written out rather than read from `layoutNames()` so the values stay literal
+ * types in the schema. `graph-handler.test.ts` fails if the library gains or
+ * loses one, which is the drift this would otherwise invite.
+ */
+export const LAYOUT_NAMES = [
+  "dagre",
+  "cose",
+  "concentric",
+  "grid",
+  "circle",
+  "breadthfirst",
+  "fcose",
+  "cola",
+  "klay",
+  "cise",
+  "avsdf",
+  "elk-layered",
+  "elk-mrtree",
+  "elk-stress",
+] as const;
+
 const schema = z.object({
   action: z.literal("graph"),
   id: z
@@ -46,13 +80,41 @@ const schema = z.object({
     .optional()
     .describe("Include documents that have no relations at all. Defaults to false."),
   layout: z
-    .enum(["dagre", "cose", "concentric", "grid", "circle", "breadthfirst"])
+    .enum(LAYOUT_NAMES)
     .optional()
     .describe("Layout algorithm. Defaults to dagre."),
+  direction: z
+    .enum(["TB", "BT", "LR", "RL"])
+    .optional()
+    .describe(
+      "Rank direction for dagre. Defaults to TB. LR reads better for a wide, shallow graph.",
+    ),
+  spacing: z
+    .number()
+    .positive()
+    .optional()
+    .describe("Multiplier on the gaps between nodes. Defaults to 1."),
+  edgeStyle: z
+    .enum(["bezier", "taxi", "segments", "straight", "haystack"])
+    .optional()
+    .describe(
+      "How edges are drawn. Defaults to bezier. taxi takes its bearing from " +
+      "`direction`, so a hierarchy does not need it stated twice.",
+    ),
+  format: z
+    .enum(["html", "text"])
+    .optional()
+    .describe(
+      "html writes a page for a person to look at; text returns the same graph as an " +
+      "adjacency list in the response, for a caller that has no browser. Defaults to html.",
+    ),
   outputPath: z
     .string()
     .optional()
-    .describe("Where to write the page. Defaults to a file under the system temp directory."),
+    .describe(
+      "Where to write the page. Defaults to a file under the system temp directory. " +
+      "Ignored by format: \"text\", which returns the graph rather than writing it.",
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -65,6 +127,10 @@ Usage:
 - \`instruction(action: "graph")\` - the whole corpus
 - \`instruction(action: "graph", id: "<id>", depth: 2)\` - one document's neighbourhood
 - \`instruction(action: "graph", includeUnlinked: true)\` - also show documents with no relations
+- \`instruction(action: "graph", direction: "LR")\` - lay the hierarchy out left-to-right
+- \`instruction(action: "graph", format: "text")\` - the same graph as an adjacency list
+- \`instruction(action: "graph", id: "<id>", depth: 2, format: "text")\` - what references
+  it and what it references, to that depth
 
 Writes an HTML file and returns its path. Open it in a browser.`;
 
@@ -74,7 +140,17 @@ Writes an HTML file and returns its path. Open it in a browser.`;
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, depth = 1, includeUnlinked = false, layout, outputPath } = params.args;
+    const {
+      id,
+      depth = 1,
+      includeUnlinked = false,
+      layout,
+      direction,
+      spacing,
+      edgeStyle,
+      format = "html",
+      outputPath,
+    } = params.args;
     const { reader } = params.context;
 
     const listed = await reader.listDocuments({ recursive: true });
@@ -101,9 +177,18 @@ Writes an HTML file and returns its path. Open it in a browser.`;
         }]));
     }
 
+    if (format === "text") {
+      return textResponse(formatGraphAsText({ nodes, edges, focusId: id, depth }));
+    }
+
     const html = renderGraphHtml({
       graph: { nodes, edges },
-      layout: layout === undefined ? undefined : { name: layout },
+      layout: toLayoutOptions({ layout, direction, spacing }),
+      edgeStyle,
+      // From the whole corpus, not this view: a group has to keep its colour
+      // between the corpus graph and a close-up, and only the caller knows
+      // which groups exist beyond the ones being drawn right now.
+      groupOrder: groupOrderFor(documents),
       title: id === undefined ? "Document relations" : `Relations around ${id}`,
     });
 
@@ -257,6 +342,100 @@ function neighbourhood(params: {
   }
 
   return reached;
+}
+
+/**
+ * Every group the mapping can produce, in the order colours are handed out.
+ *
+ * Derived from the whole corpus rather than from the nodes being drawn,
+ * because the colour of a group must not depend on which others happen to
+ * appear: without this, `every-task` came out purple in the corpus graph and
+ * orange in a close-up of one document.
+ *
+ * The two sentinel groups are listed even though most graphs contain neither.
+ * A name the list omits falls in behind the ones it holds, which settles the
+ * order between views holding the same groups but not between views where one
+ * is absent -- and appearing only sometimes is exactly what these two do.
+ */
+function groupOrderFor(documents: MarkdownSummary[]): string[] {
+  const groups = new Set(documents.map((doc) => groupOf(doc.id)));
+  return [...[...groups].sort(), MISSING_GROUP, ORPHAN_GROUP];
+}
+
+/**
+ * The same graph the page draws, written out for a caller that cannot open one.
+ *
+ * An adjacency list carries the whole structure in the fewest tokens: one line
+ * per document that references anything, direction preserved. When the graph is
+ * focused on a document, the two questions actually being asked -- what points
+ * here, and what does this point at -- are answered on their own lines first,
+ * so neither has to be recovered by scanning.
+ */
+function formatGraphAsText(params: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  focusId?: string;
+  depth: number;
+}): string {
+  const { nodes, edges, focusId, depth } = params;
+
+  const outgoing = new Map<string, string[]>();
+  for (const edge of edges) {
+    outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]);
+  }
+
+  const adjacency = [...outgoing.entries()].map(([source, targets]) =>
+    `${source} -> ${targets.join(", ")}`,
+  );
+
+  const sections: string[] = [];
+
+  // Focused: say outright what the caller came to find out.
+  if (focusId !== undefined) {
+    const referencedBy = edges.filter((e) => e.target === focusId).map((e) => e.source);
+    const references = outgoing.get(focusId) ?? [];
+    sections.push(
+      `${focusId}, depth ${depth}
+
+referenced by: ${referencedBy.length === 0 ? "(nothing)" : referencedBy.join(", ")}
+references: ${references.length === 0 ? "(nothing)" : references.join(", ")}`,
+    );
+  } else {
+    sections.push(`${nodes.length} documents, ${edges.length} relations`);
+  }
+
+  sections.push(adjacency.join("\n"));
+
+  // Dangling links are the reason to look at the graph at all, so they are said
+  // rather than left to be inferred from ids that appear only as targets.
+  const missing = nodes.filter((node) => node.group === MISSING_GROUP);
+  if (missing.length > 0) {
+    sections.push(`missing (referenced but not present): ${missing.map((n) => n.id).join(", ")}`);
+  }
+
+  const unlinked = nodes.filter((node) => node.group === ORPHAN_GROUP);
+  if (unlinked.length > 0) {
+    sections.push(`unlinked (no relations either way): ${unlinked.map((n) => n.id).join(", ")}`);
+  }
+
+  return sections.join("\n\n");
+}
+
+/**
+ * Undefined unless something was actually asked for, so the renderer keeps its
+ * own defaults rather than being handed a layout object full of undefined.
+ */
+function toLayoutOptions(params: {
+  layout?: LayoutName;
+  direction?: LayoutDirection;
+  spacing?: number;
+}): LayoutOptions | undefined {
+  const { layout, direction, spacing } = params;
+
+  // Nothing to say -- let the renderer decide.
+  if (layout === undefined && direction === undefined && spacing === undefined) return undefined;
+
+  return { name: layout, direction, spacing };
 }
 
 function defaultOutputPath(focusId?: string): string {

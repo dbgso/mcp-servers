@@ -7,6 +7,7 @@ import {
   NotExistsValidator,
   ExistsValidator,
 } from "./validators.js";
+import { describeScope, EMPTY_SCOPE, isManaged, type DocumentScope } from "./document-scope.js";
 import { parseFrontmatter, updateFrontmatter } from "../utils/frontmatter-parser.js";
 import { formatDocumentListItem } from "../utils/string-utils.js";
 
@@ -32,10 +33,26 @@ const CACHE_TTL = 60_000; // 1 minute
 
 export class MarkdownReader {
   private readonly directory: string;
+  private readonly scope: DocumentScope;
   private cache: CacheEntry | null = null;
 
-  constructor(directory: string) {
+  constructor(directory: string, scope: DocumentScope = EMPTY_SCOPE) {
     this.directory = path.resolve(directory);
+    this.scope = scope;
+  }
+
+  /**
+   * Whether this server manages the document. Enforced at the scan, so every
+   * feature derived from the listing -- search, lint, backlinks, the graph --
+   * inherits it without each having to remember.
+   */
+  isManaged(id: string): boolean {
+    return isManaged({ id, scope: this.scope });
+  }
+
+  /** The configured scope, for callers that report on the corpus. */
+  getScope(): DocumentScope {
+    return this.scope;
   }
 
   /**
@@ -81,6 +98,7 @@ export class MarkdownReader {
           summaries.push(...subDocs);
         } else if (entry.isFile() && entry.name.endsWith(".md")) {
           const id = this.pathToId(fullPath);
+          if (!this.isManaged(id)) continue;
           const metadata = await this.extractMetadata(fullPath);
           summaries.push({
             id,
@@ -243,6 +261,7 @@ export class MarkdownReader {
   }
 
   async getDocumentContent(id: string): Promise<string | null> {
+    if (!this.isManaged(id)) return null;
     const filePath = this.idToPath(id);
 
     try {
@@ -257,6 +276,7 @@ export class MarkdownReader {
   }
 
   async documentExists(id: string): Promise<boolean> {
+    if (!this.isManaged(id)) return false;
     const filePath = this.idToPath(id);
     try {
       await fs.access(filePath);
@@ -271,6 +291,9 @@ export class MarkdownReader {
     content: string;
   }): Promise<AddResult> {
     const { id, content } = params;
+
+    const outOfScope = unmanagedResult({ reader: this, ids: [id] });
+    if (outOfScope !== null) return outOfScope;
 
     const description = this.parseDescription(content);
     const exists = await this.documentExists(id);
@@ -306,6 +329,9 @@ export class MarkdownReader {
   }): Promise<AddResult> {
     const { id, content } = params;
 
+    const outOfScope = unmanagedResult({ reader: this, ids: [id] });
+    if (outOfScope !== null) return outOfScope;
+
     const description = this.parseDescription(content);
     const exists = await this.documentExists(id);
 
@@ -333,6 +359,10 @@ export class MarkdownReader {
   }
 
   async deleteDocument(id: string): Promise<AddResult> {
+    const outOfScope = unmanagedResult({ reader: this, ids: [id] });
+    if (outOfScope !== null) return outOfScope;
+
+
     const exists = await this.documentExists(id);
     if (!exists) {
       return {
@@ -376,6 +406,9 @@ export class MarkdownReader {
     updateBacklinks?: boolean;
   }): Promise<AddResult & { updatedBacklinks?: string[] }> {
     const { oldId, newId, overwrite = false, updateBacklinks = true } = params;
+
+    const outOfScope = unmanagedResult({ reader: this, ids: [oldId, newId] });
+    if (outOfScope !== null) return outOfScope;
     const oldExists = await this.documentExists(oldId);
     if (!oldExists) {
       return {
@@ -570,4 +603,23 @@ export class MarkdownReader {
     }
     return description;
   }
+}
+
+/**
+ * Refuse a write that would touch a document this server does not manage.
+ *
+ * Returned rather than thrown: these are ordinary results a caller reports, not
+ * programming errors. Reads simply come back empty; writes say why, because
+ * silently doing nothing would look like success.
+ */
+function unmanagedResult(params: {
+  reader: MarkdownReader;
+  ids: string[];
+}): AddResult | null {
+  const outside = params.ids.filter((id) => !params.reader.isManaged(id));
+  if (outside.length === 0) return null;
+  return {
+    success: false,
+    error: `Outside this server's scope: ${outside.join(", ")}. ${describeScope(params.reader.getScope())}`.trim(),
+  };
 }
