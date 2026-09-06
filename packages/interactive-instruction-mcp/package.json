@@ -59,6 +59,7 @@
     "@types/diff": "8.0.0",
     "@vitest/coverage-v8": "catalog:",
     "mcp-shared": "workspace:*",
+    "mcp-shared-graph-viz": "workspace:*",
     "tsup": "catalog:",
     "vitest": "catalog:"
   }

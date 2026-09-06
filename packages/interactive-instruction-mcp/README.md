@@ -51,6 +51,27 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `set_status` — Set draft workflow status (single `id` or batch `ids`)
 - `update_meta` — Generate metadata update prompt (`id` only)
 
+**Seeing the corpus**
+- `graph` — Render the `relatedDocs` graph as an interactive page (optional: `id`, `depth`, `includeUnlinked`, `layout`, `outputPath`)
+
+### Looking at the relations
+
+`relatedDocs` lives in frontmatter, which means the relations between documents are data rather
+than prose — so they can be drawn:
+
+```
+instruction(action: "graph")                      → the whole corpus
+instruction(action: "graph", id: "every-task", depth: 2)  → one document's neighbourhood
+```
+
+It writes an HTML file and returns the path; open it in a browser to pan, zoom, and hover a
+node to fade everything that is not adjacent to it. Documents are coloured by their top-level
+category, and **links pointing at documents that do not exist are drawn too**, as `(missing)`
+— silently omitting them would make a broken corpus look intact.
+
+Drawing is done by `mcp-shared-graph-viz`, which is given nodes and edges and knows nothing
+about documents; the mapping from `relatedDocs` onto them lives here.
+
 ### Draft vs Promoted
 
 | | Draft | Promoted |

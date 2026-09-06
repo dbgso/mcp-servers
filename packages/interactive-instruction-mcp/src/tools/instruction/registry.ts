@@ -17,6 +17,7 @@ import {
   LintHandler,
   SetStatusHandler,
   UpdateMetaHandler,
+  GraphHandler,
 } from "./handlers/index.js";
 
 export { ActionRegistry };
@@ -42,6 +43,7 @@ export function createActionRegistry(): ActionRegistry<InstructionContext> {
     new LintHandler(),
     new SetStatusHandler(),
     new UpdateMetaHandler(),
+    new GraphHandler(),
   ]);
 
   return registry;
