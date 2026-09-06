@@ -64,8 +64,16 @@ export function buildCytoscapeStyle(params: {
         "line-color": theme.palette.edge,
         "target-arrow-color": theme.palette.edge,
         "arrow-scale": 0.9,
+      },
+    },
+    // Scoped to edges that carry one: mapping `label` on every edge makes
+    // cytoscape warn once per edge that has no such data.
+    {
+      selector: "edge[label]",
+      style: {
         label: "data(label)",
         "font-size": theme.fontSize - 2,
+        "font-family": theme.fontFamily,
         color: theme.palette.mutedForeground,
         "text-background-color": theme.palette.background,
         "text-background-opacity": 0.85,

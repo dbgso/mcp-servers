@@ -108,7 +108,6 @@ ${scripts}
     elements: elements,
     style: style,
     layout: layout,
-    wheelSensitivity: 0.2,
   });
 
   var tip = document.getElementById("tip");

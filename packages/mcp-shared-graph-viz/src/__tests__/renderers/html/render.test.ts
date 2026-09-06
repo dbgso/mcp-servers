@@ -9,7 +9,7 @@ import {
   MAX_LABEL_WIDTH_PX,
   renderHtml,
 } from "../../../renderers/html/index.js";
-import { resolveTheme } from "../../../theme.js";
+import { DEFAULT_FONT_FAMILY, resolveTheme } from "../../../theme.js";
 import type { GraphInput } from "../../../types.js";
 
 const graph: GraphInput = {
@@ -65,6 +65,32 @@ describe("buildCytoscapeStyle", () => {
     expect(rule.style["background-color"]).toBe(theme.palette.swatches[0].fill);
   });
 
+  /**
+   * cytoscape warns once per edge when a mapping is assigned to elements that
+   * have no such data, so the label styles are scoped to the edges that carry
+   * one.
+   */
+  it("scopes the label styles to edges that have a label", () => {
+    const style = buildCytoscapeStyle({ prepared: prepareGraph({ graph }), theme });
+    const base = style.find((rule) => (rule as { selector: string }).selector === "edge") as {
+      style: Record<string, unknown>;
+    };
+    expect(base.style).not.toHaveProperty("label");
+    const labelled = style.find(
+      (rule) => (rule as { selector: string }).selector === "edge[label]",
+    ) as { style: Record<string, unknown> };
+    expect(labelled.style.label).toBe("data(label)");
+  });
+
+  /**
+   * cytoscape validates font-family against `^([\w- "]+(?:\s*,\s*[\w- "]+)*)$`
+   * and silently ignores a stack it rejects, so the default must pass it.
+   */
+  it("uses a font stack cytoscape accepts", () => {
+    expect(DEFAULT_FONT_FAMILY).toMatch(/^([\w- "]+(?:\s*,\s*[\w- "]+)*)$/);
+    expect(DEFAULT_FONT_FAMILY).not.toContain("'");
+  });
+
   it("draws an arrow only on directed edges", () => {
     const style = buildCytoscapeStyle({ prepared: prepareGraph({ graph }), theme });
     expect(selectorsOf({ style })).toContain("edge[?directed]");
@@ -81,6 +107,7 @@ describe("buildCytoscapeStyle", () => {
       "node[height]",
       ":parent",
       "edge",
+      "edge[label]",
       "edge[?directed]",
       ".faded",
     ]);
@@ -194,6 +221,11 @@ describe("renderHtml", () => {
     const html = renderHtml({ graph, title: "<img onerror=x>" });
     expect(html).not.toContain("<img onerror=x>");
     expect(html).toContain("&lt;img onerror=x&gt;");
+  });
+
+  /** cytoscape warns that a custom wheel sensitivity misbehaves on other hardware. */
+  it("leaves the wheel sensitivity alone", () => {
+    expect(renderHtml({ graph })).not.toContain("wheelSensitivity");
   });
 
   it("exposes the cytoscape instance so the page can be extended", () => {
