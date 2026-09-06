@@ -99,13 +99,40 @@ interface GraphEdge {
 
 ### Layouts
 
-`dagre` (default), `cose`, `concentric`, `grid`, `circle`, `breadthfirst`, `preset`.
+Fifteen, and the shape of the data decides which one reads well.
 
-| Shape of data | Layout |
-|---|---|
-| Dependency chains, hierarchies | `dagre` (with `direction: "LR"` for wide graphs) |
-| Loosely connected clusters | `cose` |
-| Caller already has coordinates | `preset` (every node needs `position`) |
+| | Layout | Good for |
+|---|---|---|
+| **Layered** | `dagre` (default), `klay`, `elk-layered` | Anything with a direction: dependencies, chains, hierarchies |
+| **Tree** | `elk-mrtree`, `breadthfirst` | Strict trees, levels from a root |
+| **Force** | `fcose`, `cose`, `cola`, `elk-stress` | Loosely connected clusters, no inherent direction |
+| **Circular** | `cise`, `avsdf`, `circle`, `concentric` | Showing membership; `cise` draws one circle per `group` |
+| **Fixed** | `grid`, `preset` | A regular arrangement, or coordinates the caller already has |
+
+`direction` (`TB` / `BT` / `LR` / `RL`) applies to `dagre`, `klay` and the ELK
+layouts. `LR` is usually the readable choice for a graph that fans out.
+
+Seven are built into cytoscape and cost nothing to load. The rest come from
+extensions the page fetches from a CDN, pinned to exact versions. A layout
+declares its own scripts and nothing else has to know: an extension registers
+itself with cytoscape as it loads, so the page only fetches them in order.
+
+`cose`, `fcose`, `cola` and `elk-stress` are randomised and differ between
+runs. Use `preset`, `grid`, `dagre` or `klay` when the output has to be
+reproducible.
+
+ELK's `radial` is deliberately absent: it requires a tree, and given a cycle it
+does not fail but spins, taking the page's main thread with it.
+
+### Edge routing
+
+```ts
+renderGraphHtml({ graph, edgeStyle: "taxi" });
+```
+
+`bezier` (default), `taxi` (right-angled elbows), `segments`, `straight`,
+`haystack`. `taxi` takes its direction from the layout's, so it is not asked
+for twice.
 
 ### Options
 
@@ -116,8 +143,9 @@ renderGraphHtml({
   theme: { palette, fontFamily, fontSize },
   title: "...",
   legend: true,
+  edgeStyle: "taxi",         // how edges are drawn
   cytoscapeUrl: "...",       // where the page loads cytoscape from
-  layoutScriptUrls: ["..."], // and whatever the layout needs (only dagre does)
+  layoutScriptUrls: ["..."], // and whatever the layout needs
 });
 ```
 
@@ -216,6 +244,51 @@ is rejected instead of slipping through.
 A test walks `renderers/*/` and asserts each directory's entry point exports a
 `Renderer` named after the directory, so a second format cannot quietly arrive
 as a bare function beside the seam instead of through it.
+
+## Keeping colours steady across views
+
+A group's colour comes from its position in the list of groups, so a graph
+containing fewer of them shifts the rest along: the same document is one colour
+in the whole corpus and another in a close-up of it. Pass the corpus's groups
+once and every view agrees.
+
+```ts
+const GROUP_ORDER = ["requirement", "spec", "design", "implementation", "adr"];
+
+renderGraphHtml({ graph: whole,   groupOrder: GROUP_ORDER });
+renderGraphHtml({ graph: closeUp, groupOrder: GROUP_ORDER });   // same colours
+```
+
+Groups the list omits fall in behind it, by name, so an incomplete list
+degrades instead of throwing; a listed group absent from this view keeps its
+colour reserved without appearing in the legend.
+
+**List every group your mapping can produce**, including the ones it produces
+only sometimes — a bucket for documents nothing links to, say. The fallback
+orders what it was not told about, but a group that comes and goes still shifts
+whatever trails it, which is the drift `groupOrder` is there to stop.
+
+Hashing the name would be steady without any of this, but three groups over
+eight swatches share a colour about a third of the time, and two groups drawn
+alike is worse than one drawn differently elsewhere.
+
+## Checking that it draws
+
+The unit tests assert what the page says. Whether a browser can act on it is a
+different question, and every defect found in this package so far passed the
+unit tests: an extension's dependency script missing, a layout name cytoscape
+does not know, a font stack it silently rejected, a layout that spins forever.
+
+```
+pnpm --filter mcp-shared-graph-viz smoke
+```
+
+Opens every layout in headless Chrome against a graph with a cycle in it and
+checks the node count, that positions are finite and distinct, that the graph
+has extent, that nothing threw — and that the page still answers, which is the
+only way a hang shows up. Needs Chrome and network access to the CDNs, which is
+why it is not part of `pnpm test`. Run it after touching a layout, a script
+URL, or the page template.
 
 ## Errors
 

@@ -1,6 +1,19 @@
 import { CYTOSCAPE_SHAPES } from "../../elements.js";
 import type { PreparedGraph } from "../../elements.js";
 import type { ResolvedTheme } from "../../theme.js";
+import type { EdgeStyle, LayoutDirection } from "../../types.js";
+
+export const DEFAULT_EDGE_STYLE: EdgeStyle = "bezier";
+
+/**
+ * `taxi` draws right-angled elbows, and needs to know which way the graph
+ * runs; the layout's own direction is the answer, so it is not asked for
+ * twice.
+ */
+function taxiDirection(params: { direction?: LayoutDirection }): string {
+  const { direction } = params;
+  return { TB: "downward", BT: "upward", LR: "rightward", RL: "leftward" }[direction ?? "TB"];
+}
 
 export const MAX_LABEL_WIDTH_PX = 170;
 
@@ -13,8 +26,10 @@ export const MAX_LABEL_WIDTH_PX = 170;
 export function buildCytoscapeStyle(params: {
   prepared: PreparedGraph;
   theme: ResolvedTheme;
+  edgeStyle?: EdgeStyle;
+  direction?: LayoutDirection;
 }): unknown[] {
-  const { prepared, theme } = params;
+  const { prepared, theme, edgeStyle = DEFAULT_EDGE_STYLE, direction } = params;
 
   const perNode = prepared.nodes.map((node) => ({
     selector: `node[id = ${JSON.stringify(node.id)}]`,
@@ -60,7 +75,9 @@ export function buildCytoscapeStyle(params: {
       selector: "edge",
       style: {
         width: 1.4,
-        "curve-style": "bezier",
+        "curve-style": edgeStyle,
+        "taxi-direction": taxiDirection({ direction }),
+        "taxi-turn": "50%",
         "line-color": theme.palette.edge,
         "target-arrow-color": theme.palette.edge,
         "arrow-scale": 0.9,

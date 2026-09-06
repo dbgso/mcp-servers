@@ -75,6 +75,32 @@ describe("prepareGraph", () => {
   });
 });
 
+describe("prepareGraph with a caller-supplied group order", () => {
+  const graph: GraphInput = {
+    nodes: [{ id: "a", group: "spec" }, { id: "b", group: "adr" }],
+    edges: [],
+  };
+  const groupOrder = ["requirement", "spec", "design", "adr"];
+
+  it("colours a node by its slot in the caller's order, not this view's", () => {
+    const prepared = prepareGraph({ graph, groupOrder });
+    expect(prepared.nodes[0].swatch).toBe(DEFAULT_PALETTE.swatches[1]);
+    expect(prepared.nodes[1].swatch).toBe(DEFAULT_PALETTE.swatches[3]);
+  });
+
+  /** The colour is reserved; the legend still describes what is on screen. */
+  it("leaves absent groups out of the legend", () => {
+    expect(prepareGraph({ graph, groupOrder }).groups.map((g) => g.name)).toEqual(["spec", "adr"]);
+  });
+
+  it("gives the same node the same colour in a smaller view", () => {
+    const closeUp: GraphInput = { nodes: [{ id: "b", group: "adr" }], edges: [] };
+    expect(prepareGraph({ graph: closeUp, groupOrder }).nodes[0].swatch).toBe(
+      prepareGraph({ graph, groupOrder }).nodes[1].swatch,
+    );
+  });
+});
+
 describe("CYTOSCAPE_SHAPES", () => {
   type Case = { shape: NodeShape; expected: string };
   const cases: Case[] = [

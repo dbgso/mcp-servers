@@ -55,15 +55,28 @@ export interface GraphInput {
 }
 
 export type LayoutName =
+  // Built into cytoscape.
   | "dagre"
   | "cose"
   | "concentric"
   | "grid"
   | "circle"
   | "breadthfirst"
-  | "preset";
+  | "preset"
+  // Provided by extensions, loaded by the page from a CDN.
+  | "fcose"
+  | "cola"
+  | "klay"
+  | "cise"
+  | "avsdf"
+  | "elk-layered"
+  | "elk-mrtree"
+  | "elk-stress";
 
 export type LayoutDirection = "TB" | "BT" | "LR" | "RL";
+
+/** How an edge is drawn between its endpoints. */
+export type EdgeStyle = "bezier" | "taxi" | "segments" | "straight" | "haystack";
 
 export interface LayoutOptions {
   /** Defaults to "dagre". */

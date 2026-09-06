@@ -1,4 +1,4 @@
-import type { GraphInput, LayoutOptions, ThemeOptions } from "../types.js";
+import type { EdgeStyle, GraphInput, LayoutOptions, ThemeOptions } from "../types.js";
 
 /**
  * What a renderer is asked to draw.
@@ -15,6 +15,20 @@ export interface RenderParams {
   title?: string;
   /** Show a legend of the groups. Defaults to true when groups exist. */
   legend?: boolean;
+  /** How edges are drawn. Defaults to "bezier". */
+  edgeStyle?: EdgeStyle;
+  /**
+   * The order colours are assigned from, so a group keeps its colour across
+   * views of one corpus. Pass the same list every time.
+   *
+   * List every group the mapping can produce, including the ones it produces
+   * only sometimes — a bucket for documents nothing links to, say. Groups the
+   * list omits follow it by name, which settles the order between views
+   * holding the same ones, but a group present in one view and absent from
+   * another still shifts whatever trails it. That drift is what this option is
+   * for, so omitting such a group gives it back.
+   */
+  groupOrder?: readonly string[];
 }
 
 /**

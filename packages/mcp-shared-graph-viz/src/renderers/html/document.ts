@@ -101,8 +101,6 @@ ${scripts}
   var head = document.getElementById("head");
   document.documentElement.style.setProperty("--header-height", head.offsetHeight + "px");
 
-  if (window.cytoscapeDagre) { cytoscape.use(window.cytoscapeDagre); }
-
   var cy = cytoscape({
     container: document.getElementById("cy"),
     elements: elements,

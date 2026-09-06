@@ -54,6 +54,92 @@ describe("collectGroups", () => {
   });
 });
 
+describe("collectGroups with a caller-supplied order", () => {
+  /** The reported symptom: one document purple in one view, orange in another. */
+  it("keeps a group's colour when a view contains fewer groups", () => {
+    const groupOrder = ["adr", "design", "proposal", "requirement", "spec"];
+    const whole: GraphInput = {
+      nodes: groupOrder.map((group, i) => ({ id: `n${i}`, group })),
+      edges: [],
+    };
+    const closeUp: GraphInput = {
+      nodes: [{ id: "n3", group: "requirement" }, { id: "n4", group: "spec" }],
+      edges: [],
+    };
+
+    const indexIn = (graph: GraphInput, group: string): number =>
+      collectGroups({ graph, groupOrder }).indexOf(group);
+
+    expect(indexIn(whole, "spec")).toBe(indexIn(closeUp, "spec"));
+    expect(indexIn(whole, "requirement")).toBe(indexIn(closeUp, "requirement"));
+  });
+
+  it("moves a group's colour without one, which is why the option exists", () => {
+    const whole: GraphInput = {
+      nodes: [{ id: "a", group: "adr" }, { id: "b", group: "spec" }],
+      edges: [],
+    };
+    const closeUp: GraphInput = { nodes: [{ id: "b", group: "spec" }], edges: [] };
+    expect(collectGroups({ graph: whole }).indexOf("spec")).toBe(1);
+    expect(collectGroups({ graph: closeUp }).indexOf("spec")).toBe(0);
+  });
+
+  it("keeps a listed group's slot even when this view has none of it", () => {
+    const graph: GraphInput = { nodes: [{ id: "a", group: "spec" }], edges: [] };
+    expect(collectGroups({ graph, groupOrder: ["adr", "design", "spec"] })).toEqual([
+      "adr",
+      "design",
+      "spec",
+    ]);
+  });
+
+  it("puts a group the caller forgot behind the ones it listed", () => {
+    const graph: GraphInput = {
+      nodes: [{ id: "a", group: "spec" }, { id: "b", group: "unlisted" }],
+      edges: [],
+    };
+    expect(collectGroups({ graph, groupOrder: ["adr", "spec"] })).toEqual([
+      "adr",
+      "spec",
+      "unlisted",
+    ]);
+  });
+
+  /**
+   * The tail is by name, so two views holding the same forgotten groups agree
+   * even if their nodes arrive in a different order.
+   */
+  it("orders forgotten groups by name, not by where they turned up", () => {
+    const oneWay: GraphInput = {
+      nodes: [{ id: "a", group: "(unlinked)" }, { id: "b", group: "(missing)" }],
+      edges: [],
+    };
+    const otherWay: GraphInput = {
+      nodes: [{ id: "b", group: "(missing)" }, { id: "a", group: "(unlinked)" }],
+      edges: [],
+    };
+    expect(collectGroups({ graph: oneWay, groupOrder: ["spec"] })).toEqual(
+      collectGroups({ graph: otherWay, groupOrder: ["spec"] }),
+    );
+  });
+
+  /** How far the fallback does not go: list a group that comes and goes. */
+  it("still shifts a forgotten group when another one is absent", () => {
+    const both: GraphInput = {
+      nodes: [{ id: "a", group: "(missing)" }, { id: "b", group: "(unlinked)" }],
+      edges: [],
+    };
+    const one: GraphInput = { nodes: [{ id: "b", group: "(unlinked)" }], edges: [] };
+    expect(collectGroups({ graph: both, groupOrder: ["spec"] }).indexOf("(unlinked)")).toBe(2);
+    expect(collectGroups({ graph: one, groupOrder: ["spec"] }).indexOf("(unlinked)")).toBe(1);
+  });
+
+  it("does not repeat a group the caller listed twice over", () => {
+    const graph: GraphInput = { nodes: [{ id: "a", group: "spec" }], edges: [] };
+    expect(collectGroups({ graph, groupOrder: ["spec", "adr"] })).toEqual(["spec", "adr"]);
+  });
+});
+
 describe("buildSwatchMap", () => {
   it("assigns distinct swatches in order", () => {
     const map = buildSwatchMap({ groups: ["a", "b"], palette: DEFAULT_PALETTE });
