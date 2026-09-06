@@ -59,12 +59,13 @@ export const CYTOSCAPE_SHAPES: Record<NodeShape, string> = {
 export function prepareGraph(params: {
   graph: GraphInput;
   theme?: ThemeOptions;
+  groupOrder?: readonly string[];
 }): PreparedGraph {
-  const { graph, theme } = params;
+  const { graph, theme, groupOrder } = params;
   assertValidGraph({ graph });
 
   const resolved = resolveTheme({ theme });
-  const groupNames = collectGroups({ graph });
+  const groupNames = collectGroups({ graph, groupOrder });
   const swatches = buildSwatchMap({ groups: groupNames, palette: resolved.palette });
 
   const nodes = graph.nodes.map(
@@ -96,13 +97,19 @@ export function prepareGraph(params: {
     }),
   );
 
+  // A group nobody is in gets a colour but no legend entry: the caller's
+  // ordering may list the whole corpus, and a legend should describe the
+  // picture in front of you.
+  const present = new Set(nodes.map((node) => node.group));
   return {
     nodes,
     edges,
-    groups: groupNames.map((name) => ({
-      name,
-      swatch: swatchFor({ group: name, swatches, palette: resolved.palette }),
-    })),
+    groups: groupNames
+      .filter((name) => present.has(name))
+      .map((name) => ({
+        name,
+        swatch: swatchFor({ group: name, swatches, palette: resolved.palette }),
+      })),
   };
 }
 
@@ -176,6 +183,7 @@ export function clustersOf(params: { prepared: PreparedGraph }): string[][] {
 export function toCytoscapeElements(params: {
   graph: GraphInput;
   theme?: ThemeOptions;
+  groupOrder?: readonly string[];
 }): CytoscapeElement[] {
   return preparedToElements({ prepared: prepareGraph(params) });
 }

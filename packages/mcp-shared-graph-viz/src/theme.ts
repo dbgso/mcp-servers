@@ -49,20 +49,42 @@ export function resolveTheme(params: { theme?: ThemeOptions }): ResolvedTheme {
 }
 
 /**
- * Groups in first-appearance order.
+ * The groups present, in the order their colours are assigned from.
  *
- * Order of appearance rather than hashing, so a graph with few groups always
- * gets clearly distinct colors and the same input always yields the same map.
+ * Colour comes from a group's position in this list, which is why the caller
+ * can supply it. Two views of one corpus contain different groups, so ordering
+ * by what each view happens to contain moves a group's colour between them —
+ * a document purple in the whole graph and orange in a close-up of it.
+ *
+ * Hashing the name instead would be stable across views but would collide:
+ * three groups over eight swatches share a colour about a third of the time,
+ * and two groups drawn the same colour is worse than one drawn differently
+ * elsewhere. Position it stays, and a caller that knows the whole corpus can
+ * pass `groupOrder` once and get both.
+ *
+ * Groups absent from `groupOrder` keep their colours after the ones in it, so
+ * an incomplete list degrades rather than throws.
  */
-export function collectGroups(params: { graph: GraphInput }): string[] {
-  const { graph } = params;
-  const groups: string[] = [];
+export function collectGroups(params: { graph: GraphInput; groupOrder?: readonly string[] }): string[] {
+  const { graph, groupOrder } = params;
+
+  const present = new Set<string>();
+  const appearance: string[] = [];
   for (const node of graph.nodes) {
-    if (node.group !== undefined && !groups.includes(node.group)) {
-      groups.push(node.group);
+    if (node.group !== undefined && !present.has(node.group)) {
+      present.add(node.group);
+      appearance.push(node.group);
     }
   }
-  return groups;
+
+  if (groupOrder === undefined) {
+    return appearance;
+  }
+
+  // Every name the caller listed keeps its slot, whether or not this view has
+  // it, so the colour of a group does not depend on which others turned up.
+  const ordered = [...groupOrder];
+  return [...ordered, ...appearance.filter((group) => !ordered.includes(group))];
 }
 
 export function buildSwatchMap(params: {

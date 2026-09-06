@@ -245,6 +245,28 @@ A test walks `renderers/*/` and asserts each directory's entry point exports a
 `Renderer` named after the directory, so a second format cannot quietly arrive
 as a bare function beside the seam instead of through it.
 
+## Keeping colours steady across views
+
+A group's colour comes from its position in the list of groups, so a graph
+containing fewer of them shifts the rest along: the same document is one colour
+in the whole corpus and another in a close-up of it. Pass the corpus's groups
+once and every view agrees.
+
+```ts
+const GROUP_ORDER = ["requirement", "spec", "design", "implementation", "adr"];
+
+renderGraphHtml({ graph: whole,   groupOrder: GROUP_ORDER });
+renderGraphHtml({ graph: closeUp, groupOrder: GROUP_ORDER });   // same colours
+```
+
+Groups the list omits fall in behind it, so an incomplete list degrades instead
+of throwing, and a listed group absent from this view keeps its colour reserved
+without appearing in the legend.
+
+Hashing the name would be steady without any of this, but three groups over
+eight swatches share a colour about a third of the time, and two groups drawn
+alike is worse than one drawn differently elsewhere.
+
 ## Checking that it draws
 
 The unit tests assert what the page says. Whether a browser can act on it is a

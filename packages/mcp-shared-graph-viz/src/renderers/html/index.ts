@@ -26,11 +26,12 @@ export function renderHtml(params: RenderParams & HtmlRendererOptions): string {
     title,
     legend = true,
     edgeStyle,
+    groupOrder,
     cytoscapeUrl = DEFAULT_CYTOSCAPE_URL,
     layoutScriptUrls,
   } = params;
 
-  const prepared = prepareGraph({ graph, theme });
+  const prepared = prepareGraph({ graph, theme, groupOrder });
   const resolvedTheme = resolveTheme({ theme });
   const layout = resolveLayout({ name: layoutOptions?.name });
 

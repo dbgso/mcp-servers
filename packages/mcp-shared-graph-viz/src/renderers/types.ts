@@ -17,6 +17,12 @@ export interface RenderParams {
   legend?: boolean;
   /** How edges are drawn. Defaults to "bezier". */
   edgeStyle?: EdgeStyle;
+  /**
+   * The order colours are assigned from, so a group keeps its colour across
+   * views of one corpus. Pass the same list every time; groups it omits fall
+   * in behind, in the order this graph happens to contain them.
+   */
+  groupOrder?: readonly string[];
 }
 
 /**
