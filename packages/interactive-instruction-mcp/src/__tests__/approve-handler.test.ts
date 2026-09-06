@@ -655,7 +655,7 @@ describe("ApproveHandler", () => {
       expect(status?.state).toBe("pending_approval");
     });
 
-    it("should return error for unexpected state when no workflow exists", async () => {
+    it("starts the review for a draft that has no workflow state yet", async () => {
       const id = getTestId("test-draft-no-workflow");
 
       // Create draft file directly without triggering workflow
@@ -671,9 +671,12 @@ describe("ApproveHandler", () => {
         context,
       });
 
+      // `editing` used to fall through to "Unexpected State", which left any
+      // draft reset back to it permanently stuck. It now submits the draft's
+      // current content and asks for the self-review notes.
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Unexpected State");
-      expect(result.content[0].text).toContain("editing");
+      expect(result.content[0].text).toContain("self_review");
+      expect(result.content[0].text).toContain("notes");
     });
 
     it("should generate CREATE summary for new documents", async () => {
