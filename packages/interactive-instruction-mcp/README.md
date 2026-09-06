@@ -51,6 +51,83 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `set_status` — Set draft workflow status (single `id` or batch `ids`)
 - `update_meta` — Generate metadata update prompt (`id` only)
 
+**Seeing the corpus**
+- `graph` — Render the `relatedDocs` graph as an interactive page, or return it as text
+  (optional: `id`, `depth`, `includeUnlinked`, `layout`, `direction`, `spacing`, `edgeStyle`,
+  `format`, `outputPath`)
+
+### Looking at the relations
+
+`relatedDocs` lives in frontmatter, which means the relations between documents are data rather
+than prose — so they can be drawn:
+
+```
+instruction(action: "graph")                      → the whole corpus
+instruction(action: "graph", id: "every-task", depth: 2)  → one document's neighbourhood
+```
+
+It writes an HTML file and returns the path; open it in a browser to pan, zoom, and hover a
+node to fade everything that is not adjacent to it. Documents are coloured by their top-level
+category, and **links pointing at documents that do not exist are drawn too**, as `(missing)`
+— silently omitting them would make a broken corpus look intact.
+
+`direction` (`TB` / `BT` / `LR` / `RL`) and `spacing` are passed to the layout. A document
+corpus tends to be shallow and wide, so `LR` often reads better than the default `TB`.
+
+`layout` accepts every layout `mcp-shared-graph-viz` offers apart from `preset`, which places
+nodes where the caller says and so has nothing to offer here: `dagre` (default), `cose`,
+`concentric`, `grid`, `circle`, `breadthfirst`, `fcose`, `cola`, `klay`, `cise`, `avsdf`,
+`elk-layered`, `elk-mrtree`, `elk-stress`. `edgeStyle` (`bezier` by default, or `taxi`,
+`segments`, `straight`, `haystack`) decides how edges are drawn; `taxi` takes its bearing from
+`direction`, so a hierarchy does not need it stated twice.
+
+Colours are assigned from the whole corpus rather than from the documents on screen, so a
+category keeps its colour between the corpus graph and a close-up of one document.
+
+Drawing is done by `mcp-shared-graph-viz`, which is given nodes and edges and knows nothing
+about documents; the mapping from `relatedDocs` onto them lives here.
+
+### The same graph as text
+
+A page is for a person. A caller with no browser can ask for the graph itself:
+
+```
+instruction(action: "graph", format: "text")
+```
+
+```
+34 documents, 36 relations
+
+coding-rules__overview -> coding-rules__general, coding-rules__mcp-tool-design, coding-rules__typescript
+coding-rules__mcp-tool-design -> coding-rules__handler-pattern, coding-rules__mcp-tool-approval, ...
+every-task -> coding-rules__overview, trigger__rule-keyword, workflow__dry-principle, ...
+```
+
+One line per document that references anything, direction preserved, nothing written to disk.
+On this repository's own documents that is about an eighth of the bytes of
+`list(recursive: true)`, which carries every description and `whenToUse` alongside.
+
+With `id`, the two questions being asked are answered before the adjacency list, so neither
+has to be recovered by scanning it:
+
+```
+instruction(action: "graph", id: "coding-rules__mcp-tool-design", depth: 2, format: "text")
+```
+
+```
+coding-rules__mcp-tool-design, depth 2
+
+referenced by: coding-rules__overview
+references: coding__mcp-tool-help-pattern, coding-rules__handler-pattern, ...
+
+coding-rules__handler-pattern -> coding-rules__schema-sync
+coding-rules__mcp-tool-design -> coding__mcp-tool-help-pattern, ...
+every-task -> coding-rules__overview
+```
+
+`(missing)` links and, with `includeUnlinked`, documents with no relations are named on their
+own lines rather than left to be inferred.
+
 ### Draft vs Promoted
 
 | | Draft | Promoted |
@@ -122,6 +199,25 @@ Optionally add flags to help AI remember to use the MCP tools:
 | `--reminder <message>` | Add custom reminder message (can be used multiple times) |
 | `--topic-for-every-task <id>` | Specify a document AI must re-read before every task |
 | `--info-expires <seconds>` | How long MCP info stays valid (default: 60). Works with `--topic-for-every-task` |
+| `--include <id-prefix>` | Manage only documents under this prefix. Repeatable |
+| `--exclude <id-prefix>` | Do not manage documents under this prefix. Repeatable, applied after `--include` |
+
+### Sharing a directory with another tool
+
+A documents directory is not always all one tool's. This repository's own `./docs` also holds
+`chain/`, which belongs to a different MCP server — those files have their own frontmatter and
+their own relation field, so every check made here reports them as broken. Before excluding
+them, `lint` returned 223 issues; after `--exclude chain`, 38, and the error count went from 60
+to 1.
+
+```
+mcp-interactive-instruction ./docs --exclude chain
+```
+
+Unmanaged documents are invisible: they do not appear in `list`, `lint`, backlinks or the
+graph, `read` finds nothing, and a write that would touch one is refused with a reason rather
+than quietly doing nothing. Prefixes are matched by whole id segments, so `--exclude chain`
+takes `chain__adr__…` and leaves `chainsaw` alone.
 
 ### Topic for Every Task
 

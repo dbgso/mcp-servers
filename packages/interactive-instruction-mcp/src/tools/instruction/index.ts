@@ -88,6 +88,10 @@ This tool explains how to use the instruction tool.
 - \`instruction(action: "set_status", ids: "id1,id2", status: "<status>")\` - Set draft status (batch)
 - \`instruction(action: "update_meta", id: "<id>")\` - Generate metadata update prompt
 
+### Seeing the corpus
+- \`instruction(action: "graph")\` - Render the relatedDocs graph as an interactive page
+- \`instruction(action: "graph", id: "<id>", depth: 2)\` - Draw one document's neighbourhood
+
 ## Reminder
 
 Information from this MCP is only valid for ${config.infoValidSeconds} seconds.
