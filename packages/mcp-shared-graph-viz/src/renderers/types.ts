@@ -19,8 +19,14 @@ export interface RenderParams {
   edgeStyle?: EdgeStyle;
   /**
    * The order colours are assigned from, so a group keeps its colour across
-   * views of one corpus. Pass the same list every time; groups it omits fall
-   * in behind, in the order this graph happens to contain them.
+   * views of one corpus. Pass the same list every time.
+   *
+   * List every group the mapping can produce, including the ones it produces
+   * only sometimes — a bucket for documents nothing links to, say. Groups the
+   * list omits follow it by name, which settles the order between views
+   * holding the same ones, but a group present in one view and absent from
+   * another still shifts whatever trails it. That drift is what this option is
+   * for, so omitting such a group gives it back.
    */
   groupOrder?: readonly string[];
 }
