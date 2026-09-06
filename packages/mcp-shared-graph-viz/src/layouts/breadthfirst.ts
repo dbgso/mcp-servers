@@ -1,9 +1,8 @@
-import type { Layout } from "./types.js";
+import { BaseLayout } from "./base.js";
 
-export class BreadthfirstLayout implements Layout {
+/** Levels away from the roots. */
+export class BreadthfirstLayout extends BaseLayout {
   readonly name = "breadthfirst";
-  readonly scriptUrls = [];
-  readonly requiresPositions = false;
 
   buildSpec(): Record<string, unknown> {
     return { directed: true, grid: true };

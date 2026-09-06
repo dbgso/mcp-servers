@@ -1,4 +1,5 @@
-import type { BuildSpecParams, Layout } from "./types.js";
+import { BaseLayout } from "./base.js";
+import type { BuildSpecParams } from "./types.js";
 
 /** dagre lives in a plugin, and the plugin needs dagre itself. */
 export const DAGRE_SCRIPT_URLS = [
@@ -6,10 +7,11 @@ export const DAGRE_SCRIPT_URLS = [
   "https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js",
 ] as const;
 
-export class DagreLayout implements Layout {
+/** Layered, and the most readable choice for anything with a direction to it. */
+export class DagreLayout extends BaseLayout {
   readonly name = "dagre";
-  readonly scriptUrls = DAGRE_SCRIPT_URLS;
-  readonly requiresPositions = false;
+  override readonly scriptUrls = DAGRE_SCRIPT_URLS;
+  override readonly pluginGlobals = ["cytoscapeDagre"] as const;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     const { options, spacing } = params;

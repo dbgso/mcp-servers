@@ -18,8 +18,24 @@ const names = layoutNames();
 
 describe("LAYOUTS", () => {
   it("covers every layout name", () => {
-    expect(names.sort()).toEqual(
-      ["breadthfirst", "circle", "concentric", "cose", "dagre", "grid", "preset"].sort(),
+    expect([...names].sort()).toEqual(
+      [
+        "avsdf",
+        "breadthfirst",
+        "circle",
+        "cise",
+        "cola",
+        "concentric",
+        "cose",
+        "dagre",
+        "elk-layered",
+        "elk-mrtree",
+        "elk-stress",
+        "fcose",
+        "grid",
+        "klay",
+        "preset",
+      ].sort(),
     );
   });
 
@@ -27,9 +43,38 @@ describe("LAYOUTS", () => {
     expect(LAYOUTS[name].name).toBe(name);
   });
 
-  it("only dagre needs extra scripts", () => {
-    const withScripts = names.filter((name) => LAYOUTS[name].scriptUrls.length > 0);
-    expect(withScripts).toEqual(["dagre"]);
+  /**
+   * A layout that loads scripts has to say what they define, or the page will
+   * fetch an extension and never register it.
+   */
+  it.each(names.map((name) => ({ name })))("$name pairs its scripts with its globals", ({ name }) => {
+    const layout = LAYOUTS[name];
+    expect(layout.scriptUrls.length > 0).toBe(layout.pluginGlobals.length > 0);
+  });
+
+  it("loads scripts only over https", () => {
+    for (const name of names) {
+      for (const url of LAYOUTS[name].scriptUrls) {
+        expect(url).toMatch(/^https:\/\//);
+      }
+    }
+  });
+
+  /** Pinned, so a CDN publishing a new major cannot change a rendered page. */
+  it("pins every script to an exact version", () => {
+    for (const name of names) {
+      for (const url of LAYOUTS[name].scriptUrls) {
+        expect(url).toMatch(/@\d+\.\d+\.\d+\/|\/\d+\.\d+\.\d+\//);
+      }
+    }
+  });
+
+  it("uses the built-in layouts without any script", () => {
+    const builtIn = ["dagre", "cose", "concentric", "grid", "circle", "breadthfirst", "preset"];
+    const withoutScripts = names.filter((name) => LAYOUTS[name].scriptUrls.length === 0);
+    expect(withoutScripts.sort()).toEqual(
+      builtIn.filter((name) => name !== "dagre").sort(),
+    );
   });
 
   it("only preset needs positions", () => {
@@ -62,8 +107,22 @@ describe("buildLayoutSpec", () => {
    */
   it.each(names.map((name) => ({ name })))("$name fits to the container", ({ name }) => {
     const spec = buildLayoutSpec({ layout: { name } });
-    expect(spec).toMatchObject({ name, animate: false, fit: true, padding: FIT_PADDING });
+    expect(spec).toMatchObject({ animate: false, fit: true, padding: FIT_PADDING });
     expect(spec.boundingBox).toBeUndefined();
+  });
+
+  /** cytoscape resolves the extension's name, which is not always ours. */
+  it.each(names.map((name) => ({ name })))("$name names the layout cytoscape knows", ({ name }) => {
+    expect(buildLayoutSpec({ layout: { name } }).name).toBe(LAYOUTS[name].cytoscapeName);
+  });
+
+  it("hands every elk algorithm to the one layout cytoscape registered", () => {
+    for (const name of ["elk-layered", "elk-mrtree", "elk-stress"] as const) {
+      expect(buildLayoutSpec({ layout: { name } }).name).toBe("elk");
+    }
+    expect(buildLayoutSpec({ layout: { name: "elk-mrtree" } }).elk).toMatchObject({
+      algorithm: "mrtree",
+    });
   });
 
   type SpacingCase = { name: LayoutName; key: string; atOne: number };

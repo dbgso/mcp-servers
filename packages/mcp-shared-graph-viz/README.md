@@ -99,13 +99,40 @@ interface GraphEdge {
 
 ### Layouts
 
-`dagre` (default), `cose`, `concentric`, `grid`, `circle`, `breadthfirst`, `preset`.
+Fifteen, and the shape of the data decides which one reads well.
 
-| Shape of data | Layout |
-|---|---|
-| Dependency chains, hierarchies | `dagre` (with `direction: "LR"` for wide graphs) |
-| Loosely connected clusters | `cose` |
-| Caller already has coordinates | `preset` (every node needs `position`) |
+| | Layout | Good for |
+|---|---|---|
+| **Layered** | `dagre` (default), `klay`, `elk-layered` | Anything with a direction: dependencies, chains, hierarchies |
+| **Tree** | `elk-mrtree`, `breadthfirst` | Strict trees, levels from a root |
+| **Force** | `fcose`, `cose`, `cola`, `elk-stress` | Loosely connected clusters, no inherent direction |
+| **Circular** | `cise`, `avsdf`, `circle`, `concentric` | Showing membership; `cise` draws one circle per `group` |
+| **Fixed** | `grid`, `preset` | A regular arrangement, or coordinates the caller already has |
+
+`direction` (`TB` / `BT` / `LR` / `RL`) applies to `dagre`, `klay` and the ELK
+layouts. `LR` is usually the readable choice for a graph that fans out.
+
+Seven are built into cytoscape and cost nothing to load. The rest come from
+extensions the page fetches from a CDN, pinned to exact versions; a layout
+declares its own scripts and the globals they define, so nothing else has to
+know.
+
+`cose`, `fcose`, `cola` and `elk-stress` are randomised and differ between
+runs. Use `preset`, `grid`, `dagre` or `klay` when the output has to be
+reproducible.
+
+ELK's `radial` is deliberately absent: it requires a tree, and given a cycle it
+does not fail but spins, taking the page's main thread with it.
+
+### Edge routing
+
+```ts
+renderGraphHtml({ graph, edgeStyle: "taxi" });
+```
+
+`bezier` (default), `taxi` (right-angled elbows), `segments`, `straight`,
+`haystack`. `taxi` takes its direction from the layout's, so it is not asked
+for twice.
 
 ### Options
 
@@ -116,8 +143,9 @@ renderGraphHtml({
   theme: { palette, fontFamily, fontSize },
   title: "...",
   legend: true,
+  edgeStyle: "taxi",         // how edges are drawn
   cytoscapeUrl: "...",       // where the page loads cytoscape from
-  layoutScriptUrls: ["..."], // and whatever the layout needs (only dagre does)
+  layoutScriptUrls: ["..."], // and whatever the layout needs
 });
 ```
 

@@ -1,8 +1,14 @@
+import { AvsdfLayout } from "./avsdf.js";
 import { BreadthfirstLayout } from "./breadthfirst.js";
-import { GeometricLayout } from "./geometric.js";
+import { CiseLayout } from "./cise.js";
+import { ColaLayout } from "./cola.js";
 import { ConcentricLayout } from "./concentric.js";
 import { CoseLayout } from "./cose.js";
 import { DagreLayout } from "./dagre.js";
+import { ElkLayout } from "./elk.js";
+import { FcoseLayout } from "./fcose.js";
+import { GeometricLayout } from "./geometric.js";
+import { KlayLayout } from "./klay.js";
 import { PresetLayout } from "./preset.js";
 import type { Layout, LayoutSpec } from "./types.js";
 import { GraphVizError } from "../errors.js";
@@ -22,6 +28,14 @@ export const LAYOUTS: Record<LayoutName, Layout> = {
   circle: new GeometricLayout("circle"),
   breadthfirst: new BreadthfirstLayout(),
   preset: new PresetLayout(),
+  fcose: new FcoseLayout(),
+  cola: new ColaLayout(),
+  klay: new KlayLayout(),
+  cise: new CiseLayout(),
+  avsdf: new AvsdfLayout(),
+  "elk-layered": new ElkLayout("elk-layered", "layered"),
+  "elk-mrtree": new ElkLayout("elk-mrtree", "mrtree"),
+  "elk-stress": new ElkLayout("elk-stress", "stress"),
 };
 
 export const DEFAULT_LAYOUT: LayoutName = "dagre";
@@ -52,17 +66,18 @@ export function resolveLayout(params: { name?: string }): Layout {
 export function buildLayoutSpec(params: {
   layout?: LayoutOptions;
   positions?: Map<string, Point>;
+  clusters?: string[][];
 }): LayoutSpec {
-  const { layout = {}, positions = new Map<string, Point>() } = params;
+  const { layout = {}, positions = new Map<string, Point>(), clusters = [] } = params;
   const resolved = resolveLayout({ name: layout.name });
   const spacing = layout.spacing ?? 1;
 
   return {
-    name: resolved.name,
+    name: resolved.cytoscapeName,
     animate: false,
     fit: true,
     padding: FIT_PADDING,
     spacingFactor: spacing,
-    ...resolved.buildSpec({ options: layout, spacing, positions }),
+    ...resolved.buildSpec({ options: layout, spacing, positions, clusters }),
   };
 }

@@ -1,4 +1,4 @@
-import { prepareGraph, preparedToElements, presetPositions } from "../../elements.js";
+import { clustersOf, prepareGraph, preparedToElements, presetPositions } from "../../elements.js";
 import { assertPositions } from "../../errors.js";
 import { buildLayoutSpec, resolveLayout } from "../../layouts/index.js";
 import { resolveTheme } from "../../theme.js";
@@ -25,6 +25,7 @@ export function renderHtml(params: RenderParams & HtmlRendererOptions): string {
     theme,
     title,
     legend = true,
+    edgeStyle,
     cytoscapeUrl = DEFAULT_CYTOSCAPE_URL,
     layoutScriptUrls,
   } = params;
@@ -47,13 +48,21 @@ export function renderHtml(params: RenderParams & HtmlRendererOptions): string {
           stroke: group.swatch.stroke,
         }))
       : [],
-    // The layout says which scripts it needs; the renderer does not know.
+    // The layout says which scripts it needs, and what they define; the
+    // renderer knows neither.
     scriptUrls: [cytoscapeUrl, ...(layoutScriptUrls ?? layout.scriptUrls)],
+    pluginGlobals: [...layout.pluginGlobals],
     elements: preparedToElements({ prepared }),
-    style: buildCytoscapeStyle({ prepared, theme: resolvedTheme }),
+    style: buildCytoscapeStyle({
+      prepared,
+      theme: resolvedTheme,
+      edgeStyle,
+      direction: layoutOptions?.direction,
+    }),
     layout: buildLayoutSpec({
       layout: layoutOptions,
       positions: presetPositions({ prepared }),
+      clusters: clustersOf({ prepared }),
     }),
   });
 }
@@ -80,6 +89,6 @@ export class HtmlRenderer implements Renderer {
 /** The page with default settings. */
 export const htmlRenderer: Renderer = new HtmlRenderer();
 
-export { buildCytoscapeStyle, MAX_LABEL_WIDTH_PX } from "./style.js";
+export { buildCytoscapeStyle, DEFAULT_EDGE_STYLE, MAX_LABEL_WIDTH_PX } from "./style.js";
 export { escapeScriptJson, escapeXml } from "./escape.js";
 export type { HtmlRendererOptions } from "./types.js";

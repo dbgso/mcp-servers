@@ -162,6 +162,17 @@ export function presetPositions(params: { prepared: PreparedGraph }): Map<string
   return positions;
 }
 
+/**
+ * Node ids grouped by `group`, in the same first-appearance order the colours
+ * use, for the layouts that arrange clusters rather than individual nodes.
+ */
+export function clustersOf(params: { prepared: PreparedGraph }): string[][] {
+  const { prepared } = params;
+  return prepared.groups.map((group) =>
+    prepared.nodes.filter((node) => node.group === group.name).map((node) => node.id),
+  );
+}
+
 export function toCytoscapeElements(params: {
   graph: GraphInput;
   theme?: ThemeOptions;

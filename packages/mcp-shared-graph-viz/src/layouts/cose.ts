@@ -1,9 +1,9 @@
-import type { BuildSpecParams, Layout } from "./types.js";
+import { BaseLayout } from "./base.js";
+import type { BuildSpecParams } from "./types.js";
 
-export class CoseLayout implements Layout {
+/** Force-directed, built in. Randomised, so it differs between runs. */
+export class CoseLayout extends BaseLayout {
   readonly name = "cose";
-  readonly scriptUrls = [];
-  readonly requiresPositions = false;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     const { spacing } = params;

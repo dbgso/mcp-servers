@@ -1,4 +1,4 @@
-import type { GraphInput, LayoutOptions, ThemeOptions } from "../types.js";
+import type { EdgeStyle, GraphInput, LayoutOptions, ThemeOptions } from "../types.js";
 
 /**
  * What a renderer is asked to draw.
@@ -15,6 +15,8 @@ export interface RenderParams {
   title?: string;
   /** Show a legend of the groups. Defaults to true when groups exist. */
   legend?: boolean;
+  /** How edges are drawn. Defaults to "bezier". */
+  edgeStyle?: EdgeStyle;
 }
 
 /**

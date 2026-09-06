@@ -1,4 +1,5 @@
-import type { BuildSpecParams, Layout } from "./types.js";
+import { BaseLayout } from "./base.js";
+import type { BuildSpecParams } from "./types.js";
 
 /**
  * Places nodes where the caller says.
@@ -6,10 +7,9 @@ import type { BuildSpecParams, Layout } from "./types.js";
  * The positions are handed to the layout explicitly rather than left on the
  * element definitions, which cytoscape does not always read back.
  */
-export class PresetLayout implements Layout {
+export class PresetLayout extends BaseLayout {
   readonly name = "preset";
-  readonly scriptUrls = [];
-  readonly requiresPositions = true;
+  override readonly requiresPositions = true;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     return { positions: Object.fromEntries(params.positions) };
