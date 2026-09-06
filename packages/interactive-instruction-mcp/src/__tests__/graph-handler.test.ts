@@ -12,7 +12,8 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { MarkdownReader } from "../services/markdown-reader.js";
-import { GraphHandler, buildGraph } from "../tools/instruction/handlers/graph.js";
+import { GraphHandler, buildGraph, LAYOUT_NAMES } from "../tools/instruction/handlers/graph.js";
+import { layoutNames, LAYOUTS } from "mcp-shared-graph-viz";
 import { DRAFT_DIR } from "../constants.js";
 import type { MarkdownSummary } from "../types/index.js";
 
@@ -197,6 +198,35 @@ describe("GraphHandler", () => {
     expect(text).toContain("No relations to draw");
   });
 
+  describe("colour stability", () => {
+    const groupsOf = async (rawParams: Record<string, unknown>) => {
+      const outputPath = path.join(tempDir, `graph-${Math.random()}.html`);
+      await handler.execute({
+        rawParams: { action: "graph", outputPath, ...rawParams },
+        context: { reader },
+      });
+      const html = await fs.readFile(outputPath, "utf-8");
+      const style = html.match(
+        /node\[id = \\"a__one\\"\]","style":\{"background-color":"(#[0-9a-f]{6})"/,
+      );
+      return style?.[1];
+    };
+
+    it("keeps a group's colour between the corpus and a close-up", async () => {
+      // The reported symptom: narrowing the view moved a document's colour,
+      // because the palette index came from the groups that happened to show.
+      await write("a__one", ["b__two"]);
+      await write("b__two", ["c__three"]);
+      await write("c__three", []);
+
+      const whole = await groupsOf({});
+      const closeUp = await groupsOf({ id: "a__one", depth: 1 });
+
+      expect(whole).toBeDefined();
+      expect(closeUp).toBe(whole);
+    });
+  });
+
   describe("format: text", () => {
     const asText = async (rawParams: Record<string, unknown>) => {
       const result = await handler.execute({
@@ -283,6 +313,18 @@ describe("GraphHandler", () => {
     });
   });
 
+  describe("keeping up with the renderer", () => {
+    it("offers every layout the library has, apart from the one needing positions", () => {
+      // The schema spells the names out to keep them literal types, so this is
+      // what notices when the library gains or loses one.
+      const offerable = layoutNames()
+        .filter((name) => !LAYOUTS[name].requiresPositions)
+        .sort();
+
+      expect([...LAYOUT_NAMES].sort()).toEqual(offerable);
+    });
+  });
+
   describe("layout", () => {
     const render = async (rawParams: Record<string, unknown>) => {
       await write("alpha", ["beta"]);
@@ -315,6 +357,33 @@ describe("GraphHandler", () => {
       // breadthfirst ignores rankDir; naming it must not be overridden by direction.
       const html = await render({ layout: "breadthfirst", direction: "LR" });
       expect(html).toContain('"name":"breadthfirst"');
+    });
+
+    it.each([["taxi"], ["straight"], ["segments"], ["haystack"], ["bezier"]])(
+      "passes edgeStyle %s to the renderer",
+      async (edgeStyle) => {
+        const html = await render({ edgeStyle });
+        expect(html).toContain(`"curve-style":"${edgeStyle}"`);
+      },
+    );
+
+    it.each([["fcose"], ["cola"], ["avsdf"], ["cise"], ["klay"]])(
+      "accepts the layout %s the library gained",
+      async (layout) => {
+        const html = await render({ layout });
+        expect(html).toContain(`"name":"${layout}"`);
+      },
+    );
+
+    it.each([
+      ["elk-layered", "layered"],
+      ["elk-mrtree", "mrtree"],
+      ["elk-stress", "stress"],
+    ])("maps %s onto the elk layout's %s algorithm", async (layout, algorithm) => {
+      // cytoscape-elk registers a single layout named "elk"; the variant this
+      // handler offers is chosen by its algorithm, not by the layout name.
+      const html = await render({ layout });
+      expect(html).toContain(`"algorithm":"${algorithm}"`);
     });
 
     it("rejects a direction that is not a rank direction", async () => {

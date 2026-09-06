@@ -53,7 +53,8 @@ instruction(action: "read", id: "doc-id") → Read a document
 
 **Seeing the corpus**
 - `graph` — Render the `relatedDocs` graph as an interactive page, or return it as text
-  (optional: `id`, `depth`, `includeUnlinked`, `layout`, `direction`, `spacing`, `format`, `outputPath`)
+  (optional: `id`, `depth`, `includeUnlinked`, `layout`, `direction`, `spacing`, `edgeStyle`,
+  `format`, `outputPath`)
 
 ### Looking at the relations
 
@@ -72,6 +73,16 @@ category, and **links pointing at documents that do not exist are drawn too**, a
 
 `direction` (`TB` / `BT` / `LR` / `RL`) and `spacing` are passed to the layout. A document
 corpus tends to be shallow and wide, so `LR` often reads better than the default `TB`.
+
+`layout` accepts every layout `mcp-shared-graph-viz` offers apart from `preset`, which places
+nodes where the caller says and so has nothing to offer here: `dagre` (default), `cose`,
+`concentric`, `grid`, `circle`, `breadthfirst`, `fcose`, `cola`, `klay`, `cise`, `avsdf`,
+`elk-layered`, `elk-mrtree`, `elk-stress`. `edgeStyle` (`bezier` by default, or `taxi`,
+`segments`, `straight`, `haystack`) decides how edges are drawn; `taxi` takes its bearing from
+`direction`, so a hierarchy does not need it stated twice.
+
+Colours are assigned from the whole corpus rather than from the documents on screen, so a
+category keeps its colour between the corpus graph and a close-up of one document.
 
 Drawing is done by `mcp-shared-graph-viz`, which is given nodes and edges and knows nothing
 about documents; the mapping from `relatedDocs` onto them lives here.

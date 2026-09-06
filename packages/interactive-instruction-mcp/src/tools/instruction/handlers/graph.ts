@@ -7,6 +7,7 @@ import {
   renderGraphHtml,
   type GraphEdge,
   type GraphNode,
+  type EdgeStyle,
   type LayoutDirection,
   type LayoutName,
   type LayoutOptions,
@@ -36,6 +37,32 @@ const GRAPH_BASE = "mcp-instruction-graphs";
 const ORPHAN_GROUP = "(unlinked)";
 const MISSING_GROUP = "(missing)";
 
+/**
+ * Every layout the renderer offers except `preset`, which places nodes where
+ * the caller says and so is not something to pick from a menu -- this handler
+ * has no positions to give it.
+ *
+ * Written out rather than read from `layoutNames()` so the values stay literal
+ * types in the schema. `graph-handler.test.ts` fails if the library gains or
+ * loses one, which is the drift this would otherwise invite.
+ */
+export const LAYOUT_NAMES = [
+  "dagre",
+  "cose",
+  "concentric",
+  "grid",
+  "circle",
+  "breadthfirst",
+  "fcose",
+  "cola",
+  "klay",
+  "cise",
+  "avsdf",
+  "elk-layered",
+  "elk-mrtree",
+  "elk-stress",
+] as const;
+
 const schema = z.object({
   action: z.literal("graph"),
   id: z
@@ -53,7 +80,7 @@ const schema = z.object({
     .optional()
     .describe("Include documents that have no relations at all. Defaults to false."),
   layout: z
-    .enum(["dagre", "cose", "concentric", "grid", "circle", "breadthfirst"])
+    .enum(LAYOUT_NAMES)
     .optional()
     .describe("Layout algorithm. Defaults to dagre."),
   direction: z
@@ -67,6 +94,13 @@ const schema = z.object({
     .positive()
     .optional()
     .describe("Multiplier on the gaps between nodes. Defaults to 1."),
+  edgeStyle: z
+    .enum(["bezier", "taxi", "segments", "straight", "haystack"])
+    .optional()
+    .describe(
+      "How edges are drawn. Defaults to bezier. taxi takes its bearing from " +
+      "`direction`, so a hierarchy does not need it stated twice.",
+    ),
   format: z
     .enum(["html", "text"])
     .optional()
@@ -113,6 +147,7 @@ Writes an HTML file and returns its path. Open it in a browser.`;
       layout,
       direction,
       spacing,
+      edgeStyle,
       format = "html",
       outputPath,
     } = params.args;
@@ -149,6 +184,11 @@ Writes an HTML file and returns its path. Open it in a browser.`;
     const html = renderGraphHtml({
       graph: { nodes, edges },
       layout: toLayoutOptions({ layout, direction, spacing }),
+      edgeStyle,
+      // From the whole corpus, not this view: a group has to keep its colour
+      // between the corpus graph and a close-up, and only the caller knows
+      // which groups exist beyond the ones being drawn right now.
+      groupOrder: groupOrderFor(documents),
       title: id === undefined ? "Document relations" : `Relations around ${id}`,
     });
 
@@ -302,6 +342,24 @@ function neighbourhood(params: {
   }
 
   return reached;
+}
+
+/**
+ * Every group the mapping can produce, in the order colours are handed out.
+ *
+ * Derived from the whole corpus rather than from the nodes being drawn,
+ * because the colour of a group must not depend on which others happen to
+ * appear: without this, `every-task` came out purple in the corpus graph and
+ * orange in a close-up of one document.
+ *
+ * The two sentinel groups are listed even though most graphs contain neither.
+ * A name the list omits falls in behind the ones it holds, which settles the
+ * order between views holding the same groups but not between views where one
+ * is absent -- and appearing only sometimes is exactly what these two do.
+ */
+function groupOrderFor(documents: MarkdownSummary[]): string[] {
+  const groups = new Set(documents.map((doc) => groupOf(doc.id)));
+  return [...[...groups].sort(), MISSING_GROUP, ORPHAN_GROUP];
 }
 
 /**
