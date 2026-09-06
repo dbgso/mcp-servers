@@ -6,7 +6,9 @@ import {
   HasDescriptionValidator,
   NotExistsValidator,
   ExistsValidator,
+  ValidIdValidator,
 } from "./validators.js";
+import { ID_SEPARATOR, resolveDocumentPathOrThrow } from "./document-id.js";
 import { describeScope, EMPTY_SCOPE, isManaged, type DocumentScope } from "./document-scope.js";
 import { parseFrontmatter, updateFrontmatter } from "../utils/frontmatter-parser.js";
 import { formatDocumentListItem } from "../utils/string-utils.js";
@@ -28,7 +30,6 @@ interface CacheEntry {
   timestamp: number;
 }
 
-const ID_SEPARATOR = "__";
 const CACHE_TTL = 60_000; // 1 minute
 
 export class MarkdownReader {
@@ -60,8 +61,7 @@ export class MarkdownReader {
    * "git__workflow" -> "git/workflow.md"
    */
   private idToPath(id: string): string {
-    const parts = id.split(ID_SEPARATOR);
-    return path.join(this.directory, ...parts) + ".md";
+    return resolveDocumentPathOrThrow({ directory: this.directory, id });
   }
 
   /**
@@ -291,6 +291,14 @@ export class MarkdownReader {
     content: string;
   }): Promise<AddResult> {
     const { id, content } = params;
+
+    // Containment first: an id that cannot safely become a path is rejected
+    // before anything asks whether this server manages it. Both run before
+    // `documentExists`, which resolves the id.
+    const idValidation = runValidators({ validators: [new ValidIdValidator({ id })] });
+    if (!idValidation.success) {
+      return idValidation;
+    }
 
     const outOfScope = unmanagedResult({ reader: this, ids: [id] });
     if (outOfScope !== null) return outOfScope;
