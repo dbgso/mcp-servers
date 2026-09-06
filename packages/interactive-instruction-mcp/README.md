@@ -143,6 +143,25 @@ Optionally add flags to help AI remember to use the MCP tools:
 | `--reminder <message>` | Add custom reminder message (can be used multiple times) |
 | `--topic-for-every-task <id>` | Specify a document AI must re-read before every task |
 | `--info-expires <seconds>` | How long MCP info stays valid (default: 60). Works with `--topic-for-every-task` |
+| `--include <id-prefix>` | Manage only documents under this prefix. Repeatable |
+| `--exclude <id-prefix>` | Do not manage documents under this prefix. Repeatable, applied after `--include` |
+
+### Sharing a directory with another tool
+
+A documents directory is not always all one tool's. This repository's own `./docs` also holds
+`chain/`, which belongs to a different MCP server — those files have their own frontmatter and
+their own relation field, so every check made here reports them as broken. Before excluding
+them, `lint` returned 223 issues; after `--exclude chain`, 38, and the error count went from 60
+to 1.
+
+```
+mcp-interactive-instruction ./docs --exclude chain
+```
+
+Unmanaged documents are invisible: they do not appear in `list`, `lint`, backlinks or the
+graph, `read` finds nothing, and a write that would touch one is refused with a reason rather
+than quietly doing nothing. Prefixes are matched by whole id segments, so `--exclude chain`
+takes `chain__adr__…` and leaves `chainsaw` alone.
 
 ### Topic for Every Task
 
