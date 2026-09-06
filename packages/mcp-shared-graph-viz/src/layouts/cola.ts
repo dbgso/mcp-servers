@@ -10,7 +10,6 @@ export const COLA_SCRIPT_URLS = [
 export class ColaLayout extends BaseLayout {
   readonly name = "cola";
   override readonly scriptUrls = COLA_SCRIPT_URLS;
-  override readonly pluginGlobals = ["cytoscapeCola"] as const;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     const { spacing } = params;

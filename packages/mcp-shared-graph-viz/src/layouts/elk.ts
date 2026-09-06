@@ -31,7 +31,6 @@ export class ElkLayout extends BaseLayout {
   }
 
   override readonly scriptUrls = ELK_SCRIPT_URLS;
-  override readonly pluginGlobals = ["cytoscapeElk"] as const;
 
   constructor(
     readonly name: LayoutName,

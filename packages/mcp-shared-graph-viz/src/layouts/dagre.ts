@@ -11,7 +11,6 @@ export const DAGRE_SCRIPT_URLS = [
 export class DagreLayout extends BaseLayout {
   readonly name = "dagre";
   override readonly scriptUrls = DAGRE_SCRIPT_URLS;
-  override readonly pluginGlobals = ["cytoscapeDagre"] as const;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     const { options, spacing } = params;

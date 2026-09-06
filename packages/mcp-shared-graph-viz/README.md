@@ -113,9 +113,9 @@ Fifteen, and the shape of the data decides which one reads well.
 layouts. `LR` is usually the readable choice for a graph that fans out.
 
 Seven are built into cytoscape and cost nothing to load. The rest come from
-extensions the page fetches from a CDN, pinned to exact versions; a layout
-declares its own scripts and the globals they define, so nothing else has to
-know.
+extensions the page fetches from a CDN, pinned to exact versions. A layout
+declares its own scripts and nothing else has to know: an extension registers
+itself with cytoscape as it loads, so the page only fetches them in order.
 
 `cose`, `fcose`, `cola` and `elk-stress` are randomised and differ between
 runs. Use `preset`, `grid`, `dagre` or `klay` when the output has to be
@@ -244,6 +244,24 @@ is rejected instead of slipping through.
 A test walks `renderers/*/` and asserts each directory's entry point exports a
 `Renderer` named after the directory, so a second format cannot quietly arrive
 as a bare function beside the seam instead of through it.
+
+## Checking that it draws
+
+The unit tests assert what the page says. Whether a browser can act on it is a
+different question, and every defect found in this package so far passed the
+unit tests: an extension's dependency script missing, a layout name cytoscape
+does not know, a font stack it silently rejected, a layout that spins forever.
+
+```
+pnpm --filter mcp-shared-graph-viz smoke
+```
+
+Opens every layout in headless Chrome against a graph with a cycle in it and
+checks the node count, that positions are finite and distinct, that the graph
+has extent, that nothing threw — and that the page still answers, which is the
+only way a hang shows up. Needs Chrome and network access to the CDNs, which is
+why it is not part of `pnpm test`. Run it after touching a layout, a script
+URL, or the page template.
 
 ## Errors
 

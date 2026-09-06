@@ -12,7 +12,6 @@ export const FCOSE_SCRIPT_URLS = [
 export class FcoseLayout extends BaseLayout {
   readonly name = "fcose";
   override readonly scriptUrls = FCOSE_SCRIPT_URLS;
-  override readonly pluginGlobals = ["cytoscapeFcose"] as const;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     const { spacing } = params;

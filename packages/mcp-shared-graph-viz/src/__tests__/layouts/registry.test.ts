@@ -43,15 +43,6 @@ describe("LAYOUTS", () => {
     expect(LAYOUTS[name].name).toBe(name);
   });
 
-  /**
-   * A layout that loads scripts has to say what they define, or the page will
-   * fetch an extension and never register it.
-   */
-  it.each(names.map((name) => ({ name })))("$name pairs its scripts with its globals", ({ name }) => {
-    const layout = LAYOUTS[name];
-    expect(layout.scriptUrls.length > 0).toBe(layout.pluginGlobals.length > 0);
-  });
-
   it("loads scripts only over https", () => {
     for (const name of names) {
       for (const url of LAYOUTS[name].scriptUrls) {

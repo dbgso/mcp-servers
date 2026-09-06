@@ -10,7 +10,6 @@ export const KLAY_SCRIPT_URLS = [
 export class KlayLayout extends BaseLayout {
   readonly name = "klay";
   override readonly scriptUrls = KLAY_SCRIPT_URLS;
-  override readonly pluginGlobals = ["cytoscapeKlay"] as const;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     const { options, spacing } = params;

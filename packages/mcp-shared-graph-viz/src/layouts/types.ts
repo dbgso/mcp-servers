@@ -35,15 +35,13 @@ export interface Layout {
    * ELK registers itself once as `elk` and picks its algorithm from options.
    */
   readonly cytoscapeName: string;
-  /** Scripts the page must load for this layout. Most need none. */
-  readonly scriptUrls: readonly string[];
   /**
-   * Globals the extension scripts define, registered with `cytoscape.use`.
+   * Scripts the page must load for this layout. Most need none.
    *
-   * Each extension names its own global, so the page cannot guess; the layout
-   * that asked for the script says what to register.
+   * An extension registers itself with cytoscape as it loads, so nothing has
+   * to call `cytoscape.use`; the page only has to fetch these in order.
    */
-  readonly pluginGlobals: readonly string[];
+  readonly scriptUrls: readonly string[];
   /** Whether every node must carry a position for this layout to make sense. */
   readonly requiresPositions: boolean;
   /** The options this layout adds on top of the shared base. */

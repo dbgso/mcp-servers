@@ -7,8 +7,6 @@ export interface DocumentParams {
   /** Legend entries, already resolved to colors. Empty means no legend. */
   legend: { name: string; fill: string; stroke: string }[];
   scriptUrls: string[];
-  /** Globals the loaded extensions define, passed to `cytoscape.use`. */
-  pluginGlobals: string[];
   elements: unknown;
   style: unknown;
   layout: unknown;
@@ -38,7 +36,7 @@ function headingMarkup(params: { title?: string }): string {
 
 /** The page: styles, the embedded graph, and the interactions. */
 export function buildDocument(params: DocumentParams): string {
-  const { title, theme, legend, scriptUrls, pluginGlobals, elements, style, layout } = params;
+  const { title, theme, legend, scriptUrls, elements, style, layout } = params;
   const scripts = scriptUrls
     .map((url) => `<script src="${escapeXml({ text: url })}"></script>`)
     .join("\n");
@@ -99,15 +97,9 @@ ${scripts}
   var elements = ${escapeScriptJson({ value: elements })};
   var style = ${escapeScriptJson({ value: style })};
   var layout = ${escapeScriptJson({ value: layout })};
-  var plugins = ${escapeScriptJson({ value: pluginGlobals })};
 
   var head = document.getElementById("head");
   document.documentElement.style.setProperty("--header-height", head.offsetHeight + "px");
-
-  // Each extension names its own global; the layout said which to register.
-  plugins.forEach(function (name) {
-    if (window[name]) { cytoscape.use(window[name]); }
-  });
 
   var cy = cytoscape({
     container: document.getElementById("cy"),

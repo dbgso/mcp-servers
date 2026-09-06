@@ -17,7 +17,6 @@ export const CISE_SCRIPT_URLS = [
 export class CiseLayout extends BaseLayout {
   readonly name = "cise";
   override readonly scriptUrls = CISE_SCRIPT_URLS;
-  override readonly pluginGlobals = ["cytoscapeCise"] as const;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     const { spacing, clusters } = params;

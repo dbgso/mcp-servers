@@ -48,10 +48,8 @@ export function renderHtml(params: RenderParams & HtmlRendererOptions): string {
           stroke: group.swatch.stroke,
         }))
       : [],
-    // The layout says which scripts it needs, and what they define; the
-    // renderer knows neither.
+    // The layout says which scripts it needs; the renderer does not know.
     scriptUrls: [cytoscapeUrl, ...(layoutScriptUrls ?? layout.scriptUrls)],
-    pluginGlobals: [...layout.pluginGlobals],
     elements: preparedToElements({ prepared }),
     style: buildCytoscapeStyle({
       prepared,

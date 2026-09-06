@@ -11,7 +11,6 @@ export const AVSDF_SCRIPT_URLS = [
 export class AvsdfLayout extends BaseLayout {
   readonly name = "avsdf";
   override readonly scriptUrls = AVSDF_SCRIPT_URLS;
-  override readonly pluginGlobals = ["cytoscapeAvsdf"] as const;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     return { nodeSeparation: 60 * params.spacing };

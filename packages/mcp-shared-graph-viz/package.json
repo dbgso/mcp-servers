@@ -20,7 +20,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "oxlint src/"
+    "lint": "oxlint src/",
+    "smoke": "tsx scripts/browser-smoke.mts"
   },
   "keywords": [
     "mcp",
