@@ -4,10 +4,10 @@
  *
  * The first attempt is refused. The refusal tells the caller to explain the
  * change to the user in its own words and then repeat the identical call. Only
- * a run of consecutive identical attempts gets through, at which point whatever
- * approval flow the tool configured runs as usual -- often none, because this
- * is meant for operations that do not warrant a token. The run ends when the
- * caller reports the operation done, not when it passes the gate.
+ * a run of identical attempts gets through, at which point whatever approval
+ * flow the tool configured runs as usual -- often none, because this is meant
+ * for operations that do not warrant a token. The run ends when the caller
+ * reports the operation done, not when it passes the gate.
  *
  * ## What it buys, and what it does not
  *
@@ -33,9 +33,21 @@
  * committing to one account of the change and standing by it verbatim, which is
  * a different act from retrying.
  *
- * The store is a single slot, so "consecutive" means consecutive: any
- * intervening operation resets the run. It is process memory, so a restart
- * fails closed.
+ * ## What a run survives
+ *
+ * Runs are held per key, so an unrelated operation in between does not break
+ * one. That is not a relaxation for its own sake: an agent asked to relate
+ * several documents works on them together, and a store that kept only the
+ * newest run would refuse the first document forever -- attempt one for A,
+ * attempt one for B, attempt two for A, each landing on a slot the other just
+ * took.
+ *
+ * What survives is narrow. `what` is part of the key, so a run applies only to
+ * the exact change it was started for; re-stage a different change and the old
+ * run does not carry over. Within that, the TTL is what bounds a run left
+ * half-finished, which makes it load-bearing rather than a backstop.
+ *
+ * It is process memory, so a restart fails closed.
  */
 
 import { contentHash } from "../content-hash.js";
@@ -44,9 +56,13 @@ import { contentHash } from "../content-hash.js";
 export const DEFAULT_REQUIRED_ATTEMPTS = 2;
 
 /**
- * How long a run may sit half-finished. A safety net, not the mechanism -- the
- * single slot is what enforces consecutiveness. Generous, because the whole
- * point is that the caller goes and talks to a human in between.
+ * How long a run may sit half-finished.
+ *
+ * With runs held per key, nothing else expires them, so this is what bounds a
+ * run nobody came back to. It stays generous anyway: the whole point is that
+ * the caller goes and talks to a human in between, and the window it leaves
+ * open is narrow -- reaching a stale run means repeating the same operation,
+ * over the same `what`, with the same explanation, having changed nothing.
  */
 export const DEFAULT_DELIBERATION_TTL_MS = 10 * 60 * 1000;
 
@@ -80,12 +96,35 @@ export interface DeliberationRequest {
   explanation: string;
 }
 
+/**
+ * Identifies one run.
+ *
+ * Branded so it can only have come from `consider`. `settle` takes the key of
+ * a run this gate actually issued, rather than any string a caller assembled
+ * that happens to hash the same way.
+ */
+export type DeliberationKey = string & { readonly __deliberationKey: unique symbol };
+
+export interface RefusedOutcome {
+  ok: false;
+  attempts: number;
+  remaining: number;
+  message: string;
+}
+
 export type DeliberationOutcome =
-  | { ok: true; attempts: number }
-  | { ok: false; attempts: number; remaining: number; message: string };
+  | { ok: true; attempts: number; key: DeliberationKey }
+  | RefusedOutcome;
+
+/** The identity of a change: who is doing what, and how they described it. */
+function deliberationKeyOf(request: DeliberationRequest): DeliberationKey {
+  return contentHash(
+    [request.operation, request.what, request.explanation].join("\u0000")
+  ) as DeliberationKey;
+}
 
 interface Run {
-  key: string;
+  key: DeliberationKey;
   attempts: number;
   expiresAt: number;
 }
@@ -95,8 +134,8 @@ export class DeliberationGate {
   private readonly ttlMs: number;
   private readonly now: () => number;
 
-  /** One slot, deliberately: a run is broken by any other operation. */
-  private run: Run | null = null;
+  /** Keyed, so concurrent runs over different changes do not evict each other. */
+  private readonly runs = new Map<string, Run>();
 
   constructor(config: DeliberationConfig = {}) {
     const {
@@ -123,22 +162,23 @@ export class DeliberationGate {
    * carried out.
    */
   consider(request: DeliberationRequest): DeliberationOutcome {
-    const key = contentHash(
-      [request.operation, request.what, request.explanation].join("\u0000")
-    );
     const now = this.now();
+
+    // Swept here rather than on a timer: a gate nobody calls costs nothing,
+    // and nothing has to keep the process awake to tidy up after it.
+    this.evictExpired(now);
+
+    const key = deliberationKeyOf(request);
     const attempts = this.nextAttemptCount({ key, now });
 
-    if (attempts >= this.requiredAttempts) {
-      // Deliberately not cleared here. Passing the gate is not the same as the
-      // operation having happened, and an operation that then fails must not
-      // cost the caller a second round of explaining itself to the user.
-      // `settle` is what ends a run, once the work is actually done.
-      this.run = { key, attempts, expiresAt: now + this.ttlMs };
-      return { ok: true, attempts };
-    }
+    // Recorded whether or not this attempt passes. Passing is not the same as
+    // the operation having happened, and an operation that then fails must not
+    // cost the caller a second round of explaining itself to the user.
+    // `settle` is what ends a run, once the work is actually done.
+    this.runs.set(key, { key, attempts, expiresAt: now + this.ttlMs });
 
-    this.run = { key, attempts, expiresAt: now + this.ttlMs };
+    if (attempts >= this.requiredAttempts) return { ok: true, attempts, key };
+
     const remaining = this.requiredAttempts - attempts;
     return {
       ok: false,
@@ -149,18 +189,57 @@ export class DeliberationGate {
   }
 
   /**
+   * Put the operation behind the gate and settle it correctly on the way out.
+   *
+   * `consider` and `settle` are the same thing done by hand, and by hand the
+   * settle is easy to lose: every early return between the two is a way to
+   * leave a passed run standing, and losing it does nothing visible at the
+   * time. Here the only way through is the callback.
+   *
+   * `succeeded` has no default on purpose. Whether a result counts as the work
+   * having happened is the caller's convention -- in this repository a handler
+   * reports failure by returning an error response, not by throwing, so a
+   * default of "returned without throwing" would settle exactly the runs that
+   * must survive. A required argument makes the caller say which it is.
+   */
+  async run<T>(params: {
+    request: DeliberationRequest;
+    work: () => Promise<T>;
+    succeeded: (result: T) => boolean;
+    onRefused: (outcome: RefusedOutcome) => T;
+  }): Promise<T> {
+    const { request, work, succeeded, onRefused } = params;
+
+    const outcome = this.consider(request);
+    if (!outcome.ok) return onRefused(outcome);
+
+    // An exception is not a report of failure, it is the absence of one, so the
+    // run stays: the caller may retry without explaining itself again.
+    const result = await work();
+
+    if (succeeded(result)) this.settle(outcome.key);
+    return result;
+  }
+
+  /**
    * Where this attempt lands in a run: 1 starts a fresh one, anything higher
-   * continues the stored one. Only an attempt with the same key, against a slot
+   * continues the stored one. Only an attempt with the same key, against a run
    * that has not expired, continues.
    */
   private nextAttemptCount(params: { key: string; now: number }): number {
     const { key, now } = params;
-    const previous = this.run;
+    const previous = this.runs.get(key);
 
-    if (previous === null) return 1;
-    if (previous.key !== key) return 1;
+    if (previous === undefined) return 1;
     if (now >= previous.expiresAt) return 1;
     return previous.attempts + 1;
+  }
+
+  /** Runs nobody came back to. Their TTL is the only thing that ends them. */
+  private evictExpired(now: number): void {
+    for (const [key, run] of this.runs) {
+      if (now >= run.expiresAt) this.runs.delete(key);
+    }
   }
 
   /**
@@ -171,13 +250,30 @@ export class DeliberationGate {
    * this: leaving the run standing is what lets it retry without putting the
    * user through the same explanation twice.
    */
-  settle(): void {
-    this.run = null;
+  settle(key: DeliberationKey): void {
+    this.runs.delete(key);
   }
 
-  /** Drop any run in progress, settled or not. */
-  reset(): void {
-    this.run = null;
+  /**
+   * How many runs are being held.
+   *
+   * Only for tests, and only one thing is worth asserting with it: that runs
+   * nobody came back to are actually dropped. A per-key store that never shrank
+   * would pass every other test in this file.
+   */
+  runCountForTesting(): number {
+    return this.runs.size;
+  }
+
+  /**
+   * Drop every run, passed or not.
+   *
+   * Named for its only legitimate caller. Nothing in a running server wants to
+   * discard other operations' runs, and before the store was keyed this was
+   * indistinguishable from settling the one run that existed.
+   */
+  resetAllForTesting(): void {
+    this.runs.clear();
   }
 }
 
@@ -207,9 +303,6 @@ Then repeat the **identical** call, including the same \`explanation\`:
 The wording is part of what identifies this attempt. Changing the arguments --
 including rephrasing the explanation -- starts a new run rather than continuing
 this one, and you will be told this again.
-
-Do not perform another gated operation in between either. Attempts have to be
-consecutive, so an intervening one ends this run and the count starts over.
 
 Do not work around this by reaching for a different tool or writing the file
 directly.`;

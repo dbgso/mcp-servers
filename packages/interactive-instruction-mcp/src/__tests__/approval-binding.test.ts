@@ -220,12 +220,22 @@ describe("link changes are bound", () => {
     const other = uniqueId("other");
     for (const id of [host, other]) await makeDoc(id);
 
-    const requested = await linkAdd.execute({
-      rawParams: { action: "link_add", id: host, relatedDocs: [other], confirmed: true },
+    // The notification this used to check is gone: a relatedDocs change is
+    // reversible by the opposite action, so it goes through the deliberation
+    // gate instead. The list still has to be named -- now in the preview the
+    // refusal carries, which is what the caller reads before committing.
+    const refused = await linkAdd.execute({
+      rawParams: {
+        action: "link_add",
+        id: host,
+        relatedDocs: [other],
+        explanation: "The host document should lead to the other one.",
+      },
       context,
     });
 
-    expect(text(requested)).toContain(other);
+    expect(text(refused)).toContain(other);
+    expect(text(refused)).toContain("Not Yet");
   });
 });
 
