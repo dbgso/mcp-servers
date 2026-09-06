@@ -30,13 +30,12 @@ export interface RenderParams {
  */
 export interface Renderer<TOutput = string> {
   /**
-   * Whether this renderer produces the requested format.
+   * The format this renderer produces, as a plain name.
    *
-   * The renderer decides, rather than exposing a name for something else to
-   * compare against: how a format is recognised — an alias, a file extension,
-   * a media type — is the renderer's business, and a caller matching on a
-   * `format` field would be reaching inside it.
+   * Matching is left to whoever holds the renderers, so the normalisation —
+   * case, surrounding space, aliases — is written once there rather than
+   * repeated in every renderer, where each is free to get it slightly wrong.
    */
-  isSupport: (format: string) => boolean;
+  readonly format: string;
   render: (params: RenderParams) => TOutput;
 }

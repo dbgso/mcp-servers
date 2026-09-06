@@ -165,19 +165,16 @@ interface RenderParams {          // the whole of what a renderer is asked to dr
 }
 
 interface Renderer<TOutput = string> {
-  isSupport: (format: string) => boolean;
+  readonly format: string;
   render: (params: RenderParams) => TOutput;
 }
 ```
 
-The renderer decides whether it handles a format, rather than exposing a name
-for something else to compare against. How a format is recognised — an alias,
-a file extension, a media type — is the renderer's business; a caller matching
-on a `format` field would be reaching inside it.
-
-```ts
-const renderer = renderers.find((r) => r.isSupport(format));
-```
+A renderer declares the format it produces and leaves matching to whoever holds
+the renderers. Asking each renderer to decide instead would mean writing the
+normalisation — case, surrounding space, aliases — once per renderer, with each
+free to get it slightly wrong; declared as a name, it is one line of data and
+the matching lives in one place.
 
 A format's own settings are **not** arguments to `render` — they are bound when
 the renderer is built, so every renderer answers the same signature and a
@@ -185,9 +182,8 @@ caller that does not know the format can still drive it:
 
 ```ts
 class HtmlRenderer implements Renderer {
-  private static readonly FORMATS = ["html", "htm"];
+  readonly format = "html";
   constructor(private readonly options: HtmlRendererOptions = {}) {}
-  isSupport = (format: string): boolean => HtmlRenderer.FORMATS.includes(format.trim().toLowerCase());
   render = (params: RenderParams): string => renderHtml({ ...params, ...this.options });
 }
 ```
@@ -218,8 +214,8 @@ contravariantly — a renderer that quietly demanded more than `RenderParams`
 is rejected instead of slipping through.
 
 A test walks `renderers/*/` and asserts each directory's entry point exports a
-`Renderer` that answers to the directory's name, so a second format cannot
-quietly arrive as a bare function beside the seam instead of through it.
+`Renderer` named after the directory, so a second format cannot quietly arrive
+as a bare function beside the seam instead of through it.
 
 ## Errors
 

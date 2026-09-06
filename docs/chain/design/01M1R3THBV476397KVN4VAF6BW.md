@@ -4,7 +4,7 @@ type: design
 title: mcp-shared-graph-viz 実装設計
 requires: 01M1R3GH8CWAPDCSEM3WQTTZ81
 created: 2026-09-05T06:24:18.811Z
-updated: 2026-09-06T05:47:03.266Z
+updated: 2026-09-06T06:16:21.329Z
 ---
 
 # mcp-shared-graph-viz 実装設計
@@ -78,24 +78,19 @@ interface RenderParams {          // レンダラに描かせるものの全て
 }
 
 interface Renderer<TOutput = string> {
-  isSupport: (format: string) => boolean;
+  readonly format: string;
   render: (params: RenderParams) => TOutput;
 }
 ```
 
-**形式に対応するかはレンダラ自身が答える。** 名前を外に出して呼び出し側に比較させると、「どう照合するか」（別名・拡張子・メディアタイプ）がレンダラの外に漏れる。
-
-```ts
-const renderer = renderers.find((r) => r.isSupport(format));
-```
+レンダラは produce する形式を**名前として宣言するだけ**にし、照合はレンダラ群を保持する側に置く。レンダラ自身に判定させると、正規化（大小文字・前後の空白・別名）を実装ごとに書くことになり、**N個それぞれで間違えられる**。宣言ならデータ1行で、照合は1箇所。
 
 **形式固有の設定は `render` の引数にしない。** 構築時に束縛する。
 
 ```ts
 class HtmlRenderer implements Renderer {
-  private static readonly FORMATS = ["html", "htm"];
+  readonly format = "html";
   constructor(private readonly options: HtmlRendererOptions = {}) {}
-  isSupport = (format: string): boolean => HtmlRenderer.FORMATS.includes(format.trim().toLowerCase());
   render = (params: RenderParams): string => renderHtml({ ...params, ...this.options });
 }
 

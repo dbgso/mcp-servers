@@ -35,30 +35,20 @@ describe("renderers/", () => {
         (value): value is Renderer<unknown> =>
           typeof value === "object" &&
           value !== null &&
-          typeof (value as { isSupport?: unknown }).isSupport === "function" &&
+          typeof (value as { format?: unknown }).format === "string" &&
           typeof (value as { render?: unknown }).render === "function",
       );
 
       expect(renderers).toHaveLength(1);
-      // The directory names the format, so the renderer must answer to it.
-      expect(renderers[0].isSupport(name)).toBe(true);
+      // The directory names the format the renderer produces.
+      expect(renderers[0].format).toBe(name);
     },
   );
 });
 
 describe("htmlRenderer", () => {
-  type Case = { name: string; format: string; expected: boolean };
-  const cases: Case[] = [
-    { name: "its own format", format: "html", expected: true },
-    { name: "a common alias", format: "htm", expected: true },
-    { name: "case and padding are not the caller's problem", format: "  HTML ", expected: true },
-    { name: "another format", format: "svg", expected: false },
-    { name: "a near miss", format: "htmlx", expected: false },
-    { name: "nothing", format: "", expected: false },
-  ];
-
-  it.each(cases)("recognises $name", ({ format, expected }) => {
-    expect(htmlRenderer.isSupport(format)).toBe(expected);
+  it("names its format", () => {
+    expect(htmlRenderer.format).toBe("html");
   });
 
   it("renders through the contract", () => {
