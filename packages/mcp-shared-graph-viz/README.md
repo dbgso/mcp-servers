@@ -246,6 +246,15 @@ The consequence is that it has **no runtime dependencies**. cytoscape is loaded
 by the page from a CDN, pinned to an exact version and overridable via
 `cytoscapeUrl` / `dagreUrls` for an offline or self-hosted copy.
 
+### One warning the page still prints
+
+cytoscape prints `The style value of \`label\` is deprecated for \`width\`` (and
+for `height`). Sizing a node to its label is what this package wants and
+`nodeSize` accepts no other non-numeric value, so there is nothing to migrate
+to; the page keeps it. Everything else cytoscape had to say has been dealt
+with — the font stack it silently rejected, the label mapping it warned about
+once per unlabelled edge, and the custom wheel sensitivity it advises against.
+
 If you need a static image instead — for a Markdown embed, or a reply that
 cannot run a browser — emit DOT or mermaid from the same nodes and edges and
 hand it to `kroki-mcp`.

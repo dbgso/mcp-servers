@@ -22,8 +22,14 @@ export const DEFAULT_PALETTE: Palette = {
   neutral: { fill: "#f4f5f7", stroke: "#9aa3b0", text: "#2f3742" },
 };
 
+/**
+ * Unquoted on purpose. cytoscape validates `font-family` against
+ * `^([\w- "]+(?:\s*,\s*[\w- "]+)*)$` and rejects single quotes outright,
+ * silently falling back to its default font for everything it draws. CSS
+ * accepts multi-word family names unquoted, so one stack serves both.
+ */
 export const DEFAULT_FONT_FAMILY =
-  "ui-sans-serif, -apple-system, 'Segoe UI', 'Helvetica Neue', 'Noto Sans JP', 'Hiragino Sans', Meiryo, sans-serif";
+  "ui-sans-serif, -apple-system, Segoe UI, Helvetica Neue, Noto Sans JP, Hiragino Sans, Meiryo, sans-serif";
 
 export const DEFAULT_FONT_SIZE = 13;
 
