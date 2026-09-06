@@ -301,9 +301,12 @@ export class MarkdownReader {
   }): Promise<AddResult> {
     const { id, content } = params;
 
-    // Containment first: an id that cannot safely become a path is rejected
-    // before anything asks whether this server manages it. Both run before
-    // `documentExists`, which resolves the id.
+    // Containment first so that a traversing id gets the containment error
+    // rather than "outside this server's scope", which would send the caller
+    // looking at configuration instead of at the id. Not a safety ordering --
+    // `isManaged` only compares strings, and the containment that matters is
+    // enforced inside `idToPath` whichever way round these two sit. Both run
+    // before `documentExists`, which resolves the id.
     const idValidation = runValidators({ validators: [new ValidIdValidator({ id })] });
     if (!idValidation.success) {
       return idValidation;

@@ -13,7 +13,7 @@
  * it removes.
  */
 
-const ID_SEPARATOR = "__";
+import { ID_SEPARATOR } from "./document-id.js";
 
 export interface DocumentScope {
   /** When non-empty, only ids under these prefixes are managed. */
