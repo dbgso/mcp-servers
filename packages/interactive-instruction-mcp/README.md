@@ -224,7 +224,9 @@ where nothing can deliver a token. So `apply` is gated differently.
 
 `apply` requires an `explanation`: what the change does and why, in your agent's own words.
 **The first call is always refused**, with instructions to explain the change to you and then
-repeat the identical call. Only the second consecutive identical attempt goes through.
+repeat the identical call. Only the second consecutive identical attempt goes through. The
+refusal comes back as an ordinary response, not an error: being refused is a step in the
+operation rather than a failure of it.
 
 This is **disclosure, not consent**. Nothing verifies that anyone read the explanation. What
 it guarantees is that the change cannot happen silently: a refused call forces the agent to
@@ -240,6 +242,19 @@ of the change and standing by it verbatim. The count is configurable per operati
 `apply` is also not a blind write: it refuses if the document changed after the diff was
 computed, and refuses — discarding the staged update — if the document has since been
 deleted. Staged updates expire after a day.
+
+A run lives in the server process, not on disk. Restarting the server — which includes
+resuming a headless session, since each CLI invocation starts its own server — drops any
+half-finished run, and the next identical call is refused as attempt 1 again. That is the
+safe direction to fail, but a caller that retries automatically should know it can be sent
+around the loop twice.
+
+The gate sits behind the tool, so it only sees callers that chose the tool. Measured over
+fifteen headless runs: with a plain request, 3/3 agents explained the change and handed the
+decision back, against 0/3 without the gate — but told "use whatever method you like", 3/3
+edited the file directly with `Edit` and never called `apply` at all. The control did the
+same, so that is the prompt talking, not the gate. Nothing here can stop a caller that never
+reaches it; that needs something upstream of tool choice, such as a `PreToolUse` hook.
 
 If an operation would be genuinely damaging when an uncooperative agent gets through, this is
 the wrong gate for it. That is why deletion, rename and promotion use tokens instead.

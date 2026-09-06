@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -183,12 +183,17 @@ describe("ApplyHandler", () => {
         context: { reader },
       });
 
+    const textOf = (response: Awaited<ReturnType<typeof apply>>): string =>
+      response.content[0].type === "text" ? response.content[0].text : "";
+
     it("refuses the first attempt and tells the caller to explain the change", async () => {
       await stage("gated-first");
 
       const first = await apply("gated-first", "Adds the v2 body we discussed.");
 
-      expect(first.isError).toBe(true);
+      // A refusal is a step in the operation, not a failure of the tool: an
+      // error response invites the caller to look for another way in.
+      expect(first.isError).toBeFalsy();
       const text = first.content[0].type === "text" ? first.content[0].text : "";
       expect(text).toContain("Explain to the user");
       // Refused means refused: nothing was written.
@@ -214,7 +219,8 @@ describe("ApplyHandler", () => {
       // around: a different explanation is a different attempt.
       const second = await apply("gated-reworded", "Updating the document.");
 
-      expect(second.isError).toBe(true);
+      expect(second.isError).toBeFalsy();
+      expect(textOf(second)).toContain("attempt 1 of 2");
       expect(await fs.readFile(path.join(docsDir, "gated-reworded.md"), "utf-8")).toContain("v1");
     });
 
@@ -226,8 +232,33 @@ describe("ApplyHandler", () => {
       await apply("two", "Applies two.");
       const back = await apply("one", "Applies one.");
 
-      expect(back.isError).toBe(true);
+      expect(back.isError).toBeFalsy();
+      expect(textOf(back)).toContain("attempt 1 of 2");
       expect(await fs.readFile(path.join(docsDir, "one.md"), "utf-8")).toContain("v1");
+    });
+
+    it("keeps the run when the write fails, so the user is asked once", async () => {
+      await stage("gated-writefail");
+      const explanation = "Adds the v2 body we discussed.";
+
+      await apply("gated-writefail", explanation);
+      // Passing the gate is not the same as the work being done. A write that
+      // fails after the fact used to consume the run, which sent the caller
+      // back to attempt 1 and made the user sit through the explanation twice.
+      const failing = vi
+        .spyOn(reader, "updateDocument")
+        .mockResolvedValueOnce({ success: false, error: "disk on fire" });
+      const failed = await apply("gated-writefail", explanation);
+
+      expect(failed.isError).toBe(true);
+      expect(textOf(failed)).toContain("disk on fire");
+
+      failing.mockRestore();
+      const retried = await apply("gated-writefail", explanation);
+
+      expect(retried.isError).toBeFalsy();
+      expect(textOf(retried)).not.toContain("Explain to the user");
+      expect(await fs.readFile(path.join(docsDir, "gated-writefail.md"), "utf-8")).toContain("v2");
     });
 
     it("rejects a call with no explanation at all", async () => {

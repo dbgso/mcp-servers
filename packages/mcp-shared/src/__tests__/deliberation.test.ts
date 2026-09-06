@@ -128,11 +128,12 @@ describe("DeliberationGate", () => {
     });
   });
 
-  it("consumes the run, so the next identical call starts over", () => {
+  it("does not leave the operation unlocked once the run is settled", () => {
     const gate = new DeliberationGate();
 
     gate.consider(request);
     expect(gate.consider(request).ok).toBe(true);
+    gate.settle();
 
     // Passing once does not leave the operation unlocked.
     expect(gate.consider(request).ok).toBe(false);
@@ -155,5 +156,30 @@ describe("DeliberationGate", () => {
       expect(outcome.message).toContain("Explain to the user");
       expect(outcome.message).toContain("writing the file");
     }
+  });
+
+  describe("settling a passed run", () => {
+    it("keeps the run standing until the caller settles it", () => {
+      const gate = new DeliberationGate();
+
+      gate.consider(request);
+      expect(gate.consider(request).ok).toBe(true);
+      // Passing is not the same as the work being done. Until the caller says
+      // it happened, an identical retry must not be sent back to attempt 1.
+      expect(gate.consider(request).ok).toBe(true);
+    });
+
+    it("starts over once the run is settled", () => {
+      const gate = new DeliberationGate();
+
+      gate.consider(request);
+      gate.consider(request);
+      gate.settle();
+
+      const after = gate.consider(request);
+
+      expect(after.ok).toBe(false);
+      expect(after.attempts).toBe(1);
+    });
   });
 });

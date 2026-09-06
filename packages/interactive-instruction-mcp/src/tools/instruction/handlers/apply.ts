@@ -25,6 +25,9 @@ const schema = z.object({
  * instructions to explain the change to the user, and only a second identical
  * attempt goes through.
  *
+ * The refusal comes back as an ordinary response rather than an error, because
+ * it is a step in the operation rather than a failure of it.
+ *
  * This is disclosure, not consent. Nothing verifies the user was told. It makes
  * the change impossible to perform silently, which is the property worth having
  * for an operation whose worst outcome is a document with the wrong text in it.
@@ -107,7 +110,10 @@ export class ApplyHandler extends BaseActionHandler<Args, InstructionContext> {
       explanation,
     });
     if (!deliberated.ok) {
-      return errorResponse(deliberated.message);
+      // Not `errorResponse`. Being refused here is a normal step of this
+      // operation, and dressing it as a tool failure invites the caller to
+      // treat the tool as broken and go looking for another way in.
+      return textResponse(deliberated.message);
     }
 
     // Written through the reader, so the path comes from this server's
@@ -115,8 +121,12 @@ export class ApplyHandler extends BaseActionHandler<Args, InstructionContext> {
     // how a stale `list` outlived an applied update by up to a minute.
     const writeResult = await reader.updateDocument({ id, content: pending.content });
     if (!writeResult.success) {
+      // The run is left standing on purpose: the user has already heard this
+      // explanation once, and a failed write should not make them hear it again.
       return errorResponse(`Error applying update: ${writeResult.error}`);
     }
+
+    deliberation.settle();
 
     await deletePendingUpdate({ docsDir, id });
     await removeDiffFile(pending.diffPath);
