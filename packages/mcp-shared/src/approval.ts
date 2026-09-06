@@ -20,6 +20,8 @@ export {
 
 export type {
   ApprovalRequest,
+  ApprovalRequestResult,
+  NotificationDelivery,
   ApprovalOptions,
   ApprovalResult,
   PendingApproval,

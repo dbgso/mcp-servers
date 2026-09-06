@@ -173,7 +173,7 @@ ${warningSection}` +
 **Action:** add relatedDocs
 **Changes:** ${relatedDocs.join(", ")}
 
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
+${getApprovalRequestedMessage(approvalResult)}` +
       formatNextActions([{
         action: "link_add",
         description: "Apply with token from user",

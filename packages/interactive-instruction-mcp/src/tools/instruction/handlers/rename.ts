@@ -169,7 +169,7 @@ ${backlinks.map((doc) => `- ${doc.id}`).join("\n")}
 **Rename:** ${id} → ${newId}
 ${backlinks.length > 0 ? `**Backlinks to update:** ${backlinks.length}` : ""}
 
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
+${getApprovalRequestedMessage(approvalResult)}` +
       formatNextActions([{
         action: "rename",
         description: "Apply with token from user",
