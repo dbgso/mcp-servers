@@ -11,6 +11,7 @@ export const FCOSE_SCRIPT_URLS = [
 /** cose reworked: faster on large graphs and steadier between runs. */
 export class FcoseLayout extends BaseLayout {
   readonly name = "fcose";
+  override readonly sizesNodesByLabel = true;
   override readonly scriptUrls = FCOSE_SCRIPT_URLS;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
