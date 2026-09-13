@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { contentHash } from "../content-hash.js";
+import { getErrorMessage } from "../error.js";
 
 export { contentHash };
 
@@ -89,15 +90,30 @@ function generateToken(digits = 4): string {
 }
 
 /**
- * Default token source. Honors MCP_APPROVAL_TEST_TOKEN when set, otherwise mints
- * a fresh numeric token. The override exists ONLY so that integration tests which
- * drive the server across a process boundary can approve — the token is delivered
- * out-of-band (never on disk), so a black-box test has no other way to learn it.
- * It is never set in production and does not affect content-binding, single-use,
- * or the "token never written to disk" guarantee. An explicit
- * ApprovalOptions.tokenGenerator still wins over this.
+ * Whether this process is a test run. Gates every affordance that would weaken
+ * the approval gate: the fallback-file write, the desktop notification, and the
+ * fixed-token override.
+ */
+function isTestEnvironment(): boolean {
+  return process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+}
+
+/**
+ * Default token source. Mints a fresh numeric token, except under a test run,
+ * where MCP_APPROVAL_TEST_TOKEN may fix it. The override exists ONLY so that
+ * integration tests which drive the server across a process boundary can
+ * approve — the token is delivered out-of-band (never on disk), so a black-box
+ * test has no other way to learn it.
+ *
+ * The test-environment check is the point. The variable is readable by anything
+ * that can run a shell in this process's environment — including the agent
+ * whose request is being gated — so honoring it outside a test would hand that
+ * agent every token and defeat the notification-only channel entirely. A
+ * leftover export from an integration run must not silently do that.
+ * An explicit ApprovalOptions.tokenGenerator still wins over this.
  */
 function defaultToken(tokenLength: number): string {
+  if (!isTestEnvironment()) return generateToken(tokenLength);
   return process.env.MCP_APPROVAL_TEST_TOKEN || generateToken(tokenLength);
 }
 
@@ -142,10 +158,33 @@ The approval token was sent via desktop notification only.
  * Sends desktop notification and saves to fallback file.
  * Returns a token that the user must provide to confirm.
  */
+/**
+ * - `sent`: handed to the notifier, which reported no error.
+ * - `failed`: the notifier reported an error, so no one has the token.
+ * - `skipped`: no attempt was made -- a test run, or `notify: false`.
+ */
+export type NotificationDelivery = "sent" | "failed" | "skipped";
+
+export interface ApprovalRequestResult {
+  token: string;
+  fallbackPath: string;
+  /**
+   * What became of the notification carrying the token.
+   *
+   * Three states, not a boolean: "nobody got a token" is true both when
+   * delivery failed and when notifications were never attempted, but only the
+   * first is something to warn about. Collapsing them made every response
+   * under a test run announce that approval was impossible.
+   */
+  delivery: NotificationDelivery;
+  /** Why delivery failed, when it did. Only set for "failed". */
+  notifyError?: string;
+}
+
 export async function requestApproval(params: {
   request: ApprovalRequest;
   options?: ApprovalOptions;
-}): Promise<{ token: string; fallbackPath: string }> {
+}): Promise<ApprovalRequestResult> {
   const { request, options = {} } = params;
   const {
     timeoutMs = 5 * 60 * 1000, // 5 minutes
@@ -156,8 +195,7 @@ export async function requestApproval(params: {
     tokenGenerator = () => defaultToken(tokenLength),
   } = options;
 
-  // Check for test environment
-  const isTestEnv = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+  const isTestEnv = isTestEnvironment();
   const shouldSkipFile = skipFile || isTestEnv;
   const shouldNotify = notify && !isTestEnv;
 
@@ -193,16 +231,54 @@ export async function requestApproval(params: {
 
   // Send desktop notification (skip in test environment).
   // This is the only channel that carries the token.
-  if (shouldNotify) {
-    notifier.notify({
-      title: `MCP Approval: ${request.operation}`,
-      message: `Token: ${token}\n${request.description}`,
-      sound: true,
-      wait: true,
-    });
-  }
+  const delivery = shouldNotify
+    ? await sendApprovalNotification({
+        title: `MCP Approval: ${request.operation}`,
+        message: `Token: ${token}\n${request.description}`,
+      })
+    : { delivery: "skipped" as const, error: undefined };
 
-  return { token, fallbackPath };
+  return { token, fallbackPath, delivery: delivery.delivery, notifyError: delivery.error };
+}
+
+/**
+ * How long to wait for the notifier to report a delivery failure.
+ *
+ * `wait: true` means the callback ALSO fires when the human dismisses the
+ * notification, which can be minutes away — so the callback cannot simply be
+ * awaited. The failures worth reporting (no notifier binary, no D-Bus, a
+ * headless or SSH session) arrive immediately, so give them a short grace
+ * period and treat silence as delivery.
+ */
+const NOTIFY_FAILURE_GRACE_MS = 500;
+
+async function sendApprovalNotification(params: {
+  title: string;
+  message: string;
+}): Promise<{ delivery: NotificationDelivery; error?: string }> {
+  const { title, message } = params;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result: { delivery: NotificationDelivery; error?: string }): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => settle({ delivery: "sent" }), NOTIFY_FAILURE_GRACE_MS);
+    // Never hold the process open just to find out a notification succeeded.
+    timer.unref?.();
+
+    try {
+      notifier.notify({ title, message, sound: true, wait: true }, (err) => {
+        if (err) settle({ delivery: "failed", error: getErrorMessage(err) });
+      });
+    } catch (err) {
+      settle({ delivery: "failed", error: getErrorMessage(err) });
+    }
+  });
 }
 
 /**
@@ -276,13 +352,13 @@ export function resendApprovalNotification(requestId: string): boolean {
 
   // Skip notification in test environment.
   // Re-deliver the token via the desktop notification only (never the file).
-  const isTestEnv = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
-  if (!isTestEnv) {
-    notifier.notify({
+  if (!isTestEnvironment()) {
+    // Deliberately not awaited: the caller only needs to know the approval was
+    // still live, and a resend is a retry of a channel already reported as
+    // failing. Errors are swallowed by design here, not by omission.
+    void sendApprovalNotification({
       title: `MCP Approval: ${pending.request.operation}`,
       message: `Token: ${pending.token}\n${pending.request.description}`,
-      sound: true,
-      wait: true,
     });
   }
 
@@ -301,7 +377,25 @@ This action requires user approval. Please provide the approval token.`;
 /**
  * Get a message indicating approval was requested
  */
-export function getApprovalRequestedMessage(_fallbackPath?: string): string {
+export function getApprovalRequestedMessage(params?: {
+  delivery?: NotificationDelivery;
+  notifyError?: string;
+}): string {
+  // Only an actual failure warns. "skipped" means notifications were never
+  // attempted -- a test run, or a caller that turned them off -- which is not
+  // something to tell the caller approval is impossible over.
+  if (params?.delivery === "failed") {
+    return `# Approval Could Not Be Requested
+
+The desktop notification failed to send${params.notifyError ? `: ${params.notifyError}` : ""}.
+
+The token is delivered ONLY through that notification, so nobody can read it and
+this operation cannot be approved. Do NOT try to recover the token by other
+means. Tell the user that desktop notifications are not working in this
+environment — a headless or SSH session, or a missing notifier — so they can fix
+it or approve the change by hand.`;
+  }
+
   return `# Approval Requested
 
 A desktop notification has been sent to the user with the approval token.

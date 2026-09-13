@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { requestApproval, validateApproval, getApprovalRequestedMessage, getApprovalRejectionMessage } from "mcp-shared/approval";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions } from "../types.js";
 import {
@@ -13,15 +12,19 @@ import {
   findInvalidDocs,
   detectCircularReferences,
   calculateNewRelatedDocs,
-  pendingChanges,
+  deliberateLinkChange,
 } from "./link-shared.js";
 
 const schema = z.object({
   action: z.literal("link_add"),
   id: z.string().describe("Document ID to add links to"),
   relatedDocs: z.array(z.string()).describe("Document IDs to add as related"),
-  confirmed: z.boolean().optional(),
-  approvalToken: z.string().optional(),
+  explanation: z
+    .string()
+    .min(1)
+    .describe(
+      "What these links mean and why you are adding them, in your own words, as you described them to the user. Required, and it must be identical across both attempts.",
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -35,7 +38,7 @@ export class LinkAddHandler extends BaseActionHandler<Args, InstructionContext> 
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, relatedDocs, confirmed, approvalToken } = params.args;
+    const { id, relatedDocs, explanation } = params.args;
     const { reader } = params.context;
 
     // Check if document exists
@@ -76,38 +79,25 @@ export class LinkAddHandler extends BaseActionHandler<Args, InstructionContext> 
 
     const newRelated = calcResult.newRelated;
 
-    // Preview mode
-    if (!confirmed && !approvalToken) {
-      return this.showPreview({ id, currentRelated, newRelated, relatedDocs, circularWarnings });
-    }
-
-    // Request approval
-    if (confirmed && !approvalToken) {
-      return this.requestLinkApproval({ id, relatedDocs });
-    }
-
-    // Apply with token
-    if (approvalToken) {
-      return this.applyLink({
-        reader,
-        id,
-        approvalToken,
-        content,
-        frontmatter,
-        newRelated,
-      });
-    }
-
-    return errorResponse("Error: Unexpected state");
+    // Every check that can refuse for free has run, so this is the last point
+    // at which refusing costs nothing. The preview is shown by the refusal.
+    return deliberateLinkChange({
+      linkAction: "link_add",
+      id,
+      newRelated,
+      explanation,
+      preview: this.buildPreview({ id, currentRelated, newRelated, relatedDocs, circularWarnings }),
+      work: () => this.applyLink({ reader, id, content, frontmatter, newRelated }),
+    });
   }
 
-  private showPreview(params: {
+  private buildPreview(params: {
     id: string;
     currentRelated: string[];
     newRelated: string[];
     relatedDocs: string[];
     circularWarnings: string[];
-  }): ToolResponse {
+  }): string {
     const { id, currentRelated, newRelated, relatedDocs, circularWarnings } = params;
     const changedDocs = relatedDocs.filter((d) => !currentRelated.includes(d));
 
@@ -125,7 +115,7 @@ Circular references are discouraged by lint rules. Consider using one-way links 
 `;
     }
 
-    return textResponse(
+    return (
       `## Preview: Adding relatedDocs
 
 **Document:** ${id}
@@ -135,77 +125,26 @@ Circular references are discouraged by lint rules. Consider using one-way links 
 **Adding:** ${changedDocs.join(", ")}
 
 **New relatedDocs:** ${newRelated.length > 0 ? newRelated.join(", ") : "(none)"}
-${warningSection}` +
-      formatNextActions([{
-        action: "link_add",
-        description: "Confirm and proceed",
-        example: `instruction(action: "link_add", id: "${id}", relatedDocs: ${JSON.stringify(relatedDocs)}, confirmed: true)`,
-      }]),
+${warningSection}`
     );
   }
 
-  private async requestLinkApproval(params: {
-    id: string;
-    relatedDocs: string[];
-  }): Promise<ToolResponse> {
-    const { id, relatedDocs } = params;
-    const requestId = `instruction::link_add::${id}`;
-
-    pendingChanges.set(id, {
-      id,
-      linkAction: "link_add",
-      relatedDocs,
-      timestamp: Date.now(),
-    });
-
-    const approvalResult = await requestApproval({
-      request: {
-        id: requestId,
-        operation: "Link add",
-        description: `Add relatedDocs for "${id}"`,
-      },
-    });
-
-    return textResponse(
-      `# Approval Requested
-
-**Document:** ${id}
-**Action:** add relatedDocs
-**Changes:** ${relatedDocs.join(", ")}
-
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
-      formatNextActions([{
-        action: "link_add",
-        description: "Apply with token from user",
-        example: `instruction(action: "link_add", id: "${id}", relatedDocs: ${JSON.stringify(relatedDocs)}, approvalToken: "<token>")`,
-      }]),
-    );
-  }
-
+  /**
+   * The write itself, once the gate has let it through.
+   *
+   * Failure is reported by returning an error response rather than by throwing,
+   * which is what `deliberateLinkChange` reads to decide whether the run is
+   * over: an exception would mean something unforeseen, and would leave the run
+   * standing rather than consuming it.
+   */
   private async applyLink(params: {
     reader: InstructionContext["reader"];
     id: string;
-    approvalToken: string;
     content: string;
     frontmatter: ReturnType<typeof parseFrontmatter>;
     newRelated: string[];
   }): Promise<ToolResponse> {
-    const { reader, id, approvalToken, content, frontmatter, newRelated } = params;
-    const requestId = `instruction::link_add::${id}`;
-
-    const pending = pendingChanges.get(id);
-    if (!pending) {
-      return errorResponse(`Error: No pending change found for "${id}". Please start the approval workflow again.`);
-    }
-
-    const validation = validateApproval({
-      requestId,
-      providedToken: approvalToken,
-    });
-
-    if (!validation.valid) {
-      return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);
-    }
+    const { reader, id, content, frontmatter, newRelated } = params;
 
     // Apply the change
     const newFrontmatter = {
@@ -222,7 +161,6 @@ ${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
     await fs.writeFile(filePath, newContent, "utf-8");
     reader.invalidateCache();
 
-    pendingChanges.delete(id);
 
     return textResponse(
       `Successfully added relatedDocs for "${id}".

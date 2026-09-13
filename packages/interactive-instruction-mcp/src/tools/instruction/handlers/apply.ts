@@ -1,17 +1,44 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
+import { contentHash, DeliberationGate } from "mcp-shared/approval";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
-import { getPendingUpdate, deletePendingUpdate } from "../../../utils/pending-update.js";
-import * as fs from "node:fs/promises";
+import { removeDiffFile } from "../../../utils/diff-utils.js";
+import type { PendingUpdate } from "../../../utils/pending-update.js";
+import { deletePendingUpdate, getPendingUpdate } from "../../../utils/pending-update.js";
+import type { MarkdownReader } from "../../../services/markdown-reader.js";
 
 const schema = z.object({
   action: z.literal("apply"),
   id: z.string(),
+  explanation: z
+    .string()
+    .min(1)
+    .describe(
+      "What this update does and why, in your own words, as you described it to the user. Required, and it must be identical across both attempts."
+    ),
 });
 
-type Args = z.infer<typeof schema>;
+/**
+ * `apply` writes to a promoted document with no token, which is deliberate --
+ * it is the ordinary way documents get maintained, and a notification round
+ * trip on every edit would make that unworkable in a headless session. What it
+ * does have is a deliberation gate: the first attempt is refused with
+ * instructions to explain the change to the user, and only a second identical
+ * attempt goes through.
+ *
+ * The refusal comes back as an ordinary response rather than an error, because
+ * it is a step in the operation rather than a failure of it.
+ *
+ * This is disclosure, not consent. Nothing verifies the user was told. It makes
+ * the change impossible to perform silently, which is the property worth having
+ * for an operation whose worst outcome is a document with the wrong text in it.
+ * The genuinely destructive operations -- delete, rename, promotion -- are
+ * behind content-bound tokens instead.
+ */
+const deliberation = new DeliberationGate();
 
+type Args = z.infer<typeof schema>;
 
 export class ApplyHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "apply";
@@ -22,10 +49,11 @@ export class ApplyHandler extends BaseActionHandler<Args, InstructionContext> {
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id } = params.args;
+    const { id, explanation } = params.args;
+    const { reader } = params.context;
+    const docsDir = reader.getDirectory();
 
-    // Get pending update
-    const pending = await getPendingUpdate(id);
+    const pending = await getPendingUpdate({ docsDir, id });
     if (!pending) {
       return errorResponse(`No pending update found for "${id}".` +
         formatNextActions([{
@@ -35,25 +63,97 @@ export class ApplyHandler extends BaseActionHandler<Args, InstructionContext> {
         }]));
     }
 
-    // Apply the update
-    try {
-      await fs.writeFile(pending.originalPath, pending.content, "utf-8");
-    } catch (error) {
-      return errorResponse(`Error applying update: ${error instanceof Error ? error.message : String(error)}`);
+    // The document has to still be the one the diff was computed against.
+    //
+    // This used to write `pending.content` to `pending.originalPath` with no
+    // check at all -- no re-read, no existence test, no comparison. Three
+    // things followed. An edit made between `update` and `apply` was silently
+    // discarded, so the diff the human read was not the diff that got applied.
+    // A document deleted under an approval token came back, because
+    // `writeFile` recreates. And because the path came out of the stored record
+    // rather than from this reader, another server's file could be written
+    // instead of this one's.
+    const current = await reader.getDocumentContent(id);
+    if (current === null) {
+      await deletePendingUpdate({ docsDir, id });
+      await removeDiffFile(pending.diffPath);
+      return errorResponse(
+        `Document "${id}" no longer exists, so this update was discarded rather than recreating it.` +
+        formatNextActions([{
+          action: "add",
+          description: "Create it again as a draft",
+          example: `instruction(action: "add", id: "${id}", content: "...", description: "...", whenToUse: [...])`,
+        }]));
     }
 
-    // Clean up pending update and diff file
-    await deletePendingUpdate(id);
-    try {
-      await fs.unlink(pending.diffPath);
-    } catch {
-      // Ignore if diff file already deleted
+    if (contentHash(current) !== pending.originalHash) {
+      return errorResponse(
+        `Document "${id}" changed after this update was prepared, so the diff you reviewed is not the diff that would be applied.` +
+        formatNextActions([
+          {
+            action: "cancel",
+            description: "Discard the stale update",
+            example: `instruction(action: "cancel", id: "${id}")`,
+          },
+          {
+            action: "read",
+            description: "Read the document as it stands now",
+            example: `instruction(action: "read", id: "${id}")`,
+          },
+        ]));
     }
+
+    // Every check above has passed, so this is the point of no return -- and
+    // the last point at which refusing costs nothing. The gate is keyed on the
+    // change itself, so re-staging a different update starts a new run.
+    return deliberation.run({
+      request: {
+        operation: `instruction::apply::${id}`,
+        what: `${pending.originalHash}\n${contentHash(pending.content)}`,
+        explanation,
+      },
+      // The run ends only when the update is really on disk. A failed write
+      // leaves it standing on purpose: the user has already heard this
+      // explanation once, and should not have to hear it again.
+      succeeded: (response) => response.isError !== true,
+      // Not `errorResponse`. Being refused here is a normal step of this
+      // operation, and dressing it as a tool failure invites the caller to
+      // treat the tool as broken and go looking for another way in.
+      onRefused: (refused) => textResponse(refused.message),
+      work: () => this.applyPending({ id, pending, reader, docsDir }),
+    });
+  }
+
+  /**
+   * The write itself, once the gate has let it through.
+   *
+   * Reporting failure by returning an error response rather than throwing is
+   * what `succeeded` above reads: an exception would mean something unforeseen
+   * and would leave the run standing, which is not what a rejected write is.
+   */
+  private async applyPending(params: {
+    id: string;
+    pending: PendingUpdate;
+    reader: MarkdownReader;
+    docsDir: string;
+  }): Promise<ToolResponse> {
+    const { id, pending, reader, docsDir } = params;
+
+    // Written through the reader, so the path comes from this server's
+    // documents directory and the list cache is invalidated. Writing raw was
+    // how a stale `list` outlived an applied update by up to a minute.
+    const writeResult = await reader.updateDocument({ id, content: pending.content });
+    if (!writeResult.success) {
+      return errorResponse(`Error applying update: ${writeResult.error}`);
+    }
+
+    await deletePendingUpdate({ docsDir, id });
+    await removeDiffFile(pending.diffPath);
 
     return textResponse(
       `Update applied successfully to "${id}".
 
-Path: ${pending.originalPath}` +
+Path: ${reader.getFilePath(id)}` +
       formatNextActions([
         { action: "read", description: "Read the updated document", example: `instruction(action: "read", id: "${id}")` },
         { action: "list", description: "View all documents", example: `instruction(action: "list")` },

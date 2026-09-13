@@ -1,7 +1,6 @@
 {
   "name": "mcp-interactive-instruction",
-  "version": "2.0.0",
-  "private": true,
+  "version": "1.2.0",
   "description": "MCP server for interactive instruction documents - list, view, add, and update markdown files on demand",
   "type": "module",
   "main": "dist/index.js",
@@ -53,12 +52,14 @@
     "@modelcontextprotocol/sdk": "catalog:",
     "diff": "8.0.3",
     "node-notifier": "catalog:",
+    "yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/diff": "8.0.0",
     "@vitest/coverage-v8": "catalog:",
     "mcp-shared": "workspace:*",
+    "mcp-shared-graph-viz": "workspace:*",
     "tsup": "catalog:",
     "vitest": "catalog:"
   }

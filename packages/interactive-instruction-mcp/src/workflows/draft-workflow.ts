@@ -10,8 +10,7 @@
  * - When confirmed, tool shows diff/summary as supplementary info + sends notification
  */
 
-import * as path from "node:path";
-import * as os from "node:os";
+import { scopedStateDir } from "../services/instance-scope.js";
 import { defineWorkflow, fieldRequired, stateVisited, customValidator, WorkflowManager, type WorkflowDefinition } from "mcp-shared/workflow";
 
 // Workflow states
@@ -96,13 +95,22 @@ const draftWorkflowDefinition: WorkflowDefinition<DraftState, DraftContext, Draf
         return { nextState: "pending_approval" };
       },
     },
-    // pending_approval → applied: Apply with approval token (requires real approval)
+    // pending_approval → applied
+    //
+    // Deliberately NOT `requiresApproval: true`. The approve handler is the
+    // gate: it requests the approval, binds it to the promotion target and the
+    // draft body, and validates the token before calling this. A second gate
+    // here validated against a request id of its own making
+    // (`${instanceId}-${currentState}`), which nothing ever registered, so it
+    // returned `not_found` every time -- and the handler discarded the failure
+    // and promoted regardless. The state machine therefore never reached
+    // `applied`, which is what left stale `pending_approval` entries lying
+    // around for a later draft to inherit.
     {
       from: ["pending_approval"],
       preconditions: [
         stateVisited("user_reviewing"),
       ],
-      requiresApproval: true,
       action: async (ctx) => {
         ctx.approvalToken = "approved";
         return { nextState: "applied" };
@@ -132,17 +140,38 @@ export const nextActionHints: Record<DraftState, string> = {
   applied: "Workflow complete",
 };
 
-// Persistence directory. Overridable via env so parallel test workers can each
-// get an isolated store (the default is a single shared tmp dir).
-const PERSIST_DIR =
-  process.env.MCP_DRAFT_PERSIST_DIR ?? path.join(os.tmpdir(), "mcp-draft-workflows");
+const PERSIST_BASE = "mcp-draft-workflows";
 
-// Workflow manager instance
-export const draftWorkflowManager = new WorkflowManager<DraftState, DraftContext, DraftParams>({
-  definition: draftWorkflow,
-  persistDir: PERSIST_DIR,
-  createInitialContext: (id) => ({
-    draftId: id,
-    content: "",
-  }),
-});
+function buildManager(docsDir: string | null): WorkflowManager<DraftState, DraftContext, DraftParams> {
+  return new WorkflowManager<DraftState, DraftContext, DraftParams>({
+    definition: draftWorkflow,
+    persistDir: scopedStateDir({
+      base: PERSIST_BASE,
+      docsDir,
+      override: process.env.MCP_DRAFT_PERSIST_DIR,
+    }),
+    createInitialContext: (id) => ({
+      draftId: id,
+      content: "",
+    }),
+  });
+}
+
+/**
+ * Reassigned by `configureDraftWorkflowPersistence`, which is why this is a
+ * `let`: ESM exports are live bindings, so importers see the configured manager
+ * without every call site having to thread it through.
+ *
+ * Until configured it falls back to an unscoped store, which is what tests use.
+ */
+export let draftWorkflowManager = buildManager(null);
+
+/**
+ * Point the workflow store at a directory specific to this server's documents.
+ * Called once at startup. Without it, two servers on one machine share a store
+ * keyed by document id, and a draft confirmed in one project can satisfy an
+ * approval in another.
+ */
+export function configureDraftWorkflowPersistence(params: { docsDir: string }): void {
+  draftWorkflowManager = buildManager(params.docsDir);
+}

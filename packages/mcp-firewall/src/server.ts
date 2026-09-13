@@ -147,7 +147,7 @@ function registerProxyExecuteTool(params: {
           const pendingCall = pendingStore.add({ toolName, args, matchedRule });
           auditLogger?.logAsk({ toolName, args, rule: matchedRule, reason: evaluation.reason });
 
-          const { fallbackPath } = await requestApproval({
+          const approvalResult = await requestApproval({
             request: {
               id: pendingCall.id,
               operation: `proxy:${toolName}`,
@@ -159,7 +159,7 @@ function registerProxyExecuteTool(params: {
             content: [
               {
                 type: "text",
-                text: `[APPROVAL REQUIRED] ${evaluation.reason}\n\nRequest ID: ${pendingCall.id}\n\n${getApprovalRequestedMessage(fallbackPath)}\n\nUse proxy_approve tool to approve this call.`,
+                text: `[APPROVAL REQUIRED] ${evaluation.reason}\n\nRequest ID: ${pendingCall.id}\n\n${getApprovalRequestedMessage(approvalResult)}\n\nUse proxy_approve tool to approve this call.`,
               },
             ],
           };

@@ -1,5 +1,8 @@
+import { DeliberationGate } from "mcp-shared/approval";
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
+import type { ToolResponse } from "mcp-shared";
+import { textResponse } from "../types.js";
 
 export { textResponse } from "../types.js";
 
@@ -133,13 +136,83 @@ export function calculateNewRelatedDocs(params: {
 }
 
 /**
- * Pending link change for approval workflow.
+ * What a link approval is bound to: the resulting list, not the delta the
+ * caller asked for.
+ *
+ * The applied list used to be recomputed from the apply-time arguments while
+ * the approval was keyed on the document id alone, so a token approved for
+ * `relatedDocs: ["harmless"]` could be spent on `["evil"]` -- and the
+ * notification named neither, so the swap was undetectable from the human's
+ * side. It is in the notification now too.
+ *
+ * There is deliberately no separate pending-change map. The one that used to
+ * live here was keyed by document id and shared between link_add and
+ * link_remove, so two live approvals for one document clobbered each other and
+ * stranded a valid token. The approval store already tracks what is pending.
  */
-export interface PendingLinkChange {
-  id: string;
+export function buildLinkApprovalWhat(params: {
   linkAction: "link_add" | "link_remove";
-  relatedDocs: string[];
-  timestamp: number;
+  id: string;
+  newRelated: string[];
+}): string {
+  const { linkAction, id, newRelated } = params;
+  return [`${linkAction}: ${id}`, `relatedDocs: ${newRelated.join(",")}`].join("\n");
 }
 
-export const pendingChanges = new Map<string, PendingLinkChange>();
+/**
+ * The gate both link actions go through.
+ *
+ * Shared deliberately. The two are inverses, and a run started for one must not
+ * be continued by the other -- but that falls out of the key rather than out of
+ * separate gates: `buildLinkApprovalWhat` names the action, so `link_add` and
+ * `link_remove` over the same document hash differently. One gate keeps the
+ * eviction sweep and the TTL in one place.
+ */
+const linkDeliberation = new DeliberationGate();
+
+/** Only for tests: a gate is process memory and outlives a single case. */
+export function resetLinkDeliberationForTesting(): void {
+  linkDeliberation.resetAllForTesting();
+}
+
+/**
+ * Put a relatedDocs change behind the deliberation gate.
+ *
+ * These used to end in an out-of-band token: three calls, and a notification
+ * the caller had to get a human to read back. A relatedDocs entry is metadata,
+ * and the operation that undoes it is the other one of this pair, so what the
+ * change warrants is disclosure rather than consent -- which is what this gate
+ * buys, in two calls and without a channel the caller cannot reach. Deletion,
+ * renaming and promotion keep their tokens; those are not reversible by asking
+ * for the opposite.
+ *
+ * The preview rides on the refusal rather than being a step of its own. Seeing
+ * what will change and being asked to explain it are the same moment, and
+ * making them separate calls only meant the explanation was written after the
+ * decision.
+ */
+export async function deliberateLinkChange(params: {
+  linkAction: "link_add" | "link_remove";
+  id: string;
+  newRelated: string[];
+  explanation: string;
+  preview: string;
+  work: () => Promise<ToolResponse>;
+}): Promise<ToolResponse> {
+  const { linkAction, id, newRelated, explanation, preview, work } = params;
+
+  return linkDeliberation.run({
+    request: {
+      operation: `instruction::${linkAction}::${id}`,
+      what: buildLinkApprovalWhat({ linkAction, id, newRelated }),
+      explanation,
+    },
+    // The run ends only once the frontmatter is written. A failed write leaves
+    // it standing so the caller can retry without explaining itself twice.
+    succeeded: (response) => response.isError !== true,
+    // Refusal is a normal step here, not a fault: `errorResponse` would invite
+    // the caller to treat the tool as broken and look for another way in.
+    onRefused: (refused) => textResponse(`${preview}\n\n---\n\n${refused.message}`),
+    work,
+  });
+}

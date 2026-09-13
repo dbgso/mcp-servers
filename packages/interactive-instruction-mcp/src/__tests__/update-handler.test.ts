@@ -309,8 +309,13 @@ Original body.`;
       expect(updateResult.isError).toBeFalsy();
 
       const applyHandler = new ApplyHandler();
+      // The first attempt is refused by design; the second identical one applies.
+      await applyHandler.execute({
+        rawParams: { action: "apply", id: "preserve", explanation: "test: applies the staged update" },
+        context: { reader },
+      });
       const applyResult = await applyHandler.execute({
-        rawParams: { action: "apply", id: "preserve" },
+        rawParams: { action: "apply", id: "preserve", explanation: "test: applies the staged update" },
         context: { reader },
       });
       expect(applyResult.isError).toBeFalsy();
@@ -342,8 +347,13 @@ Original body.`;
       expect(updateResult.isError).toBeFalsy();
 
       const applyHandler = new ApplyHandler();
+      // The first attempt is refused by design; the second identical one applies.
       await applyHandler.execute({
-        rawParams: { action: "apply", id: "override-desc" },
+        rawParams: { action: "apply", id: "override-desc", explanation: "test: applies the staged update" },
+        context: { reader },
+      });
+      await applyHandler.execute({
+        rawParams: { action: "apply", id: "override-desc", explanation: "test: applies the staged update" },
         context: { reader },
       });
 

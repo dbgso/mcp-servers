@@ -45,18 +45,29 @@ vi.mock("node-notifier", () => ({
   notify: vi.fn(),
 }));
 
-// Global mock for mcp-shared to prevent real notifications
+// The approval module is spied on, NOT stubbed.
+//
+// It used to be stubbed, with `validateApproval` hardwired to `{ valid: true }`,
+// which meant no test in this package ever ran the approval gate: every token
+// was accepted, and swapping the promotion target or the draft content after
+// approval looked like an ordinary success. Whole classes of bug were
+// invisible to a green suite.
+//
+// `vi.fn(actual.x)` keeps the call counts tests assert on while running the
+// real implementation, so an invalid token, an expired approval or a content
+// mismatch fails the way it would in production.
+//
+// The token is fixed instead. `requestApproval` honors MCP_APPROVAL_TEST_TOKEN
+// only under a test run, and skips both the desktop notification and the
+// fallback file there, so this has no side effects -- a test simply knows the
+// token the real gate minted.
+process.env.MCP_APPROVAL_TEST_TOKEN = "valid-token";
+
 vi.mock("mcp-shared/approval", async (importOriginal) => {
   const actual = await importOriginal<typeof import("mcp-shared/approval")>();
   return {
     ...actual,
-    requestApproval: vi.fn().mockResolvedValue({
-      token: "mock-token-global",
-      fallbackPath: "/tmp/mock-pending.txt",
-    }),
-    validateApproval: vi.fn().mockReturnValue({ valid: true }),
-    resendApprovalNotification: vi.fn().mockReturnValue(true),
-    getApprovalRequestedMessage: vi.fn().mockReturnValue("Approval requested (mocked)."),
-    getApprovalRejectionMessage: vi.fn().mockReturnValue("Approval rejected (mocked)."),
+    requestApproval: vi.fn(actual.requestApproval),
+    validateApproval: vi.fn(actual.validateApproval),
   };
 });

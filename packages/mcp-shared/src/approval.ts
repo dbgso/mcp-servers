@@ -20,10 +20,23 @@ export {
 
 export type {
   ApprovalRequest,
+  ApprovalRequestResult,
+  NotificationDelivery,
   ApprovalOptions,
   ApprovalResult,
   PendingApproval,
 } from "./utils/approval/core.js";
+
+export {
+  DeliberationGate,
+  DEFAULT_REQUIRED_ATTEMPTS,
+  DEFAULT_DELIBERATION_TTL_MS,
+} from "./utils/approval/deliberation.js";
+export type {
+  DeliberationConfig,
+  DeliberationRequest,
+  DeliberationOutcome,
+} from "./utils/approval/deliberation.js";
 
 export { TokenApprovalStrategy } from "./utils/approval/token.js";
 export type { TokenApprovalConfig } from "./utils/approval/token.js";
