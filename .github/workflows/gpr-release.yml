@@ -36,6 +36,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Without this pnpm logs "Skipped OIDC: ... INCORRECT_PERMISSIONS" and
+      # publishes anyway, unsigned. The token in NODE_AUTH_TOKEN is enough to
+      # write to the registry, so nothing fails -- the snapshot just arrives
+      # with no provenance and no note saying why.
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
