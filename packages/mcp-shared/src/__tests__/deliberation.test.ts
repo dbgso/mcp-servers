@@ -1,6 +1,10 @@
 /**
- * The deliberation gate: a run of consecutive identical attempts, where the
- * caller's own explanation is part of what "identical" means.
+ * The deliberation gate: a run of identical attempts, where the caller's own
+ * explanation is part of what "identical" means.
+ *
+ * Runs are held per key, so what a run tolerates in between is the other half
+ * of the contract, and the tests below say both halves: an unrelated operation
+ * does not break a run, and nothing but the TTL or a settle ends one.
  */
 
 import { describe, it, expect } from "vitest";
@@ -33,7 +37,9 @@ describe("DeliberationGate", () => {
     const gate = new DeliberationGate();
 
     expect(gate.consider(request).ok).toBe(false);
-    expect(gate.consider(request)).toEqual({ ok: true, attempts: 2 });
+    const passed = gate.consider(request);
+    expect(passed.ok).toBe(true);
+    if (passed.ok) expect(passed.attempts).toBe(2);
   });
 
   it("defaults to two attempts", () => {
@@ -58,15 +64,29 @@ describe("DeliberationGate", () => {
       if (!second.ok) expect(second.attempts).toBe(1);
     });
 
-    it("requires the attempts to be consecutive", () => {
+    it("survives an unrelated operation in between", () => {
+      // A caller working through several documents interleaves them. When runs
+      // shared one slot this was the case that could never finish: each
+      // document's first attempt evicted the other's.
       const gate = new DeliberationGate();
 
       gate.consider(request);
       gate.consider({ ...request, operation: "instruction::apply::unrelated" });
       const third = gate.consider(request);
 
-      expect(third.ok).toBe(false);
-      if (!third.ok) expect(third.attempts).toBe(1);
+      expect(third.ok).toBe(true);
+      if (third.ok) expect(third.attempts).toBe(2);
+    });
+
+    it("carries several runs at once without mixing them", () => {
+      const gate = new DeliberationGate();
+      const other = { ...request, operation: "instruction::apply::other" };
+
+      gate.consider(request);
+      gate.consider(other);
+
+      expect(gate.consider(request).ok).toBe(true);
+      expect(gate.consider(other).ok).toBe(true);
     });
   });
 
@@ -132,20 +152,53 @@ describe("DeliberationGate", () => {
     const gate = new DeliberationGate();
 
     gate.consider(request);
-    expect(gate.consider(request).ok).toBe(true);
-    gate.settle();
+    const passed = gate.consider(request);
+    expect(passed.ok).toBe(true);
+    if (passed.ok) gate.settle(passed.key);
 
     // Passing once does not leave the operation unlocked.
     expect(gate.consider(request).ok).toBe(false);
   });
 
-  it("reset drops a run in progress", () => {
+  it("settles only the run it was given", () => {
     const gate = new DeliberationGate();
+    const other = { ...request, operation: "instruction::apply::other" };
 
     gate.consider(request);
-    gate.reset();
+    const passed = gate.consider(request);
+    gate.consider(other);
+    if (passed.ok) gate.settle(passed.key);
+
+    // The other run is mid-flight and has nothing to do with the settled one.
+    expect(gate.consider(other).ok).toBe(true);
+  });
+
+  it("resetAllForTesting drops every run", () => {
+    const gate = new DeliberationGate();
+    const other = { ...request, operation: "instruction::apply::other" };
+
+    gate.consider(request);
+    gate.consider(other);
+    gate.resetAllForTesting();
 
     expect(gate.consider(request).ok).toBe(false);
+    expect(gate.consider(other).ok).toBe(false);
+  });
+
+  it("forgets a run nobody came back to", () => {
+    // With runs held per key, the TTL is the only thing that ends one, so the
+    // store must not keep growing on half-finished runs.
+    let now = 0;
+    const gate = new DeliberationGate({ ttlMs: 100, now: () => now });
+
+    gate.consider(request);
+    gate.consider({ ...request, operation: "instruction::apply::other" });
+    now += 101;
+
+    // Sweeping happens on the next call, so this one both evicts and starts
+    // over rather than continuing either stale run.
+    expect(gate.consider(request).ok).toBe(false);
+    expect(gate.runCountForTesting()).toBe(1);
   });
 
   it("tells the caller not to route around it", () => {
@@ -173,13 +226,106 @@ describe("DeliberationGate", () => {
       const gate = new DeliberationGate();
 
       gate.consider(request);
-      gate.consider(request);
-      gate.settle();
+      const passed = gate.consider(request);
+      if (passed.ok) gate.settle(passed.key);
 
       const after = gate.consider(request);
 
       expect(after.ok).toBe(false);
       expect(after.attempts).toBe(1);
     });
+  });
+});
+
+/**
+ * `run` exists so the settle cannot be lost. `consider`/`settle` by hand leave
+ * one behind on every early return between them, and losing one is silent at
+ * the time -- so these say what happens on each path rather than that the pair
+ * was called.
+ */
+describe("DeliberationGate.run", () => {
+  const ok = { isError: false } as const;
+  const failed = { isError: true } as const;
+  const succeeded = (r: { isError: boolean }) => !r.isError;
+  const onRefused = () => ({ isError: false, refused: true } as const);
+
+  it("does not do the work on the first attempt", async () => {
+    const gate = new DeliberationGate();
+    let ran = 0;
+
+    const result = await gate.run({
+      request,
+      work: async () => { ran += 1; return ok; },
+      succeeded,
+      onRefused,
+    });
+
+    expect(ran).toBe(0);
+    expect(result).toHaveProperty("refused", true);
+  });
+
+  it("does the work on the second, and settles it", async () => {
+    const gate = new DeliberationGate();
+    let ran = 0;
+    const call = () => gate.run({
+      request,
+      work: async () => { ran += 1; return ok; },
+      succeeded,
+      onRefused,
+    });
+
+    await call();
+    await call();
+    expect(ran).toBe(1);
+
+    // Settled, so the next identical call starts the explaining over.
+    await call();
+    expect(ran).toBe(1);
+  });
+
+  it("leaves the run standing when the work reports failure", async () => {
+    // The caller has already explained itself once. A write that was rejected
+    // must not make it explain again.
+    const gate = new DeliberationGate();
+    let ran = 0;
+    const call = (result: { isError: boolean }) => gate.run({
+      request,
+      work: async () => { ran += 1; return result; },
+      succeeded,
+      onRefused,
+    });
+
+    await call(failed);
+    await call(failed);
+    expect(ran).toBe(1);
+
+    await call(ok);
+    expect(ran).toBe(2);
+  });
+
+  it("leaves the run standing when the work throws", async () => {
+    // An exception is not a report of failure, it is the absence of one.
+    const gate = new DeliberationGate();
+
+    await gate.run({ request, work: async () => ok, succeeded, onRefused });
+    await expect(
+      gate.run({
+        request,
+        work: async () => { throw new Error("disk went away"); },
+        succeeded,
+        onRefused,
+      }),
+    ).rejects.toThrow("disk went away");
+
+    let ran = 0;
+    const result = await gate.run({
+      request,
+      work: async () => { ran += 1; return ok; },
+      succeeded,
+      onRefused,
+    });
+
+    expect(ran).toBe(1);
+    expect(result).not.toHaveProperty("refused");
   });
 });

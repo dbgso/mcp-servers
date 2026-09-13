@@ -6,7 +6,7 @@ MCP server for interactive instruction documents. AI agents discover usage throu
 
 - **Learn by doing**: AI calls `instruction_describe()` to learn available actions, then uses `instruction()` with guided responses
 - **Single source of truth**: Each handler defines its own schema — no manual sync needed
-- **Human oversight**: Draft edits are free. Promoted documents are gated — promotion, deletion, rename and link changes need a one-time token delivered out-of-band; content updates cannot be applied silently
+- **Human oversight**: Draft edits are free. Promoted documents are gated — promotion, deletion and rename need a one-time token delivered out-of-band; content and link changes cannot be applied silently
 
 ## Compared to skill files
 
@@ -96,7 +96,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `cancel` — Cancel a pending update
 
 **Metadata & Quality**
-- `link_add` / `link_remove` — Manage related document links (approval required, drafts included)
+- `link_add` / `link_remove` — Manage related document links (deliberation gate, drafts included)
 - `lint` — Check document quality
 - `set_status` — Reset drafts to `editing`, discarding their workflow state (single `id` or batch `ids`)
 - `update_meta` — Generate metadata update prompt (`id` only)
@@ -186,7 +186,7 @@ own lines rather than left to be inferred.
 | `update` | Direct overwrite | Pending diff → `apply` (deliberation gate) / `cancel` |
 | `delete` | Immediate | Preview → `confirmed: true` → token |
 | `rename` | Immediate | Preview → `confirmed: true` → token |
-| `link_add` / `link_remove` | Preview → `confirmed: true` → token | Preview → `confirmed: true` → token |
+| `link_add` / `link_remove` | Preview + refusal → repeat (deliberation gate) | Preview + refusal → repeat (deliberation gate) |
 | Promotion | `approve` (notes → confirmed → token) | — |
 
 Link changes are the one operation that is gated for drafts too: they rewrite `relatedDocs`
@@ -212,21 +212,33 @@ channel the human sees.
 
 | Gate | Actions |
 |---|---|
-| Approval token, content-bound | `approve`, `delete` (promoted), `rename` (promoted), `link_add`, `link_remove` |
-| Deliberation, no token | `update` (promoted) → `apply` |
+| Approval token, content-bound | `approve`, `delete` (promoted), `rename` (promoted) |
+| Deliberation, no token | `update` (promoted) → `apply`, `link_add`, `link_remove` |
 | None | `add`, `update` (draft), `delete` (draft), `rename` (draft), `cancel`, `list`, `read`, `lint`, `set_status`, `update_meta` |
 
-### The deliberation gate on `apply`
+### The deliberation gate
 
 Editing a promoted document is the ordinary way documents get maintained, and a notification
 round trip on every edit would make that unworkable — impossible, in a headless session,
-where nothing can deliver a token. So `apply` is gated differently.
+where nothing can deliver a token. So `apply`, `link_add` and `link_remove` are gated
+differently.
 
-`apply` requires an `explanation`: what the change does and why, in your agent's own words.
+Each requires an `explanation`: what the change does and why, in your agent's own words.
 **The first call is always refused**, with instructions to explain the change to you and then
-repeat the identical call. Only the second consecutive identical attempt goes through. The
-refusal comes back as an ordinary response, not an error: being refused is a step in the
-operation rather than a failure of it.
+repeat the identical call. Only a second identical attempt goes through. The refusal comes
+back as an ordinary response, not an error: being refused is a step in the operation rather
+than a failure of it.
+
+For the link actions the refusal carries the preview, so what would change and the request to
+explain it arrive together — and the whole operation is two calls rather than the three the
+token round used to need. A `relatedDocs` entry is metadata, and the operation that undoes it
+is the other one of the pair; deletion, renaming and promotion keep their tokens because
+asking for the opposite does not undo those.
+
+Runs are held per change, so relating several documents in one sitting works: an attempt for
+one document does not cancel another's. What identifies a run is the operation, the change
+itself, and the explanation verbatim — reword the explanation or alter the links and the run
+starts over.
 
 This is **disclosure, not consent**. Nothing verifies that anyone read the explanation. What
 it guarantees is that the change cannot happen silently: a refused call forces the agent to
@@ -317,7 +329,7 @@ stateDiagram-v2
     pending --> clean: apply(id, explanation) twice, writes it
     pending --> clean: cancel(id) discards it
 
-    clean --> awaiting: delete / rename / link_add / link_remove + confirmed
+    clean --> awaiting: delete / rename + confirmed
     awaiting --> clean: same action + approvalToken
 ```
 

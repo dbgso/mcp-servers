@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { LinkAddHandler } from "../tools/instruction/handlers/link-add.js";
 import { LinkRemoveHandler } from "../tools/instruction/handlers/link-remove.js";
+import { resetLinkDeliberationForTesting } from "../tools/instruction/handlers/link-shared.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import * as fs from "fs";
 import * as path from "path";
@@ -20,6 +21,7 @@ describe("LinkHandler", () => {
   let docsDir: string;
 
   beforeEach(() => {
+    resetLinkDeliberationForTesting();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "link-handler-test-"));
     docsDir = path.join(tempDir, "docs");
     fs.mkdirSync(docsDir, { recursive: true });
@@ -62,6 +64,7 @@ description: Document B
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           id: "doc-b",
           relatedDocs: ["doc-a"],
         },
@@ -90,6 +93,7 @@ description: Document B
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           id: "doc-a",
           relatedDocs: ["doc-b"],
         },
@@ -130,6 +134,7 @@ relatedDocs:
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           id: "doc-a",
           relatedDocs: ["doc-b", "doc-c"],
         },
@@ -154,6 +159,7 @@ description: Document A
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           id: "doc-a",
           relatedDocs: ["doc-a"],
         },
@@ -194,6 +200,7 @@ description: Document C
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           id: "doc-c",
           relatedDocs: ["doc-a"],
         },
@@ -233,6 +240,7 @@ description: Document C
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           id: "doc-a",
           relatedDocs: ["doc-b", "doc-c"],
         },
@@ -269,6 +277,7 @@ relatedDocs:
       const result = await removeHandler.execute({
         rawParams: {
           action: "link_remove",
+          explanation: "Relating these two documents.",
           id: "doc-a",
           relatedDocs: ["doc-b"],
         },
@@ -286,6 +295,7 @@ relatedDocs:
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           relatedDocs: ["doc-b"],
         },
         context: { reader, config: { reminderEnabled: false } },
@@ -305,6 +315,7 @@ description: Document A
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           id: "doc-a",
         },
         context: { reader, config: { reminderEnabled: false } },
@@ -318,6 +329,7 @@ description: Document A
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           id: "nonexistent",
           relatedDocs: ["doc-b"],
         },
@@ -338,6 +350,7 @@ description: Document A
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
+          explanation: "Relating these two documents.",
           id: "doc-a",
           relatedDocs: ["nonexistent"],
         },
@@ -349,264 +362,171 @@ description: Document A
     });
   });
 
-  describe("approval flow", () => {
-    it("should request approval when confirmed is true", async () => {
-      createDoc("doc-a", `---
-description: Document A
----
+  describe("the deliberation gate", () => {
+    const explanation = "Doc A now points at Doc B so the overview leads there.";
 
-# Doc A`);
+    const call = (handler: typeof addHandler, rawParams: Record<string, unknown>) =>
+      handler.execute({
+        rawParams,
+        context: { reader, config: { reminderEnabled: false } },
+      });
 
-      createDoc("doc-b", `---
-description: Document B
----
+    const addOnce = (over: Record<string, unknown> = {}) =>
+      call(addHandler, {
+        action: "link_add",
+        id: "doc-a",
+        relatedDocs: ["doc-b"],
+        explanation,
+        ...over,
+      });
 
-# Doc B`);
+    beforeEach(() => {
+      createDoc("doc-a", `---\ndescription: Document A\n---\n\n# Doc A`);
+      createDoc("doc-b", `---\ndescription: Document B\n---\n\n# Doc B`);
+    });
+
+    it("refuses the first attempt, and says what would change", async () => {
+      const result = await addOnce();
+
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text as string;
+      // The preview is not a step of its own any more: seeing the change and
+      // being asked to explain it are the same moment.
+      expect(text).toContain("Preview: Adding relatedDocs");
+      expect(text).toContain("Not Yet -- Tell the User First");
+
+      const onDisk = fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8");
+      expect(onDisk).not.toContain("doc-b");
+    });
+
+    it("writes on the second identical attempt", async () => {
+      await addOnce();
+      const result = await addOnce();
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text as string).toContain("Successfully added relatedDocs");
+      expect(fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8")).toContain("doc-b");
+    });
+
+    it("takes two calls rather than three", async () => {
+      // The token round is gone. What used to be preview -> confirmed ->
+      // approvalToken is preview+refusal -> apply.
+      await addOnce();
+      await addOnce();
+
+      expect(requestApproval).not.toHaveBeenCalled();
+    });
+
+    it("starts over when the explanation is reworded", async () => {
+      // Committing to one account of the change is the whole signal; retrying
+      // with altered arguments is the reflex it is meant to catch.
+      await addOnce();
+      const result = await addOnce({ explanation: "Same thing, said differently." });
+
+      expect(result.content[0].text as string).toContain("Not Yet");
+      expect(fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8")).not.toContain("doc-b");
+    });
+
+    it("starts over when the links themselves change", async () => {
+      createDoc("doc-c", `---\ndescription: Document C\n---\n\n# Doc C`);
+
+      await addOnce();
+      const result = await addOnce({ relatedDocs: ["doc-c"] });
+
+      expect(result.content[0].text as string).toContain("Not Yet");
+    });
+
+    it("does not let one document's run carry another's", async () => {
+      createDoc("doc-c", `---\ndescription: Document C\n---\n\n# Doc C`);
+
+      // Interleaved, which is how an agent relating several documents works --
+      // and what a single-slot gate could never let finish.
+      await addOnce();
+      await addOnce({ id: "doc-c" });
+      await addOnce();
+
+      expect(fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8")).toContain("doc-b");
+      expect(fs.readFileSync(path.join(docsDir, "doc-c.md"), "utf-8")).not.toContain("doc-b");
+    });
+
+    it("gates link_remove the same way", async () => {
+      createDoc("doc-a", `---\ndescription: Document A\nrelatedDocs:\n  - doc-b\n---\n\n# Doc A`);
+      const removal = () => call(removeHandler, {
+        action: "link_remove",
+        id: "doc-a",
+        relatedDocs: ["doc-b"],
+        explanation: "Doc A no longer leads to Doc B.",
+      });
+
+      const first = await removal();
+      expect(first.content[0].text as string).toContain("Preview: Removing relatedDocs");
+      expect(fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8")).toContain("doc-b");
+
+      await removal();
+      expect(fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8")).not.toContain("doc-b");
+    });
+
+    it("will not let an add run be finished by a remove", async () => {
+      // Same document, same explanation, opposite operations. They hash apart
+      // because the action is part of what the run is keyed on.
+      createDoc("doc-a", `---\ndescription: Document A\nrelatedDocs:\n  - doc-b\n---\n\n# Doc A`);
+
+      await call(addHandler, {
+        action: "link_add", id: "doc-a", relatedDocs: ["doc-b"], explanation,
+      });
+      const result = await call(removeHandler, {
+        action: "link_remove", id: "doc-a", relatedDocs: ["doc-b"], explanation,
+      });
+
+      expect(result.content[0].text as string).toContain("Not Yet");
+      expect(fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8")).toContain("doc-b");
+    });
+
+    it("refuses a change that names a document that does not exist", async () => {
+      // Checked before the gate: making the caller explain a change that
+      // cannot happen wastes the one thing the gate is spending.
+      const result = await addOnce({ relatedDocs: ["ghost"] });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text as string).toContain("do not exist");
+    });
+  });
+
+  describe("changes that need no gate", () => {
+    it("says nothing changed when every link is already there", async () => {
+      createDoc("doc-a", `---\ndescription: Document A\nrelatedDocs:\n  - doc-b\n---\n\n# Doc A`);
+      createDoc("doc-b", `---\ndescription: Document B\n---\n\n# Doc B`);
 
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
           id: "doc-a",
           relatedDocs: ["doc-b"],
-          confirmed: true,
+          explanation: "Nothing to do.",
         },
         context: { reader, config: { reminderEnabled: false } },
       });
 
       expect(result.isError).toBeFalsy();
-      const text = result.content[0].text as string;
-      expect(text).toContain("Approval Requested");
-      expect(requestApproval).toHaveBeenCalled();
+      expect(result.content[0].text as string).toContain("already in relatedDocs");
     });
 
-    it("should apply link when approval token is valid", async () => {
-      createDoc("doc-a", `---
-description: Document A
----
+    it("says nothing changed when the links to remove are not there", async () => {
+      createDoc("doc-a", `---\ndescription: Document A\nrelatedDocs:\n  - doc-c\n---\n\n# Doc A`);
+      createDoc("doc-b", `---\ndescription: Document B\n---\n\n# Doc B`);
 
-# Doc A`);
-
-      createDoc("doc-b", `---
-description: Document B
----
-
-# Doc B`);
-
-      // First request approval
-      await addHandler.execute({
-        rawParams: {
-          action: "link_add",
-          id: "doc-a",
-          relatedDocs: ["doc-b"],
-          confirmed: true,
-        },
-        context: { reader, config: { reminderEnabled: false } },
-      });
-
-      // Then apply with token
-      const result = await addHandler.execute({
-        rawParams: {
-          action: "link_add",
-          id: "doc-a",
-          relatedDocs: ["doc-b"],
-          approvalToken: "valid-token",
-        },
-        context: { reader, config: { reminderEnabled: false } },
-      });
-
-      expect(result.isError).toBeFalsy();
-      const text = result.content[0].text as string;
-      expect(text).toContain("Successfully added");
-      expect(text).toContain("doc-b");
-
-      // Verify file was updated
-      const updatedContent = fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8");
-      expect(updatedContent).toContain("relatedDocs:");
-      expect(updatedContent).toContain("doc-b");
-    });
-
-    it("should apply link_remove when approval token is valid", async () => {
-      createDoc("doc-a", `---
-description: Document A
-relatedDocs:
-  - doc-b
----
-
-# Doc A`);
-
-      createDoc("doc-b", `---
-description: Document B
----
-
-# Doc B`);
-
-      // First request approval
-      await removeHandler.execute({
-        rawParams: {
-          action: "link_remove",
-          id: "doc-a",
-          relatedDocs: ["doc-b"],
-          confirmed: true,
-        },
-        context: { reader, config: { reminderEnabled: false } },
-      });
-
-      // Then apply with token
       const result = await removeHandler.execute({
         rawParams: {
           action: "link_remove",
           id: "doc-a",
           relatedDocs: ["doc-b"],
-          approvalToken: "valid-token",
+          explanation: "Nothing to do.",
         },
         context: { reader, config: { reminderEnabled: false } },
       });
 
       expect(result.isError).toBeFalsy();
-      const text = result.content[0].text as string;
-      expect(text).toContain("Successfully removed");
-
-      // Verify file was updated - relatedDocs should be removed
-      const updatedContent = fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8");
-      expect(updatedContent).not.toContain("doc-b");
-    });
-
-    it("should return no change when removing docs not in relatedDocs", async () => {
-      createDoc("doc-a", `---
-description: Document A
-relatedDocs:
-  - doc-c
----
-
-# Doc A`);
-
-      createDoc("doc-b", `---
-description: Document B
----
-
-# Doc B`);
-
-      const result = await removeHandler.execute({
-        rawParams: {
-          action: "link_remove",
-          id: "doc-a",
-          relatedDocs: ["doc-b"],  // doc-b is not in doc-a's relatedDocs
-        },
-        context: { reader, config: { reminderEnabled: false } },
-      });
-
-      expect(result.isError).toBeFalsy();
-      const text = result.content[0].text as string;
-      expect(text).toContain("None of the specified documents are in relatedDocs");
-    });
-
-    it("rejects a token for an approval that was never requested", async () => {
-      // Ids no other test in this file requests approval for: the approval
-      // store is module-level and outlives a single test.
-      createDoc("unrequested-a", `---
-description: Document A
----
-
-# Doc A`);
-
-      createDoc("unrequested-b", `---
-description: Document B
----
-
-# Doc B`);
-
-      // Try to apply token without first requesting approval
-      const result = await addHandler.execute({
-        rawParams: {
-          action: "link_add",
-          id: "unrequested-a",
-          relatedDocs: ["unrequested-b"],
-          approvalToken: "some-token",
-        },
-        context: { reader, config: { reminderEnabled: false } },
-      });
-
-      // The separate pending-change map this used to consult is gone -- it was
-      // keyed by document id and shared between link_add and link_remove, so
-      // two live approvals for one document clobbered each other. The approval
-      // store is the single record of what is pending, and it has never heard
-      // of this request.
-      expect(result.isError).toBe(true);
-      const text = result.content[0].text as string;
-      expect(text).toContain("not_found");
-    });
-
-    it("should return no change when all docs are already in relatedDocs (line 199)", async () => {
-      createDoc("doc-a", `---
-description: Document A
-relatedDocs:
-  - doc-b
----
-
-# Doc A`);
-
-      createDoc("doc-b", `---
-description: Document B
----
-
-# Doc B`);
-
-      // Try to add doc-b which is already in doc-a's relatedDocs
-      const result = await addHandler.execute({
-        rawParams: {
-          action: "link_add",
-          id: "doc-a",
-          relatedDocs: ["doc-b"],
-        },
-        context: { reader, config: { reminderEnabled: false } },
-      });
-
-      expect(result.isError).toBeFalsy();
-      const text = result.content[0].text as string;
-      expect(text).toContain("All specified documents are already in relatedDocs");
-    });
-
-    it("should return error when approval token is invalid", async () => {
-      createDoc("doc-a", `---
-description: Document A
----
-
-# Doc A`);
-
-      createDoc("doc-b", `---
-description: Document B
----
-
-# Doc B`);
-
-      // First request approval
-      await addHandler.execute({
-        rawParams: {
-          action: "link_add",
-          id: "doc-a",
-          relatedDocs: ["doc-b"],
-          confirmed: true,
-        },
-        context: { reader, config: { reminderEnabled: false } },
-      });
-
-      // Mock validateApproval to return invalid
-      vi.mocked(validateApproval).mockReturnValueOnce({ valid: false, reason: "Token expired" });
-
-      // Then try with invalid token
-      const result = await addHandler.execute({
-        rawParams: {
-          action: "link_add",
-          id: "doc-a",
-          relatedDocs: ["doc-b"],
-          approvalToken: "invalid-token",
-        },
-        context: { reader, config: { reminderEnabled: false } },
-      });
-
-      expect(result.isError).toBe(true);
-      const text = result.content[0].text as string;
-      expect(text).toContain("Token expired");
+      expect(result.content[0].text as string).toContain("None of the specified documents are in relatedDocs");
     });
   });
 });

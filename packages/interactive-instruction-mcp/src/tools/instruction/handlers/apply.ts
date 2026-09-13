@@ -4,7 +4,9 @@ import { contentHash, DeliberationGate } from "mcp-shared/approval";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
 import { removeDiffFile } from "../../../utils/diff-utils.js";
+import type { PendingUpdate } from "../../../utils/pending-update.js";
 import { deletePendingUpdate, getPendingUpdate } from "../../../utils/pending-update.js";
+import type { MarkdownReader } from "../../../services/markdown-reader.js";
 
 const schema = z.object({
   action: z.literal("apply"),
@@ -104,29 +106,46 @@ export class ApplyHandler extends BaseActionHandler<Args, InstructionContext> {
     // Every check above has passed, so this is the point of no return -- and
     // the last point at which refusing costs nothing. The gate is keyed on the
     // change itself, so re-staging a different update starts a new run.
-    const deliberated = deliberation.consider({
-      operation: `instruction::apply::${id}`,
-      what: `${pending.originalHash}\n${contentHash(pending.content)}`,
-      explanation,
-    });
-    if (!deliberated.ok) {
+    return deliberation.run({
+      request: {
+        operation: `instruction::apply::${id}`,
+        what: `${pending.originalHash}\n${contentHash(pending.content)}`,
+        explanation,
+      },
+      // The run ends only when the update is really on disk. A failed write
+      // leaves it standing on purpose: the user has already heard this
+      // explanation once, and should not have to hear it again.
+      succeeded: (response) => response.isError !== true,
       // Not `errorResponse`. Being refused here is a normal step of this
       // operation, and dressing it as a tool failure invites the caller to
       // treat the tool as broken and go looking for another way in.
-      return textResponse(deliberated.message);
-    }
+      onRefused: (refused) => textResponse(refused.message),
+      work: () => this.applyPending({ id, pending, reader, docsDir }),
+    });
+  }
+
+  /**
+   * The write itself, once the gate has let it through.
+   *
+   * Reporting failure by returning an error response rather than throwing is
+   * what `succeeded` above reads: an exception would mean something unforeseen
+   * and would leave the run standing, which is not what a rejected write is.
+   */
+  private async applyPending(params: {
+    id: string;
+    pending: PendingUpdate;
+    reader: MarkdownReader;
+    docsDir: string;
+  }): Promise<ToolResponse> {
+    const { id, pending, reader, docsDir } = params;
 
     // Written through the reader, so the path comes from this server's
     // documents directory and the list cache is invalidated. Writing raw was
     // how a stale `list` outlived an applied update by up to a minute.
     const writeResult = await reader.updateDocument({ id, content: pending.content });
     if (!writeResult.success) {
-      // The run is left standing on purpose: the user has already heard this
-      // explanation once, and a failed write should not make them hear it again.
       return errorResponse(`Error applying update: ${writeResult.error}`);
     }
-
-    deliberation.settle();
 
     await deletePendingUpdate({ docsDir, id });
     await removeDiffFile(pending.diffPath);
