@@ -61,8 +61,10 @@ describe("ApplyHandler", () => {
     await fs.writeFile(diffPath, "diff content");
 
     await savePendingUpdate({
+      docsDir,
       id: "test-doc",
       content: "# Updated\n\nNew content.",
+      originalContent: "# Original\n\nOld content.",
       originalPath,
       diffPath,
     });
@@ -83,36 +85,96 @@ describe("ApplyHandler", () => {
     expect(content).toContain("New content");
 
     // Verify pending was cleaned up
-    const pending = await getPendingUpdate("test-doc");
+    const pending = await getPendingUpdate({ docsDir, id: "test-doc" });
     expect(pending).toBeNull();
   });
 
-  it("returns error when file write fails", async () => {
-    // Create pending update with invalid path (directory doesn't exist)
-    const invalidPath = path.join(tempDir, "nonexistent", "deep", "nested", "file.md");
+  it("discards a pending update whose document is gone instead of recreating it", async () => {
+    // The document was deleted after the update was staged -- and deleting a
+    // promoted document takes an approval token. `apply` used to write
+    // `pending.content` to the stored path regardless, which brought the
+    // document back without any approval.
     const diffPath = path.join(tempDir, "test.diff");
     await fs.writeFile(diffPath, "diff content");
 
     await savePendingUpdate({
-      id: "write-fail-test",
-      content: "# Content",
-      originalPath: invalidPath,
+      docsDir,
+      id: "deleted-doc",
+      content: "# Resurrected",
+      originalContent: "# Original",
+      originalPath: path.join(docsDir, "deleted-doc.md"),
       diffPath,
     });
 
-    // Try to apply
     const result = await handler.execute({
-      rawParams: { action: "apply", id: "write-fail-test" },
+      rawParams: { action: "apply", id: "deleted-doc" },
       context: { reader },
     });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].type === "text" && result.content[0].text).toContain(
-      "Error applying update"
+      "no longer exists"
     );
+    await expect(fs.access(path.join(docsDir, "deleted-doc.md"))).rejects.toThrow();
+    expect(await getPendingUpdate({ docsDir, id: "deleted-doc" })).toBeNull();
+  });
 
-    // Clean up the pending update
-    await deletePendingUpdate("write-fail-test");
+  it("does not leave a stale description in the list cache", async () => {
+    const originalPath = path.join(docsDir, "cached.md");
+    const originalContent = "---\ndescription: OLD DESC\n---\n\n# Cached";
+    await fs.writeFile(originalPath, originalContent);
+
+    // Populate the cache the way a `list` call would.
+    await reader.listDocuments({ recursive: true });
+
+    const diffPath = path.join(tempDir, "cached.diff");
+    await fs.writeFile(diffPath, "diff content");
+    await savePendingUpdate({
+      docsDir,
+      id: "cached",
+      content: "---\ndescription: NEW DESC\n---\n\n# Cached",
+      originalContent,
+      originalPath,
+      diffPath,
+    });
+
+    await handler.execute({ rawParams: { action: "apply", id: "cached" }, context: { reader } });
+
+    // `apply` used to write through raw fs, bypassing the reader, so every
+    // other write path invalidated the cache and this one did not -- `list`
+    // served the old description for up to the full TTL.
+    const listed = await reader.listDocuments({ recursive: true });
+    const doc = listed.documents.find((d) => d.id === "cached");
+    expect(doc?.description).toBe("NEW DESC");
+  });
+
+  it("refuses when the document changed after the update was prepared", async () => {
+    const originalPath = path.join(docsDir, "raced.md");
+    await fs.writeFile(originalPath, "# Raced\n\nv1");
+
+    const diffPath = path.join(tempDir, "raced.diff");
+    await fs.writeFile(diffPath, "diff content");
+
+    await savePendingUpdate({
+      docsDir,
+      id: "raced",
+      content: "# Raced\n\nv2 from the agent",
+      originalContent: "# Raced\n\nv1",
+      originalPath,
+      diffPath,
+    });
+
+    // Someone edits the file by hand in the meantime.
+    await fs.writeFile(originalPath, "# Raced\n\nhand-written edit");
+    reader.invalidateCache();
+
+    const result = await handler.execute({
+      rawParams: { action: "apply", id: "raced" },
+      context: { reader },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(await fs.readFile(originalPath, "utf-8")).toContain("hand-written edit");
   });
 
 });
@@ -163,12 +225,16 @@ describe("CancelHandler", () => {
   it("cancels pending update and cleans up", async () => {
     // Create pending update
     const originalPath = path.join(docsDir, "test-doc.md");
+    const originalContent = "# Original";
+    await fs.writeFile(originalPath, originalContent);
     const diffPath = path.join(tempDir, "test.diff");
     await fs.writeFile(diffPath, "diff content");
 
     await savePendingUpdate({
+      docsDir,
       id: "test-doc",
       content: "# New",
+      originalContent,
       originalPath,
       diffPath,
     });
@@ -185,7 +251,7 @@ describe("CancelHandler", () => {
     );
 
     // Verify pending was cleaned up
-    const pending = await getPendingUpdate("test-doc");
+    const pending = await getPendingUpdate({ docsDir, id: "test-doc" });
     expect(pending).toBeNull();
   });
 });

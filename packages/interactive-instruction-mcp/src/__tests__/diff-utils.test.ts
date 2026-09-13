@@ -1,5 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as os from "node:os";
 import { generateDiff, formatDiffForDisplay, writeDiffToFile } from "../utils/diff-utils.js";
 
 describe("diff-utils", () => {
@@ -76,6 +78,13 @@ describe("diff-utils", () => {
 
   describe("writeDiffToFile", () => {
     const createdFiles: string[] = [];
+    // Diff files are scoped to the documents directory, so that two servers on
+    // one machine do not write into each other's store.
+    let docsDir: string;
+
+    beforeEach(async () => {
+      docsDir = await fs.mkdtemp(path.join(os.tmpdir(), "diff-utils-docs-"));
+    });
 
     afterEach(async () => {
       for (const file of createdFiles) {
@@ -90,7 +99,7 @@ describe("diff-utils", () => {
 
     it("writes diff to temp file and returns path", async () => {
       const diff = "--- a\n+++ b\n-old\n+new";
-      const filePath = await writeDiffToFile({ diff, id: "test-doc" });
+      const filePath = await writeDiffToFile({ diff, id: "test-doc", docsDir });
       createdFiles.push(filePath);
 
       expect(filePath).toContain("test-doc");
@@ -100,12 +109,14 @@ describe("diff-utils", () => {
       expect(content).toBe(diff);
     });
 
-    it("sanitizes id for filename", async () => {
+    it("encodes an id that is not filename-safe", async () => {
       const diff = "test diff";
-      const filePath = await writeDiffToFile({ diff, id: "path/to/doc" });
+      const filePath = await writeDiffToFile({ diff, id: "path/to/doc", docsDir });
       createdFiles.push(filePath);
 
-      expect(filePath).toContain("path_to_doc");
+      // Percent-encoded rather than character-replaced, so two ids cannot land
+      // on the same diff file.
+      expect(path.basename(filePath)).toContain("path%2Fto%2Fdoc");
       expect(filePath).not.toContain("/to/");
     });
   });

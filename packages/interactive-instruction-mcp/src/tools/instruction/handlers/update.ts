@@ -5,8 +5,8 @@ import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
 import type { DocumentFrontmatter } from "../../../types/index.js";
 import { updateFrontmatter, parseFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
-import { generateDiff, writeDiffToFile } from "../../../utils/diff-utils.js";
-import { savePendingUpdate } from "../../../utils/pending-update.js";
+import { generateDiff, removeDiffFile, writeDiffToFile } from "../../../utils/diff-utils.js";
+import { getPendingUpdate, savePendingUpdate } from "../../../utils/pending-update.js";
 
 const schema = z.object({
   action: z.literal("update"),
@@ -130,7 +130,7 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
     originalPath: string;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, content, description, whenToUse, originalContent, originalPath } = params;
+    const { id, content, description, whenToUse, originalContent, originalPath, reader } = params;
 
     // Preserve existing frontmatter if not overridden
     const existingFrontmatter = parseFrontmatter(originalContent);
@@ -156,13 +156,20 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
       return textResponse(`No changes detected for "${id}".`);
     }
 
-    // Write diff to file
-    const diffPath = await writeDiffToFile({ diff, id });
+    const docsDir = reader.getDirectory();
 
-    // Save pending update
+    // Re-staging replaces the previous entry, so its diff file has no owner
+    // left to clean it up. They used to accumulate in tmp forever.
+    const superseded = await getPendingUpdate({ docsDir, id });
+    await removeDiffFile(superseded?.diffPath);
+
+    const diffPath = await writeDiffToFile({ diff, id, docsDir });
+
     await savePendingUpdate({
+      docsDir,
       id,
       content: finalContent,
+      originalContent,
       originalPath,
       diffPath,
     });
