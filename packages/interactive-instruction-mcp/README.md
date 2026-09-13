@@ -6,7 +6,7 @@ MCP server for interactive instruction documents. AI agents discover usage throu
 
 - **Learn by doing**: AI calls `instruction_describe()` to learn available actions, then uses `instruction()` with guided responses
 - **Single source of truth**: Each handler defines its own schema — no manual sync needed
-- **Human oversight**: Draft operations are free, promoted document changes require approval
+- **Human oversight**: Draft edits are free. Promoted documents are gated — promotion, deletion, rename and link changes need a one-time token delivered out-of-band; content updates go through a diff you explicitly apply or cancel
 
 ## Tools
 
@@ -34,7 +34,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 
 **Draft Operations**
 - `add` — Create a new draft (`id`, `content`, `description`, `whenToUse` required)
-- `update` — Update a draft (direct) or promoted document (pending + apply/cancel)
+- `update` — Update a draft (direct overwrite) or promoted document (writes a pending diff; no token — see `apply` / `cancel`)
 - `delete` — Delete a draft (instant) or promoted document (approval required)
 - `rename` — Rename a draft (instant) or promoted document (approval required)
 
@@ -46,7 +46,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `cancel` — Cancel a pending update
 
 **Metadata & Quality**
-- `link_add` / `link_remove` — Manage related document links
+- `link_add` / `link_remove` — Manage related document links (approval required, drafts included)
 - `lint` — Check document quality
 - `set_status` — Set draft workflow status (single `id` or batch `ids`)
 - `update_meta` — Generate metadata update prompt (`id` only)
@@ -130,22 +130,91 @@ own lines rather than left to be inferred.
 
 ### Draft vs Promoted
 
-| | Draft | Promoted |
+| Operation | Draft (`_mcp_drafts/`) | Promoted (root directories) |
 |---|---|---|
-| Location | `_mcp_drafts/` | Root directories |
-| Create/Update/Delete | Free | Requires approval |
-| Approval workflow | add → approve (notes → confirmed → token) | N/A |
+| `add` | Free | Create a draft, then `approve` it |
+| `update` | Direct overwrite | Pending diff → `apply` / `cancel` (no token) |
+| `delete` | Immediate | Preview → `confirmed: true` → token |
+| `rename` | Immediate | Preview → `confirmed: true` → token |
+| `link_add` / `link_remove` | Preview → `confirmed: true` → token | Preview → `confirmed: true` → token |
+| Promotion | `approve` (notes → confirmed → token) | — |
 
-### Approval Workflow
+Link changes are the one operation that is gated for drafts too: they rewrite `relatedDocs`
+frontmatter on both sides of the link, so a draft edit can reach a promoted document.
+
+### Approval Model
+
+A gated action is approved out-of-band. The token travels **only** through the desktop
+notification and is never written to disk — the file at `$TMPDIR/mcp-approval/pending.txt`
+records that an approval is pending, without the token — so the agent that requested the
+approval cannot read the token back and approve itself. Tokens are single-use and expire
+after 5 minutes.
+
+| Gate | Actions |
+|---|---|
+| Approval token | `approve`, `delete` (promoted), `rename` (promoted), `link_add`, `link_remove` |
+| Diff preview, no token | `update` (promoted) → `apply` / `cancel` |
+| None | `add`, `update` (draft), `delete` (draft), `rename` (draft), `list`, `read`, `lint`, `set_status`, `update_meta` |
+
+### Draft Lifecycle
+
+Draft promotion is a state machine (`src/workflows/draft-workflow.ts`). State is persisted
+and mirrored into the document's `status` frontmatter, so a draft resumes where it left off.
+
+```mermaid
+stateDiagram-v2
+    [*] --> editing
+    editing --> self_review: add(id, content, description, whenToUse)
+    self_review --> user_reviewing: approve(notes)
+    user_reviewing --> pending_approval: approve(confirmed) + desktop notification
+    pending_approval --> applied: approve(approvalToken)
+    applied --> [*]
+```
+
+| State | What has to happen next |
+|---|---|
+| `editing` | Draft exists. `add` submits its content and moves it on immediately. |
+| `self_review` | AI reviews its own draft and records `notes`. |
+| `user_reviewing` | AI explains the draft to the user **in its own words**. The tool deliberately withholds the content here so the explanation cannot be copied from it. |
+| `pending_approval` | User reads the token from the desktop notification and hands it to the AI. |
+| `applied` | Draft moved out of `_mcp_drafts/` into the documentation tree. |
+
+The same flow as calls:
 
 ```
 1. instruction(action: "add", id: "new-doc", content: "...", description: "...", whenToUse: [...])
 2. instruction(action: "approve", id: "new-doc", notes: "<self-review>")
-3. [AI explains to user]
+3. [AI explains the draft to the user]
 4. instruction(action: "approve", id: "new-doc", confirmed: true)
-5. [User provides token]
+5. [User reads the token from the desktop notification]
 6. instruction(action: "approve", id: "new-doc", approvalToken: "<token>")
 ```
+
+Batch the confirmation step with `ids: "a,b,c"`, and skip the consecutive-approval warning
+with `force: true`. Promote to a different location with `targetId`.
+
+### Promoted Document Operations
+
+Editing an already-promoted document does not go through the draft state machine. Content
+updates take the pending-diff route; everything else takes the token route.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "no pending change" as clean
+    state "pending update" as pending
+    state "awaiting token" as awaiting
+
+    clean --> pending: update(id, content) stages a diff
+    pending --> clean: apply(id) writes it
+    pending --> clean: cancel(id) discards it
+
+    clean --> awaiting: delete / rename / link_add / link_remove + confirmed
+    awaiting --> clean: same action + approvalToken
+```
+
+`update` takes no approval parameters at all. On a promoted document it stages the change and
+returns the unified diff; nothing on disk has moved until `apply` is called.
 
 ## Installation
 
