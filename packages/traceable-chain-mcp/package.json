@@ -36,7 +36,7 @@
     "@modelcontextprotocol/sdk": "catalog:",
     "mcp-shared": "workspace:*",
     "ulid": "catalog:",
-    "yaml": "2.7.0",
+    "yaml": "catalog:",
     "zod": "catalog:",
     "zod-to-json-schema": "catalog:"
   },

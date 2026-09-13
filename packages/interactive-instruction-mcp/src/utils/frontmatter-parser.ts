@@ -1,130 +1,140 @@
+/**
+ * Frontmatter reading and writing.
+ *
+ * The rule here is that a write touches what it was asked to touch and nothing
+ * else. That sounds obvious, and the previous implementation broke it three
+ * ways: a hand-rolled line parser recognised seven keys and dropped everything
+ * else, the serialiser rebuilt the block from a typed struct in a fixed order,
+ * and neither understood quoting. So adding one `relatedDocs` entry to a
+ * document deleted its `owner` and `ticket` keys, discarded its comments and
+ * blank lines, reordered what was left, and let `"quoted values"` carry their
+ * own quote marks into search results.
+ *
+ * None of it was recoverable: `link_remove` puts back the link, not the
+ * `owner` key that went with it.
+ *
+ * The fix is to stop reconstructing the block. `yaml`'s Document API keeps the
+ * parsed source -- comments, order, spacing, quoting style -- and edits it in
+ * place, so anything this code has no opinion about survives a write. The typed
+ * view of the known keys is still what callers see; it is just no longer what
+ * gets written back.
+ */
+
+import { isMap, isSeq, parseDocument, Scalar, type Document } from "yaml";
 import type { DocumentFrontmatter } from "../types/index.js";
 
 // Standard frontmatter at file start
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---/;
 
-// Frontmatter keys for array fields
 const WHEN_TO_USE_KEY = "whenToUse" as const;
 const RELATED_DOCS_KEY = "relatedDocs" as const;
-type ArrayFieldKey = typeof WHEN_TO_USE_KEY | typeof RELATED_DOCS_KEY;
-
-// Draft status fields
 const STATUS_KEY = "status" as const;
 const SELF_REVIEW_NOTES_KEY = "selfReviewNotes" as const;
 const CONFIRMED_AT_KEY = "confirmedAt" as const;
 const APPROVED_AT_KEY = "approvedAt" as const;
 
-/**
- * Parse YAML frontmatter from markdown content
- * Frontmatter must be at the start of the file
- */
-export function parseFrontmatter(content: string): DocumentFrontmatter {
+const VALID_STATUSES = [
+  "editing",
+  "self_review",
+  "user_reviewing",
+  "pending_approval",
+  "approved",
+] as const;
+
+function frontmatterText(content: string): string | null {
   const match = content.match(FRONTMATTER_REGEX);
-  if (!match) {
-    return {};
+  return match === null ? null : match[1];
+}
+
+/**
+ * Parse the frontmatter for reading, keeping whatever is legible.
+ *
+ * Malformed YAML is not rejected outright. `yaml` reports the error and still
+ * hands back the keys it managed to resolve, and the line parser this replaced
+ * was similarly forgiving -- it skipped junk lines and kept going. A document
+ * with one stray line should still show its description in `list`, not vanish
+ * from the corpus.
+ */
+function parseFrontmatterDocument(content: string): Document.Parsed | null {
+  const text = frontmatterText(content);
+  if (text === null) return null;
+  return parseDocument(text);
+}
+
+/**
+ * Parse the frontmatter for writing, and only when it is sound.
+ *
+ * Reading tolerates damage; writing must not. Editing a document `yaml` could
+ * not fully understand would serialise back whatever it guessed -- in the
+ * malformed case above it folds three lines into one invented key -- and that
+ * guess would replace the file. Better to start from an empty block and lose
+ * the unreadable metadata than to rewrite it into something new.
+ */
+function parseFrontmatterForWrite(content: string): Document.Parsed | null {
+  const doc = parseFrontmatterDocument(content);
+  if (doc === null || doc.errors.length > 0) return null;
+  return doc;
+}
+
+/** A YAML scalar as a string, or undefined for anything else. */
+function readString(params: { doc: Document.Parsed; key: string }): string | undefined {
+  const value = params.doc.get(params.key);
+  return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * A sequence of strings. Non-string entries are dropped rather than
+ * stringified: `relatedDocs: [1, 2]` is a malformed link list, and inventing
+ * `"1"` from it would name a document that cannot exist.
+ */
+function readStringArray(params: { doc: Document.Parsed; key: string }): string[] | undefined {
+  const { doc, key } = params;
+  // `get` hands back the node, not a plain array -- the whole point of the
+  // Document API is that the node keeps its source. `toJSON` is what turns it
+  // into the values callers expect.
+  const node = doc.get(key);
+
+  if (isSeq(node)) {
+    const items: unknown = node.toJSON();
+    if (!Array.isArray(items)) return undefined;
+    return items.filter((item): item is string => typeof item === "string");
   }
 
-  const yamlContent = match[1];
+  // A bare scalar reads as a one-item list. Documents written by hand carry
+  // `whenToUse: single trigger`, and the previous parser accepted it; rejecting
+  // it now would silently empty those fields.
+  const value = doc.get(key);
+  return typeof value === "string" ? [value] : undefined;
+}
+
+export function parseFrontmatter(content: string): DocumentFrontmatter {
+  const doc = parseFrontmatterDocument(content);
+  if (doc === null || !isMap(doc.contents)) return {};
+
   const result: DocumentFrontmatter = {};
 
-  const lines = yamlContent.split("\n");
-  let currentKey: ArrayFieldKey | null = null;
-  let currentArray: string[] = [];
+  const description = readString({ doc, key: "description" });
+  if (description !== undefined) result.description = description;
 
-  // Save current array to result based on key
-  const saveCurrentArray = () => {
-    if (currentKey && currentArray.length > 0) {
-      if (currentKey === WHEN_TO_USE_KEY) {
-        result.whenToUse = currentArray;
-      } else if (currentKey === RELATED_DOCS_KEY) {
-        result.relatedDocs = currentArray;
-      }
-    }
-    currentKey = null;
-    currentArray = [];
-  };
+  const whenToUse = readStringArray({ doc, key: WHEN_TO_USE_KEY });
+  if (whenToUse !== undefined) result.whenToUse = whenToUse;
 
-  // Parse inline array value
-  const parseInlineArray = (value: string): string[] => {
-    return value
-      .slice(1, -1)
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  };
+  const relatedDocs = readStringArray({ doc, key: RELATED_DOCS_KEY });
+  if (relatedDocs !== undefined) result.relatedDocs = relatedDocs;
 
-  // Parse inline or multi-line array value
-  const parseArrayField = (params: { key: ArrayFieldKey; value: string }) => {
-    const { key, value } = params;
-    saveCurrentArray(); // Save previous array first
-    currentKey = key;
-    if (value) {
-      // Inline array syntax: key: [a, b, c]
-      if (value.startsWith("[") && value.endsWith("]")) {
-        if (key === WHEN_TO_USE_KEY) {
-          result.whenToUse = parseInlineArray(value);
-        } else if (key === RELATED_DOCS_KEY) {
-          result.relatedDocs = parseInlineArray(value);
-        }
-        currentKey = null;
-        currentArray = [];
-      } else {
-        // Single inline value
-        currentArray = [value];
-      }
-    } else {
-      // Array will follow on next lines
-      currentArray = [];
-    }
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === "") continue;
-
-    // Check if this is an array item (starts with "- ")
-    if (trimmed.startsWith("- ") && currentKey !== null) {
-      currentArray.push(trimmed.slice(2).trim());
-      continue;
-    }
-
-    // Check if this is a key-value pair
-    const colonIndex = trimmed.indexOf(":");
-    if (colonIndex > 0) {
-      const key = trimmed.slice(0, colonIndex).trim();
-      const value = trimmed.slice(colonIndex + 1).trim();
-
-      if (key === "description") {
-        saveCurrentArray();
-        result.description = value;
-      } else if (key === WHEN_TO_USE_KEY) {
-        parseArrayField({ key: WHEN_TO_USE_KEY, value });
-      } else if (key === RELATED_DOCS_KEY) {
-        parseArrayField({ key: RELATED_DOCS_KEY, value });
-      } else if (key === STATUS_KEY) {
-        saveCurrentArray();
-        // Validate status value
-        const validStatuses = ["editing", "self_review", "user_reviewing", "pending_approval", "approved"];
-        if (validStatuses.includes(value)) {
-          result.status = value as DocumentFrontmatter["status"];
-        }
-      } else if (key === SELF_REVIEW_NOTES_KEY) {
-        saveCurrentArray();
-        result.selfReviewNotes = value;
-      } else if (key === CONFIRMED_AT_KEY) {
-        saveCurrentArray();
-        result.confirmedAt = value;
-      } else if (key === APPROVED_AT_KEY) {
-        saveCurrentArray();
-        result.approvedAt = value;
-      } else {
-        saveCurrentArray();
-      }
-    }
+  const status = readString({ doc, key: STATUS_KEY });
+  if (status !== undefined && (VALID_STATUSES as readonly string[]).includes(status)) {
+    result.status = status as DocumentFrontmatter["status"];
   }
 
-  // Save final array if exists
-  saveCurrentArray();
+  const selfReviewNotes = readString({ doc, key: SELF_REVIEW_NOTES_KEY });
+  if (selfReviewNotes !== undefined) result.selfReviewNotes = selfReviewNotes;
+
+  const confirmedAt = readString({ doc, key: CONFIRMED_AT_KEY });
+  if (confirmedAt !== undefined) result.confirmedAt = confirmedAt;
+
+  const approvedAt = readString({ doc, key: APPROVED_AT_KEY });
+  if (approvedAt !== undefined) result.approvedAt = approvedAt;
 
   return result;
 }
@@ -137,7 +147,11 @@ export function stripFrontmatter(content: string): string {
 }
 
 /**
- * Create or update frontmatter in content
+ * Create or update frontmatter in content.
+ *
+ * `content` is not only the source of the body: its frontmatter is the base the
+ * new values are written onto, which is how everything outside
+ * `DocumentFrontmatter` survives a write.
  */
 export function updateFrontmatter(params: {
   content: string;
@@ -145,50 +159,110 @@ export function updateFrontmatter(params: {
 }): string {
   const { content, frontmatter } = params;
   const body = stripFrontmatter(content);
-  const yaml = serializeFrontmatter(frontmatter);
-  return `---\n${yaml}---\n\n${body}`;
+
+  const parsed = parseFrontmatterForWrite(content);
+  const doc = parsed !== null && isMap(parsed.contents) ? parsed : emptyDocument();
+
+  applyField({ doc, key: "description", value: frontmatter.description });
+  applyField({ doc, key: WHEN_TO_USE_KEY, value: nonEmpty(frontmatter.whenToUse) });
+  applyField({ doc, key: RELATED_DOCS_KEY, value: nonEmpty(frontmatter.relatedDocs) });
+  applyField({ doc, key: STATUS_KEY, value: frontmatter.status });
+  applyField({ doc, key: SELF_REVIEW_NOTES_KEY, value: frontmatter.selfReviewNotes });
+  applyField({ doc, key: CONFIRMED_AT_KEY, value: frontmatter.confirmedAt });
+  applyField({ doc, key: APPROVED_AT_KEY, value: frontmatter.approvedAt });
+
+  // An empty mapping stringifies as `{}`, which is valid YAML but reads as
+  // noise in a document that simply has no metadata. Emit an empty block, as
+  // the previous serialiser did.
+  const yaml = isMap(doc.contents) && doc.contents.items.length === 0
+    ? "\n"
+    : doc.toString({ lineWidth: 0 });
+  return `---\n${yaml.endsWith("\n") ? yaml : `${yaml}\n`}---\n\n${body}`;
 }
 
 /**
- * Serialize frontmatter object to YAML string
+ * A document to write into when there is no frontmatter to preserve.
+ *
+ * Built from `{}` because an empty source parses to null contents, with nowhere
+ * for `set` to put anything -- then forced back to block style, since the flow
+ * mapping `{}` would otherwise keep its braces and emit
+ * `{ description: ..., whenToUse: [...] }` on one line.
  */
-function serializeFrontmatter(frontmatter: DocumentFrontmatter): string {
-  const lines: string[] = [];
+function emptyDocument(): Document {
+  const doc = parseDocument("{}");
+  if (isMap(doc.contents)) doc.contents.flow = false;
+  return doc;
+}
 
-  if (frontmatter.description) {
-    lines.push(`description: ${frontmatter.description}`);
+/** An empty array means "no value", matching how the old serialiser behaved. */
+function nonEmpty(value: string[] | undefined): string[] | undefined {
+  return value === undefined || value.length === 0 ? undefined : value;
+}
+
+/**
+ * Write one known field, leaving the document alone where there is nothing to
+ * say.
+ *
+ * `undefined` deletes rather than skips. Callers build the whole
+ * `DocumentFrontmatter` they want and pass it, so a field they left out is one
+ * they mean to be gone -- `link_remove` clearing the last link relies on that.
+ * Unknown keys are never touched, because nothing here names them.
+ */
+function applyField(params: {
+  doc: Document.Parsed | Document;
+  key: string;
+  value: string | string[] | undefined;
+}): void {
+  const { doc, key, value } = params;
+
+  if (value === undefined) {
+    doc.delete(key);
+    return;
   }
 
-  if (frontmatter.whenToUse && frontmatter.whenToUse.length > 0) {
-    lines.push(`${WHEN_TO_USE_KEY}:`);
-    for (const item of frontmatter.whenToUse) {
-      lines.push(`  - ${item}`);
-    }
+  // Unchanged means untouched. Rewriting a value that already says what it
+  // should would discard the author's own quoting and any comment on the line,
+  // which is the whole class of damage this module exists to stop.
+  if (matchesExisting({ doc, key, value })) return;
+
+  if (Array.isArray(value)) {
+    doc.set(key, value);
+    return;
   }
 
-  if (frontmatter.relatedDocs && frontmatter.relatedDocs.length > 0) {
-    lines.push(`${RELATED_DOCS_KEY}:`);
-    for (const item of frontmatter.relatedDocs) {
-      lines.push(`  - ${item}`);
-    }
+  doc.set(key, scalarFor(value));
+}
+
+function matchesExisting(params: {
+  doc: Document.Parsed | Document;
+  key: string;
+  value: string | string[];
+}): boolean {
+  const { doc, key, value } = params;
+  const node = doc.get(key);
+
+  if (Array.isArray(value)) {
+    if (!isSeq(node)) return false;
+    const items: unknown = node.toJSON();
+    return Array.isArray(items) && JSON.stringify(items) === JSON.stringify(value);
   }
 
-  // Draft status fields (only for drafts)
-  if (frontmatter.status) {
-    lines.push(`${STATUS_KEY}: ${frontmatter.status}`);
-  }
+  return node === value;
+}
 
-  if (frontmatter.selfReviewNotes) {
-    lines.push(`${SELF_REVIEW_NOTES_KEY}: ${frontmatter.selfReviewNotes}`);
-  }
+/**
+ * Prefer plain style, which is what the hand-written serialiser produced and
+ * what the documents in the wild look like -- but only where plain round-trips.
+ * `description: yes` reads back as a boolean, so a value whose plain form means
+ * something else has to keep its quotes.
+ */
+function scalarFor(value: string): Scalar {
+  const scalar = new Scalar(value);
+  scalar.type = Scalar.PLAIN;
 
-  if (frontmatter.confirmedAt) {
-    lines.push(`${CONFIRMED_AT_KEY}: ${frontmatter.confirmedAt}`);
+  const roundTripped: unknown = parseDocument(`v: ${scalar.toString()}`).get("v");
+  if (roundTripped !== value) {
+    scalar.type = Scalar.QUOTE_DOUBLE;
   }
-
-  if (frontmatter.approvedAt) {
-    lines.push(`${APPROVED_AT_KEY}: ${frontmatter.approvedAt}`);
-  }
-
-  return lines.join("\n") + "\n";
+  return scalar;
 }
