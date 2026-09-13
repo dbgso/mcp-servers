@@ -12,7 +12,7 @@ import {
   customValidator,
   type WorkflowDefinition,
 } from "../utils/workflow.js";
-import * as approvalModule from "../utils/approval/core.js";
+import type { WorkflowApproval } from "../types/workflow.js";
 
 // Test types
 type TestState = "draft" | "review" | "approved" | "rejected";
@@ -49,6 +49,23 @@ const testWorkflowDef: WorkflowDefinition<TestState, TestContext, TestParams> = 
     },
   ],
 };
+
+
+/**
+ * The engine no longer imports an approval flow; it takes one. These tests use
+ * a double rather than the token implementation, because what they exercise is
+ * the engine's branching -- requested, valid, invalid -- and not how a token
+ * reaches a human.
+ */
+function fakeApproval(params: { validToken?: string } = {}): WorkflowApproval {
+  return {
+    request: async () => ({ fallbackPath: "/tmp/test-approval.txt" }),
+    validate: ({ providedToken }) =>
+      params.validToken !== undefined && providedToken === params.validToken
+        ? { valid: true }
+        : { valid: false, reason: "invalid_token" },
+  };
+}
 
 describe("Workflow", () => {
   describe("defineWorkflow", () => {
@@ -538,7 +555,11 @@ describe("Workflow", () => {
         ],
       });
 
-      const instance = createWorkflowInstance({ definition: approvalWorkflow, initialContext: { content: "test" } });
+      const instance = createWorkflowInstance({
+        definition: approvalWorkflow,
+        initialContext: { content: "test" },
+        options: { approval: fakeApproval() },
+      });
 
       // Without approval token, should fail
       const result = await instance.trigger({ params: {} });
@@ -606,7 +627,11 @@ describe("Workflow", () => {
         ],
       });
 
-      const instance = createWorkflowInstance({ definition: dynamicApprovalWorkflow, initialContext: { content: "test" } });
+      const instance = createWorkflowInstance({
+        definition: dynamicApprovalWorkflow,
+        initialContext: { content: "test" },
+        options: { approval: fakeApproval() },
+      });
 
       // With approval-triggering action, should require approval
       const result = await instance.trigger({ params: { action: "approve" } });
@@ -618,15 +643,7 @@ describe("Workflow", () => {
     });
 
     it("should succeed when valid approval token is provided", async () => {
-      // Mock approval functions
       const mockToken = "1234";
-      vi.spyOn(approvalModule, "requestApproval").mockResolvedValue({
-        token: mockToken,
-        fallbackPath: "/tmp/test-approval.txt",
-      });
-      vi.spyOn(approvalModule, "validateApproval").mockReturnValue({
-        valid: true,
-      });
 
       const approvalWorkflow = defineWorkflow<TestState, TestContext, TestParams>({
         id: "approval-success",
@@ -641,7 +658,11 @@ describe("Workflow", () => {
         ],
       });
 
-      const instance = createWorkflowInstance({ definition: approvalWorkflow, initialContext: { content: "test" } });
+      const instance = createWorkflowInstance({
+        definition: approvalWorkflow,
+        initialContext: { content: "test" },
+        options: { approval: fakeApproval({ validToken: mockToken }) },
+      });
 
       // With valid approval token, should succeed
       const result = await instance.trigger({ params: {}, approvalToken: mockToken });
@@ -657,15 +678,6 @@ describe("Workflow", () => {
     });
 
     it("should fail with approval_invalid when token is invalid", async () => {
-      // Mock approval functions
-      vi.spyOn(approvalModule, "requestApproval").mockResolvedValue({
-        token: "1234",
-        fallbackPath: "/tmp/test-approval.txt",
-      });
-      vi.spyOn(approvalModule, "validateApproval").mockReturnValue({
-        valid: false,
-        reason: "invalid_token",
-      });
 
       const approvalWorkflow = defineWorkflow<TestState, TestContext, TestParams>({
         id: "approval-invalid",
@@ -680,7 +692,11 @@ describe("Workflow", () => {
         ],
       });
 
-      const instance = createWorkflowInstance({ definition: approvalWorkflow, initialContext: { content: "test" } });
+      const instance = createWorkflowInstance({
+        definition: approvalWorkflow,
+        initialContext: { content: "test" },
+        options: { approval: fakeApproval({ validToken: "1234" }) },
+      });
 
       // With invalid approval token, should fail
       const result = await instance.trigger({ params: {}, approvalToken: "wrong-token" });
@@ -691,8 +707,38 @@ describe("Workflow", () => {
       }
       expect(instance.state).toBe("draft");
 
-      // Restore mocks
-      vi.restoreAllMocks();
+      expect(instance.state).toBe("draft");
+    });
+
+    it("refuses the transition when no approval flow was given", async () => {
+      const approvalWorkflow = defineWorkflow<TestState, TestContext, TestParams>({
+        id: "approval-unconfigured",
+        states: ["draft", "review", "approved", "rejected"],
+        initial: "draft",
+        transitions: [
+          {
+            from: ["draft"],
+            requiresApproval: true,
+            action: async () => ({ nextState: "review" }),
+          },
+        ],
+      });
+
+      const instance = createWorkflowInstance({
+        definition: approvalWorkflow,
+        initialContext: { content: "test" },
+      });
+
+      // Not "approved by default": a transition that wants approval, in a
+      // workflow with no way to obtain it, must not proceed.
+      const result = await instance.trigger({ params: {} });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.errorType).toBe("approval_invalid");
+        expect(result.error).toContain("approval");
+      }
+      expect(instance.state).toBe("draft");
     });
   });
 });

@@ -24,7 +24,7 @@
  * inside one operation that can be run backwards.
  */
 
-import { DeliberationGate } from "mcp-shared/approval";
+import { DeliberationGate } from "mcp-shared/deliberation";
 import type { ToolResponse } from "mcp-shared";
 import { textResponse } from "../tools/instruction/types.js";
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { contentHash } from "mcp-shared/approval";
+import { contentHash } from "mcp-shared/deliberation";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
 import { removeDiffFile } from "../../../utils/diff-utils.js";

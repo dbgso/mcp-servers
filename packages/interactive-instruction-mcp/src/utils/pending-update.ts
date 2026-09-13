@@ -13,7 +13,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { contentHash } from "mcp-shared/approval";
+import { contentHash } from "mcp-shared/deliberation";
 import { scopedStateDir } from "../services/instance-scope.js";
 
 const PENDING_BASE = "mcp-instruction-pending";

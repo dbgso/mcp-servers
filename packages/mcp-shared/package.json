@@ -20,6 +20,10 @@
       "types": "./dist/approval.d.ts",
       "import": "./dist/approval.js"
     },
+    "./deliberation": {
+      "types": "./dist/deliberation.d.ts",
+      "import": "./dist/deliberation.js"
+    },
     "./tunnel": {
       "types": "./dist/tunnel.d.ts",
       "import": "./dist/tunnel.js"
