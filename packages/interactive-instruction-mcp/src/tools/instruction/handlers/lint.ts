@@ -3,6 +3,7 @@ import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions, textResponse } from "../types.js";
 import { DRAFT_DIR } from "../../../constants.js";
+import { stripFrontmatter } from "../../../utils/frontmatter-parser.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
 
@@ -170,13 +171,17 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
       const content = await reader.getDocumentContent(doc.id);
       if (!content) continue;
 
-      const lineCount = content.split("\n").length;
+      // The body only. Counting the frontmatter meant that describing a
+      // document well spent its size budget: a fifth `whenToUse` entry is a
+      // line against the limit, so the rule rewarded thin metadata and
+      // eventually warned about documents whose prose was well within it.
+      const lineCount = stripFrontmatter(content).split("\n").length;
       if (lineCount > MAX_LINES) {
         issues.push({
           severity: "warning",
           docId: doc.id,
           rule: "document-too-large",
-          message: `Document has ${lineCount} lines (max recommended: ${MAX_LINES}). Consider splitting.`,
+          message: `Document body has ${lineCount} lines (max recommended: ${MAX_LINES}). Consider splitting.`,
         });
       }
     }
