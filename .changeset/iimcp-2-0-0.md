@@ -46,3 +46,12 @@ The promotion state machine also advances only after the file has moved. Trigger
 **Metadata can be changed without resending the document.** `update`'s `content` is now optional: `update(id, description, whenToUse)` edits the frontmatter and leaves the body alone. Resending a whole document to fix one `whenToUse` entry was the reason metadata went unmaintained, and on a promoted document it staged a diff whose noise hid the one line that actually moved. `update_meta`, which used to print a prompt telling the caller to do exactly that resend, now shows what the metadata says today alongside the documents one hop away in the `relatedDocs` graph — or, for a document nothing links to, the other documents under its category as candidates for where it belongs.
 
 **The size warning counts the body, not the frontmatter.** Describing a document well used to spend its line budget: a fifth `whenToUse` entry was a line against the 150-line limit, so `lint` rewarded thin metadata and eventually warned about documents whose prose was well inside it.
+
+**A write terminates the file, and touches nothing it was not asked to.** Documents written through the server came out with no trailing newline while hand-edited ones kept theirs, so a metadata-only change showed the last line of the body as a `-`/`+` pair in `git diff` and the files stopped being POSIX text. Every write now goes through the reader, which is also the only path that checks the document is in scope and invalidates the list cache -- `link_add` and `link_remove` were writing with `fs.writeFile` and a bare path, skipping all three.
+
+**`add` keeps the metadata written in its `content`.** The frontmatter in `content` used to be discarded and rebuilt from the arguments, so `relatedDocs` written there was dropped in silence -- and since the prose still reads correctly, the loss shows up only when the graph is drawn. Arguments still win where both say something.
+
+**Promotion no longer publishes the workflow's own fields.** `status`, `selfReviewNotes` and `confirmedAt` exist to run the approval conversation; they were left in the promoted document, so every reader of it got the AI's self-review notes at the top. `approvedAt` stays: when a document joined the corpus is a fact about the document.
+
+**`update` accepts `relatedDocs`.** It was silently ignored, which is the worst of the three options -- the caller is told the update was prepared and the link is not in it. Passing it replaces the list; `link_add` / `link_remove` remain the incremental pair.
+
