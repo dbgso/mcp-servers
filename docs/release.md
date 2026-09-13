@@ -123,12 +123,28 @@ intent rather than mechanism:
    [npm bootstrap](./release/npm-bootstrap.md). Only the first publish of a
    package needs a token: npm can only attach a Trusted Publisher to a package
    that already exists.
-3. Remove `private: true` from that package's `package.json`.
-4. From then on it is the standard flow, and nothing here is special again: a
-   changeset bumps it, the version PR merges, the release workflow publishes it.
+3. Remove `private: true` from that package's `package.json`, with its version
+   set to the one already on npm (the `0.0.0` placeholder), and add a changeset
+   for it in the same PR.
+4. From then on it is the standard flow, and nothing here is special again: the
+   version PR bumps it and writes its CHANGELOG, the merge publishes it.
 
-Check the version before step 3 — removing `private` publishes whatever is in
-`package.json` on the next push to `main`, not the next patch bump.
+## Nothing publishes without a changeset
+
+`changeset publish` does not look at changesets either: it publishes any
+non-private package whose version is not on npm. Left alone, a hand-edited
+version — or removing `private` from a package at an unpublished version —
+would reach npm on the next push to `main` with no changeset behind it.
+
+`pnpm release` therefore runs `scripts/verify-changelog-gate.mjs` before
+`changeset publish`. For every package about to be published (not private, version
+not on npm), its `CHANGELOG.md` must contain the `## <version>` section that
+`changeset version` writes. If any package lacks one, the release fails and
+**nothing** is published. A registry error also fails the release rather than
+guessing.
+
+To fix a failure, put the version back to the published one and add a changeset;
+the version PR produces the CHANGELOG entry.
 
 ## Trying a package via GitHub Packages
 
