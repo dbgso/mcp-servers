@@ -26,7 +26,6 @@ export interface DraftContext {
   draftId: string;
   content: string;
   selfReviewNotes?: string;
-  approvalToken?: string;
   /** Timestamp when draft was confirmed (transitioned to pending_approval) */
   confirmedAt?: number;
 }
@@ -111,10 +110,7 @@ const draftWorkflowDefinition: WorkflowDefinition<DraftState, DraftContext, Draf
       preconditions: [
         stateVisited("user_reviewing"),
       ],
-      action: async (ctx) => {
-        ctx.approvalToken = "approved";
-        return { nextState: "applied" };
-      },
+      action: async () => ({ nextState: "applied" }),
     },
   ],
 };
@@ -126,17 +122,17 @@ export const draftWorkflow = defineWorkflow(draftWorkflowDefinition);
 export const stateDescriptions: Record<DraftState, string> = {
   editing: "Draft is being edited",
   self_review: "AI must self-review the draft content",
-  user_reviewing: "AI must explain content to user in their own words, then call with confirmed: true",
-  pending_approval: "Waiting for user approval (token required)",
+  user_reviewing: "AI must explain the content to the user in its own words, then promote with that same `explanation`",
+  pending_approval: "Explained to the user; waiting for the promotion to be repeated",
   applied: "Draft has been applied to documentation",
 };
 
 // Next action hints for each state
 export const nextActionHints: Record<DraftState, string> = {
-  editing: "Call draft(action: 'approve', id: '<id>', content: '<content>') to submit for self-review",
-  self_review: "Call draft(action: 'approve', id: '<id>', notes: '<review notes>') after reviewing",
-  user_reviewing: "Explain the content to the user in your own words. After user confirms, call draft(action: 'approve', id: '<id>', confirmed: true)",
-  pending_approval: "Desktop notification sent. User must approve with token: draft(action: 'approve', id: '<id>', approvalToken: '<token>')",
+  editing: "Call instruction(action: 'approve', id: '<id>') to submit for self-review",
+  self_review: "Call instruction(action: 'approve', id: '<id>', notes: '<review notes>') after reviewing",
+  user_reviewing: "Explain the content to the user in your own words, then call instruction(action: 'approve', id: '<id>', explanation: '<what you told them>')",
+  pending_approval: "Repeat the identical call, with the same `explanation`, to promote: instruction(action: 'approve', id: '<id>', explanation: '<what you told the user>')",
   applied: "Workflow complete",
 };
 

@@ -1,8 +1,7 @@
-import { DeliberationGate } from "mcp-shared/approval";
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
 import type { ToolResponse } from "mcp-shared";
-import { textResponse } from "../types.js";
+import { gateMutation } from "../../../services/mutation-gate.js";
 
 export { textResponse } from "../types.js";
 
@@ -159,21 +158,6 @@ export function buildLinkApprovalWhat(params: {
   return [`${linkAction}: ${id}`, `relatedDocs: ${newRelated.join(",")}`].join("\n");
 }
 
-/**
- * The gate both link actions go through.
- *
- * Shared deliberately. The two are inverses, and a run started for one must not
- * be continued by the other -- but that falls out of the key rather than out of
- * separate gates: `buildLinkApprovalWhat` names the action, so `link_add` and
- * `link_remove` over the same document hash differently. One gate keeps the
- * eviction sweep and the TTL in one place.
- */
-const linkDeliberation = new DeliberationGate();
-
-/** Only for tests: a gate is process memory and outlives a single case. */
-export function resetLinkDeliberationForTesting(): void {
-  linkDeliberation.resetAllForTesting();
-}
 
 /**
  * Put a relatedDocs change behind the deliberation gate.
@@ -201,18 +185,16 @@ export async function deliberateLinkChange(params: {
 }): Promise<ToolResponse> {
   const { linkAction, id, newRelated, explanation, preview, work } = params;
 
-  return linkDeliberation.run({
-    request: {
-      operation: `instruction::${linkAction}::${id}`,
-      what: buildLinkApprovalWhat({ linkAction, id, newRelated }),
-      explanation,
-    },
-    // The run ends only once the frontmatter is written. A failed write leaves
-    // it standing so the caller can retry without explaining itself twice.
-    succeeded: (response) => response.isError !== true,
-    // Refusal is a normal step here, not a fault: `errorResponse` would invite
-    // the caller to treat the tool as broken and look for another way in.
-    onRefused: (refused) => textResponse(`${preview}\n\n---\n\n${refused.message}`),
+  // One gate covers both actions, which is what makes them share a run key
+  // rather than share a gate: `buildLinkApprovalWhat` names the action, so
+  // `link_add` and `link_remove` over the same document hash differently and a
+  // run started for one cannot be continued by the other.
+  return gateMutation({
+    operation: "link",
+    subject: `instruction::${linkAction}::${id}`,
+    what: buildLinkApprovalWhat({ linkAction, id, newRelated }),
+    explanation,
+    preview,
     work,
   });
 }

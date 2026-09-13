@@ -1,25 +1,30 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { requestApproval, validateApproval, getApprovalRequestedMessage, getApprovalRejectionMessage } from "mcp-shared/approval";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
+import { gateMutation } from "../../../services/mutation-gate.js";
 
 const schema = z.object({
   action: z.literal("rename"),
   id: z.string(),
   newId: z.string(),
-  confirmed: z.boolean().optional(),
-  approvalToken: z.string().optional(),
+  explanation: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Why this document should move, in your own words, as you told the user. Required for a promoted document, and identical across every attempt."
+    ),
 });
 
 type Args = z.infer<typeof schema>;
 
 
 /**
- * Binds a rename approval to both ends of the move. `destinationOccupied` is in
- * here so that a document appearing at the destination after approval fails the
- * match rather than the rename silently meaning something different.
+ * Binds a rename to both ends of the move. `destinationOccupied` is in here so
+ * that a document appearing at the destination mid-run fails the match rather
+ * than the rename silently meaning something different.
  */
 async function buildRenameWhat(params: {
   reader: InstructionContext["reader"];
@@ -37,14 +42,19 @@ async function buildRenameWhat(params: {
 
 export class RenameHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "rename";
-  readonly help = "Rename a document (draft or promoted). Promoted renames require approval.";
+  readonly help = `Rename a document (draft or promoted).
+
+A draft rename is immediate. Renaming a promoted document rewrites every
+backlink to it, so the first attempts are refused with the list of documents
+that would be edited; repeat the identical call, with the same \`explanation\`,
+to go through.`;
   readonly schema = schema;
 
   protected async doExecute(params: {
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, newId, confirmed, approvalToken } = params.args;
+    const { id, newId, explanation } = params.args;
     const { reader } = params.context;
 
     // P1: draft/promoted同名存在ガード
@@ -69,22 +79,19 @@ export class RenameHandler extends BaseActionHandler<Args, InstructionContext> {
         }]));
     }
 
-    // Preview mode
-    if (!confirmed && !approvalToken) {
-      return this.showPreview({ reader, id, newId });
+    // Optional in the schema because a draft rename has nothing to explain;
+    // for a promoted document it is the key the run is built on.
+    if (explanation === undefined) {
+      return errorResponse(
+        `Renaming the promoted document "${id}" needs an \`explanation\`: why it should move, in the words you used with the user.` +
+        formatNextActions([{
+          action: "rename",
+          description: "Say why, then repeat the identical call",
+          example: `instruction(action: "rename", id: "${id}", newId: "${newId}", explanation: "<why it should move>")`,
+        }]));
     }
 
-    // Request approval
-    if (confirmed && !approvalToken) {
-      return this.requestRenameApproval({ reader, id, newId });
-    }
-
-    // Apply with token
-    if (approvalToken) {
-      return this.applyRename({ reader, id, newId, approvalToken });
-    }
-
-    return errorResponse("Unexpected state");
+    return this.renamePromoted({ reader, id, newId, explanation });
   }
 
   private async renameDraft(params: {
@@ -120,102 +127,56 @@ export class RenameHandler extends BaseActionHandler<Args, InstructionContext> {
     );
   }
 
-  private async showPreview(params: {
+  /**
+   * The gated path.
+   *
+   * The backlink list rides on the refusal rather than being a `confirmed`
+   * step of its own: seeing which documents get edited and being asked to
+   * explain the move are the same moment.
+   */
+  private async renamePromoted(params: {
     reader: InstructionContext["reader"];
     id: string;
     newId: string;
+    explanation: string;
   }): Promise<ToolResponse> {
-    const { reader, id, newId } = params;
-    const backlinks = await reader.findBacklinks(id);
+    const { reader, id, newId, explanation } = params;
 
-    let text = `## Rename Preview
-
-**From:** ${id}
-**To:** ${newId}
-`;
-
-    if (backlinks.length > 0) {
-      text += `
-**Backlinks to update (${backlinks.length}):**
-${backlinks.map((doc) => `- ${doc.id}`).join("\n")}
-`;
+    // Checked before the run starts rather than after it passes. It is also
+    // part of the bound `what` below, so a destination that appears mid-run
+    // breaks the key instead of quietly changing what the rename means.
+    if (await reader.documentExists(newId)) {
+      return errorResponse(`Error: Document "${newId}" already exists. Choose a different name or delete the existing document first.`);
     }
 
-    return textResponse(
-      text +
-      formatNextActions([{
-        action: "rename",
-        description: "Confirm rename",
-        example: `instruction(action: "rename", id: "${id}", newId: "${newId}", confirmed: true)`,
-      }]),
-    );
-  }
-
-  private async requestRenameApproval(params: {
-    reader: InstructionContext["reader"];
-    id: string;
-    newId: string;
-  }): Promise<ToolResponse> {
-    const { reader, id, newId } = params;
     const backlinks = await reader.findBacklinks(id);
-    const requestId = `instruction::rename::${id}::${newId}`;
 
-    const approvalResult = await requestApproval({
-      request: {
-        id: requestId,
-        operation: "Rename document",
-        description: `Rename "${id}" to "${newId}"${backlinks.length > 0 ? ` (updates ${backlinks.length} backlinks)` : ""}`,
-        what: await buildRenameWhat({ reader, id, newId }),
-      },
+    const preview = [
+      `## Renaming ${id} → ${newId}`,
+      "",
+      backlinks.length > 0
+        ? `**${backlinks.length} document(s) link to it and will be edited to point at the new id:**\n${backlinks
+            .map((doc) => `- ${doc.id}`)
+            .join("\n")}`
+        : "Nothing links to it.",
+    ].join("\n");
+
+    return gateMutation({
+      operation: "rename",
+      subject: `instruction::rename::${id}::${newId}`,
+      what: await buildRenameWhat({ reader, id, newId }),
+      explanation,
+      preview,
+      work: () => this.applyRename({ reader, id, newId }),
     });
-
-    return textResponse(
-      `# Approval Requested
-
-**Rename:** ${id} → ${newId}
-${backlinks.length > 0 ? `**Backlinks to update:** ${backlinks.length}` : ""}
-
-${getApprovalRequestedMessage(approvalResult)}` +
-      formatNextActions([{
-        action: "rename",
-        description: "Apply with token from user",
-        example: `instruction(action: "rename", id: "${id}", newId: "${newId}", approvalToken: "<token>")`,
-      }]),
-    );
   }
 
   private async applyRename(params: {
     reader: InstructionContext["reader"];
     id: string;
     newId: string;
-    approvalToken: string;
   }): Promise<ToolResponse> {
-    const { reader, id, newId, approvalToken } = params;
-    // No side record of what is pending: the request id already names both ends
-    // of the move, and the approval store is what tracks it. The map that used
-    // to live here duplicated that, and its `delete` ran before the success
-    // check below -- so a failed rename spent the token AND dropped the entry,
-    // leaving no way back.
-    const requestId = `instruction::rename::${id}::${newId}`;
-
-    // Checked before the token is spent. It used to run after
-    // `validateApproval` had already consumed the approval, so losing this race
-    // burned the token and left no way forward. It is also part of the bound
-    // ground truth below, so a destination that appears after approval fails
-    // the match rather than quietly changing what the rename means.
-    if (await reader.documentExists(newId)) {
-      return errorResponse(`Error: Document "${newId}" already exists. Choose a different name or delete the existing document first.`);
-    }
-
-    const validation = validateApproval({
-      requestId,
-      providedToken: approvalToken,
-      currentWhat: await buildRenameWhat({ reader, id, newId }),
-    });
-
-    if (!validation.valid) {
-      return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);
-    }
+    const { reader, id, newId } = params;
 
     const result = await reader.renameDocument({
       oldId: id,

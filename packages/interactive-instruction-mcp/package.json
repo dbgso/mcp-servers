@@ -51,7 +51,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
     "diff": "8.0.3",
-    "node-notifier": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"
   },

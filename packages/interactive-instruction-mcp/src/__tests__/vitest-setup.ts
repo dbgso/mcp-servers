@@ -32,42 +32,13 @@ for (const dir of [PERSIST_DIR, PENDING_DIR, DIFF_DIR]) {
   await fs.mkdir(dir, { recursive: true }).catch(() => {});
 }
 
-// Clean up approval directory (approval itself is mocked below, so the shared
-// dir is only cosmetic here).
-const APPROVAL_DIR = path.join(os.tmpdir(), "mcp-approval");
-await fs.rm(APPROVAL_DIR, { recursive: true, force: true }).catch(() => {});
-
-// Mock node-notifier to prevent desktop notifications
-vi.mock("node-notifier", () => ({
-  default: {
-    notify: vi.fn(),
-  },
-  notify: vi.fn(),
-}));
-
-// The approval module is spied on, NOT stubbed.
+// Nothing in this package requests an approval any more: every gated mutation
+// goes through the deliberation gate, which is process memory and needs no
+// directory, no notifier and no token. What used to live here -- a node-notifier
+// mock to stop real desktop notifications, spies over `requestApproval` /
+// `validateApproval`, and `MCP_APPROVAL_TEST_TOKEN` so tests could know the
+// token the gate minted -- has no subject left.
 //
-// It used to be stubbed, with `validateApproval` hardwired to `{ valid: true }`,
-// which meant no test in this package ever ran the approval gate: every token
-// was accepted, and swapping the promotion target or the draft content after
-// approval looked like an ordinary success. Whole classes of bug were
-// invisible to a green suite.
-//
-// `vi.fn(actual.x)` keeps the call counts tests assert on while running the
-// real implementation, so an invalid token, an expired approval or a content
-// mismatch fails the way it would in production.
-//
-// The token is fixed instead. `requestApproval` honors MCP_APPROVAL_TEST_TOKEN
-// only under a test run, and skips both the desktop notification and the
-// fallback file there, so this has no side effects -- a test simply knows the
-// token the real gate minted.
-process.env.MCP_APPROVAL_TEST_TOKEN = "valid-token";
-
-vi.mock("mcp-shared/approval", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("mcp-shared/approval")>();
-  return {
-    ...actual,
-    requestApproval: vi.fn(actual.requestApproval),
-    validateApproval: vi.fn(actual.validateApproval),
-  };
-});
+// Tests that exercise a gate call `resetMutationGatesForTesting()` instead: a
+// gate outlives a single case, so a run opened by one test would otherwise let
+// the next one through on its first attempt.
