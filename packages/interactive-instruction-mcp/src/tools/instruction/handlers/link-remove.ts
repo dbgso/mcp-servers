@@ -148,7 +148,7 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
 **Action:** remove relatedDocs
 **Changes:** ${relatedDocs.join(", ")}
 
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
+${getApprovalRequestedMessage(approvalResult)}` +
       formatNextActions([{
         action: "link_remove",
         description: "Apply with token from user",

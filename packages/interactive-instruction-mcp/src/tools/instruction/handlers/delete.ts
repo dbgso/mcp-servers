@@ -147,7 +147,7 @@ ${backlinks.map((doc) => `- ${doc.id}`).join("\n")}
 **Delete:** ${id}
 ${backlinks.length > 0 ? `**Warning:** Referenced by ${backlinks.length} document(s)` : ""}
 
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
+${getApprovalRequestedMessage(approvalResult)}` +
         formatNextActions([
           {
             action: "delete",

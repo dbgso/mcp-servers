@@ -207,7 +207,7 @@ ${changeInfo}
 
 ---
 
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
+${getApprovalRequestedMessage(approvalResult)}` +
         formatNextActions([{
           action: "approve",
           description: "Apply with token from user",
@@ -352,7 +352,7 @@ ${changeInfos.join("\n\n---\n\n")}
 
 ---
 
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
+${getApprovalRequestedMessage(approvalResult)}` +
         formatNextActions([{
           action: "approve",
           description: "Apply batch with token from user",
@@ -454,7 +454,7 @@ ${changeInfos.join("\n\n---\n\n")}
 
 ---
 
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
+${getApprovalRequestedMessage(approvalResult)}` +
       formatNextActions([{
         action: "approve",
         description: "Apply batch with token from user",
