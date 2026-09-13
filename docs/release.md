@@ -130,7 +130,7 @@ intent rather than mechanism:
 Check the version before step 3 — removing `private` publishes whatever is in
 `package.json` on the next push to `main`, not the next patch bump.
 
-## Using a package privately via GitHub Packages
+## Trying a package via GitHub Packages
 
 `.github/workflows/gpr-release.yml` publishes one package to GitHub Packages on
 demand, independent of the npm release. It works for `private: true` packages
@@ -140,14 +140,15 @@ stays intact.
 ### Publish
 
 ```bash
-gh workflow run gpr-release.yml -f package=ast-file-mcp            # private (default)
-gh workflow run gpr-release.yml -f package=ast-file-mcp -f tag=dev -f visibility=private
+gh workflow run gpr-release.yml -f package=ast-file-mcp
+gh workflow run gpr-release.yml -f package=ast-file-mcp -f tag=dev
 ```
 
 - Name: `@dbgso/<package name>`, version `0.0.0-<tag>.<timestamp>.<sha>`, dist-tag `<tag>`
-- The job summary shows the ready-to-run `npx` command and the visibility GitHub actually holds
-- Visibility is decided by the first publish. **A public package can never be
-  made private again**, so leave the default unless you mean it
+- The job summary shows the ready-to-run `npx` command
+- **Published packages are public.** GitHub Packages takes visibility from the
+  linked repository, and this repository is public; npm's `access` has no
+  effect. Delete snapshots you no longer need from the package settings
 - Packages that still list a `workspace:` package in `dependencies` (not bundled
   with tsup) are rejected: the published copy could not be installed
 
