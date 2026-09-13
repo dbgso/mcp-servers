@@ -12,6 +12,14 @@ on:
         required: false
         default: 'snapshot'
         type: string
+      visibility:
+        description: 'Package visibility on first publish (public cannot be reverted to private)'
+        required: false
+        default: 'private'
+        type: choice
+        options:
+          - private
+          - public
   # Callable so branch-scoped workflows can publish a snapshot without
   # duplicating the publish logic.
   workflow_call:
@@ -24,6 +32,11 @@ on:
         description: 'Pre-release tag (default: snapshot)'
         required: false
         default: 'snapshot'
+        type: string
+      visibility:
+        description: 'Package visibility on first publish: private or public'
+        required: false
+        default: 'private'
         type: string
 
 env:
@@ -46,16 +59,42 @@ jobs:
 
       - name: Resolve package name
         id: pkg
+        env:
+          VISIBILITY: ${{ inputs.visibility || 'private' }}
         run: |
           PKG_DIR="packages/${{ inputs.package }}"
           if [ ! -d "$PKG_DIR" ]; then
             echo "::error::Package directory not found: $PKG_DIR"
             exit 1
           fi
+
+          # npm calls a private package "restricted"; anything else is a typo
+          # that must not silently fall back to public.
+          case "$VISIBILITY" in
+            private) ACCESS=restricted ;;
+            public) ACCESS=public ;;
+            *)
+              echo "::error::visibility must be private or public, got: $VISIBILITY"
+              exit 1
+              ;;
+          esac
+
+          # A workspace dependency is published as a bare name that exists on
+          # neither registry, so the snapshot would install nowhere. Bundled
+          # packages keep those in devDependencies and never hit this.
+          UNRESOLVABLE=$(jq -r '[.dependencies, .peerDependencies, .optionalDependencies]
+            | map(. // {}) | add | to_entries[]
+            | select(.value | startswith("workspace:")) | .key' "${PKG_DIR}/package.json")
+          if [ -n "$UNRESOLVABLE" ]; then
+            echo "::error::${{ inputs.package }} depends on workspace packages that are not bundled: $(echo "$UNRESOLVABLE" | paste -sd ' ')"
+            exit 1
+          fi
+
           PKG_NAME=$(jq -r .name "${PKG_DIR}/package.json")
           {
             echo "name=${PKG_NAME}"
             echo "dir=${PKG_DIR}"
+            echo "access=${ACCESS}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build
@@ -68,6 +107,7 @@ jobs:
         id: publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACCESS: ${{ steps.pkg.outputs.access }}
         run: |
           TAG="${{ inputs.tag || 'snapshot' }}"
           SHORT_SHA="${GITHUB_SHA:0:7}"
@@ -79,23 +119,27 @@ jobs:
           ORIGINAL_NAME=$(jq -r .name "${PKG_DIR}/package.json")
           SCOPED_NAME="${SCOPE}/${ORIGINAL_NAME}"
 
-          echo "📦 Publishing ${SCOPED_NAME}@${PRE_VERSION}"
+          echo "📦 Publishing ${SCOPED_NAME}@${PRE_VERSION} (${ACCESS})"
 
-          # Temporarily update package.json for GitHub Packages
+          # Temporarily update package.json for GitHub Packages. `private` only
+          # guards the npm release, so it is dropped here: GitHub Packages is
+          # where unreleased packages are meant to be tried.
           jq --arg name "$SCOPED_NAME" \
              --arg version "$PRE_VERSION" \
              --arg registry "${{ env.REGISTRY }}" \
-             '.name = $name | .version = $version | .publishConfig = { "registry": $registry, "access": "public" }' \
+             --arg access "$ACCESS" \
+             'del(.private) | .name = $name | .version = $version | .publishConfig = { "registry": $registry, "access": $access }' \
              "${PKG_DIR}/package.json" > "${PKG_DIR}/package.json.tmp"
           mv "${PKG_DIR}/package.json.tmp" "${PKG_DIR}/package.json"
 
           # Publish (pnpm resolves catalog: and workspace: protocols)
           cd "$PKG_DIR"
-          pnpm publish --no-git-checks --tag "$TAG"
+          pnpm publish --no-git-checks --tag "$TAG" --access "$ACCESS"
 
           echo "✅ Published ${SCOPED_NAME}@${PRE_VERSION}"
           {
             echo "name=${SCOPED_NAME}"
+            echo "unscoped=${ORIGINAL_NAME}"
             echo "version=${PRE_VERSION}"
           } >> "$GITHUB_OUTPUT"
 
@@ -104,13 +148,28 @@ jobs:
       - name: Summary
         env:
           PKG: ${{ steps.publish.outputs.name }}@${{ steps.publish.outputs.version }}
+          UNSCOPED: ${{ steps.publish.outputs.unscoped }}
+          REQUESTED: ${{ inputs.visibility || 'private' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Visibility is fixed by the first publish and a public package can
+          # never go back to private, so report what GitHub actually holds
+          # instead of trusting the requested value.
+          ACTUAL=$(gh api "/users/${GITHUB_REPOSITORY_OWNER}/packages/npm/${UNSCOPED}" --jq .visibility 2>/dev/null || echo unknown)
+
           # \$(gh auth token) stays literal: it is for the reader to run, not us.
           NPX_CMD="npx --yes --${SCOPE}:registry=${REGISTRY} --${REGISTRY#https:}/:_authToken=\$(gh auth token) ${PKG}"
           {
             echo "## Published \`${PKG}\`"
             echo
-            echo "Run it standalone (GitHub Packages requires a token even for public packages):"
+            echo "Visibility: requested \`${REQUESTED}\`, actual \`${ACTUAL}\`"
+            if [ "$ACTUAL" != "unknown" ] && [ "$ACTUAL" != "$REQUESTED" ]; then
+              echo
+              echo "> [!WARNING]"
+              echo "> The package already existed with a different visibility; change it under the package settings if needed (public cannot be made private)."
+            fi
+            echo
+            echo "Run it standalone (GitHub Packages requires a token with \`read:packages\`, even for public packages):"
             echo
             echo '```sh'
             echo "${NPX_CMD}"
