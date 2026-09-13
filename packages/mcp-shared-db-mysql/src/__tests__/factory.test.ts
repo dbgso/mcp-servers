@@ -105,10 +105,12 @@ describe("createMysqlDataSource", () => {
     expect(calls[0]?.sql).toBe(
       "SELECT `id`, `meta` FROM `users` WHERE JSON_UNQUOTE(JSON_EXTRACT(`meta`, ?)) = ? LIMIT ?",
     );
-    // value -> path -> limit: bind order set by `buildFindByJsonPath`
-    // (value first, then dialect-allocated path, then limit). Path appears
-    // as a separately-bound string, not interpolated.
-    expect(calls[0]?.values).toEqual(["z", "$.foo.bar", 5]);
+    // path -> value -> limit: the order the `?` tokens appear above. MySQL
+    // binds positionally, so this list is the mapping -- with the first two
+    // swapped the engine reads "z" as the JSON path and answers
+    // ER_INVALID_JSON_PATH. Path appears as a separately-bound string, not
+    // interpolated.
+    expect(calls[0]?.values).toEqual(["$.foo.bar", "z", 5]);
   });
 
   it("explainSql wraps with EXPLAIN FORMAT=JSON and forwards bind values", async () => {

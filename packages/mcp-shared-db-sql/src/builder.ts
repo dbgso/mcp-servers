@@ -9,7 +9,7 @@
  * before it reaches us, so `parseJsonPath` only needs to drop the leading
  * sentinel and split on `.`.
  */
-import type { Dialect, JsonPathInput } from "./dialect.js";
+import type { Dialect, JsonPathFragment, JsonPathInput, ParamBuilder } from "./dialect.js";
 import { ParamBuilderImpl } from "./param-builder.js";
 
 export interface BuiltSql {
@@ -110,20 +110,40 @@ export interface BuildFindByJsonPathParams {
   limit: number;
 }
 
+/**
+ * Join a dialect's SQL parts and values alternately, allocating a placeholder
+ * for each value as it is reached.
+ */
+function interleave(input: { fragment: JsonPathFragment; params: ParamBuilder }): string {
+  const { sql, values } = input.fragment;
+  if (sql.length !== values.length + 1) {
+    throw new Error(
+      `dialect returned ${sql.length} SQL parts for ${values.length} values; expected ${values.length + 1}`,
+    );
+  }
+  let out = sql[0] ?? "";
+  for (const [i, value] of values.entries()) {
+    out += input.params.add(value) + (sql[i + 1] ?? "");
+  }
+  return out;
+}
+
 export function buildFindByJsonPath(params: BuildFindByJsonPathParams): BuiltSql {
   const pb = new ParamBuilderImpl(params.dialect);
   const colsSql = quoteColumns({ dialect: params.dialect, columns: params.columns });
   const tableSql = params.dialect.quoteIdent(params.table);
   const fieldSql = params.dialect.quoteIdent(params.field);
   const path = parseJsonPath(params.path);
-  // Allocate the value placeholder before letting the dialect push extras —
-  // this keeps `?`-style engines (which reuse a single token) consistent
-  // with the value's logical position in the binding sequence.
-  const valuePh = pb.add(params.value);
-  const condition = params.dialect.jsonPathEquals({
-    columnSql: fieldSql,
-    path,
-    valuePlaceholder: valuePh,
+  // The dialect hands back literal SQL and the values to bind; the
+  // placeholders are made here, walking the two in step. That is what makes
+  // the binding order and the textual order the same fact rather than two
+  // facts that have to agree — the bug this replaced was them disagreeing.
+  const condition = interleave({
+    fragment: params.dialect.jsonPathEquals({
+      columnSql: fieldSql,
+      path,
+      value: params.value,
+    }),
     params: pb,
   });
   const limitPh = pb.add(params.limit);

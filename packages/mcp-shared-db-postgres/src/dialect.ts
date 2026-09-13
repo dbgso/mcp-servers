@@ -76,9 +76,12 @@ export const postgresDialect: Dialect = {
   placeholder(index: number): string {
     return `$${index}`;
   },
-  jsonPathEquals({ columnSql, path, valuePlaceholder, params }) {
-    const segmentsPh = params.add(path.segments);
-    return `${columnSql} #>> ${segmentsPh} = ${valuePlaceholder}`;
+  jsonPathEquals({ columnSql, path, value }) {
+    // Segments travel as a JS array; `pg` serialises that as a `text[]`.
+    return {
+      sql: [`${columnSql} #>> `, " = ", ""],
+      values: [path.segments, value],
+    };
   },
   explainPrefix(): string {
     return "EXPLAIN (FORMAT JSON)";
