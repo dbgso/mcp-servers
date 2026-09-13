@@ -34,3 +34,8 @@ None of that could have been caught by the tests: the suite stubbed `validateApp
 **New: `graph` and scoping.** `instruction(action: "graph")` renders the `relatedDocs` graph as an interactive page — links pointing at documents that do not exist are drawn rather than dropped, because finding those is a reason to open it. `--include` / `--exclude` say which documents in the directory this server manages, for a directory it shares with another tool.
 
 Approvals now report a delivery failure instead of claiming a notification was sent, and `MCP_APPROVAL_TEST_TOKEN` is honored only under a test run — the variable is readable by anything sharing the process environment, including the agent whose request is being gated.
+
+**Metadata can be changed without resending the document.** `update`'s `content` is now optional: `update(id, description, whenToUse)` edits the frontmatter and leaves the body alone. Resending a whole document to fix one `whenToUse` entry was the reason metadata went unmaintained, and on a promoted document it staged a diff whose noise hid the one line that actually moved. `update_meta`, which used to print a prompt telling the caller to do exactly that resend, now shows what the metadata says today alongside the documents one hop away in the `relatedDocs` graph — or, for a document nothing links to, the other documents under its category as candidates for where it belongs.
+
+**The size warning counts the body, not the frontmatter.** Describing a document well used to spend its line budget: a fifth `whenToUse` entry was a line against the 150-line limit, so `lint` rewarded thin metadata and eventually warned about documents whose prose was well inside it.
+

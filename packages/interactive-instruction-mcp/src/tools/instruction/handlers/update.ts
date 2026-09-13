@@ -8,10 +8,19 @@ import { updateFrontmatter, parseFrontmatter, stripFrontmatter } from "../../../
 import { generateDiff, removeDiffFile, writeDiffToFile } from "../../../utils/diff-utils.js";
 import { getPendingUpdate, savePendingUpdate } from "../../../utils/pending-update.js";
 
+// Deliberately a plain object, with no `.refine`: the tool's inputSchema is
+// assembled by merging every handler's `.shape`, and a refinement wraps the
+// object in a type that has none -- which takes out the schema for every other
+// action too. "At least one field" is checked in `doExecute` instead.
 const schema = z.object({
   action: z.literal("update"),
   id: z.string().describe("Document ID to update"),
-  content: z.string().describe("New document content (markdown)"),
+  content: z
+    .string()
+    .optional()
+    .describe(
+      "New document content (markdown). Omit to change only the metadata below, keeping the body as it is."
+    ),
   description: z.string().optional().describe("Updated description"),
   whenToUse: z.array(z.string()).optional().describe("Updated usage scenarios"),
 });
@@ -24,7 +33,9 @@ export class UpdateHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly help = `Update a draft or promoted document.
 
 Usage:
-- \`instruction(action: "update", id: "doc-id", content: "...")\` - Update content
+- \`instruction(action: "update", id: "doc-id", content: "...")\` - Update the body
+- \`instruction(action: "update", id: "doc-id", description: "...", whenToUse: ["..."])\` - Update
+  the metadata alone; omitting \`content\` keeps the body as it is
 - Draft: direct overwrite. Promoted: pending flow with diff preview.`;
 
   readonly schema = schema;
@@ -35,6 +46,20 @@ Usage:
   }): Promise<ToolResponse> {
     const { id, content, description, whenToUse } = params.args;
     const { reader } = params.context;
+
+    // Every field but the id is optional, so nothing in the schema stops
+    // `update(id)` on its own -- which would rewrite the document with exactly
+    // what it already said, and on a promoted document stage an empty diff for
+    // someone to approve.
+    if (content === undefined && description === undefined && whenToUse === undefined) {
+      return errorResponse(
+        `Nothing to update for "${id}". Pass \`content\` to change the body, or \`description\` / \`whenToUse\` to change the metadata.` +
+        formatNextActions([{
+          action: "update_meta",
+          description: "See what the metadata should say",
+          example: `instruction(action: "update_meta", id: "${id}")`,
+        }]));
+    }
 
     // P1: draft/promoted同名存在ガード
     const draftId = DRAFT_PREFIX + id;
@@ -77,7 +102,7 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
   private async handleDraftUpdate(params: {
     id: string;
     draftId: string;
-    content: string;
+    content?: string;
     description?: string;
     whenToUse?: string[];
     reader: InstructionContext["reader"];
@@ -89,7 +114,10 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
     const existingFrontmatter = existingContent ? parseFrontmatter(existingContent) : {};
 
     const finalContent = this.generateContentWithFrontmatter({
-      content,
+      // No `content` means a metadata-only change, so the body carries over
+      // untouched. Asking callers to resend a document they are not editing was
+      // the reason metadata updates were avoided.
+      content: content ?? existingContent ?? "",
       description,
       whenToUse,
       existingFrontmatter,
@@ -123,7 +151,7 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
    */
   private async handleExistingDocUpdate(params: {
     id: string;
-    content: string;
+    content?: string;
     description?: string;
     whenToUse?: string[];
     originalContent: string;
@@ -136,7 +164,10 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
     const existingFrontmatter = parseFrontmatter(originalContent);
 
     const finalContent = this.generateContentWithFrontmatter({
-      content,
+      // A metadata-only change keeps the body. The diff below then shows only
+      // the frontmatter lines that moved, which is the whole point of allowing
+      // the call without it.
+      content: content ?? originalContent,
       description,
       whenToUse,
       existingFrontmatter,

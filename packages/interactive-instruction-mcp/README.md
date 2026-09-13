@@ -84,7 +84,8 @@ instruction(action: "read", id: "doc-id") → Read a document
 
 **Draft Operations**
 - `add` — Create a new draft (`id`, `content`, `description`, `whenToUse` required)
-- `update` — Update a draft (direct overwrite) or promoted document (writes a pending diff — see `apply` / `cancel`)
+- `update` — Update a draft (direct overwrite) or promoted document (writes a pending diff — see `apply` / `cancel`).
+  `content` is optional: pass `description` / `whenToUse` on their own to change the metadata and keep the body
 - `delete` — Delete a draft (instant) or promoted document (approval required)
 - `rename` — Rename a draft (instant) or promoted document (approval required)
 
@@ -99,7 +100,8 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `link_add` / `link_remove` — Manage related document links (deliberation gate, drafts included)
 - `lint` — Check document quality
 - `set_status` — Reset drafts to `editing`, discarding their workflow state (single `id` or batch `ids`)
-- `update_meta` — Generate metadata update prompt (`id` only)
+- `update_meta` — Show a document's metadata alongside its neighbours in the `relatedDocs` graph,
+  or same-category candidates when it has none, and ask for better metadata (`id` only)
 
 **Seeing the corpus**
 - `graph` — Render the `relatedDocs` graph as an interactive page, or return it as text
@@ -325,7 +327,7 @@ stateDiagram-v2
     state "pending update" as pending
     state "awaiting token" as awaiting
 
-    clean --> pending: update(id, content) stages a diff
+    clean --> pending: update(id, content or metadata) stages a diff
     pending --> clean: apply(id, explanation) twice, writes it
     pending --> clean: cancel(id) discards it
 
