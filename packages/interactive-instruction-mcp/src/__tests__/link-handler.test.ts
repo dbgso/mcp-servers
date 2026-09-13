@@ -6,15 +6,9 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
-// Mock the approval functions
-vi.mock("mcp-shared/approval", async () => {
-  const actual = await vi.importActual("mcp-shared/approval");
-  return {
-    ...actual,
-    requestApproval: vi.fn().mockResolvedValue({ fallbackPath: "/tmp/test" }),
-    validateApproval: vi.fn().mockReturnValue({ valid: true }),
-  };
-});
+// The approval module is spied on (not stubbed) in vitest-setup.ts. This file
+// used to stub `validateApproval` to `{ valid: true }`, which meant the link
+// approval gate was never actually run here.
 
 import { requestApproval, validateApproval } from "mcp-shared/approval";
 
@@ -415,7 +409,7 @@ description: Document B
           action: "link_add",
           id: "doc-a",
           relatedDocs: ["doc-b"],
-          approvalToken: "test-token",
+          approvalToken: "valid-token",
         },
         context: { reader, config: { reminderEnabled: false } },
       });
@@ -463,7 +457,7 @@ description: Document B
           action: "link_remove",
           id: "doc-a",
           relatedDocs: ["doc-b"],
-          approvalToken: "test-token",
+          approvalToken: "valid-token",
         },
         context: { reader, config: { reminderEnabled: false } },
       });
@@ -506,14 +500,16 @@ description: Document B
       expect(text).toContain("None of the specified documents are in relatedDocs");
     });
 
-    it("should return error when no pending change found for approval", async () => {
-      createDoc("doc-a", `---
+    it("rejects a token for an approval that was never requested", async () => {
+      // Ids no other test in this file requests approval for: the approval
+      // store is module-level and outlives a single test.
+      createDoc("unrequested-a", `---
 description: Document A
 ---
 
 # Doc A`);
 
-      createDoc("doc-b", `---
+      createDoc("unrequested-b", `---
 description: Document B
 ---
 
@@ -523,16 +519,21 @@ description: Document B
       const result = await addHandler.execute({
         rawParams: {
           action: "link_add",
-          id: "doc-a",
-          relatedDocs: ["doc-b"],
+          id: "unrequested-a",
+          relatedDocs: ["unrequested-b"],
           approvalToken: "some-token",
         },
         context: { reader, config: { reminderEnabled: false } },
       });
 
+      // The separate pending-change map this used to consult is gone -- it was
+      // keyed by document id and shared between link_add and link_remove, so
+      // two live approvals for one document clobbered each other. The approval
+      // store is the single record of what is pending, and it has never heard
+      // of this request.
       expect(result.isError).toBe(true);
       const text = result.content[0].text as string;
-      expect(text).toContain("No pending change found");
+      expect(text).toContain("not_found");
     });
 
     it("should return no change when all docs are already in relatedDocs (line 199)", async () => {

@@ -16,13 +16,24 @@ const schema = z.object({
 type Args = z.infer<typeof schema>;
 
 
-interface PendingRename {
-  oldId: string;
+/**
+ * Binds a rename approval to both ends of the move. `destinationOccupied` is in
+ * here so that a document appearing at the destination after approval fails the
+ * match rather than the rename silently meaning something different.
+ */
+async function buildRenameWhat(params: {
+  reader: InstructionContext["reader"];
+  id: string;
   newId: string;
-  timestamp: number;
+}): Promise<string> {
+  const { reader, id, newId } = params;
+  const destinationOccupied = await reader.documentExists(newId);
+  return [
+    `rename: ${id}`,
+    `to: ${newId}`,
+    `destinationOccupied: ${destinationOccupied ? "yes" : "no"}`,
+  ].join("\n");
 }
-
-const pendingRenames = new Map<string, PendingRename>();
 
 export class RenameHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "rename";
@@ -149,17 +160,12 @@ ${backlinks.map((doc) => `- ${doc.id}`).join("\n")}
     const backlinks = await reader.findBacklinks(id);
     const requestId = `instruction::rename::${id}::${newId}`;
 
-    pendingRenames.set(requestId, {
-      oldId: id,
-      newId,
-      timestamp: Date.now(),
-    });
-
     const approvalResult = await requestApproval({
       request: {
         id: requestId,
         operation: "Rename document",
         description: `Rename "${id}" to "${newId}"${backlinks.length > 0 ? ` (updates ${backlinks.length} backlinks)` : ""}`,
+        what: await buildRenameWhat({ reader, id, newId }),
       },
     });
 
@@ -185,31 +191,30 @@ ${getApprovalRequestedMessage(approvalResult)}` +
     approvalToken: string;
   }): Promise<ToolResponse> {
     const { reader, id, newId, approvalToken } = params;
+    // No side record of what is pending: the request id already names both ends
+    // of the move, and the approval store is what tracks it. The map that used
+    // to live here duplicated that, and its `delete` ran before the success
+    // check below -- so a failed rename spent the token AND dropped the entry,
+    // leaving no way back.
     const requestId = `instruction::rename::${id}::${newId}`;
-    const pending = pendingRenames.get(requestId);
 
-    if (!pending) {
-      return errorResponse(`No pending rename found for "${id}" → "${newId}". Please start the approval workflow again.` +
-        formatNextActions([{
-          action: "rename",
-          description: "Start rename workflow",
-          example: `instruction(action: "rename", id: "${id}", newId: "${newId}")`,
-        }]));
+    // Checked before the token is spent. It used to run after
+    // `validateApproval` had already consumed the approval, so losing this race
+    // burned the token and left no way forward. It is also part of the bound
+    // ground truth below, so a destination that appears after approval fails
+    // the match rather than quietly changing what the rename means.
+    if (await reader.documentExists(newId)) {
+      return errorResponse(`Error: Document "${newId}" already exists. Choose a different name or delete the existing document first.`);
     }
 
     const validation = validateApproval({
       requestId,
       providedToken: approvalToken,
+      currentWhat: await buildRenameWhat({ reader, id, newId }),
     });
 
     if (!validation.valid) {
       return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);
-    }
-
-    // Check if destination already exists
-    const destExists = await reader.documentExists(newId);
-    if (destExists) {
-      return errorResponse(`Error: Document "${newId}" already exists. Choose a different name or delete the existing document first.`);
     }
 
     const result = await reader.renameDocument({
@@ -217,8 +222,6 @@ ${getApprovalRequestedMessage(approvalResult)}` +
       newId,
       updateBacklinks: true,
     });
-
-    pendingRenames.delete(requestId);
 
     if (!result.success) {
       return errorResponse(`Error: ${result.error ?? "Unknown error"}`);

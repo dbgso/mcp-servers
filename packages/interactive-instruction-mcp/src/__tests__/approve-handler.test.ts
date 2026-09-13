@@ -14,10 +14,9 @@ import { ApproveHandler } from "../tools/instruction/handlers/approve.js";
 import { AddHandler } from "../tools/instruction/handlers/add.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 
-// Import mocked functions from mcp-shared (mocked globally in vitest-setup.ts)
+// Spies over the real approval module, wired up in vitest-setup.ts.
 import { requestApproval, validateApproval } from "mcp-shared/approval";
 
-// Get references to the mocked functions
 const mockRequestApproval = vi.mocked(requestApproval);
 const mockValidateApproval = vi.mocked(validateApproval);
 
@@ -56,20 +55,13 @@ describe("ApproveHandler", () => {
     approveHandler = new ApproveHandler();
     addHandler = new AddHandler();
 
-    // Setup mock implementations
-    mockRequestApproval.mockResolvedValue({
-      token: "mock-token-12345",
-      fallbackPath: "/tmp/mock-pending.txt",
-    });
-    mockValidateApproval.mockImplementation(({ providedToken }) => {
-      if (providedToken === "valid-token") {
-        return { valid: true };
-      }
-      return { valid: false, reason: "Invalid token" };
-    });
+    mockRequestApproval.mockClear();
+    mockValidateApproval.mockClear();
   });
 
   afterEach(async () => {
+    // clearAllMocks, not resetAllMocks: the spies must keep wrapping the real
+    // implementations between tests.
     vi.clearAllMocks();
 
     // Remove workflow states for all IDs used in this test. Use delete() (not
@@ -90,9 +82,30 @@ describe("ApproveHandler", () => {
   /**
    * Helper to create a draft and progress it to a specific state.
    */
+  /**
+   * Registers a BATCH approval. The batch request id is built from the id list,
+   * so an approval requested through the single-draft path does not satisfy it.
+   * Spy counts are cleared afterwards so a test counts only its own calls.
+   */
+  async function requestBatchApproval(ids: string): Promise<void> {
+    await approveHandler.execute({
+      rawParams: { action: "approve", ids },
+      context,
+    });
+    mockRequestApproval.mockClear();
+    mockValidateApproval.mockClear();
+  }
+
+  /**
+   * `pending_approval` is reached through the handler rather than by driving
+   * the workflow manager directly, because that is the step that registers the
+   * approval. Skipping it used to be invisible -- the stubbed validator
+   * accepted any token -- but the real gate has nothing to validate against.
+   */
   async function createDraftAtState(
     id: string,
-    state: "editing" | "self_review" | "user_reviewing" | "pending_approval"
+    state: "editing" | "self_review" | "user_reviewing" | "pending_approval",
+    options: { targetId?: string } = {}
   ): Promise<void> {
     // Clear any existing state first
     draftWorkflowManager.clear({ id });
@@ -121,10 +134,12 @@ describe("ApproveHandler", () => {
 
     if (state === "user_reviewing") return;
 
-    // Progress to pending_approval
-    await draftWorkflowManager.trigger({
-      id,
-      triggerParams: { action: "confirm", confirmed: true },
+    // Progress to pending_approval AND request the approval, the way a caller
+    // does. `force` skips the consecutive-approval warning, which is about
+    // caller habits and not what these tests are exercising.
+    await approveHandler.execute({
+      rawParams: { action: "approve", id, confirmed: true, force: true, ...options },
+      context,
     });
   }
 
@@ -281,6 +296,8 @@ describe("ApproveHandler", () => {
         await createDraftAtState(id1, "pending_approval");
         await createDraftAtState(id2, "pending_approval");
 
+        await requestBatchApproval(`${id1},${id2}`);
+
         const result = await approveHandler.execute({
           rawParams: {
             action: "approve",
@@ -326,13 +343,18 @@ describe("ApproveHandler", () => {
           context,
         });
 
-        expect(result.isError).toBeFalsy();
-        expect(result.content[0].text).toContain("Draft not found");
+        // A draft that disappeared after approval no longer matches what was
+        // approved, so the batch is refused rather than partly applied. It used
+        // to be reported per item inside a successful response.
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("no longer exists");
       });
 
       it("should reject invalid token", async () => {
         const id1 = getTestId("test-draft-1");
         await createDraftAtState(id1, "pending_approval");
+
+        await requestBatchApproval(id1);
 
         const result = await approveHandler.execute({
           rawParams: {
@@ -345,7 +367,7 @@ describe("ApproveHandler", () => {
 
         expect(result.isError).toBe(true);
         // Message contains reason from validateApproval
-        expect(result.content[0].text).toContain("Invalid token");
+        expect(result.content[0].text).toContain("invalid_token");
       });
 
       it("should require all drafts in pending_approval state", async () => {
@@ -353,6 +375,8 @@ describe("ApproveHandler", () => {
         const id2 = getTestId("test-draft-2");
         await createDraftAtState(id1, "pending_approval");
         await createDraftAtState(id2, "user_reviewing"); // Wrong state
+
+        await requestBatchApproval(`${id1},${id2}`);
 
         const result = await approveHandler.execute({
           rawParams: {
@@ -372,6 +396,8 @@ describe("ApproveHandler", () => {
         const id2 = getTestId("test-draft-2");
         await createDraftAtState(id1, "pending_approval");
         await createDraftAtState(id2, "pending_approval");
+
+        mockRequestApproval.mockClear();
 
         const result = await approveHandler.execute({
           rawParams: {
@@ -456,6 +482,8 @@ describe("ApproveHandler", () => {
         error: "Batch rename error",
       });
 
+      await requestBatchApproval(id1);
+
       const result = await approveHandler.execute({
         rawParams: {
           action: "approve",
@@ -498,8 +526,8 @@ describe("ApproveHandler", () => {
       });
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Approval rejected");
-      expect(result.content[0].text).toContain("Invalid token");
+      expect(result.content[0].text).toContain("Approval Required");
+      expect(result.content[0].text).toContain("invalid_token");
     });
 
     it("should apply draft with valid token", async () => {
@@ -527,7 +555,7 @@ describe("ApproveHandler", () => {
     it("should apply draft to custom targetId with valid token", async () => {
       const id = getTestId("test-draft-1");
       const targetId = getTestId("custom-target");
-      await createDraftAtState(id, "pending_approval");
+      await createDraftAtState(id, "pending_approval", { targetId });
 
       const result = await approveHandler.execute({
         rawParams: { action: "approve", id, targetId, approvalToken: "valid-token" },

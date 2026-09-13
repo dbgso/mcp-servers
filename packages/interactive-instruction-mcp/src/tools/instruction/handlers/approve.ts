@@ -35,6 +35,20 @@ function buildBatchRequestId(ids: string[]): string {
   return `instruction::approve-batch::${ids.join(",")}`;
 }
 
+/**
+ * The draft reduced to what a human is actually approving: its metadata and
+ * body, with the fields the promotion itself writes (`status`, `approvedAt`,
+ * `confirmedAt`) left out, since those differ between the moment approval is
+ * requested and the moment it is used.
+ */
+function stableDraftBody(content: string): string {
+  const { description, whenToUse, relatedDocs } = parseFrontmatter(content);
+  return [
+    JSON.stringify({ description, whenToUse, relatedDocs }),
+    stripFrontmatter(content),
+  ].join("\n");
+}
+
 // --- 変更点3: ToolResult → ToolResponse ヘルパー ---
 
 // --- 変更点4: extends BaseActionHandler（旧: implements DraftActionHandler） ---
@@ -196,8 +210,17 @@ Now you're trying to confirm "${id}" separately.` +
 
       // --- 変更点2: requestId統一 ---
       const requestId = buildRequestId([id]);
+      const what = await this.buildApprovalWhat({ id, targetId, reader });
+      if (what === null) {
+        return errorResponse(`Error: Draft "${id}" not found.`);
+      }
       const approvalResult = await requestApproval({
-        request: { id: requestId, operation: "Draft Approval", description: `Approve draft "${id}"?` },
+        request: {
+          id: requestId,
+          operation: "Draft Approval",
+          description: await this.buildApprovalDescription({ id, targetId, reader }),
+          what,
+        },
       });
 
       return textResponse(
@@ -230,6 +253,75 @@ Expected: self_review or user_reviewing` +
   }
 
   // --- ロジック変更なし: generateChangeInfo, generateSummary, generateDiff ---
+
+  /**
+   * What this promotion will do, computed from the files rather than described
+   * by the caller. Bound into the approval so it cannot be swapped afterwards:
+   * `targetId` used to be read again at token time and applied with
+   * `overwrite: true`, which turned a token approved for "create a new note"
+   * into an overwrite of any promoted document. The draft body is in here for
+   * the same reason -- editing a draft needs no approval, so a token could
+   * otherwise be spent on content nobody saw.
+   *
+   * Returns null when the draft is gone, which the callers report as an error.
+   */
+  private async buildApprovalWhat(params: {
+    id: string;
+    targetId?: string;
+    reader: InstructionContext["reader"];
+  }): Promise<string | null> {
+    const { id, targetId, reader } = params;
+    const finalTargetId = targetId || id;
+
+    const draftContent = await reader.getDocumentContent(DRAFT_PREFIX + id);
+    if (draftContent === null) return null;
+
+    const existing = await reader.getDocumentContent(finalTargetId);
+
+    return [
+      `promote: ${id}`,
+      `target: ${finalTargetId}`,
+      `overwrites: ${existing === null ? "no" : "yes"}`,
+      `content:`,
+      stableDraftBody(draftContent),
+    ].join("\n");
+  }
+
+  /**
+   * One line for the desktop notification. That notification is the human's
+   * only channel -- the diff goes into the tool response, which only the agent
+   * reads -- so it has to name the target and say whether anything is being
+   * overwritten.
+   */
+  private async buildApprovalDescription(params: {
+    id: string;
+    targetId?: string;
+    reader: InstructionContext["reader"];
+  }): Promise<string> {
+    const { id, targetId, reader } = params;
+    const finalTargetId = targetId || id;
+    const existing = await reader.getDocumentContent(finalTargetId);
+    const verb = existing === null ? "create" : "OVERWRITE";
+    return `Promote draft "${id}" -> ${verb} "${finalTargetId}"`;
+  }
+
+  /**
+   * The batch equivalent, in the caller's order so that reordering the ids
+   * produces a different approval rather than reusing one.
+   */
+  private async buildBatchApprovalWhat(params: {
+    idList: string[];
+    reader: InstructionContext["reader"];
+  }): Promise<string | null> {
+    const { idList, reader } = params;
+    const parts: string[] = [];
+    for (const id of idList) {
+      const what = await this.buildApprovalWhat({ id, reader });
+      if (what === null) return null;
+      parts.push(what);
+    }
+    return parts.join("\n---\n");
+  }
 
   private async generateChangeInfo(params: {
     id: string;
@@ -341,8 +433,17 @@ Each draft must complete the workflow (notes → explain → confirmed) before b
         changeInfos.push(info);
       }
 
+      const what = await this.buildBatchApprovalWhat({ idList, reader });
+      if (what === null) {
+        return errorResponse("Error: One of the drafts in this batch no longer exists.");
+      }
       const approvalResult = await requestApproval({
-        request: { id: batchRequestId, operation: "Batch Draft Approval", description: `Approve ${idList.length} drafts: ${idList.join(", ")}` },
+        request: {
+          id: batchRequestId,
+          operation: "Batch Draft Approval",
+          description: `Promote ${idList.length} drafts: ${idList.join(", ")}`,
+          what,
+        },
       });
 
       return textResponse(
@@ -362,7 +463,15 @@ ${getApprovalRequestedMessage(approvalResult)}` +
     }
 
     // Validate token
-    const validation = validateApproval({ requestId: batchRequestId, providedToken: approvalToken });
+    const currentWhat = await this.buildBatchApprovalWhat({ idList, reader });
+    if (currentWhat === null) {
+      return errorResponse("Error: One of the drafts in this batch no longer exists.");
+    }
+    const validation = validateApproval({
+      requestId: batchRequestId,
+      providedToken: approvalToken,
+      currentWhat,
+    });
     if (!validation.valid) {
       return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);
     }
@@ -505,7 +614,14 @@ You must complete the workflow first:
     }
 
     const requestId = buildRequestId([id]);
-    const validation = validateApproval({ requestId, providedToken: approvalToken });
+    // Recomputed here, before anything is written -- the promotion itself
+    // rewrites the draft's frontmatter, so computing it later would compare the
+    // approval against the change already in progress.
+    const currentWhat = await this.buildApprovalWhat({ id, targetId, reader });
+    if (currentWhat === null) {
+      return errorResponse(`Error: Draft "${id}" not found.`);
+    }
+    const validation = validateApproval({ requestId, providedToken: approvalToken, currentWhat });
 
     if (!validation.valid) {
       return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);

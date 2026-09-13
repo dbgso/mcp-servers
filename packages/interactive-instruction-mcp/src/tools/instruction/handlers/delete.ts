@@ -15,6 +15,21 @@ const schema = z.object({
 type Args = z.infer<typeof schema>;
 
 
+/**
+ * Binds a delete approval to the document as it stood when the human approved
+ * it. If the content changes in between, the approval no longer matches and the
+ * caller has to ask again -- what was approved for deletion is not what would
+ * be deleted.
+ */
+async function buildDeleteWhat(params: {
+  reader: InstructionContext["reader"];
+  id: string;
+}): Promise<string> {
+  const { reader, id } = params;
+  const content = await reader.getDocumentContent(id);
+  return [`delete: ${id}`, `content:`, content ?? "(missing)"].join("\n");
+}
+
 export class DeleteHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "delete";
   readonly help = `Delete a draft or promoted document.
@@ -138,6 +153,7 @@ ${backlinks.map((doc) => `- ${doc.id}`).join("\n")}
         id: requestId,
         operation: "Delete document",
         description: `Delete "${id}"${backlinks.length > 0 ? ` (referenced by ${backlinks.length} documents)` : ""}`,
+        what: await buildDeleteWhat({ reader, id }),
       },
     });
 
@@ -169,6 +185,7 @@ ${getApprovalRequestedMessage(approvalResult)}` +
     const validation = validateApproval({
       requestId,
       providedToken: approvalToken,
+      currentWhat: await buildDeleteWhat({ reader, id }),
     });
 
     if (!validation.valid) {
