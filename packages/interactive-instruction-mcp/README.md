@@ -6,7 +6,7 @@ MCP server for interactive instruction documents. AI agents discover usage throu
 
 - **Learn by doing**: AI calls `instruction_describe()` to learn available actions, then uses `instruction()` with guided responses
 - **Single source of truth**: Each handler defines its own schema — no manual sync needed
-- **Human oversight**: Draft edits are free. Promoted documents are gated — promotion, deletion, rename and link changes need a one-time token delivered out-of-band; content updates go through a diff you explicitly apply or cancel
+- **Human oversight**: Draft edits are free. Promoted documents are gated — promotion, deletion, rename and link changes need a one-time token delivered out-of-band; content updates cannot be applied silently
 
 ## Compared to skill files
 
@@ -84,7 +84,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 
 **Draft Operations**
 - `add` — Create a new draft (`id`, `content`, `description`, `whenToUse` required)
-- `update` — Update a draft (direct overwrite) or promoted document (writes a pending diff; no token — see `apply` / `cancel`)
+- `update` — Update a draft (direct overwrite) or promoted document (writes a pending diff — see `apply` / `cancel`)
 - `delete` — Delete a draft (instant) or promoted document (approval required)
 - `rename` — Rename a draft (instant) or promoted document (approval required)
 
@@ -92,7 +92,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `approve` — Progress through: notes → confirmed → token (optional: `targetId`, `force`, `ids` for batch)
 
 **Pending Updates** (for promoted document updates via `update`)
-- `apply` — Apply a pending update
+- `apply` — Apply a pending update (`explanation` required; the first call is refused by design)
 - `cancel` — Cancel a pending update
 
 **Metadata & Quality**
@@ -183,7 +183,7 @@ own lines rather than left to be inferred.
 | Operation | Draft (`_mcp_drafts/`) | Promoted (root directories) |
 |---|---|---|
 | `add` | Free | Create a draft, then `approve` it |
-| `update` | Direct overwrite | Pending diff → `apply` / `cancel` (no token) |
+| `update` | Direct overwrite | Pending diff → `apply` (deliberation gate) / `cancel` |
 | `delete` | Immediate | Preview → `confirmed: true` → token |
 | `rename` | Immediate | Preview → `confirmed: true` → token |
 | `link_add` / `link_remove` | Preview → `confirmed: true` → token | Preview → `confirmed: true` → token |
@@ -213,12 +213,51 @@ channel the human sees.
 | Gate | Actions |
 |---|---|
 | Approval token, content-bound | `approve`, `delete` (promoted), `rename` (promoted), `link_add`, `link_remove` |
-| Diff preview, no token | `update` (promoted) → `apply` / `cancel` |
-| None | `add`, `update` (draft), `delete` (draft), `rename` (draft), `list`, `read`, `lint`, `set_status`, `update_meta` |
+| Deliberation, no token | `update` (promoted) → `apply` |
+| None | `add`, `update` (draft), `delete` (draft), `rename` (draft), `cancel`, `list`, `read`, `lint`, `set_status`, `update_meta` |
 
-`update` → `apply` carries no token, but `apply` is not a blind write: it refuses if the
-document changed after the diff was computed, and refuses — discarding the staged update —
-if the document has since been deleted. Staged updates expire after a day.
+### The deliberation gate on `apply`
+
+Editing a promoted document is the ordinary way documents get maintained, and a notification
+round trip on every edit would make that unworkable — impossible, in a headless session,
+where nothing can deliver a token. So `apply` is gated differently.
+
+`apply` requires an `explanation`: what the change does and why, in your agent's own words.
+**The first call is always refused**, with instructions to explain the change to you and then
+repeat the identical call. Only the second consecutive identical attempt goes through. The
+refusal comes back as an ordinary response, not an error: being refused is a step in the
+operation rather than a failure of it.
+
+This is **disclosure, not consent**. Nothing verifies that anyone read the explanation. What
+it guarantees is that the change cannot happen silently: a refused call forces the agent to
+produce user-facing text, and the explanation it commits to is a parameter, so it is on the
+record where you can see it and say no.
+
+Repetition is a meaningful signal here for a specific reason. The explanation is part of what
+identifies an attempt, and the reflex on being refused is to retry with *altered* arguments —
+which is a different attempt, refused again. Getting through means committing to one account
+of the change and standing by it verbatim. The count is configurable per operation
+(`requiredAttempts`, default 2) for tools that want more friction.
+
+`apply` is also not a blind write: it refuses if the document changed after the diff was
+computed, and refuses — discarding the staged update — if the document has since been
+deleted. Staged updates expire after a day.
+
+A run lives in the server process, not on disk. Restarting the server — which includes
+resuming a headless session, since each CLI invocation starts its own server — drops any
+half-finished run, and the next identical call is refused as attempt 1 again. That is the
+safe direction to fail, but a caller that retries automatically should know it can be sent
+around the loop twice.
+
+The gate sits behind the tool, so it only sees callers that chose the tool. Measured over
+fifteen headless runs: with a plain request, 3/3 agents explained the change and handed the
+decision back, against 0/3 without the gate — but told "use whatever method you like", 3/3
+edited the file directly with `Edit` and never called `apply` at all. The control did the
+same, so that is the prompt talking, not the gate. Nothing here can stop a caller that never
+reaches it; that needs something upstream of tool choice, such as a `PreToolUse` hook.
+
+If an operation would be genuinely damaging when an uncooperative agent gets through, this is
+the wrong gate for it. That is why deletion, rename and promotion use tokens instead.
 
 ### Draft Lifecycle
 
@@ -275,7 +314,7 @@ stateDiagram-v2
     state "awaiting token" as awaiting
 
     clean --> pending: update(id, content) stages a diff
-    pending --> clean: apply(id) writes it
+    pending --> clean: apply(id, explanation) twice, writes it
     pending --> clean: cancel(id) discards it
 
     clean --> awaiting: delete / rename / link_add / link_remove + confirmed

@@ -182,8 +182,8 @@ ${diff}\`\`\`` +
         formatNextActions([
           {
             action: "apply",
-            description: "Apply this update",
-            example: `instruction(action: "apply", id: "${id}")`,
+            description: "Explain this change to the user, then apply it (twice -- the first call is refused on purpose)",
+            example: `instruction(action: "apply", id: "${id}", explanation: "<what this changes and why>")`,
           },
           {
             action: "cancel",

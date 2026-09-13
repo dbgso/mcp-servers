@@ -503,7 +503,7 @@ describe("Integration Tests", () => {
 
       it("should error when applying non-existent pending update", async () => {
         const result = await applyHandler.execute({
-          rawParams: { action: "apply", id: "non-existent" },
+          rawParams: { action: "apply", id: "non-existent", explanation: "test: applies the staged update" },
           context: context,
         });
 

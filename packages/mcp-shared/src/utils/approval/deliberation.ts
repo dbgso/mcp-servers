@@ -1,0 +1,216 @@
+/**
+ * Deliberation gate -- a speed bump in front of an operation, for changes that
+ * warrant disclosure rather than consent.
+ *
+ * The first attempt is refused. The refusal tells the caller to explain the
+ * change to the user in its own words and then repeat the identical call. Only
+ * a run of consecutive identical attempts gets through, at which point whatever
+ * approval flow the tool configured runs as usual -- often none, because this
+ * is meant for operations that do not warrant a token. The run ends when the
+ * caller reports the operation done, not when it passes the gate.
+ *
+ * ## What it buys, and what it does not
+ *
+ * It buys DISCLOSURE. A refused call forces the agent to produce user-facing
+ * text, and the explanation it commits to is a parameter, so it lands in the
+ * transcript where a human can see it and intervene. It costs no round trip:
+ * nobody has to read a notification or relay a token, and it works in a
+ * headless session where the token strategy cannot.
+ *
+ * It does not buy CONSENT. Nothing here verifies that a human read anything.
+ * An agent may repeat the call without saying a word. Do not put an operation
+ * behind this gate if an uncooperative or confused caller getting through would
+ * matter -- use `TokenApprovalStrategy`, where the proof travels on a channel
+ * the caller cannot read.
+ *
+ * ## Why repetition is a meaningful signal
+ *
+ * Not because a model rarely repeats itself -- given a refusal that says "call
+ * again", repeating is exactly what it does. The signal is that the key
+ * includes the caller's own `explanation`, and the reflex on being refused is
+ * to retry with ALTERED arguments. Altered arguments are a different key, which
+ * is refused again with the same instruction. Getting through requires
+ * committing to one account of the change and standing by it verbatim, which is
+ * a different act from retrying.
+ *
+ * The store is a single slot, so "consecutive" means consecutive: any
+ * intervening operation resets the run. It is process memory, so a restart
+ * fails closed.
+ */
+
+import { contentHash } from "../content-hash.js";
+
+/** Attempts required by default. Two is the documented, ordinary setting. */
+export const DEFAULT_REQUIRED_ATTEMPTS = 2;
+
+/**
+ * How long a run may sit half-finished. A safety net, not the mechanism -- the
+ * single slot is what enforces consecutiveness. Generous, because the whole
+ * point is that the caller goes and talks to a human in between.
+ */
+export const DEFAULT_DELIBERATION_TTL_MS = 10 * 60 * 1000;
+
+export interface DeliberationConfig {
+  /**
+   * Consecutive identical attempts required to pass. Defaults to
+   * `DEFAULT_REQUIRED_ATTEMPTS`. Raise it for an operation that deserves more
+   * friction -- though an operation that deserves much more probably deserves
+   * a different strategy instead.
+   */
+  requiredAttempts?: number;
+  /** Overrides `DEFAULT_DELIBERATION_TTL_MS`. */
+  ttlMs?: number;
+  /** Injectable clock, for tests. */
+  now?: () => number;
+}
+
+export interface DeliberationRequest {
+  /** Identifies the operation, e.g. `instruction::apply::<id>`. */
+  operation: string;
+  /**
+   * Tool-computed ground truth of what will change -- the same value a
+   * content-bound approval would be keyed on. Part of the key, so a caller that
+   * re-stages a different change starts a new run.
+   */
+  what: string;
+  /**
+   * The caller's account of the change, in its own words, as it gave it to the
+   * user. Part of the key: this is what makes a run mean something.
+   */
+  explanation: string;
+}
+
+export type DeliberationOutcome =
+  | { ok: true; attempts: number }
+  | { ok: false; attempts: number; remaining: number; message: string };
+
+interface Run {
+  key: string;
+  attempts: number;
+  expiresAt: number;
+}
+
+export class DeliberationGate {
+  private readonly requiredAttempts: number;
+  private readonly ttlMs: number;
+  private readonly now: () => number;
+
+  /** One slot, deliberately: a run is broken by any other operation. */
+  private run: Run | null = null;
+
+  constructor(config: DeliberationConfig = {}) {
+    const {
+      requiredAttempts = DEFAULT_REQUIRED_ATTEMPTS,
+      ttlMs = DEFAULT_DELIBERATION_TTL_MS,
+      now = Date.now,
+    } = config;
+
+    if (!Number.isInteger(requiredAttempts) || requiredAttempts < 1) {
+      throw new Error(
+        `requiredAttempts must be a positive integer, got ${String(requiredAttempts)}`
+      );
+    }
+
+    this.requiredAttempts = requiredAttempts;
+    this.ttlMs = ttlMs;
+    this.now = now;
+  }
+
+  /**
+   * Record an attempt and say whether the operation may proceed.
+   *
+   * Passing does not end the run -- call `settle` once the operation has been
+   * carried out.
+   */
+  consider(request: DeliberationRequest): DeliberationOutcome {
+    const key = contentHash(
+      [request.operation, request.what, request.explanation].join("\u0000")
+    );
+    const now = this.now();
+    const attempts = this.nextAttemptCount({ key, now });
+
+    if (attempts >= this.requiredAttempts) {
+      // Deliberately not cleared here. Passing the gate is not the same as the
+      // operation having happened, and an operation that then fails must not
+      // cost the caller a second round of explaining itself to the user.
+      // `settle` is what ends a run, once the work is actually done.
+      this.run = { key, attempts, expiresAt: now + this.ttlMs };
+      return { ok: true, attempts };
+    }
+
+    this.run = { key, attempts, expiresAt: now + this.ttlMs };
+    const remaining = this.requiredAttempts - attempts;
+    return {
+      ok: false,
+      attempts,
+      remaining,
+      message: buildDeliberationMessage({ request, attempts, remaining }),
+    };
+  }
+
+  /**
+   * Where this attempt lands in a run: 1 starts a fresh one, anything higher
+   * continues the stored one. Only an attempt with the same key, against a slot
+   * that has not expired, continues.
+   */
+  private nextAttemptCount(params: { key: string; now: number }): number {
+    const { key, now } = params;
+    const previous = this.run;
+
+    if (previous === null) return 1;
+    if (previous.key !== key) return 1;
+    if (now >= previous.expiresAt) return 1;
+    return previous.attempts + 1;
+  }
+
+  /**
+   * End the run that just passed, once the operation it let through has
+   * actually been carried out. The next identical call then starts over.
+   *
+   * A caller that passes the gate and then fails to do the work should not call
+   * this: leaving the run standing is what lets it retry without putting the
+   * user through the same explanation twice.
+   */
+  settle(): void {
+    this.run = null;
+  }
+
+  /** Drop any run in progress, settled or not. */
+  reset(): void {
+    this.run = null;
+  }
+}
+
+function buildDeliberationMessage(params: {
+  request: DeliberationRequest;
+  attempts: number;
+  remaining: number;
+}): string {
+  const { request, attempts, remaining } = params;
+  const total = attempts + remaining;
+
+  return `# Not Yet -- Tell the User First
+
+This is attempt ${attempts} of ${total} for **${request.operation}**, and it has not been
+carried out.
+
+Before trying again:
+
+1. Explain to the user, in your own words, what this change does and why you are
+   making it. Do not paraphrase this message at them -- describe the change.
+2. Give them a chance to say no.
+
+Then repeat the **identical** call, including the same \`explanation\`:
+
+> ${request.explanation}
+
+The wording is part of what identifies this attempt. Changing the arguments --
+including rephrasing the explanation -- starts a new run rather than continuing
+this one, and you will be told this again.
+
+Do not perform another gated operation in between either. Attempts have to be
+consecutive, so an intervening one ends this run and the count starts over.
+
+Do not work around this by reaching for a different tool or writing the file
+directly.`;
+}
