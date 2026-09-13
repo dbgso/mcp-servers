@@ -93,7 +93,29 @@ export class ApproveHandler extends BaseActionHandler<Args, InstructionContext> 
     currentState: DraftState;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, targetId, notes, confirmed, force, currentState, reader } = params;
+    const { id, targetId, notes, confirmed, force, reader } = params;
+    let { currentState } = params;
+
+    // editing: submit the draft's current content and carry on into
+    // self_review. Without this the state has no entry point through this
+    // handler -- only `add` performed the submit -- so a draft reset back to
+    // `editing` fell through to "Unexpected State" and was stuck for good,
+    // which is the complaint issue #6 opens with.
+    if (currentState === "editing") {
+      const draftContent = await reader.getDocumentContent(DRAFT_PREFIX + id);
+      if (draftContent === null) {
+        return errorResponse(`Error: Draft "${id}" not found.`);
+      }
+
+      const submitted = await draftWorkflowManager.trigger({
+        id,
+        triggerParams: { action: "submit", content: draftContent },
+      });
+      if (!submitted.ok) {
+        return errorResponse(`Error: ${submitted.error}`);
+      }
+      currentState = "self_review";
+    }
 
     // self_review state: need notes to proceed
     if (currentState === "self_review") {
@@ -165,7 +187,7 @@ Self-review recorded.
 
       // Check consecutive approvals
       if (!force) {
-        const recentlyConfirmed = await this.getRecentlyConfirmedDrafts({ currentId: id, withinMs: 10_000 });
+        const recentlyConfirmed = await this.getRecentlyConfirmedDrafts({ currentId: id, withinMs: 10_000, reader });
         if (recentlyConfirmed.length > 0) {
           const allIds = [id, ...recentlyConfirmed];
           return errorResponse(
@@ -407,12 +429,23 @@ ${headerSection}`;
       return this.handleBatchConfirmed({ idList, reader });
     }
 
-    // Check all drafts are in pending_approval state
+    // Check all drafts are in pending_approval state AND actually went through
+    // the review steps. State alone is not enough: a leftover entry from an
+    // earlier cycle reads as `pending_approval`, so a brand-new draft reusing
+    // that id could be batch-approved without self-review or an explanation to
+    // the user. Persisted state is deleted on promotion now, but the check
+    // costs nothing and does not depend on that cleanup having happened.
     const notReady: string[] = [];
     for (const id of idList) {
       const status = await draftWorkflowManager.getStatus({ id });
       const state = status?.state ?? "editing";
-      if (state !== "pending_approval") notReady.push(`${id} (${state})`);
+      if (state !== "pending_approval") {
+        notReady.push(`${id} (${state})`);
+        continue;
+      }
+      if (!status?.visitedStates.includes("user_reviewing")) {
+        notReady.push(`${id} (never reviewed)`);
+      }
     }
 
     if (notReady.length > 0) {
@@ -480,7 +513,15 @@ ${getApprovalRequestedMessage(approvalResult)}` +
     const results: string[] = [];
     for (const id of idList) {
       const sourceDraftId = DRAFT_PREFIX + id;
-      await draftWorkflowManager.trigger({ id, triggerParams: { action: "approve" }, approvalToken });
+      const transition = await draftWorkflowManager.trigger({
+        id,
+        triggerParams: { action: "approve" },
+        approvalToken,
+      });
+      if (!transition.ok) {
+        results.push(`- ${id}: ${transition.error}`);
+        continue;
+      }
 
       const draftContent = await reader.getDocumentContent(sourceDraftId);
       if (draftContent === null) {
@@ -488,17 +529,11 @@ ${getApprovalRequestedMessage(approvalResult)}` +
         continue;
       }
 
-      const existingFrontmatter = parseFrontmatter(draftContent);
-      const approvedContent = updateFrontmatter({
-        content: stripFrontmatter(draftContent),
-        frontmatter: { ...existingFrontmatter, status: "approved" as const, approvedAt: new Date().toISOString() },
-      });
-
-      await reader.updateDocument({ id: sourceDraftId, content: approvedContent });
       const renameResult = await reader.renameDocument({ oldId: sourceDraftId, newId: id, overwrite: true });
 
       if (renameResult.success) {
-        draftWorkflowManager.clear({ id });
+        await this.markApproved({ id, reader });
+        await draftWorkflowManager.delete({ id });
         results.push(`- ${id}: Applied`);
       } else {
         results.push(`- ${id}: ${renameResult.error}`);
@@ -572,19 +607,39 @@ ${getApprovalRequestedMessage(approvalResult)}` +
     );
   }
 
-  private async getRecentlyConfirmedDrafts(params: { currentId: string; withinMs: number }): Promise<string[]> {
-    const { currentId, withinMs } = params;
+  /**
+   * Drafts confirmed moments ago and still waiting for a token.
+   *
+   * The draft file has to still be there. Applied drafts used to qualify --
+   * their persisted state stayed at `pending_approval` with a fresh
+   * `confirmedAt` -- so the warning named documents that no longer existed and
+   * the batch command it recommended was guaranteed to fail, which trained
+   * callers to reach for `force` instead.
+   */
+  private async getRecentlyConfirmedDrafts(params: {
+    currentId: string;
+    withinMs: number;
+    reader: InstructionContext["reader"];
+  }): Promise<string[]> {
+    const { currentId, withinMs, reader } = params;
     const now = Date.now();
     const allStatuses = await draftWorkflowManager.listAll();
-    return allStatuses
-      .filter((status) => {
-        if (status.id === currentId) return false;
-        if (status.state !== "pending_approval") return false;
-        const confirmedAt = status.context.confirmedAt;
-        if (!confirmedAt) return false;
-        return (now - confirmedAt) < withinMs;
-      })
-      .map((status) => status.id);
+
+    const candidates = allStatuses.filter((status) => {
+      if (status.id === currentId) return false;
+      if (status.state !== "pending_approval") return false;
+      const confirmedAt = status.context.confirmedAt;
+      if (!confirmedAt) return false;
+      return (now - confirmedAt) < withinMs;
+    });
+
+    const stillPending: string[] = [];
+    for (const status of candidates) {
+      if (await reader.documentExists(DRAFT_PREFIX + status.id)) {
+        stillPending.push(status.id);
+      }
+    }
+    return stillPending;
   }
 
   private async handleApprovalWithToken(params: {
@@ -627,7 +682,14 @@ You must complete the workflow first:
       return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);
     }
 
-    await draftWorkflowManager.trigger({ id, triggerParams: { action: "approve" }, approvalToken });
+    const transition = await draftWorkflowManager.trigger({
+      id,
+      triggerParams: { action: "approve" },
+      approvalToken,
+    });
+    if (!transition.ok) {
+      return errorResponse(`Error: ${transition.error}`);
+    }
 
     const sourceDraftId = DRAFT_PREFIX + id;
     const finalTargetId = targetId || id;
@@ -637,20 +699,20 @@ You must complete the workflow first:
       return errorResponse(`Error: Draft "${id}" not found.`);
     }
 
-    const existingFrontmatter = parseFrontmatter(draftContent);
-    const approvedContent = updateFrontmatter({
-      content: stripFrontmatter(draftContent),
-      frontmatter: { ...existingFrontmatter, status: "approved" as const, approvedAt: new Date().toISOString() },
-    });
-
-    await reader.updateDocument({ id: sourceDraftId, content: approvedContent });
+    // Move first, mark approved second. The other order left a failed rename
+    // with a draft stamped `status: approved` and a token already spent, and
+    // the single-id path offers no way to mint another.
     const renameResult = await reader.renameDocument({ oldId: sourceDraftId, newId: finalTargetId, overwrite: true });
-
     if (!renameResult.success) {
       return errorResponse(`Error: ${renameResult.error}`);
     }
 
-    draftWorkflowManager.clear({ id });
+    await this.markApproved({ id: finalTargetId, reader });
+
+    // delete, not clear: `clear` only drops the in-memory entry, leaving a
+    // persisted `pending_approval` on disk that a later draft with the same id
+    // inherits -- and can be promoted on without ever being reviewed.
+    await draftWorkflowManager.delete({ id });
 
     return textResponse(
       `Draft "${id}" approved and promoted to "${finalTargetId}" successfully.` +
@@ -659,6 +721,31 @@ You must complete the workflow first:
         { action: "list", description: "View all documents", example: `instruction(action: "list")` },
       ]),
     );
+  }
+
+  /**
+   * Stamp the promoted document as approved. Runs after the move succeeds, so a
+   * failed promotion leaves the draft exactly as it was.
+   */
+  private async markApproved(params: {
+    id: string;
+    reader: InstructionContext["reader"];
+  }): Promise<void> {
+    const { id, reader } = params;
+    const content = await reader.getDocumentContent(id);
+    if (content === null) return;
+
+    await reader.updateDocument({
+      id,
+      content: updateFrontmatter({
+        content: stripFrontmatter(content),
+        frontmatter: {
+          ...parseFrontmatter(content),
+          status: "approved" as const,
+          approvedAt: new Date().toISOString(),
+        },
+      }),
+    });
   }
 
   private async updateDraftFrontmatterStatus(params: {

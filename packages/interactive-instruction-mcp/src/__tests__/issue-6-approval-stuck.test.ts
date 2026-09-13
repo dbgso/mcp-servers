@@ -281,8 +281,8 @@ describe("Issue #6: Approval workflow stuck in pending_approval", () => {
     });
   });
 
-  describe("Bug 3: set_status does not reset workflow state machine", () => {
-    it("should reproduce: set_status updates frontmatter but not workflow manager state", async () => {
+  describe("Bug 3 (fixed): set_status resets the workflow state machine", () => {
+    it("set_status resets the workflow, unsticking a draft", async () => {
       mockRequestApproval.mockResolvedValue({
         token: "9999",
         fallbackPath: "/tmp/mock.txt",
@@ -307,36 +307,32 @@ describe("Issue #6: Approval workflow stuck in pending_approval", () => {
       const statusBefore = await draftWorkflowManager.getStatus({ id: "test-doc" });
       expect(statusBefore?.state).toBe("pending_approval");
 
-      // Use set_status to reset to user_reviewing (e.g., to retry approval)
-      const setStatusResult = await setStatusHandler.execute({
+      // Declaring an intermediate state is refused: writing one into the
+      // frontmatter never advanced anything, because the approve handler goes
+      // by the workflow manager. That mismatch is what left a draft stuck with
+      // no way back.
+      const forward = await setStatusHandler.execute({
         rawParams: { action: "set_status", id: "test-doc", status: "user_reviewing" },
+        context,
+      });
+      expect(forward.isError).toBe(true);
+
+      // A reset is the supported recovery, and it clears the workflow entry too.
+      const setStatusResult = await setStatusHandler.execute({
+        rawParams: { action: "set_status", id: "test-doc", status: "editing" },
         context,
       });
       expect(setStatusResult.isError).toBeFalsy();
 
-      // BUG 3 REPRODUCTION:
-      // set_status only updates the frontmatter in the markdown file,
-      // but does NOT reset the workflow state machine in draftWorkflowManager.
-
-      // Check workflow manager state - it should be user_reviewing after set_status
       const statusAfter = await draftWorkflowManager.getStatus({ id: "test-doc" });
+      expect(statusAfter?.state).toBe("editing");
 
-      // Expected behavior: statusAfter.state === "user_reviewing"
-      // Actual behavior (bug): statusAfter.state === "pending_approval" (unchanged)
-      expect(statusAfter?.state).toBe("pending_approval"); // Bug: still pending_approval
-
-      // Now try to re-confirm - the approve handler reads state from workflow manager,
-      // which is still "pending_approval", so it hits the "Unexpected State" fallback
+      // And the review can be started again from the beginning.
       const retryResult = await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", confirmed: true, force: true },
+        rawParams: { action: "approve", id: "test-doc", notes: "reviewed again" },
         context,
       });
-
-      // BUG: The handler sees "pending_approval" from workflow manager (not frontmatter),
-      // and since confirmed=true is only handled for user_reviewing state,
-      // it falls through to the "Unexpected State" error.
-      expect(retryResult.isError).toBe(true);
-      expect(retryResult.content[0].text).toContain("Unexpected State");
+      expect(retryResult.isError).toBeFalsy();
     });
   });
 
