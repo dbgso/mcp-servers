@@ -32,10 +32,10 @@ for (const dir of [PERSIST_DIR, PENDING_DIR, DIFF_DIR]) {
   await fs.mkdir(dir, { recursive: true }).catch(() => {});
 }
 
-// Clean up approval directory (approval itself is mocked below, so the shared
-// dir is only cosmetic here).
-const APPROVAL_DIR = path.join(os.tmpdir(), "mcp-approval");
-await fs.rm(APPROVAL_DIR, { recursive: true, force: true }).catch(() => {});
+// Nothing clears the approval directory here. `requestApproval` skips the file
+// entirely once VITEST is set, so no test ever writes one -- but a developer's
+// own MCP server, running on the same machine, does. Deleting it took a live
+// pending approval away from a session that had nothing to do with the tests.
 
 // Mock node-notifier to prevent desktop notifications
 vi.mock("node-notifier", () => ({
