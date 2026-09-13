@@ -130,6 +130,54 @@ intent rather than mechanism:
 Check the version before step 3 — removing `private` publishes whatever is in
 `package.json` on the next push to `main`, not the next patch bump.
 
+## Trying a package via GitHub Packages
+
+`.github/workflows/gpr-release.yml` publishes one package to GitHub Packages on
+demand, independent of the npm release. It works for `private: true` packages
+too — `private` is dropped only in the published copy, so the npm guard above
+stays intact.
+
+### Publish
+
+```bash
+gh workflow run gpr-release.yml -f package=ast-file-mcp
+gh workflow run gpr-release.yml -f package=ast-file-mcp -f tag=dev
+```
+
+- Name: `@dbgso/<package name>`, version `0.0.0-<tag>.<timestamp>.<sha>`, dist-tag `<tag>`
+- The job summary shows the ready-to-run `npx` command
+- **Published packages are public.** GitHub Packages takes visibility from the
+  linked repository, and this repository is public; npm's `access` has no
+  effect. Delete snapshots you no longer need from the package settings
+- Packages that still list a `workspace:` package in `dependencies` (not bundled
+  with tsup) are rejected: the published copy could not be installed
+
+### Use
+
+Reading GitHub Packages always needs a token with `read:packages`, even for
+public packages. Add the scope once (interactive):
+
+```bash
+gh auth refresh -s read:packages
+```
+
+Run directly:
+
+```bash
+npx --yes \
+  --@dbgso:registry=https://npm.pkg.github.com \
+  --//npm.pkg.github.com/:_authToken=$(gh auth token) \
+  @dbgso/ast-file-mcp@snapshot
+```
+
+Or configure `~/.npmrc` once and use plain `npx @dbgso/<name>@<tag>` (e.g. in an
+MCP client config):
+
+```ini
+@dbgso:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
 ## Commands
 
 | Command | Description |
