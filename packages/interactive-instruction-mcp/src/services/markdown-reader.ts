@@ -296,6 +296,28 @@ export class MarkdownReader {
     }
   }
 
+  /**
+   * Every write goes through here, so a document always ends with exactly one
+   * newline.
+   *
+   * Reported as #51: eight documents written through the MCP all came out
+   * without a trailing newline, while the 91 edited by hand in the same corpus
+   * kept theirs -- so `git diff` showed the last line of the body as a -/+ pair
+   * even for a change that only touched the frontmatter, and the files stopped
+   * being POSIX text files (`wc -l` short by one, `cat` joining lines).
+   *
+   * The cause is upstream of any single handler: `stripFrontmatter` trims, and
+   * the frontmatter writer ends at the body with no terminator. Fixing it in
+   * each handler would leave the next write path to rediscover it, which is how
+   * all three routes in the report had it at once.
+   */
+  private withTrailingNewline(content: string): string {
+    // An empty document stays empty: a file with a single newline in it is not
+    // what "no content" should look like on disk.
+    if (content === "") return content;
+    return content.endsWith("\n") ? content : `${content}\n`;
+  }
+
   async addDocument(params: {
     id: string;
     content: string;
@@ -333,7 +355,7 @@ export class MarkdownReader {
       const filePath = this.idToPath(id);
       const dir = path.dirname(filePath);
       await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(filePath, content, "utf-8");
+      await fs.writeFile(filePath, this.withTrailingNewline(content), "utf-8");
       this.invalidateCache();
       return { success: true, path: filePath };
     } catch (error) {
@@ -368,7 +390,7 @@ export class MarkdownReader {
 
     try {
       const filePath = this.idToPath(id);
-      await fs.writeFile(filePath, content, "utf-8");
+      await fs.writeFile(filePath, this.withTrailingNewline(content), "utf-8");
       this.invalidateCache();
       return { success: true, path: filePath };
     } catch (error) {
@@ -564,7 +586,9 @@ export class MarkdownReader {
 
     const newContent = updateFrontmatter({ content, frontmatter });
     const filePath = this.idToPath(docId);
-    await fs.writeFile(filePath, newContent, "utf-8");
+    // A backlink rewrite touches a document nobody asked about, so it least of
+    // all should leave a mark on its last line.
+    await fs.writeFile(filePath, this.withTrailingNewline(newContent), "utf-8");
     return true;
   }
 

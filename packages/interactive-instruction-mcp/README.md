@@ -85,7 +85,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 **Draft Operations**
 - `add` — Create a new draft (`id`, `content`, `description`, `whenToUse` required)
 - `update` — Update a draft (direct overwrite) or promoted document (writes a pending diff — see `apply` / `cancel`).
-  `content` is optional: pass `description` / `whenToUse` on their own to change the metadata and keep the body
+  `content` is optional: pass `description` / `whenToUse` / `relatedDocs` on their own to change the metadata and keep the body
 - `delete` — Delete a draft (instant) or promoted document (approval required)
 - `rename` — Rename a draft (instant) or promoted document (approval required)
 
