@@ -2,10 +2,14 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
-import { DRAFT_DIR } from "../../../constants.js";
+import { isInternalDocument } from "../../../constants.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { buildGraph } from "./graph.js";
+import {
+  isDescriptionMissing,
+  MISSING_DESCRIPTION_PLACEHOLDER,
+} from "../../../services/metadata-completeness.js";
 
 const schema = z.object({
   action: z.literal("update_meta"),
@@ -88,7 +92,7 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
     }
 
     const listed = await reader.listDocuments({ recursive: true });
-    const documents = listed.documents.filter((doc) => !doc.id.startsWith(DRAFT_DIR));
+    const documents = listed.documents.filter((doc) => !isInternalDocument(doc.id));
     const { related, candidates, category } = buildNeighbourhood({ id, documents });
 
     const frontmatter = parseFrontmatter(content);
@@ -158,7 +162,11 @@ function formatList(values: string[] | undefined): string {
 }
 
 function describe(doc: MarkdownSummary): string {
-  return `- \`${doc.id}\` — ${doc.description || "(no description)"}`;
+  // The same placeholder `list` and `lint` use. Testing for an empty string
+  // here printed `— (No description)`, since a document whose description was
+  // never written already carries the placeholder by the time it is listed.
+  const summary = isDescriptionMissing(doc) ? MISSING_DESCRIPTION_PLACEHOLDER : doc.description;
+  return `- \`${doc.id}\` — ${summary}`;
 }
 
 function neighbourhoodSection(params: {
