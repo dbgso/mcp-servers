@@ -17,6 +17,11 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { LintHandler } from "../tools/instruction/handlers/lint.js";
+import { AddHandler } from "../tools/instruction/handlers/add.js";
+import { UpdateHandler } from "../tools/instruction/handlers/update.js";
+import { parseFrontmatter } from "../utils/frontmatter-parser.js";
+import { getPendingUpdate } from "../utils/pending-update.js";
+import { DRAFT_PREFIX } from "../constants.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";
 
@@ -206,5 +211,97 @@ describe("the same heading twice in one document", () => {
     const text = await run();
     expect(text).toContain("duplicate-heading");
     expect(text).not.toContain("document-too-large");
+  });
+});
+
+describe("the shapes real documents come in", () => {
+  const meta = "description: A document\nwhenToUse:\n  - testing";
+
+  it("reads a file with CRLF line endings", async () => {
+    // Written on Windows, or by a tool that terminates lines that way. The
+    // heading parser splits on \n, so without trimming, every heading would
+    // carry a \r and never match its twin.
+    await fs.writeFile(
+      path.join(docsDir, "crlf.md"),
+      "---\r\ndescription: d\r\nwhenToUse:\r\n  - w\r\n---\r\n\r\n# T\r\n\r\n## Related\r\n\r\n## Related\r\n",
+      "utf-8"
+    );
+
+    expect(await run()).toContain("duplicate-heading");
+  });
+
+  it("ignores headings in a fence that is itself indented", async () => {
+    // A code block inside a list item is indented, and its contents are still
+    // not sections.
+    await write({
+      id: "indented",
+      frontmatter: meta,
+      body: "# T\n\n## Ex\n\n  ```sh\n  # Ex\n  ```\n\n  ```sh\n  # Ex\n  ```",
+    });
+
+    expect(await run()).not.toContain("duplicate-heading");
+  });
+
+  it("does not see setext headings, and that is a decision", async () => {
+    // `Related` over `-------` is a heading in CommonMark, and this check does
+    // not read it. Measured on this repository's 96 documents: 62 lines look
+    // like setext headings and every one of them is either the closing `---`
+    // of frontmatter or a line inside a code fence -- both already handled.
+    // Genuine setext headings: zero. Reading them would mean treating a `---`
+    // after any paragraph as a heading, which is where those 62 come from, so
+    // the trade is a known blind spot against a class of false positive that
+    // this corpus is full of.
+    await write({
+      id: "setext",
+      frontmatter: meta,
+      body: "Related\n-------\n\nbody\n\nRelated\n-------",
+    });
+
+    expect(await run()).not.toContain("duplicate-heading");
+  });
+
+  it("size-checks a document with no frontmatter at all", async () => {
+    await write({ id: "bare", body: longBody });
+
+    expect(await run()).toContain("document-too-large");
+  });
+});
+
+describe("sizeExemption survives the write paths", () => {
+  it("through add", async () => {
+    // The key is new, so the question is whether the frontmatter writer keeps
+    // it: a document that declared itself exempt and lost the declaration on
+    // its first write would be worse than not having the feature.
+    await new AddHandler().execute({
+      rawParams: {
+        action: "add",
+        id: "kept",
+        description: "d",
+        whenToUse: ["w"],
+        content: `---\nsizeExemption: A reference table.\n---\n\n# T\n\n${longBody}`,
+      },
+      context,
+    });
+
+    const draft = await context.reader.getDocumentContent(DRAFT_PREFIX + "kept");
+    expect(parseFrontmatter(draft ?? "").sizeExemption).toBe("A reference table.");
+  });
+
+  it("through a metadata-only update", async () => {
+    await write({
+      id: "doc",
+      frontmatter: 'description: d\nwhenToUse:\n  - w\nsizeExemption: A reference table.',
+      body: longBody,
+    });
+    context.reader.invalidateCache();
+
+    await new UpdateHandler().execute({
+      rawParams: { action: "update", id: "doc", description: "changed" },
+      context,
+    });
+
+    // The staged content is what `apply` would write.
+    const pending = await getPendingUpdate({ docsDir, id: "doc" });
+    expect(parseFrontmatter(pending?.content ?? "").sizeExemption).toBe("A reference table.");
   });
 });
