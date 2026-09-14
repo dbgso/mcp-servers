@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { requestApproval, validateApproval, getApprovalRequestedMessage, getApprovalRejectionMessage } from "mcp-shared/approval";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
+import { gateMutation } from "../../../services/mutation-gate.js";
 import {
   draftWorkflowManager,
   stateDescriptions,
@@ -12,21 +12,25 @@ import {
 import { parseFrontmatter, updateFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { generateDiff } from "../../../utils/diff-utils.js";
 
-// --- 変更点1: zodスキーマでバリデーション（手動チェック不要に） ---
 const schema = z.object({
   action: z.literal("approve"),
   id: z.string().optional(),
   ids: z.string().optional(),
   targetId: z.string().optional(),
   notes: z.string().optional(),
-  confirmed: z.boolean().optional(),
-  approvalToken: z.string().optional(),
+  explanation: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "What this document says and why it should be promoted, in your own words, as you told the user. Required to promote, and identical across every attempt."
+    ),
   force: z.boolean().optional(),
 });
 
 type Args = z.infer<typeof schema>;
 
-// --- 変更点2: requestId生成を統一 ---
+/** Names one promotion to the gate; `what` below is what binds it to content. */
 function buildRequestId(parts: string[]): string {
   return `instruction::approve::${parts.join("::")}`;
 }
@@ -49,25 +53,26 @@ function stableDraftBody(content: string): string {
   ].join("\n");
 }
 
-// --- 変更点3: ToolResult → ToolResponse ヘルパー ---
-
-// --- 変更点4: extends BaseActionHandler（旧: implements DraftActionHandler） ---
 export class ApproveHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "approve";
-  readonly help = "Progress through the approval workflow: notes → confirmed → token.";
+  readonly help = `Promote a draft to a managed document.
+
+The workflow is notes → explanation: \`notes\` records your self-review, then
+\`explanation\` is what you told the user about the document. The first attempts
+with an explanation are refused and show the diff; repeat the identical call to
+promote. \`ids\` promotes several drafts under one explanation.`;
   readonly schema = schema;
 
-  // --- 変更点5: doExecute（旧: execute） args（旧: actionParams） ---
-  protected async doExecute(params: {
+    protected async doExecute(params: {
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, ids, targetId, approvalToken, notes, confirmed, force } = params.args;
+    const { id, ids, targetId, notes, explanation, force } = params.args;
     const { reader } = params.context;
 
     // Batch approval mode
     if (ids) {
-      return this.handleBatchApproval({ ids, confirmed, approvalToken, reader });
+      return this.handleBatchApproval({ ids, explanation, reader });
     }
 
     if (!id) {
@@ -77,23 +82,19 @@ export class ApproveHandler extends BaseActionHandler<Args, InstructionContext> 
     const status = await draftWorkflowManager.getStatus({ id });
     const currentState: DraftState = status?.state ?? "editing";
 
-    if (approvalToken) {
-      return this.handleApprovalWithToken({ id, targetId, approvalToken, currentState, reader });
-    }
-
-    return this.handleApprovalRequest({ id, targetId, notes, confirmed, force, currentState, reader });
+    return this.handleApprovalRequest({ id, targetId, notes, explanation, force, currentState, reader });
   }
 
   private async handleApprovalRequest(params: {
     id: string;
     targetId?: string;
     notes?: string;
-    confirmed?: boolean;
+    explanation?: string;
     force?: boolean;
     currentState: DraftState;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, targetId, notes, confirmed, force, reader } = params;
+    const { id, targetId, notes, explanation, force, reader } = params;
     let { currentState } = params;
 
     // editing: submit the draft's current content and carry on into
@@ -120,7 +121,6 @@ export class ApproveHandler extends BaseActionHandler<Args, InstructionContext> 
     // self_review state: need notes to proceed
     if (currentState === "self_review") {
       if (!notes) {
-        // --- 変更点6: formatNextActionsで統一形式 ---
         return errorResponse(`# Workflow: ${currentState}
 
 **${stateDescriptions[currentState]}**
@@ -158,8 +158,8 @@ Self-review recorded.
           },
           {
             action: "approve",
-            description: "After explaining and user confirms",
-            example: `instruction(action: "approve", id: "${id}", confirmed: true)`,
+            description: "Explain the document to the user, then promote it",
+            example: `instruction(action: "approve", id: "${id}", explanation: "<what this says and why it should be promoted>")`,
           },
         ]),
       );
@@ -167,9 +167,11 @@ Self-review recorded.
 
     // user_reviewing state
     if (currentState === "user_reviewing") {
-      if (!confirmed) {
+      if (explanation === undefined) {
         return errorResponse(
-          `# Workflow: user_reviewing` +
+          `# Workflow: user_reviewing
+
+${stateDescriptions.user_reviewing}` +
           formatNextActions([
             {
               action: "read",
@@ -178,8 +180,8 @@ Self-review recorded.
             },
             {
               action: "approve",
-              description: "After explaining and user confirms",
-              example: `instruction(action: "approve", id: "${id}", confirmed: true)`,
+              description: "Explain the document to the user, then promote it",
+              example: `instruction(action: "approve", id: "${id}", explanation: "<what this says and why it should be promoted>")`,
             },
           ]),
         );
@@ -198,20 +200,22 @@ Now you're trying to confirm "${id}" separately.` +
             formatNextActions([
               {
                 action: "approve",
-                description: "Batch confirm all (recommended)",
-                example: `instruction(action: "approve", ids: "${allIds.join(",")}", confirmed: true)`,
+                description: "Promote them together under one explanation (recommended)",
+                example: `instruction(action: "approve", ids: "${allIds.join(",")}", explanation: "<what these say and why>")`,
               },
               {
                 action: "approve",
                 description: `Proceed with just "${id}"`,
-                example: `instruction(action: "approve", id: "${id}", confirmed: true, force: true)`,
+                example: `instruction(action: "approve", id: "${id}", explanation: "${explanation}", force: true)`,
               },
             ]),
           );
         }
       }
 
-      // User confirmed - transition to pending_approval
+      // Into pending_approval before the gate runs. The gate refuses the first
+      // attempt, so the state has to be the one the repeat call lands in --
+      // which is the `pending_approval` branch below, not this one.
       const confirmResult = await draftWorkflowManager.trigger({
         id,
         triggerParams: { action: "confirm", confirmed: true },
@@ -228,37 +232,26 @@ Now you're trying to confirm "${id}" separately.` +
         reader,
       });
 
-      const changeInfo = await this.generateChangeInfo({ id, targetId, reader });
+      return this.promote({ id, targetId, explanation, reader });
+    }
 
-      // --- 変更点2: requestId統一 ---
-      const requestId = buildRequestId([id]);
-      const what = await this.buildApprovalWhat({ id, targetId, reader });
-      if (what === null) {
-        return errorResponse(`Error: Draft "${id}" not found.`);
+    // pending_approval: the state a refused attempt leaves behind, so this is
+    // where every attempt after the first arrives.
+    if (currentState === "pending_approval") {
+      if (explanation === undefined) {
+        return errorResponse(
+          `# Workflow: pending_approval
+
+This draft is waiting to be promoted, and promoting it needs the \`explanation\`
+you gave the user.` +
+          formatNextActions([{
+            action: "approve",
+            description: "Repeat the call with your explanation",
+            example: `instruction(action: "approve", id: "${id}", explanation: "<what this says and why it should be promoted>")`,
+          }]));
       }
-      const approvalResult = await requestApproval({
-        request: {
-          id: requestId,
-          operation: "Draft Approval",
-          description: await this.buildApprovalDescription({ id, targetId, reader }),
-          what,
-        },
-      });
 
-      return textResponse(
-        `# Approval Requested
-
-${changeInfo}
-
----
-
-${getApprovalRequestedMessage(approvalResult)}` +
-        formatNextActions([{
-          action: "approve",
-          description: "Apply with token from user",
-          example: `instruction(action: "approve", id: "${id}", approvalToken: "<token>")`,
-        }]),
-      );
+      return this.promote({ id, targetId, explanation, reader });
     }
 
     // Fallback for unexpected states
@@ -266,15 +259,13 @@ ${getApprovalRequestedMessage(approvalResult)}` +
 
 **Current state:** ${currentState}
 
-Expected: self_review or user_reviewing` +
+Expected: self_review, user_reviewing or pending_approval` +
       formatNextActions([{
         action: "approve",
         description: "Provide self-review notes to start",
         example: `instruction(action: "approve", id: "${id}", notes: "...")`,
       }]));
   }
-
-  // --- ロジック変更なし: generateChangeInfo, generateSummary, generateDiff ---
 
   /**
    * What this promotion will do, computed from the files rather than described
@@ -405,17 +396,21 @@ ${headerSection}`;
 
   // --- Batch approval ---
 
+  /**
+   * Promote several drafts under one explanation.
+   *
+   * One gate run over the whole batch rather than one per draft: the caller
+   * gave the user one account of the change, and making it repeat that account
+   * per document is the friction that trained callers to reach for `force`.
+   * The key is the concatenated `what` in the caller's order, so adding,
+   * dropping or reordering a draft starts a new run.
+   */
   private async handleBatchApproval(params: {
     ids: string;
-    confirmed?: boolean;
-    approvalToken?: string;
+    explanation?: string;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { ids, confirmed, approvalToken, reader } = params;
-
-    if (confirmed && approvalToken) {
-      return errorResponse("Error: Cannot provide both confirmed and approvalToken. Use one at a time.");
-    }
+    const { ids, explanation, reader } = params;
 
     const idList = ids.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
 
@@ -423,27 +418,30 @@ ${headerSection}`;
       return errorResponse("Error: No valid IDs provided");
     }
 
-    if (approvalToken) {
-      // Fall through to token validation below
-    } else if (confirmed) {
-      return this.handleBatchConfirmed({ idList, reader });
+    if (explanation === undefined) {
+      return errorResponse(
+        `Promoting ${idList.length} draft(s) needs an \`explanation\`: what they say and why they should be promoted, in the words you used with the user.` +
+        formatNextActions([{
+          action: "approve",
+          description: "Say what these are, then repeat the identical call",
+          example: `instruction(action: "approve", ids: "${ids}", explanation: "<what these say and why>")`,
+        }]));
     }
 
-    // Check all drafts are in pending_approval state AND actually went through
-    // the review steps. State alone is not enough: a leftover entry from an
-    // earlier cycle reads as `pending_approval`, so a brand-new draft reusing
-    // that id could be batch-approved without self-review or an explanation to
-    // the user. Persisted state is deleted on promotion now, but the check
-    // costs nothing and does not depend on that cleanup having happened.
+    // Every draft has to have been explained to the user once already. State
+    // alone is not enough: a leftover entry from an earlier cycle reads as
+    // `pending_approval`, so a brand-new draft reusing that id could ride along
+    // in a batch without self-review. Persisted state is deleted on promotion
+    // now, but the check costs nothing and does not depend on that cleanup.
     const notReady: string[] = [];
     for (const id of idList) {
       const status = await draftWorkflowManager.getStatus({ id });
       const state = status?.state ?? "editing";
-      if (state !== "pending_approval") {
+      if (state !== "user_reviewing" && state !== "pending_approval") {
         notReady.push(`${id} (${state})`);
         continue;
       }
-      if (!status?.visitedStates.includes("user_reviewing")) {
+      if (state === "pending_approval" && !status?.visitedStates.includes("user_reviewing")) {
         notReady.push(`${id} (never reviewed)`);
       }
     }
@@ -451,164 +449,102 @@ ${headerSection}`;
     if (notReady.length > 0) {
       return errorResponse(`# Cannot batch approve
 
-The following drafts are not in \`pending_approval\` state:
+These drafts have not been reviewed yet:
 ${notReady.map((s) => `- ${s}`).join("\n")}
 
-Each draft must complete the workflow (notes → explain → confirmed) before batch approval.`);
+Each one needs its \`notes\` recorded first.`);
     }
 
-    const batchRequestId = buildBatchRequestId(idList);
-
-    if (!approvalToken) {
-      const changeInfos: string[] = [];
-      for (const id of idList) {
-        const info = await this.generateChangeInfo({ id, reader });
-        changeInfos.push(info);
+    // Moved before the gate runs, for the same reason as the single path: the
+    // refusal has to leave the drafts in the state the repeat call expects.
+    const confirmedAt = new Date().toISOString();
+    for (const id of idList) {
+      const status = await draftWorkflowManager.getStatus({ id });
+      if ((status?.state ?? "editing") === "user_reviewing") {
+        await draftWorkflowManager.trigger({ id, triggerParams: { action: "confirm", confirmed: true } });
+        await this.updateDraftFrontmatterStatus({ id, status: "pending_approval", confirmedAt, reader });
       }
-
-      const what = await this.buildBatchApprovalWhat({ idList, reader });
-      if (what === null) {
-        return errorResponse("Error: One of the drafts in this batch no longer exists.");
-      }
-      const approvalResult = await requestApproval({
-        request: {
-          id: batchRequestId,
-          operation: "Batch Draft Approval",
-          description: `Promote ${idList.length} drafts: ${idList.join(", ")}`,
-          what,
-        },
-      });
-
-      return textResponse(
-        `# Batch Approval Requested (${idList.length} drafts)
-
-${changeInfos.join("\n\n---\n\n")}
-
----
-
-${getApprovalRequestedMessage(approvalResult)}` +
-        formatNextActions([{
-          action: "approve",
-          description: "Apply batch with token from user",
-          example: `instruction(action: "approve", ids: "${ids}", approvalToken: "<token>")`,
-        }]),
-      );
     }
 
-    // Validate token
-    const currentWhat = await this.buildBatchApprovalWhat({ idList, reader });
-    if (currentWhat === null) {
+    const what = await this.buildBatchApprovalWhat({ idList, reader });
+    if (what === null) {
       return errorResponse("Error: One of the drafts in this batch no longer exists.");
     }
-    const validation = validateApproval({
-      requestId: batchRequestId,
-      providedToken: approvalToken,
-      currentWhat,
-    });
-    if (!validation.valid) {
-      return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);
+
+    const changeInfos: string[] = [];
+    for (const id of idList) {
+      changeInfos.push(await this.generateChangeInfo({ id, reader }));
     }
 
-    // Apply all drafts
+    return gateMutation({
+      operation: "approve",
+      subject: buildBatchRequestId(idList),
+      what,
+      explanation,
+      preview: `# Promoting ${idList.length} draft(s)\n\n${changeInfos.join("\n\n---\n\n")}`,
+      work: () => this.promoteBatchNow({ idList, reader }),
+    });
+  }
+
+  /**
+   * The batch write.
+   *
+   * Reports per-draft outcomes and counts the batch as done only if every one
+   * of them landed: a partial batch leaves the gate's run standing, so the
+   * caller can retry the remainder without explaining itself again.
+   */
+  private async promoteBatchNow(params: {
+    idList: string[];
+    reader: InstructionContext["reader"];
+  }): Promise<ToolResponse> {
+    const { idList, reader } = params;
+
     const results: string[] = [];
+    const failed: string[] = [];
+
     for (const id of idList) {
       const sourceDraftId = DRAFT_PREFIX + id;
-      const transition = await draftWorkflowManager.trigger({
-        id,
-        triggerParams: { action: "approve" },
-        approvalToken,
-      });
-      if (!transition.ok) {
-        results.push(`- ${id}: ${transition.error}`);
+
+      const blocked = await this.checkPromotable(id);
+      if (blocked !== null) {
+        results.push(`- ${id}: ${blocked}`);
+        failed.push(id);
         continue;
       }
 
       const draftContent = await reader.getDocumentContent(sourceDraftId);
       if (draftContent === null) {
         results.push(`- ${id}: Draft not found`);
+        failed.push(id);
         continue;
       }
 
+      // The state machine moves only once the file has, so a draft that fails
+      // here is still promotable on the caller's next attempt.
       const renameResult = await reader.renameDocument({ oldId: sourceDraftId, newId: id, overwrite: true });
 
       if (renameResult.success) {
         await this.markApproved({ id, reader });
-        await draftWorkflowManager.delete({ id });
-        results.push(`- ${id}: Applied`);
+        await this.recordPromoted(id);
+        results.push(`- ${id}: promoted`);
       } else {
         results.push(`- ${id}: ${renameResult.error}`);
+        failed.push(id);
       }
     }
 
-    return textResponse(
-      `# Batch Approval Complete
-
-${results.join("\n")}` +
+    const body = `# Batch promotion\n\n${results.join("\n")}` +
       formatNextActions([{
         action: "list",
         description: "View all documents",
         example: `instruction(action: "list")`,
-      }]),
-    );
-  }
+      }]);
 
-  private async handleBatchConfirmed(params: {
-    idList: string[];
-    reader: InstructionContext["reader"];
-  }): Promise<ToolResponse> {
-    const { idList, reader } = params;
-
-    const notReady: string[] = [];
-    for (const id of idList) {
-      const status = await draftWorkflowManager.getStatus({ id });
-      const state = status?.state ?? "editing";
-      if (state !== "user_reviewing") notReady.push(`${id} (${state})`);
-    }
-
-    if (notReady.length > 0) {
-      return errorResponse(`# Cannot batch confirm
-
-The following drafts are not in \`user_reviewing\` state:
-${notReady.map((s) => `- ${s}`).join("\n")}
-
-Each draft must be explained to user first (notes → explain).`);
-    }
-
-    const confirmedAt = new Date().toISOString();
-    for (const id of idList) {
-      await draftWorkflowManager.trigger({ id, triggerParams: { action: "confirm", confirmed: true } });
-      await this.updateDraftFrontmatterStatus({ id, status: "pending_approval", confirmedAt, reader });
-    }
-
-    const changeInfos: string[] = [];
-    for (const id of idList) {
-      const info = await this.generateChangeInfo({ id, reader });
-      changeInfos.push(info);
-    }
-
-    const batchRequestId = buildBatchRequestId(idList);
-    const approvalResult = await requestApproval({
-      request: { id: batchRequestId, operation: "Batch Draft Approval", description: `Approve ${idList.length} drafts: ${idList.join(", ")}` },
-    });
-
-    return textResponse(
-      `# Batch Approval Requested (${idList.length} drafts)
-
-${changeInfos.join("\n\n---\n\n")}
-
----
-
-${getApprovalRequestedMessage(approvalResult)}` +
-      formatNextActions([{
-        action: "approve",
-        description: "Apply batch with token from user",
-        example: `instruction(action: "approve", ids: "${idList.join(",")}", approvalToken: "<token>")`,
-      }]),
-    );
+    return failed.length === 0 ? textResponse(body) : errorResponse(body);
   }
 
   /**
-   * Drafts confirmed moments ago and still waiting for a token.
+   * Drafts confirmed moments ago and still waiting to be promoted.
    *
    * The draft file has to still be there. Applied drafts used to qualify --
    * their persisted state stayed at `pending_approval` with a fresh
@@ -642,53 +578,89 @@ ${getApprovalRequestedMessage(approvalResult)}` +
     return stillPending;
   }
 
-  private async handleApprovalWithToken(params: {
+  /**
+   * Promote one draft, behind the gate.
+   *
+   * The diff rides on the refusal: what the promotion does and the request to
+   * explain it belong in the same response. There used to be a separate
+   * "Approval Requested" step whose whole content was a notification the caller
+   * had to get a human to read a token out of.
+   */
+  private async promote(params: {
     id: string;
     targetId?: string;
-    approvalToken: string;
-    currentState: DraftState;
+    explanation: string;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, targetId, approvalToken, currentState, reader } = params;
+    const { id, targetId, explanation, reader } = params;
 
-    if (currentState !== "pending_approval") {
-      return errorResponse(`# Cannot approve yet
-
-**Current state:** ${currentState}
-**Required state:** pending_approval
-
-You must complete the workflow first:
-1. Provide \`notes\` (self-review)
-2. Explain to user in your own words
-3. Call with \`confirmed: true\`` +
-        formatNextActions([{
-          action: "approve",
-          description: "Start with self-review notes",
-          example: `instruction(action: "approve", id: "${id}", notes: "...")`,
-        }]));
-    }
-
-    const requestId = buildRequestId([id]);
-    // Recomputed here, before anything is written -- the promotion itself
-    // rewrites the draft's frontmatter, so computing it later would compare the
-    // approval against the change already in progress.
-    const currentWhat = await this.buildApprovalWhat({ id, targetId, reader });
-    if (currentWhat === null) {
+    // Computed before anything is written: the promotion rewrites the draft's
+    // frontmatter, so a `what` read afterwards would describe the change
+    // already in progress rather than the one being gated.
+    const what = await this.buildApprovalWhat({ id, targetId, reader });
+    if (what === null) {
       return errorResponse(`Error: Draft "${id}" not found.`);
     }
-    const validation = validateApproval({ requestId, providedToken: approvalToken, currentWhat });
 
-    if (!validation.valid) {
-      return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);
-    }
+    const changeInfo = await this.generateChangeInfo({ id, targetId, reader });
+    const heading = await this.buildApprovalDescription({ id, targetId, reader });
 
-    const transition = await draftWorkflowManager.trigger({
-      id,
-      triggerParams: { action: "approve" },
-      approvalToken,
+    return gateMutation({
+      operation: "approve",
+      subject: buildRequestId([id]),
+      what,
+      explanation,
+      preview: `# ${heading}\n\n${changeInfo}`,
+      work: () => this.promoteNow({ id, targetId, reader }),
     });
-    if (!transition.ok) {
-      return errorResponse(`Error: ${transition.error}`);
+  }
+
+  /**
+   * Check that the draft is allowed to be promoted, without moving the state
+   * machine.
+   *
+   * Separate from the transition because the transition must not happen until
+   * the file is written. Triggering first meant a failed rename left the draft
+   * at `applied` with nothing on disk, and the next attempt -- which the gate's
+   * surviving run now makes possible -- fell through to "Unexpected State".
+   * Under the token this was invisible: the token was spent, so there was no
+   * next attempt to strand.
+   */
+  private async checkPromotable(id: string): Promise<string | null> {
+    const status = await draftWorkflowManager.getStatus({ id });
+    const state = status?.state ?? "editing";
+
+    if (state !== "pending_approval") {
+      return `Draft "${id}" is ${state}, not pending_approval.`;
+    }
+    if (!status?.visitedStates.includes("user_reviewing")) {
+      return `Draft "${id}" was never reviewed.`;
+    }
+    return null;
+  }
+
+  /**
+   * Record the promotion in the state machine, after the file has moved.
+   *
+   * `delete`, not `clear`: `clear` only drops the in-memory entry, leaving a
+   * persisted `pending_approval` on disk that a later draft with the same id
+   * inherits -- and can be promoted on without ever being reviewed.
+   */
+  private async recordPromoted(id: string): Promise<void> {
+    await draftWorkflowManager.trigger({ id, triggerParams: { action: "approve" } });
+    await draftWorkflowManager.delete({ id });
+  }
+
+  private async promoteNow(params: {
+    id: string;
+    targetId?: string;
+    reader: InstructionContext["reader"];
+  }): Promise<ToolResponse> {
+    const { id, targetId, reader } = params;
+
+    const blocked = await this.checkPromotable(id);
+    if (blocked !== null) {
+      return errorResponse(`Error: ${blocked}`);
     }
 
     const sourceDraftId = DRAFT_PREFIX + id;
@@ -700,22 +672,17 @@ You must complete the workflow first:
     }
 
     // Move first, mark approved second. The other order left a failed rename
-    // with a draft stamped `status: approved` and a token already spent, and
-    // the single-id path offers no way to mint another.
+    // with a draft stamped `status: approved`.
     const renameResult = await reader.renameDocument({ oldId: sourceDraftId, newId: finalTargetId, overwrite: true });
     if (!renameResult.success) {
       return errorResponse(`Error: ${renameResult.error}`);
     }
 
     await this.markApproved({ id: finalTargetId, reader });
-
-    // delete, not clear: `clear` only drops the in-memory entry, leaving a
-    // persisted `pending_approval` on disk that a later draft with the same id
-    // inherits -- and can be promoted on without ever being reviewed.
-    await draftWorkflowManager.delete({ id });
+    await this.recordPromoted(id);
 
     return textResponse(
-      `Draft "${id}" approved and promoted to "${finalTargetId}" successfully.` +
+      `Draft "${id}" promoted to "${finalTargetId}".` +
       formatNextActions([
         { action: "read", description: "Read the promoted document", example: `instruction(action: "read", id: "${finalTargetId}")` },
         { action: "list", description: "View all documents", example: `instruction(action: "list")` },

@@ -38,6 +38,8 @@ export type {
   DeliberationOutcome,
 } from "./utils/approval/deliberation.js";
 
+export { tokenWorkflowApproval } from "./utils/approval/workflow-adapter.js";
+
 export { TokenApprovalStrategy } from "./utils/approval/token.js";
 export type { TokenApprovalConfig } from "./utils/approval/token.js";
 

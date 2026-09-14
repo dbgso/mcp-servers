@@ -20,8 +20,10 @@ import { AddHandler } from "../tools/instruction/handlers/add.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 import { scopeKey, scopedStateDir } from "../services/instance-scope.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";
+import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
+import { isRefusal, throughGate } from "./helpers/gate.js";
 
-const TOKEN = "valid-token";
+const EXPLANATION = "This is the guide we agreed to write.";
 
 const config: ReminderConfig = {
   remindMcp: false,
@@ -56,8 +58,12 @@ async function promote(id: string, content: string): Promise<void> {
     context,
   });
   await approve.execute({ rawParams: { action: "approve", id, notes: "reviewed" }, context });
-  await approve.execute({ rawParams: { action: "approve", id, confirmed: true, force: true }, context });
-  await approve.execute({ rawParams: { action: "approve", id, approvalToken: TOKEN }, context });
+  await throughGate(() =>
+    approve.execute({
+      rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
+      context,
+    })
+  );
 }
 
 beforeEach(async () => {
@@ -67,6 +73,7 @@ beforeEach(async () => {
   await fs.mkdir(path.join(docsDir, DRAFT_DIR), { recursive: true });
   reader = new MarkdownReader(docsDir);
   context = { reader, config };
+  resetMutationGatesForTesting();
 });
 
 afterEach(async () => {
@@ -102,7 +109,10 @@ describe("workflow state after promotion", () => {
       context,
     });
 
-    const result = await approve.execute({ rawParams: { action: "approve", ids: id }, context });
+    const result = await approve.execute({
+      rawParams: { action: "approve", ids: id, explanation: EXPLANATION },
+      context,
+    });
 
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("Cannot batch approve");
@@ -119,7 +129,10 @@ describe("workflow state after promotion", () => {
     // would have required.
     await draftWorkflowManager.trigger({ id, triggerParams: { action: "submit", content: "# X" } });
 
-    const result = await approve.execute({ rawParams: { action: "approve", ids: id }, context });
+    const result = await approve.execute({
+      rawParams: { action: "approve", ids: id, explanation: EXPLANATION },
+      context,
+    });
 
     expect(result.isError).toBe(true);
   });
@@ -133,24 +146,30 @@ describe("a failed promotion leaves the draft alone", () => {
       context,
     });
     await approve.execute({ rawParams: { action: "approve", id, notes: "reviewed" }, context });
-    await approve.execute({ rawParams: { action: "approve", id, confirmed: true, force: true }, context });
 
-    const original = await reader.getDocumentContent(DRAFT_PREFIX + id);
+    const call = () =>
+      approve.execute({
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
+        context,
+      });
 
-    const renameSpy = vi
-      .spyOn(reader, "renameDocument")
-      .mockResolvedValueOnce({ success: false, error: "simulated disk failure" });
-
-    const result = await approve.execute({
-      rawParams: { action: "approve", id, approvalToken: TOKEN },
-      context,
-    });
+    // Captured after the first attempt, not before: that attempt stamps the
+    // draft `pending_approval`, which is the state the run is supposed to leave
+    // behind. What must not change from here on is the body and the status.
+    let result;
+    let original: string | null = null;
+    do {
+      const renameSpy = vi
+        .spyOn(reader, "renameDocument")
+        .mockResolvedValue({ success: false, error: "simulated disk failure" });
+      result = await call();
+      renameSpy.mockRestore();
+      original ??= await reader.getDocumentContent(DRAFT_PREFIX + id);
+    } while (isRefusal(result));
 
     expect(result.isError).toBe(true);
     expect(await reader.getDocumentContent(DRAFT_PREFIX + id)).toBe(original);
     expect(await reader.getDocumentContent(DRAFT_PREFIX + id)).not.toContain("status: approved");
-
-    renameSpy.mockRestore();
   });
 });
 
@@ -167,7 +186,7 @@ describe("the consecutive-approval warning", () => {
     await approve.execute({ rawParams: { action: "approve", id: next, notes: "reviewed" }, context });
 
     const result = await approve.execute({
-      rawParams: { action: "approve", id: next, confirmed: true },
+      rawParams: { action: "approve", id: next, explanation: EXPLANATION },
       context,
     });
 

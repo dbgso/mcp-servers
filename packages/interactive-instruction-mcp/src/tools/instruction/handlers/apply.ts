@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { contentHash, DeliberationGate } from "mcp-shared/approval";
+import { contentHash } from "mcp-shared/deliberation";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
 import { removeDiffFile } from "../../../utils/diff-utils.js";
 import type { PendingUpdate } from "../../../utils/pending-update.js";
 import { deletePendingUpdate, getPendingUpdate } from "../../../utils/pending-update.js";
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
+import { gateMutation } from "../../../services/mutation-gate.js";
 
 const schema = z.object({
   action: z.literal("apply"),
@@ -20,12 +21,12 @@ const schema = z.object({
 });
 
 /**
- * `apply` writes to a promoted document with no token, which is deliberate --
- * it is the ordinary way documents get maintained, and a notification round
- * trip on every edit would make that unworkable in a headless session. What it
- * does have is a deliberation gate: the first attempt is refused with
- * instructions to explain the change to the user, and only a second identical
- * attempt goes through.
+ * `apply` writes to a promoted document with no out-of-band proof, which is
+ * deliberate -- it is the ordinary way documents get maintained, and a human
+ * round trip on every edit would make that unworkable in the headless sessions
+ * this server mostly runs in. What it has instead is the deliberation gate: the
+ * first attempt is refused with instructions to explain the change to the user,
+ * and only an identical repeat goes through.
  *
  * The refusal comes back as an ordinary response rather than an error, because
  * it is a step in the operation rather than a failure of it.
@@ -33,10 +34,9 @@ const schema = z.object({
  * This is disclosure, not consent. Nothing verifies the user was told. It makes
  * the change impossible to perform silently, which is the property worth having
  * for an operation whose worst outcome is a document with the wrong text in it.
- * The genuinely destructive operations -- delete, rename, promotion -- are
- * behind content-bound tokens instead.
+ * Which gate this is, and how many attempts it takes, is decided in
+ * `services/mutation-gate.ts` rather than here.
  */
-const deliberation = new DeliberationGate();
 
 type Args = z.infer<typeof schema>;
 
@@ -106,20 +106,11 @@ export class ApplyHandler extends BaseActionHandler<Args, InstructionContext> {
     // Every check above has passed, so this is the point of no return -- and
     // the last point at which refusing costs nothing. The gate is keyed on the
     // change itself, so re-staging a different update starts a new run.
-    return deliberation.run({
-      request: {
-        operation: `instruction::apply::${id}`,
-        what: `${pending.originalHash}\n${contentHash(pending.content)}`,
-        explanation,
-      },
-      // The run ends only when the update is really on disk. A failed write
-      // leaves it standing on purpose: the user has already heard this
-      // explanation once, and should not have to hear it again.
-      succeeded: (response) => response.isError !== true,
-      // Not `errorResponse`. Being refused here is a normal step of this
-      // operation, and dressing it as a tool failure invites the caller to
-      // treat the tool as broken and go looking for another way in.
-      onRefused: (refused) => textResponse(refused.message),
+    return gateMutation({
+      operation: "apply",
+      subject: `instruction::apply::${id}`,
+      what: `${pending.originalHash}\n${contentHash(pending.content)}`,
+      explanation,
       work: () => this.applyPending({ id, pending, reader, docsDir }),
     });
   }

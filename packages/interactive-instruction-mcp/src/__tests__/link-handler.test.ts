@@ -1,17 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { LinkAddHandler } from "../tools/instruction/handlers/link-add.js";
 import { LinkRemoveHandler } from "../tools/instruction/handlers/link-remove.js";
-import { resetLinkDeliberationForTesting } from "../tools/instruction/handlers/link-shared.js";
+import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-
-// The approval module is spied on (not stubbed) in vitest-setup.ts. This file
-// used to stub `validateApproval` to `{ valid: true }`, which meant the link
-// approval gate was never actually run here.
-
-import { requestApproval, validateApproval } from "mcp-shared/approval";
 
 describe("LinkHandler", () => {
   let addHandler: LinkAddHandler;
@@ -21,7 +15,7 @@ describe("LinkHandler", () => {
   let docsDir: string;
 
   beforeEach(() => {
-    resetLinkDeliberationForTesting();
+    resetMutationGatesForTesting();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "link-handler-test-"));
     docsDir = path.join(tempDir, "docs");
     fs.mkdirSync(docsDir, { recursive: true });
@@ -411,10 +405,12 @@ description: Document A
     it("takes two calls rather than three", async () => {
       // The token round is gone. What used to be preview -> confirmed ->
       // approvalToken is preview+refusal -> apply.
-      await addOnce();
-      await addOnce();
+      const first = await addOnce();
+      const second = await addOnce();
 
-      expect(requestApproval).not.toHaveBeenCalled();
+      expect(first.content[0].text as string).toContain("Not Yet");
+      expect(second.isError).toBeFalsy();
+      expect(fs.readFileSync(path.join(docsDir, "doc-a.md"), "utf-8")).toContain("doc-b");
     });
 
     it("starts over when the explanation is reworded", async () => {

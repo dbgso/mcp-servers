@@ -65,19 +65,18 @@ This tool explains how to use the instruction tool.
 ### Draft Operations
 - \`instruction(action: "add", id: "<id>", content: "...", description: "...", whenToUse: [...])\` - Create draft
 - \`instruction(action: "update", id: "<id>", content: "...")\` - Update draft (direct) or promoted doc (pending + apply/cancel)
-- \`instruction(action: "delete", id: "<id>")\` - Delete draft (no approval) or promoted doc (approval required)
-- \`instruction(action: "rename", id: "<id>", newId: "<new-id>")\` - Rename draft (no approval) or promoted doc (approval required)
+- \`instruction(action: "delete", id: "<id>")\` - Delete draft (immediate); promoted doc needs \`explanation\` and repeated calls
+- \`instruction(action: "rename", id: "<id>", newId: "<new-id>")\` - Rename draft (immediate); promoted doc needs \`explanation\` and repeated calls
 
 ### Approval Workflow
 - \`instruction(action: "approve", id: "<id>", notes: "<self-review>")\` - Complete self-review
-- \`instruction(action: "approve", id: "<id>", confirmed: true)\` - User confirms, request token
-- \`instruction(action: "approve", id: "<id>", approvalToken: "<token>")\` - Apply with token
-- \`instruction(action: "approve", id: "<id>", targetId: "<target>", approvalToken: "<token>")\` - Apply to different ID
-- \`instruction(action: "approve", ids: "id1,id2,id3", confirmed: true)\` - Batch confirm
-- \`instruction(action: "approve", id: "<id>", confirmed: true, force: true)\` - Skip consecutive approval warning
+- \`instruction(action: "approve", id: "<id>", explanation: "<what you told the user>")\` - Promote (repeat the identical call to go through)
+- \`instruction(action: "approve", id: "<id>", targetId: "<target>", explanation: "...")\` - Promote onto a different ID
+- \`instruction(action: "approve", ids: "id1,id2,id3", explanation: "...")\` - Promote several under one explanation
+- \`instruction(action: "approve", id: "<id>", explanation: "...", force: true)\` - Skip consecutive approval warning
 
 ### Pending Update Operations
-- \`instruction(action: "apply", id: "<doc-id>")\` - Apply pending update (from update on promoted doc)
+- \`instruction(action: "apply", id: "<doc-id>", explanation: "<what you told the user>")\` - Apply pending update (repeat the identical call to go through)
 - \`instruction(action: "cancel", id: "<doc-id>")\` - Cancel pending update
 
 ### Metadata & Quality
@@ -86,7 +85,7 @@ This tool explains how to use the instruction tool.
 - \`instruction(action: "lint")\` - Check document quality
 - \`instruction(action: "set_status", id: "<id>", status: "<status>")\` - Set draft status (single)
 - \`instruction(action: "set_status", ids: "id1,id2", status: "<status>")\` - Set draft status (batch)
-- \`instruction(action: "update_meta", id: "<id>")\` - Generate metadata update prompt
+- \`instruction(action: "update_meta", id: "<id>")\` - Review a document's metadata against its neighbours
 
 ### Seeing the corpus
 - \`instruction(action: "graph")\` - Render the relatedDocs graph as an interactive page

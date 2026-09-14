@@ -25,29 +25,6 @@ export interface DocumentFrontmatter {
 }
 
 // Draft tool types
-export interface DraftActionParams {
-  action?: string;
-  id?: string;
-  ids?: string;
-  content?: string;
-  description?: string;
-  whenToUse?: string[];
-  relatedDocs?: string[];
-  newId?: string;
-  targetId?: string;
-  approvalToken?: string;
-  notes?: string;
-  confirmed?: boolean;
-  force?: boolean;
-  status?: DraftStatus;
-}
-
-export interface DraftActionContext {
-  reader: MarkdownReader;
-  config: ReminderConfig;
-}
-
-export type DraftActionHandler = ActionHandler<DraftActionParams, DraftActionContext>;
 
 // Apply tool types
 export interface ApplyActionParams {

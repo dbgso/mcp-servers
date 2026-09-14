@@ -1,16 +1,17 @@
 /**
- * Issue #6 Reproduction Test
+ * Issue #6: the approval workflow got stuck in `pending_approval`, with the
+ * token rejected as expired regardless of timing.
  *
- * Draft approval workflow gets stuck in pending_approval state.
- * Token is always rejected as "expired" regardless of timing.
+ * Three things contributed: the handler and the workflow engine minted
+ * different request ids, the token was validated twice and consumed by the
+ * first, and `set_status` did not reset the state machine -- so the draft
+ * could not be taken forward or back.
  *
- * Three bugs contribute:
- * 1. Request ID mismatch between approve-handler and workflow instance
- * 2. Double token consumption (handler validates then workflow validates again)
- * 3. set_status doesn't reset workflow state machine
- *
- * These tests use a realistic mock that enforces request ID matching,
- * unlike the global mock in vitest-setup.ts which accepts any request ID.
+ * Two of those three cannot recur, because there is no request id and no token
+ * any more: promotion goes through the deliberation gate. What is still worth
+ * testing is the property the issue was actually about -- a draft must never
+ * reach a state it cannot leave -- so that is what these tests say now, one per
+ * way the old flow got stuck.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -28,12 +29,8 @@ import {
   SetStatusHandler,
 } from "../tools/instruction/handlers/index.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
-
-// Import mocked functions from mcp-shared (mocked globally in vitest-setup.ts)
-import { requestApproval, validateApproval } from "mcp-shared/approval";
-
-const mockRequestApproval = vi.mocked(requestApproval);
-const mockValidateApproval = vi.mocked(validateApproval);
+import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
+import { isRefusal, throughGate } from "./helpers/gate.js";
 
 const tempBase = path.join(process.cwd(), "src/__tests__/temp-issue6");
 const docsDir = tempBase;
@@ -42,7 +39,7 @@ const docsDir = tempBase;
 const PERSIST_DIR =
   process.env.MCP_DRAFT_PERSIST_DIR ?? path.join(os.tmpdir(), "mcp-draft-workflows");
 
-describe("Issue #6: Approval workflow stuck in pending_approval", () => {
+describe("Issue #6: a draft must not reach a state it cannot leave", () => {
   let reader: MarkdownReader;
   let context: InstructionContext;
   let addHandler: AddHandler;
@@ -67,6 +64,8 @@ describe("Issue #6: Approval workflow stuck in pending_approval", () => {
     addHandler = new AddHandler();
     approveHandler = new ApproveHandler();
     setStatusHandler = new SetStatusHandler();
+
+    resetMutationGatesForTesting();
   });
 
   afterEach(async () => {
@@ -113,182 +112,78 @@ describe("Issue #6: Approval workflow stuck in pending_approval", () => {
     });
   }
 
-  describe("Bug 1: Request ID mismatch causes token rejection", () => {
-    it("should reproduce: approve-handler uses different request ID than workflow engine", async () => {
-      // Track what request IDs are used by requestApproval and validateApproval
-      const requestIds: { requested: string[]; validated: string[] } = {
-        requested: [],
-        validated: [],
-      };
+  const EXPLANATION = "This records how we handle approvals.";
 
-      mockRequestApproval.mockImplementation(async ({ request }) => {
-        requestIds.requested.push(request.id);
-        return { token: "1234", fallbackPath: "/tmp/mock.txt" };
-      });
-
-      mockValidateApproval.mockImplementation(({ requestId, providedToken }) => {
-        requestIds.validated.push(requestId);
-        // Simulate real behavior: only valid if requestId matches one that was requested
-        const wasRequested = requestIds.requested.includes(requestId);
-        if (!wasRequested) {
-          return { valid: false, reason: "not_found" };
-        }
-        if (providedToken === "1234") {
-          return { valid: true };
-        }
-        return { valid: false, reason: "invalid_token" };
-      });
-
-      // Create draft and progress to user_reviewing
-      await addHandler.execute({
-        rawParams: {
-          action: "add",
-          id: "test-doc",
-          content: "# Test\n\nTest content.",
-          description: "Test",
-          whenToUse: ["Testing"],
-        },
-        context,
-      });
-      await progressToState("test-doc", "user_reviewing");
-
-      // Step 1: Confirm → transitions to pending_approval, sends notification
-      const confirmResult = await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", confirmed: true, force: true },
-        context,
-      });
-      expect(confirmResult.isError).toBeFalsy();
-      expect(confirmResult.content[0].text).toContain("Approval Requested");
-
-      // At this point, requestApproval was called by the handler with its request ID
-      expect(requestIds.requested.length).toBe(1);
-      const handlerRequestId = requestIds.requested[0];
-
-      // Step 2: Provide the token
-      const tokenResult = await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", approvalToken: "1234" },
-        context,
-      });
-
-      // BUG 1 REPRODUCTION: The handler validates with its own request ID (instruction::approve::test-doc)
-      // but then calls draftWorkflowManager.trigger() which internally validates with
-      // a different request ID (test-doc-pending_approval).
-      //
-      // With our realistic mock, the handler-level validation succeeds (same ID),
-      // but the workflow engine's validation fails (different ID → not_found).
-
-      // Check what request IDs were used for validation
-      expect(requestIds.validated.length).toBeGreaterThanOrEqual(1);
-
-      // The handler validates with the same ID it requested - this succeeds
-      expect(requestIds.validated[0]).toBe(handlerRequestId);
-
-      // If the workflow engine also tries to validate (Bug 2: double consumption),
-      // it uses a DIFFERENT request ID format: "${instanceId}-${currentState}"
-      if (requestIds.validated.length > 1) {
-        const workflowRequestId = requestIds.validated[1];
-        // This demonstrates the mismatch
-        expect(workflowRequestId).not.toBe(handlerRequestId);
-        // The workflow engine's ID format is "${id}-pending_approval"
-        expect(workflowRequestId).toBe("test-doc-pending_approval");
-      }
-
-      // The overall operation should succeed (draft applied), but currently it may fail
-      // because of Bug 1 (ID mismatch) or Bug 2 (double consumption)
-      //
-      // Expected behavior: tokenResult should NOT be an error
-      // Actual behavior (bug): tokenResult IS an error due to mismatch/double consumption
-      if (tokenResult.isError) {
-        // BUG CONFIRMED: The approval fails even with a valid token
-        expect(tokenResult.content[0].text).toMatch(/approval|expired|invalid|rejected/i);
-      } else {
-        // If this passes, the bug is fixed
-        expect(tokenResult.content[0].text).toContain("approved");
-      }
+  async function addDraft(id: string): Promise<void> {
+    await addHandler.execute({
+      rawParams: {
+        action: "add",
+        id,
+        content: `# ${id}\n\nContent.`,
+        description: "Test",
+        whenToUse: ["Testing"],
+      },
+      context,
     });
-  });
+  }
 
-  describe("Bug 2: Double token consumption", () => {
-    it("should reproduce: handler validates token then workflow validates again", async () => {
-      let validateCallCount = 0;
-
-      mockRequestApproval.mockResolvedValue({
-        token: "5678",
-        fallbackPath: "/tmp/mock.txt",
-      });
-
-      mockValidateApproval.mockImplementation(({ providedToken }) => {
-        validateCallCount++;
-        if (providedToken === "5678") {
-          // Simulate real behavior: first call succeeds, second fails
-          // because real validateApproval deletes the token on first success
-          if (validateCallCount === 1) {
-            return { valid: true };
-          }
-          // Second call: token already consumed
-          return { valid: false, reason: "not_found" };
-        }
-        return { valid: false, reason: "invalid_token" };
-      });
-
-      await addHandler.execute({
-        rawParams: {
-          action: "add",
-          id: "test-doc",
-          content: "# Test\n\nTest content.",
-          description: "Test",
-          whenToUse: ["Testing"],
-        },
-        context,
-      });
-      await progressToState("test-doc", "user_reviewing");
-
-      // Confirm → pending_approval
+  describe("the refused attempt leaves a state the next call can use", () => {
+    it("promotes on the repeat, from the state the refusal left behind", async () => {
+      await addDraft("test-doc");
       await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", confirmed: true, force: true },
+        rawParams: { action: "approve", id: "test-doc", notes: "LGTM" },
         context,
       });
 
-      // Reset counter before token validation
-      validateCallCount = 0;
+      // The gate refuses the first attempt, and that attempt has already moved
+      // the draft to pending_approval. If that state had no way forward -- as
+      // it did not when the token was rejected -- this is exactly where a draft
+      // got stuck.
+      const refused = await approveHandler.execute({
+        rawParams: { action: "approve", id: "test-doc", explanation: EXPLANATION, force: true },
+        context,
+      });
+      expect(isRefusal(refused)).toBe(true);
+      expect((await draftWorkflowManager.getStatus({ id: "test-doc" }))?.state).toBe("pending_approval");
 
-      // Provide token
-      const tokenResult = await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", approvalToken: "5678" },
+      const { response } = await throughGate(() =>
+        approveHandler.execute({
+          rawParams: { action: "approve", id: "test-doc", explanation: EXPLANATION, force: true },
+          context,
+        })
+      );
+
+      expect(response.isError).toBeFalsy();
+      expect(await reader.getDocumentContent("test-doc")).toContain("Content.");
+    });
+
+    it("says what it wants when a pending_approval draft is called without an explanation", async () => {
+      await addDraft("test-doc");
+      await approveHandler.execute({
+        rawParams: { action: "approve", id: "test-doc", notes: "LGTM" },
+        context,
+      });
+      await approveHandler.execute({
+        rawParams: { action: "approve", id: "test-doc", explanation: EXPLANATION, force: true },
         context,
       });
 
-      // BUG 2 REPRODUCTION:
-      // The handler calls validateApproval() first (succeeds, token deleted),
-      // then calls draftWorkflowManager.trigger() which calls validateApproval() again
-      // (fails because token was already consumed).
-      //
-      // With real approval utils, validateApproval deletes the pending approval on success.
-      // The second call finds nothing → returns not_found → reported as "expired".
+      // A bare call in this state used to fall through to "Unexpected State",
+      // which told the caller nothing it could act on.
+      const result = await approveHandler.execute({
+        rawParams: { action: "approve", id: "test-doc" },
+        context,
+      });
 
-      // Check how many times validateApproval was called
-      // Expected: 1 (handler only, workflow should not re-validate)
-      // Actual (bug): 2 (handler + workflow engine both validate)
-      if (validateCallCount > 1) {
-        // BUG CONFIRMED: Token validated twice
-        expect(validateCallCount).toBe(2);
-        // The second validation fails because token was consumed
-        expect(tokenResult.isError).toBe(true);
-      } else {
-        // Bug is fixed: only validated once
-        expect(validateCallCount).toBe(1);
-      }
+      expect(result.isError).toBe(true);
+      const text = result.content[0].type === "text" ? result.content[0].text : "";
+      expect(text).toContain("pending_approval");
+      expect(text).toContain("explanation");
     });
   });
 
-  describe("Bug 3 (fixed): set_status resets the workflow state machine", () => {
+  describe("set_status resets the workflow state machine", () => {
     it("set_status resets the workflow, unsticking a draft", async () => {
-      mockRequestApproval.mockResolvedValue({
-        token: "9999",
-        fallbackPath: "/tmp/mock.txt",
-      });
-      mockValidateApproval.mockReturnValue({ valid: true });
-
       await addHandler.execute({
         rawParams: {
           action: "add",
@@ -336,158 +231,65 @@ describe("Issue #6: Approval workflow stuck in pending_approval", () => {
     });
   });
 
-  describe("Full reproduction: Steps from issue #6", () => {
-    it("should reproduce the complete stuck workflow scenario", async () => {
-      // Setup realistic mock that tracks request IDs and enforces matching
-      const pendingTokens = new Map<string, string>();
-
-      mockRequestApproval.mockImplementation(async ({ request }) => {
-        const token = "4567";
-        pendingTokens.set(request.id, token);
-        return { token, fallbackPath: "/tmp/mock.txt" };
-      });
-
-      mockValidateApproval.mockImplementation(({ requestId, providedToken }) => {
-        const expected = pendingTokens.get(requestId);
-        if (!expected) {
-          return { valid: false, reason: "not_found" };
-        }
-        if (expected !== providedToken) {
-          return { valid: false, reason: "invalid_token" };
-        }
-        // Consume token (real behavior)
-        pendingTokens.delete(requestId);
-        return { valid: true };
-      });
-
-      // Step 1: Create draft
-      await addHandler.execute({
-        rawParams: {
-          action: "add",
-          id: "test-doc",
-          content: "# Test Doc\n\nThis is a test document.",
-          description: "Test document",
-          whenToUse: ["Testing"],
-        },
+  describe("the states nothing could leave", () => {
+    it("can always be taken back to editing and started again", async () => {
+      await addDraft("test-doc");
+      await approveHandler.execute({
+        rawParams: { action: "approve", id: "test-doc", notes: "LGTM" },
         context,
       });
-
-      // Step 2: Progress through workflow: editing → self_review → user_reviewing
-      await progressToState("test-doc", "user_reviewing");
-
-      // Step 3: Confirm → pending_approval + notification sent
-      const confirmResult = await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", confirmed: true, force: true },
+      await approveHandler.execute({
+        rawParams: { action: "approve", id: "test-doc", explanation: EXPLANATION, force: true },
         context,
       });
-      expect(confirmResult.isError).toBeFalsy();
-      expect(confirmResult.content[0].text).toContain("Approval Requested");
+      expect((await draftWorkflowManager.getStatus({ id: "test-doc" }))?.state).toBe("pending_approval");
 
-      // Record the request ID used by the handler
-      const handlerRequestId = [...pendingTokens.keys()][0];
-      expect(handlerRequestId).toBeDefined();
-
-      // Step 4: Provide token
-      // The handler validates the token successfully (using its own request ID).
-      // Then it calls draftWorkflowManager.trigger() which internally tries to
-      // validate with a DIFFERENT request ID (Bug 1) — this fails silently because
-      // the handler doesn't check trigger()'s return value.
-      //
-      // Despite the internal workflow engine failure, the handler proceeds to
-      // rename the draft file and clear the workflow. The workflow state machine
-      // is left in an inconsistent state: the handler thinks it's applied,
-      // but the workflow engine never transitioned to "applied".
-      const approveResult = await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", approvalToken: "4567" },
+      // This is the recovery the issue asked for and did not have.
+      const reset = await setStatusHandler.execute({
+        rawParams: { action: "set_status", id: "test-doc", status: "editing" },
         context,
       });
+      expect(reset.isError).toBeFalsy();
+      expect((await draftWorkflowManager.getStatus({ id: "test-doc" }))?.state).toBe("editing");
 
-      // The handler-level validation succeeds, so it proceeds with the apply
-      // (Note: internally the workflow trigger fails, but result is ignored)
-      expect(approveResult.isError).toBeFalsy();
-      expect(approveResult.content[0].text).toContain("approved");
-
-      // But the workflow state was never properly transitioned.
-      // The handler called draftWorkflowManager.clear() which removes from cache,
-      // but the persisted state file still has "pending_approval".
-      // This demonstrates the inconsistency introduced by Bug 1 and Bug 2:
-      // the handler bypasses the workflow engine's state machine.
-
-      // Verify: the handler-level validateApproval consumed the token
-      expect(pendingTokens.has(handlerRequestId)).toBe(false);
-
-      // Verify: the workflow engine tried to validate with a different ID
-      // (this is the ID format used by instance.ts: "${instanceId}-${currentState}")
-      // The real validateApproval in mcp-shared would have received this ID
-      // and found no matching pending approval → returned "not_found".
+      const restarted = await approveHandler.execute({
+        rawParams: { action: "approve", id: "test-doc", notes: "reviewed again" },
+        context,
+      });
+      expect(restarted.isError).toBeFalsy();
     });
 
-    it("should reproduce stuck state when handler-level validation also fails", async () => {
-      // In the real system (without mocks), both requestApproval and validateApproval
-      // are the SAME real functions. The request ID mismatch means the token stored
-      // under one key is looked up under another → always "not_found".
-      //
-      // This test simulates that scenario more faithfully.
-      mockRequestApproval.mockImplementation(async ({ request }) => {
-        // Store under the handler's request ID
-        return { token: "4567", fallbackPath: "/tmp/mock.txt" };
-      });
-
-      // Always return not_found to simulate the real mismatch
-      mockValidateApproval.mockReturnValue({ valid: false, reason: "not_found" });
-
-      await addHandler.execute({
-        rawParams: {
-          action: "add",
-          id: "test-doc",
-          content: "# Test Doc\n\nThis is a test document.",
-          description: "Test document",
-          whenToUse: ["Testing"],
-        },
-        context,
-      });
-
-      await progressToState("test-doc", "user_reviewing");
-
-      // Confirm → pending_approval
+    it("does not strand the draft when the promotion itself fails", async () => {
+      await addDraft("test-doc");
       await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", confirmed: true, force: true },
+        rawParams: { action: "approve", id: "test-doc", notes: "LGTM" },
         context,
       });
 
-      // Provide token → rejected because validateApproval returns not_found
-      const approveResult = await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", approvalToken: "4567" },
-        context,
-      });
+      const call = () =>
+        approveHandler.execute({
+          rawParams: { action: "approve", id: "test-doc", explanation: EXPLANATION, force: true },
+          context,
+        });
 
-      // Handler-level validation fails → token rejected
-      expect(approveResult.isError).toBe(true);
-      expect(approveResult.content[0].text).toMatch(/approval|rejected/i);
+      // The spy goes in before every attempt: which attempt reaches the write
+      // depends on the configured count, not on this test.
+      let response;
+      do {
+        const renameSpy = vi
+          .spyOn(reader, "renameDocument")
+          .mockResolvedValue({ success: false, error: "simulated disk failure" });
+        response = await call();
+        renameSpy.mockRestore();
+      } while (isRefusal(response));
 
-      // Workflow is stuck at pending_approval
-      const status = await draftWorkflowManager.getStatus({ id: "test-doc" });
-      expect(status?.state).toBe("pending_approval");
+      expect(response.isError).toBe(true);
 
-      // Step 5: Try set_status to recover
-      await setStatusHandler.execute({
-        rawParams: { action: "set_status", id: "test-doc", status: "user_reviewing" },
-        context,
-      });
-
-      // Bug 3: Workflow manager state is still pending_approval
-      const statusAfterReset = await draftWorkflowManager.getStatus({ id: "test-doc" });
-      expect(statusAfterReset?.state).toBe("pending_approval"); // BUG: not reset
-
-      // Step 6: Try to re-confirm → hits "Unexpected State"
-      const retryResult = await approveHandler.execute({
-        rawParams: { action: "approve", id: "test-doc", confirmed: true, force: true },
-        context,
-      });
-
-      // Handler sees pending_approval from workflow manager, falls to "Unexpected State"
-      expect(retryResult.isError).toBe(true);
-      expect(retryResult.content[0].text).toContain("Unexpected State");
+      // The run survives a failed write, so the caller retries without making
+      // the user sit through the explanation twice.
+      const retry = await call();
+      expect(retry.isError).toBeFalsy();
+      expect(await reader.getDocumentContent("test-doc")).toContain("Content.");
     });
   });
 });
