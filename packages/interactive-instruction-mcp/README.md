@@ -98,7 +98,9 @@ instruction(action: "read", id: "doc-id") → Read a document
 
 **Metadata & Quality**
 - `link_add` / `link_remove` — Manage related document links (deliberation gate, drafts included)
-- `lint` — Check document quality
+- `lint` — Check document quality: missing metadata, orphans, size, similarity, circular
+  references, and repeated headings. A document that is deliberately long declares
+  `sizeExemption: <why>` in its frontmatter
 - `set_status` — Reset drafts to `editing`, discarding their workflow state (single `id` or batch `ids`)
 - `update_meta` — Show a document's metadata alongside its neighbours in the `relatedDocs` graph,
   or same-category candidates when it has none, and ask for better metadata (`id` only)

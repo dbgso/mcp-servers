@@ -20,6 +20,13 @@ export interface DocumentFrontmatter {
   relatedDocs?: string[];
   status?: DraftStatus;
   selfReviewNotes?: string;
+  /**
+   * Why this document is deliberately longer than the size check allows.
+   *
+   * A reason rather than a flag: the point is that the next reader can tell a
+   * considered exception from a warning nobody got to.
+   */
+  sizeExemption?: string;
   confirmedAt?: string;
   approvedAt?: string;
 }
