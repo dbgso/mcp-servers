@@ -101,6 +101,20 @@ describe("postgresDialect.parseExplainResult", () => {
     expect(result.planSummary).toBe("Seq Scan on events");
   });
 
+  it("names an unknown node and keeps the estimates null when the plan omits them", () => {
+    // Not every node type carries `Plan Rows` and `Total Cost` -- a plan read
+    // back without the costing options, or a node type this parser has not
+    // met, arrives with neither. Reporting 0 rows would read as "this query
+    // returns nothing", which is the opposite of unknown.
+    const rows = [{ "QUERY PLAN": [{ Plan: {} }] }];
+
+    const result = postgresDialect.parseExplainResult(rows);
+
+    expect(result.estimatedRows).toBeNull();
+    expect(result.totalCost).toBeNull();
+    expect(result.planSummary).toBe("Unknown");
+  });
+
   it("returns null estimates when the plan is missing entirely", () => {
     const result = postgresDialect.parseExplainResult([]);
     expect(result.estimatedRows).toBeNull();
