@@ -10,6 +10,7 @@ export const AVSDF_SCRIPT_URLS = [
 /** One circle, ordered to keep edge crossings down. */
 export class AvsdfLayout extends BaseLayout {
   readonly name = "avsdf";
+  override readonly sizesNodesByLabel = true;
   override readonly scriptUrls = AVSDF_SCRIPT_URLS;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {

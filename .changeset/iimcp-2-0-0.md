@@ -39,7 +39,7 @@ The promotion state machine also advances only after the file has moved. Trigger
 
 **Staged updates are scoped per documents directory.** They lived in one shared temp directory keyed loosely enough that two ids could collide, so one server's `apply` could write another server's file and report success under the wrong id.
 
-**New: `graph` and scoping.** `instruction(action: "graph")` renders the `relatedDocs` graph as an interactive page — links pointing at documents that do not exist are drawn rather than dropped, because finding those is a reason to open it. `--include` / `--exclude` say which documents in the directory this server manages, for a directory it shares with another tool.
+**New: `graph` and scoping.** `instruction(action: "graph")` renders the `relatedDocs` graph as an interactive page — links pointing at documents that do not exist are drawn rather than dropped, because finding those is a reason to open it. `--include` / `--exclude` say which documents in the directory this server manages, for a directory it shares with another tool. The cose-family layouts (`cose`, `fcose`, `cola`, `cise`, `avsdf`) laid every node on top of its neighbours, hiding all of the edges -- a corpus with 126 relations looked like one with none, with no error anywhere to say otherwise. Nodes are sized by their label, which is not resolved until the page has rendered once, so a layout run from the constructor placed them as points.
 
 `node-notifier` is no longer a dependency of this package, and a source-level test keeps it that way: the notification came back last time one handler at a time, each written against `requestApproval` because the handler next to it did.
 

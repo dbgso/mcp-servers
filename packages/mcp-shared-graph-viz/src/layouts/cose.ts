@@ -4,6 +4,7 @@ import type { BuildSpecParams } from "./types.js";
 /** Force-directed, built in. Randomised, so it differs between runs. */
 export class CoseLayout extends BaseLayout {
   readonly name = "cose";
+  override readonly sizesNodesByLabel = true;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
     const { spacing } = params;

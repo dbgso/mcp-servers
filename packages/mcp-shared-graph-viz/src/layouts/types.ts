@@ -44,6 +44,11 @@ export interface Layout {
   readonly scriptUrls: readonly string[];
   /** Whether every node must carry a position for this layout to make sense. */
   readonly requiresPositions: boolean;
+  /**
+   * Whether the layout must be told that node dimensions include the label.
+   * See `BaseLayout.sizesNodesByLabel` for what goes wrong when it is not.
+   */
+  readonly sizesNodesByLabel: boolean;
   /** The options this layout adds on top of the shared base. */
   buildSpec(params: BuildSpecParams): Record<string, unknown>;
 }
