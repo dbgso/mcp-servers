@@ -10,6 +10,7 @@ import {
 } from "./validators.js";
 import { ID_SEPARATOR, resolveDocumentPathOrThrow } from "./document-id.js";
 import { TRASH_DIR } from "../constants.js";
+import { MISSING_DESCRIPTION_PLACEHOLDER } from "./metadata-completeness.js";
 import { describeScope, EMPTY_SCOPE, isManaged, type DocumentScope } from "./document-scope.js";
 import { parseFrontmatter, updateFrontmatter } from "../utils/frontmatter-parser.js";
 import { formatDocumentListItem } from "../utils/string-utils.js";
@@ -685,7 +686,7 @@ export class MarkdownReader {
     }
 
     if (descriptionLines.length === 0) {
-      return "(No description)";
+      return MISSING_DESCRIPTION_PLACEHOLDER;
     }
 
     return this.truncateDescription(descriptionLines.join(" "));
