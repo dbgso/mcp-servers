@@ -35,6 +35,12 @@ export default defineConfig({
       // ever been checked. The ratchet's own comment blamed the shortfall on
       // `tunnel.ts` and `duckdb.ts`, which turn out to have no executable code
       // at all -- the gap was five untested files, now tested.
+      thresholds: {
+        statements: 95,
+        branches: 95,
+        functions: 95,
+        lines: 95,
+      },
     },
   },
 });
