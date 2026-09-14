@@ -144,22 +144,36 @@ You must provide \`notes\` (your self-review of the content) to proceed.` +
 
       await this.updateDraftFrontmatterStatus({ id, status: "user_reviewing", selfReviewNotes: notes, reader });
 
+      // The format used to live in a document the server wrote into the user's
+      // corpus at startup, which this response then told the caller to go and
+      // read. It is three lines; putting them here means they arrive at the
+      // moment they are acted on, and the corpus keeps only what the user put
+      // in it.
       return textResponse(
         `# Workflow: self_review → user_reviewing
 
 Self-review recorded.
 
-## Next Step: Explain to User` +
+## Next step: explain the draft to the user
+
+In your own words, and before promoting it, tell them:
+
+1. **Where it goes** — the full path, and the id it will have.
+2. **What it says** — the points the document makes, not its headings.
+3. **Why there** — what the id's prefix groups it with, and why this document
+   belongs in that group.
+
+Then promote it with that same account as the \`explanation\`.` +
         formatNextActions([
-          {
-            action: "read",
-            description: "Read approval format rules",
-            example: `instruction(action: "read", id: "_mcp-interactive-instruction__draft-approval")`,
-          },
           {
             action: "approve",
             description: "Explain the document to the user, then promote it",
             example: `instruction(action: "approve", id: "${id}", explanation: "<what this says and why it should be promoted>")`,
+          },
+          {
+            action: "read",
+            description: "Read the draft again before explaining it",
+            example: `instruction(action: "read", id: "${id}")`,
           },
         ]),
       );
@@ -174,14 +188,14 @@ Self-review recorded.
 ${stateDescriptions.user_reviewing}` +
           formatNextActions([
             {
-              action: "read",
-              description: "Read approval format rules",
-              example: `instruction(action: "read", id: "_mcp-interactive-instruction__draft-approval")`,
-            },
-            {
               action: "approve",
               description: "Explain the document to the user, then promote it",
               example: `instruction(action: "approve", id: "${id}", explanation: "<what this says and why it should be promoted>")`,
+            },
+            {
+              action: "read",
+              description: "Read the draft again before explaining it",
+              example: `instruction(action: "read", id: "${id}")`,
             },
           ]),
         );

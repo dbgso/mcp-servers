@@ -73,8 +73,8 @@ Path: ${result.path}${workflowStatus}` +
           },
           {
             action: "read",
-            description: "Read approval format rules",
-            example: `instruction(action: "read", id: "_mcp-interactive-instruction__draft-approval")`,
+            description: "Read the draft back",
+            example: `instruction(action: "read", id: "${id}")`,
           },
         ]),
     );
