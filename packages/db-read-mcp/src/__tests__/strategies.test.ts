@@ -419,3 +419,264 @@ describe("defaultOpenConnection URL dispatch", () => {
     expect(warnings.some((m) => /sslmode=require\b/.test(m))).toBe(false);
   });
 });
+
+describe("cleanup when a connection cannot be opened", () => {
+  afterEach(() => {
+    vi.doUnmock("mysql2/promise");
+    vi.doUnmock("pg");
+    vi.doUnmock("mcp-shared/tunnel");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("closes the tunnel when the mysql client cannot be created at all", async () => {
+    // The client is null here, so the teardown must not call `end()` on it --
+    // but the tunnel is already up and has to come down, or the ssh process
+    // outlives the failed startup.
+    const tunnelClose = vi.fn(async () => {});
+    vi.resetModules();
+    vi.doMock("mysql2/promise", () => ({
+      createConnection: async () => {
+        throw new Error("connect-refused");
+      },
+    }));
+    vi.doMock("mcp-shared/tunnel", async () => {
+      const actual =
+        await vi.importActual<typeof import("mcp-shared/tunnel")>("mcp-shared/tunnel");
+      return {
+        ...actual,
+        resolveTunneledUrl: async () => ({
+          url: "mysql://u:p@127.0.0.1:3306/d",
+          tunnel: { close: tunnelClose },
+        }),
+      };
+    });
+    const { mysqlStrategy: strat } = await import("../strategies/mysql.js");
+
+    await expect(
+      strat.open({
+        url: "mysql://u:p@h/d?ssl=true",
+        tunnel: { bastion: { host: "bastion.example", identityFile: "/tmp/k" } },
+        tableMetadata,
+      }),
+    ).rejects.toThrow("connect-refused");
+    expect(tunnelClose).toHaveBeenCalled();
+  });
+
+  it("closes the tunnel when the pg client cannot be created at all", async () => {
+    const tunnelClose = vi.fn(async () => {});
+    vi.resetModules();
+    vi.doMock("pg", () => ({
+      default: {
+        Client: class {
+          connect = async (): Promise<void> => {
+            throw new Error("connect-refused");
+          };
+          end = async (): Promise<void> => {};
+          query = async (): Promise<{ rows: [] }> => ({ rows: [] });
+          on = (): void => {};
+        },
+      },
+      Client: class {
+        connect = async (): Promise<void> => {
+          throw new Error("connect-refused");
+        };
+        end = async (): Promise<void> => {};
+        query = async (): Promise<{ rows: [] }> => ({ rows: [] });
+        on = (): void => {};
+      },
+    }));
+    vi.doMock("mcp-shared/tunnel", async () => {
+      const actual =
+        await vi.importActual<typeof import("mcp-shared/tunnel")>("mcp-shared/tunnel");
+      return {
+        ...actual,
+        resolveTunneledUrl: async () => ({
+          url: "postgres://u:p@127.0.0.1:5432/d",
+          tunnel: { close: tunnelClose },
+        }),
+      };
+    });
+    const { postgresStrategy: strat } = await import("../strategies/pg.js");
+
+    await expect(
+      strat.open({
+        url: "postgres://u:p@h:5432/d?sslmode=require",
+        tunnel: { bastion: { host: "bastion.example", identityFile: "/tmp/k" } },
+        tableMetadata,
+      }),
+    ).rejects.toThrow("connect-refused");
+    expect(tunnelClose).toHaveBeenCalled();
+  });
+});
+
+describe("closing a connection that went through a tunnel", () => {
+  afterEach(() => {
+    vi.doUnmock("mysql2/promise");
+    vi.doUnmock("pg");
+    vi.doUnmock("mcp-shared/tunnel");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    {
+      engine: "mysql",
+      driver: () =>
+        vi.doMock("mysql2/promise", () => ({
+          createConnection: async () => ({
+            query: async () => [[], []] as [unknown, unknown],
+            end: async () => {},
+            on: () => {},
+          }),
+        })),
+      load: async () => (await import("../strategies/mysql.js")).mysqlStrategy,
+      url: "mysql://u:p@h/d?ssl=true",
+      tunneled: "mysql://u:p@127.0.0.1:3306/d",
+    },
+    {
+      engine: "postgres",
+      driver: () => {
+        class FakePgClient {
+          connect = async (): Promise<void> => {};
+          end = async (): Promise<void> => {};
+          query = async (): Promise<{ rows: [] }> => ({ rows: [] });
+          on = (): void => {};
+        }
+        vi.doMock("pg", () => ({ default: { Client: FakePgClient }, Client: FakePgClient }));
+      },
+      load: async () => (await import("../strategies/pg.js")).postgresStrategy,
+      url: "postgres://u:p@h:5432/d?sslmode=require",
+      tunneled: "postgres://u:p@127.0.0.1:5432/d",
+    },
+  ])("brings the tunnel down with the $engine client", async ({ driver, load, url, tunneled }) => {
+    // Closing the client leaves the ssh or ssm process running otherwise, and
+    // it holds the local port the next connection wants.
+    const tunnelClose = vi.fn(async () => {});
+    vi.resetModules();
+    driver();
+    vi.doMock("mcp-shared/tunnel", async () => {
+      const actual =
+        await vi.importActual<typeof import("mcp-shared/tunnel")>("mcp-shared/tunnel");
+      return {
+        ...actual,
+        resolveTunneledUrl: async () => ({ url: tunneled, tunnel: { close: tunnelClose } }),
+      };
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const strat = await load();
+
+    const connection = await strat.open({
+      url,
+      tunnel: { bastion: { host: "bastion.example", identityFile: "/tmp/k" } },
+      tableMetadata,
+    });
+    await connection.close();
+
+    expect(tunnelClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the redacted URL in an unsupported-scheme error", () => {
+  it("keeps only the scheme when the URL cannot be parsed at all", async () => {
+    // A malformed value still must not put a password in a log line, so what
+    // survives is the part before the first colon and nothing else.
+    expect(() => pickEngineStrategy("weird scheme:secret@host/db")).toThrow(
+      /weird scheme:\/\/\.\.\./,
+    );
+  });
+});
+
+describe("a teardown that fails during a failed open", () => {
+  afterEach(() => {
+    vi.doUnmock("mysql2/promise");
+    vi.doUnmock("pg");
+    vi.doUnmock("mcp-shared/tunnel");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  /** A tunnel whose `close` rejects, to stand in for an ssh process that will not die. */
+  function brokenTunnel() {
+    return vi.fn(async () => {
+      throw new Error("tunnel-close-failed");
+    });
+  }
+
+  it("still reports the original mysql failure, not the cleanup's", async () => {
+    // The caller needs to know why the connection failed. A rejection from
+    // the cleanup would replace that with "tunnel-close-failed", which says
+    // nothing about the database.
+    const tunnelClose = brokenTunnel();
+    vi.resetModules();
+    vi.doMock("mysql2/promise", () => ({
+      createConnection: async () => ({
+        query: async () => {
+          throw new Error("set-failed");
+        },
+        end: async () => {
+          throw new Error("end-failed");
+        },
+        on: () => {},
+      }),
+    }));
+    vi.doMock("mcp-shared/tunnel", async () => {
+      const actual =
+        await vi.importActual<typeof import("mcp-shared/tunnel")>("mcp-shared/tunnel");
+      return {
+        ...actual,
+        resolveTunneledUrl: async () => ({
+          url: "mysql://u:p@127.0.0.1:3306/d",
+          tunnel: { close: tunnelClose },
+        }),
+      };
+    });
+    const { mysqlStrategy: strat } = await import("../strategies/mysql.js");
+
+    await expect(
+      strat.open({
+        url: "mysql://u:p@h/d?ssl=true",
+        tunnel: { bastion: { host: "bastion.example", identityFile: "/tmp/k" } },
+        tableMetadata,
+      }),
+    ).rejects.toThrow("set-failed");
+    expect(tunnelClose).toHaveBeenCalled();
+  });
+
+  it("still reports the original postgres failure, not the cleanup's", async () => {
+    const tunnelClose = brokenTunnel();
+    class FakePgClient {
+      connect = async (): Promise<void> => {};
+      end = async (): Promise<void> => {
+        throw new Error("end-failed");
+      };
+      query = async (): Promise<{ rows: [] }> => {
+        throw new Error("set-failed");
+      };
+      on = (): void => {};
+    }
+    vi.resetModules();
+    vi.doMock("pg", () => ({ default: { Client: FakePgClient }, Client: FakePgClient }));
+    vi.doMock("mcp-shared/tunnel", async () => {
+      const actual =
+        await vi.importActual<typeof import("mcp-shared/tunnel")>("mcp-shared/tunnel");
+      return {
+        ...actual,
+        resolveTunneledUrl: async () => ({
+          url: "postgres://u:p@127.0.0.1:5432/d",
+          tunnel: { close: tunnelClose },
+        }),
+      };
+    });
+    const { postgresStrategy: strat } = await import("../strategies/pg.js");
+
+    await expect(
+      strat.open({
+        url: "postgres://u:p@h:5432/d?sslmode=require",
+        tunnel: { bastion: { host: "bastion.example", identityFile: "/tmp/k" } },
+        tableMetadata,
+      }),
+    ).rejects.toThrow("set-failed");
+    expect(tunnelClose).toHaveBeenCalled();
+  });
+});
