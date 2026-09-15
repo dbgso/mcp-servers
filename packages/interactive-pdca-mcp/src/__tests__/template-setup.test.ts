@@ -37,7 +37,7 @@ describe("template-setup", () => {
 
   describe("setupSelfReviewTemplates", () => {
     it("copies templates when plan directory does not exist", async () => {
-      const result = await setupSelfReviewTemplates(testDir);
+      const result = await setupSelfReviewTemplates({ markdownDir: testDir });
 
       expect(result.action).toBe("copied_templates");
       expect(result.path).toContain("self-review");
@@ -53,7 +53,7 @@ describe("template-setup", () => {
       const planDir = path.join(testDir, "_mcp-interactive-instruction/plan");
       await fs.mkdir(planDir, { recursive: true });
 
-      const result = await setupSelfReviewTemplates(testDir);
+      const result = await setupSelfReviewTemplates({ markdownDir: testDir });
 
       expect(result.action).toBe("copied_templates");
       expect(result.path).toContain("self-review");
@@ -73,7 +73,8 @@ describe("template-setup", () => {
       // would make the tool unusable over a missing default.
       const emptyTemplates = await fs.mkdtemp(path.join(os.tmpdir(), "no-templates-"));
 
-      const result = await setupSelfReviewTemplates(testDir, {
+      const result = await setupSelfReviewTemplates({
+        markdownDir: testDir,
         templatesDir: emptyTemplates,
       });
 
@@ -93,7 +94,7 @@ describe("template-setup", () => {
       await fs.mkdir(selfReviewDir, { recursive: true });
       await fs.writeFile(path.join(selfReviewDir, "plan.md"), "# Test");
 
-      const result = await setupSelfReviewTemplates(testDir);
+      const result = await setupSelfReviewTemplates({ markdownDir: testDir });
 
       expect(result.action).toBe("already_exists");
     });
@@ -106,7 +107,7 @@ describe("template-setup", () => {
       );
       await fs.mkdir(selfReviewDir, { recursive: true });
 
-      const result = await setupSelfReviewTemplates(testDir);
+      const result = await setupSelfReviewTemplates({ markdownDir: testDir });
 
       expect(result.action).toBe("copied_templates");
     });
@@ -116,7 +117,7 @@ describe("template-setup", () => {
       const planDir = path.join(testDir, "_mcp-interactive-instruction/plan");
       await fs.mkdir(planDir, { recursive: true });
 
-      await setupSelfReviewTemplates(testDir);
+      await setupSelfReviewTemplates({ markdownDir: testDir });
 
       // Check plan.md content
       const planContent = await fs.readFile(
@@ -157,7 +158,7 @@ describe("template-setup", () => {
       const planDir = path.join(testDir, "_mcp-interactive-instruction/plan");
       await fs.mkdir(planDir, { recursive: true });
 
-      await setupSelfReviewTemplates(testDir);
+      await setupSelfReviewTemplates({ markdownDir: testDir });
 
       // Check that examples subdirectory was copied
       const examplesDir = path.join(planDir, "self-review/examples");
