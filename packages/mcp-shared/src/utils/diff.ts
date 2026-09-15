@@ -150,13 +150,16 @@ export function diffStructures(params: {
     }
   }
 
-  // Sort by line number for consistent output
-   
-  added.sort((a, b) => (a.lineB ?? 0) - (b.lineB ?? 0));
-   
-  removed.sort((a, b) => (a.lineA ?? 0) - (b.lineA ?? 0));
-   
-  modified.sort((a, b) => (a.lineB ?? 0) - (b.lineB ?? 0));
+  // Sort by line number, so the diff reads in the order of the file.
+  //
+  // `lineA` / `lineB` are optional on `DiffChange` because a consumer may build
+  // one without them -- an added item has no line in A. Every change built
+  // above has the one it is sorted on, so the reading is direct rather than
+  // through a `?? 0` that could never be reached and implied the field might
+  // be missing here.
+  added.sort((a, b) => (a.lineB as number) - (b.lineB as number));
+  removed.sort((a, b) => (a.lineA as number) - (b.lineA as number));
+  modified.sort((a, b) => (a.lineB as number) - (b.lineB as number));
 
   // Generate summary
   const parts: string[] = [];

@@ -219,7 +219,14 @@ export function createWorkflowInstance<
       return currentState;
     },
     get context() {
-      return { ...context };
+      // Deep, not `{ ...context }`. The getter exists so a caller cannot edit
+      // the workflow's state without a transition, and a shallow copy only
+      // achieves that for primitive fields -- an array or object in the
+      // context stayed shared, so `instance.context.items.push(...)` reached
+      // straight through. Anything a context may hold is already required to
+      // survive `JSON.stringify` in `save()`, so cloning it structurally
+      // cannot reject a context this engine otherwise supports.
+      return structuredClone(context);
     },
     get visitedStates() {
       return [...visitedStates];

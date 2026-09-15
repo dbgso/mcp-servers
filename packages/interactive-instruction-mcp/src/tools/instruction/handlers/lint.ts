@@ -4,6 +4,10 @@ import type { InstructionContext } from "../types.js";
 import { formatNextActions, textResponse } from "../types.js";
 import { isInternalDocument } from "../../../constants.js";
 import { parseFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
+import {
+  isDescriptionMissing,
+  isWhenToUseMissing,
+} from "../../../services/metadata-completeness.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
 
@@ -135,12 +139,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     const issues: LintIssue[] = [];
 
     for (const doc of documents) {
-      const noDescription =
-        !doc.description ||
-        doc.description === "(No description)" ||
-        doc.description.trim() === "";
-
-      if (noDescription) {
+      if (isDescriptionMissing(doc)) {
         issues.push({
           severity: "error",
           docId: doc.id,
@@ -149,7 +148,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
         });
       }
 
-      if (!doc.whenToUse || doc.whenToUse.length === 0) {
+      if (isWhenToUseMissing(doc)) {
         issues.push({
           severity: "warning",
           docId: doc.id,

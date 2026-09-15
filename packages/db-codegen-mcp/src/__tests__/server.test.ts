@@ -7,6 +7,7 @@ import {
   buildBastionConfig,
   buildCodegenTools,
   buildDefaultResolver,
+  buildTunnelConfig,
   createServer,
   SECRET_KEYS,
   SERVER_NAME,
@@ -130,6 +131,18 @@ describe("db-codegen-mcp server", () => {
       expect(tools[0].name).toBe("dbgen_describe");
     });
 
+    it("prefers an explicit getTunnel over the env dispatch", () => {
+      // A host embedding this server supplies its own tunnel resolution; the
+      // default that reads DBGEN_* env signals must not run alongside it.
+      const getTunnel = vi.fn(() => null);
+      const tools = buildCodegenTools({
+        resolver: fakeResolver(),
+        override: { getTunnel, pickIntrospector: vi.fn() },
+      });
+
+      expect(tools[0].name).toBe("dbgen_describe");
+    });
+
     it("forwards every codegen config field", () => {
       const resolver = fakeResolver();
       const tools = buildCodegenTools({
@@ -171,6 +184,65 @@ describe("db-codegen-mcp server", () => {
       },
     ])("$name", ({ cache, expected }) => {
       expect(buildBastionConfig(fakeResolver({ cache }))).toEqual(expected);
+    });
+  });
+
+  describe("buildTunnelConfig", () => {
+    const SSM_KEYS = [
+      "DBGEN_SSM_TARGET",
+      "DBGEN_SSM_REGION",
+      "DBGEN_SSM_PROFILE",
+      "DBGEN_SSM_DOCUMENT_NAME",
+      "DBGEN_SSM_READY_TIMEOUT_MS",
+    ] as const;
+
+    beforeEach(() => {
+      for (const key of SSM_KEYS) delete process.env[key];
+    });
+
+    afterEach(() => {
+      for (const key of SSM_KEYS) delete process.env[key];
+    });
+
+    it("reports no tunnel when neither signal is set", () => {
+      expect(buildTunnelConfig(fakeResolver({}))).toBeNull();
+    });
+
+    it("picks the bastion when only its host is configured", () => {
+      const spec = buildTunnelConfig(fakeResolver({ cache: { [HOST_KEY]: "user@host" } }));
+
+      expect(spec).toEqual({ bastion: { host: "user@host" } });
+    });
+
+    it("picks SSM from a cached target, mirroring it into the environment", () => {
+      // `ssmConfigFromEnv` reads `process.env`, so a target that arrived from
+      // a secret store rather than the shell has to be put there first --
+      // otherwise a configured tunnel is silently ignored and the connection
+      // is attempted direct.
+      const spec = buildTunnelConfig(
+        fakeResolver({ cache: { DBGEN_SSM_TARGET: "i-0123456789abcdef0" } }),
+      );
+
+      expect(spec).toEqual({ ssm: expect.objectContaining({ target: "i-0123456789abcdef0" }) });
+      expect(process.env.DBGEN_SSM_TARGET).toBe("i-0123456789abcdef0");
+    });
+
+    it("leaves a value the environment already carries alone", () => {
+      // The shell is the more specific source: a cached value must not
+      // overwrite what the operator set for this run.
+      process.env.DBGEN_SSM_TARGET = "i-from-the-shell";
+
+      buildTunnelConfig(fakeResolver({ cache: { DBGEN_SSM_TARGET: "i-from-the-store" } }));
+
+      expect(process.env.DBGEN_SSM_TARGET).toBe("i-from-the-shell");
+    });
+
+    it("refuses to guess when both a bastion and an SSM target are set", () => {
+      process.env.DBGEN_SSM_TARGET = "i-0123456789abcdef0";
+
+      expect(() =>
+        buildTunnelConfig(fakeResolver({ cache: { [HOST_KEY]: "user@host" } })),
+      ).toThrow(/at most one/);
     });
   });
 
