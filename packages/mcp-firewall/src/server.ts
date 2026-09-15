@@ -8,7 +8,7 @@ import { ProxyClient } from "./proxy-client.js";
 import { RuleEngine } from "./rule-engine.js";
 import { RuleStore } from "./rule-store.js";
 import { registerRuleTools } from "./tools/index.js";
-import type { TargetConfig } from "./types.js";
+import type { Rule, TargetConfig } from "./types.js";
 import { VERSION } from "./version.js";
 
 export interface CreateServerParams {
@@ -136,14 +136,19 @@ function registerProxyExecuteTool(params: {
         if (dryRun) {
           console.error(`[DRY-RUN] Would ask for approval: ${toolName} - ${evaluation.reason}`);
         } else {
-          // Rule engine invariant: every `ask` evaluation has a matchedRule.
-          // Narrow it here so downstream callers can rely on a non-optional Rule.
-          const matchedRule = evaluation.matchedRule;
-          if (!matchedRule) {
-            throw new Error(
-              `Rule engine invariant violated: 'ask' action has no matchedRule for tool '${toolName}'`,
-            );
-          }
+          // An `ask` does not always come from a rule: `defaultAction: "ask"`
+          // -- allow what is written down, ask about everything else -- is a
+          // rules file with nothing to attribute the hold to. This used to
+          // throw "invariant violated" for exactly that configuration, which
+          // made a reasonable posture fail every unlisted call instead of
+          // holding it. The hold is what matters; the rule is provenance.
+          const matchedRule: Rule = evaluation.matchedRule ?? {
+            id: "default",
+            priority: 0,
+            action: "ask",
+            toolPattern: "*",
+            description: evaluation.reason,
+          };
           const pendingCall = pendingStore.add({ toolName, args, matchedRule });
           auditLogger?.logAsk({ toolName, args, rule: matchedRule, reason: evaluation.reason });
 
