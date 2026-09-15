@@ -10,6 +10,14 @@ export default defineConfig({
     // ceiling failed this suite on a loaded machine while passing on an idle
     // one. The work is real, not a hang; the limit is here to catch a hang.
     testTimeout: 90000,
+    // Each of these tests builds a ts-morph Project, which holds the whole
+    // program in memory and is seconds of CPU to construct. One worker per
+    // core starves them of both: the suite passed at 317 tests and began
+    // timing out at 400, on a machine with cores to spare, because the
+    // workers were competing for memory rather than for CPU.
+    poolOptions: {
+      threads: { maxThreads: 4 },
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "clover", "json"],
