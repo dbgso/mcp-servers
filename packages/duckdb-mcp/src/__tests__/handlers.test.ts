@@ -172,3 +172,35 @@ describe("DuckdbCountHandler", () => {
     expect(data.groups).toHaveLength(1);
   });
 });
+
+describe("the registry", () => {
+  it("hands back the same instance every time", () => {
+    // Handlers are stateless but registration is not free, and a caller that
+    // got a fresh registry per request would re-register on every tool call.
+    expect(getToolRegistry()).toBe(getToolRegistry());
+  });
+});
+
+describe("a query DuckDB refuses", () => {
+  it("reports the error from a count over a file that is not there", async () => {
+    const handler = new DuckdbCountHandler();
+
+    const result = await handler.execute({
+      file_path: join(testDir, "absent.csv"),
+      group_by: "city",
+    });
+
+    expect(result.isError).toBe(true);
+  });
+
+  it("reports the error from a query over a file that is not there", async () => {
+    const handler = new DuckdbQueryHandler();
+
+    const result = await handler.execute({
+      file_path: join(testDir, "absent.csv"),
+      sql: "SELECT * FROM data",
+    });
+
+    expect(result.isError).toBe(true);
+  });
+});

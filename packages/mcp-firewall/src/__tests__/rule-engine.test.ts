@@ -503,6 +503,25 @@ describe("RuleEngine", () => {
       expect(result.conditionResults).toHaveLength(1);
       expect(result.conditionResults[0].matches).toBe(true);
     });
+
+    test("reports an empty condition list for a rule that has none", () => {
+      // A pattern-only rule is the common case; `testRule` is what the
+      // rule-management tools use to explain a decision, and it has to say
+      // "matched on the pattern alone" rather than fail on a missing array.
+      const rule: Rule = {
+        id: "pattern-only",
+        priority: 0,
+        action: "allow",
+        toolPattern: "browser_*",
+      };
+      const engine = new RuleEngine(createMockRuleStore([rule]));
+
+      const result = engine.testRule({ rule, toolName: "browser_click", args: {} });
+
+      expect(result.matches).toBe(true);
+      expect(result.patternMatch).toBe(true);
+      expect(result.conditionResults).toEqual([]);
+    });
   });
 
   describe("evaluateAll", () => {

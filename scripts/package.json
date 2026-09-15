@@ -9,6 +9,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"
   }
 }

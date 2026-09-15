@@ -15,7 +15,7 @@ export class SetupTemplatesHandler implements ApproveActionHandler {
     const { markdownDir } = params.context;
 
     try {
-      const result = await setupSelfReviewTemplates(markdownDir);
+      const result = await setupSelfReviewTemplates({ markdownDir });
 
       // Templates already exist
       if (result.action === "already_exists") {

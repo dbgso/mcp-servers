@@ -59,12 +59,16 @@ async function directoryExists(dirPath: string): Promise<boolean> {
  * - If directory doesn't exist: Create empty `_mcp-interactive-instruction/plan/` directory
  *   (so we don't ask again next time)
  *
- * @param markdownDir - The user's markdown documentation directory
+ * @param params.markdownDir - The user's markdown documentation directory
+ * @param params.templatesDir - Where the packaged templates live. Defaults to
+ *   the `templates/` directory beside this module.
  * @returns SetupResult indicating what action was taken
  */
-export async function setupSelfReviewTemplates(
-  markdownDir: string
-): Promise<SetupResult> {
+export async function setupSelfReviewTemplates(params: {
+  markdownDir: string;
+  templatesDir?: string;
+}): Promise<SetupResult> {
+  const { markdownDir, templatesDir: packagedTemplatesDir } = params;
   const planDirPath = path.join(markdownDir, PLAN_DIR_NAME);
   const selfReviewPath = path.join(markdownDir, TEMPLATE_SUBDIR);
 
@@ -81,8 +85,10 @@ export async function setupSelfReviewTemplates(
     }
   }
 
-  // Try to copy templates
-  const templatesDir = getTemplatesDir();
+  // Try to copy templates. The directory is injectable so the fallback below
+  // -- which is what an install missing its `templates/` sees -- can be
+  // driven; there is no other way to reach it from a checkout that has them.
+  const templatesDir = packagedTemplatesDir ?? getTemplatesDir();
   const templateSrcPath = path.join(templatesDir, TEMPLATE_SUBDIR);
 
   // Copy templates if they exist in the package
