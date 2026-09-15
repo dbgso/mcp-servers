@@ -31,6 +31,26 @@ run, no coverage is measured, and the thresholds below are never checked. CI
 carried that form from its first commit, which is why a package could sit
 seven points under its own threshold with a green build.
 
+## What is measured
+
+```typescript
+coverage: {
+  include: ["src/**/*.ts"],
+}
+```
+
+Without an explicit `include`, v8 counts only the files a test imported. A file
+with no test at all does not appear in the total, so the figure describes the
+tested part of the package and says nothing about the rest. Several packages
+here reported a number that looked finished while their server entry point --
+the file every tool call goes through -- was never loaded: `cli-to-mcp` read
+100% on four files and 59% on all of them.
+
+The same applies to an integration test that spawns the built server as a child
+process. It exercises the code, but v8 is not in that process, so none of it is
+measured; `mcp-firewall` and `ast-file-mcp` both had suites like that over code
+reporting 0%.
+
 ## CI Enforcement
 
 Coverage is checked in CI. PRs that drop coverage below 95% will fail.
