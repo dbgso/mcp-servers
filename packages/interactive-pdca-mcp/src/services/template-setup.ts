@@ -60,10 +60,13 @@ async function directoryExists(dirPath: string): Promise<boolean> {
  *   (so we don't ask again next time)
  *
  * @param markdownDir - The user's markdown documentation directory
+ * @param options.templatesDir - Where the packaged templates live. Defaults to
+ *   the `templates/` directory beside this module.
  * @returns SetupResult indicating what action was taken
  */
 export async function setupSelfReviewTemplates(
-  markdownDir: string
+  markdownDir: string,
+  options: { templatesDir?: string } = {}
 ): Promise<SetupResult> {
   const planDirPath = path.join(markdownDir, PLAN_DIR_NAME);
   const selfReviewPath = path.join(markdownDir, TEMPLATE_SUBDIR);
@@ -81,8 +84,10 @@ export async function setupSelfReviewTemplates(
     }
   }
 
-  // Try to copy templates
-  const templatesDir = getTemplatesDir();
+  // Try to copy templates. The directory is injectable so the fallback below
+  // -- which is what an install missing its `templates/` sees -- can be
+  // driven; there is no other way to reach it from a checkout that has them.
+  const templatesDir = options.templatesDir ?? getTemplatesDir();
   const templateSrcPath = path.join(templatesDir, TEMPLATE_SUBDIR);
 
   // Copy templates if they exist in the package

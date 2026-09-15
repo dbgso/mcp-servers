@@ -67,6 +67,23 @@ describe("template-setup", () => {
       expect(files).toContain("act.md");
     });
 
+    it("creates the directory empty when the package has no templates", async () => {
+      // What a broken or trimmed install sees. Creating the directory anyway
+      // is what stops the server asking again on every start; failing here
+      // would make the tool unusable over a missing default.
+      const emptyTemplates = await fs.mkdtemp(path.join(os.tmpdir(), "no-templates-"));
+
+      const result = await setupSelfReviewTemplates(testDir, {
+        templatesDir: emptyTemplates,
+      });
+
+      expect(result.action).toBe("created_empty");
+      expect(result.path).toContain("plan");
+      const stat = await fs.stat(result.path);
+      expect(stat.isDirectory()).toBe(true);
+      await fs.rm(emptyTemplates, { recursive: true, force: true });
+    });
+
     it("returns already_exists when self-review templates exist", async () => {
       // Create plan directory and self-review with a file
       const selfReviewDir = path.join(
