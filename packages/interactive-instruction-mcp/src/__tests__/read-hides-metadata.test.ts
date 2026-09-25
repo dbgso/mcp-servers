@@ -193,3 +193,63 @@ describe("what a document with no frontmatter reads as", () => {
     expect(text(result)).toContain("No frontmatter at all.");
   });
 });
+
+describe("update_meta on a draft", () => {
+  it("finds it under the draft prefix, and says it is one", async () => {
+    // `read` answers with prose, and a draft never appears in `list`, so this
+    // is the only way to see what a draft's metadata says -- which is when it
+    // most needs work.
+    await write({ id: path.join(DRAFT_DIR, "drafted"), content: DRAFT });
+
+    const result = await updateMeta.execute({
+      rawParams: { action: "update_meta", id: "drafted" },
+      context,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(text(result)).toContain("**[Draft]**");
+    expect(text(result)).toContain("A draft");
+    expect(text(result)).toContain("testing");
+  });
+
+  it("leaves the approval conversation out of it", async () => {
+    // Metadata here means what the corpus is navigated by. `status` and
+    // `selfReviewNotes` are the approval conversation, and this tool is for
+    // writing a description -- not for reading back the review.
+    await write({ id: path.join(DRAFT_DIR, "drafted"), content: DRAFT });
+
+    const result = await updateMeta.execute({
+      rawParams: { action: "update_meta", id: "drafted" },
+      context,
+    });
+
+    expect(text(result)).not.toContain("selfReviewNotes");
+    expect(text(result)).not.toContain("I checked the criteria");
+    expect(text(result)).not.toContain("user_reviewing");
+  });
+
+  it("prefers the promoted document when both exist", async () => {
+    // Both can exist while an update is staged; the promoted one is what the
+    // corpus reads, so it is what a metadata review is about.
+    await write({ id: "both", content: PROMOTED });
+    await write({ id: path.join(DRAFT_DIR, "both"), content: DRAFT });
+
+    const result = await updateMeta.execute({
+      rawParams: { action: "update_meta", id: "both" },
+      context,
+    });
+
+    expect(text(result)).toContain("What this document is for");
+    expect(text(result)).not.toContain("**[Draft]**");
+  });
+
+  it("still reports an id that is neither", async () => {
+    const result = await updateMeta.execute({
+      rawParams: { action: "update_meta", id: "absent" },
+      context,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("not found");
+  });
+});

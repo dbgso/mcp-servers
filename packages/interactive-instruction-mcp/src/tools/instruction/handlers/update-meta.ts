@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
-import { isInternalDocument } from "../../../constants.js";
+import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { buildGraph } from "./graph.js";
@@ -71,7 +71,8 @@ export function buildNeighbourhood(params: {
 export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "update_meta";
   readonly help =
-    "Gather what the corpus knows about a document -- its own metadata, its neighbours, and where it might belong -- and ask for better metadata.";
+    "Gather what the corpus knows about a document -- its own metadata, its neighbours, and where it might belong -- and ask for better metadata. " +
+    "This is where metadata is read: `read` answers with prose alone. Works on a draft as well as a promoted document.";
   readonly schema = schema;
 
   protected async doExecute(params: {
@@ -81,7 +82,12 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
     const { id } = params.args;
     const { reader } = params.context;
 
-    const content = await reader.getDocumentContent(id);
+    // A draft is looked up under its prefix when there is no promoted
+    // document by that id. `read` answers with prose alone, and a draft never
+    // appears in `list`, so this is the only way to see what a draft's
+    // metadata currently says -- which is exactly when it most needs work.
+    const promoted = await reader.getDocumentContent(id);
+    const content = promoted ?? (await reader.getDocumentContent(DRAFT_PREFIX + id));
     if (content === null) {
       return errorResponse(`Error: Document "${id}" not found.` +
         formatNextActions([{
@@ -90,6 +96,7 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
           example: `instruction(action: "list")`,
         }]));
     }
+    const isDraft = promoted === null;
 
     const listed = await reader.listDocuments({ recursive: true });
     const documents = listed.documents.filter((doc) => !isInternalDocument(doc.id));
@@ -98,7 +105,7 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
     const frontmatter = parseFrontmatter(content);
 
     const sections = [
-      `# Metadata review: ${id}`,
+      `# Metadata review: ${isDraft ? "**[Draft]** " : ""}${id}`,
       "",
       "## What it says now",
       `- **description**: ${frontmatter.description ?? "(not set)"}`,
