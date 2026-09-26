@@ -29,7 +29,7 @@ type Args = z.infer<typeof schema>;
 
 export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "link_remove";
-  readonly help = "Remove relatedDocs links from a document's frontmatter.";
+  readonly help = "Remove relatedDocs links from a document's frontmatter. Needs `explanation`, and the identical call repeated.";
   readonly schema = schema;
 
   protected async doExecute(params: {

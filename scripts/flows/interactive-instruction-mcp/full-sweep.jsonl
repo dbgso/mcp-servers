@@ -1,0 +1,74 @@
+# Every action of the `instruction` tool, once, in an order that lets each one
+# act on what the last one left behind. A document is created, described,
+# linked, promoted, edited through the pending flow, renamed and deleted.
+#
+#   node scripts/mcp-session.mjs interactive-instruction-mcp \
+#     scripts/flows/interactive-instruction-mcp/full-sweep.jsonl -- '{{TMPDIR}}'
+#
+# Gated actions appear as many times as their gate takes: two for apply, link
+# and approve, three for rename and delete. That repetition is the point --
+# it is what a one-call-per-process harness cannot express.
+
+{"tools": true, "label": "0. the tools on offer"}
+{"call": "instruction_describe", "label": "0b. describe", "args": {}, "expect": ["Available Actions", "read_meta"]}
+
+{"call": "instruction", "label": "1. list: an empty corpus", "args": {"action": "list"}, "expect": ["No markdown documents found"]}
+
+{"call": "instruction", "label": "2. add: first draft", "args": {"action": "add", "id": "alpha", "content": "# Alpha\n\nThe first document.", "description": "The first document of the sweep", "whenToUse": ["running the sweep"]}, "expect": ["created successfully", "editing → self_review"]}
+{"call": "instruction", "label": "3. add: second draft", "args": {"action": "add", "id": "beta", "content": "# Beta\n\nThe second document.", "description": "The second document of the sweep", "whenToUse": ["running the sweep"]}, "expect": ["created successfully"]}
+
+{"call": "instruction", "label": "4. read: a draft is prose only", "args": {"action": "read", "id": "alpha"}, "expect": ["The first document."], "expectNot": ["description:", "status:"]}
+{"call": "instruction", "label": "5. read_meta: the metadata, one action away", "args": {"action": "read_meta", "id": "alpha"}, "expect": ["**[Draft]**", "The first document of the sweep"]}
+
+{"call": "instruction", "label": "6. update: a draft is overwritten directly", "args": {"action": "update", "id": "alpha", "content": "# Alpha\n\nThe first document, revised."}, "expect": ["updated successfully"]}
+{"call": "instruction", "label": "7. update: metadata alone, body untouched", "args": {"action": "update", "id": "alpha", "whenToUse": ["running the sweep", "checking a metadata-only update"]}, "expect": ["updated successfully"]}
+{"call": "instruction", "label": "8. read: the body survived the metadata edit", "args": {"action": "read", "id": "alpha"}, "expect": ["The first document, revised."]}
+
+{"call": "instruction", "label": "9. set_status: back to editing", "args": {"action": "set_status", "id": "alpha", "status": "editing"}, "expect": ["alpha"]}
+
+{"call": "instruction", "label": "10. approve: record the self-review", "args": {"action": "approve", "id": "alpha", "notes": "reviewed: one topic, ready"}, "expect": ["alpha"]}
+{"call": "instruction", "label": "11. approve: first attempt refused", "args": {"action": "approve", "id": "alpha", "explanation": "Alpha records the first half of the sweep."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "12. approve: the identical repeat promotes", "args": {"action": "approve", "id": "alpha", "explanation": "Alpha records the first half of the sweep."}, "expect": ["promoted"], "expectNot": ["Not Yet"]}
+
+{"call": "instruction", "label": "13. approve beta: self-review", "args": {"action": "approve", "id": "beta", "notes": "reviewed: separate topic"}, "expect": ["beta"]}
+{"call": "instruction", "label": "14. approve beta: refused once", "args": {"action": "approve", "id": "beta", "explanation": "Beta records the second half.", "force": true}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "15. approve beta: promoted", "args": {"action": "approve", "id": "beta", "explanation": "Beta records the second half.", "force": true}, "expect": ["promoted"]}
+
+{"call": "instruction", "label": "16. link_add: refused once", "args": {"action": "link_add", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "17. link_add: the repeat writes the link", "args": {"action": "link_add", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expectNot": ["Not Yet"]}
+{"call": "instruction", "label": "18. list: backlinks now have something to show", "args": {"action": "list", "backlinks": true}, "expect": ["alpha", "beta"]}
+{"call": "instruction", "label": "19. list: search", "args": {"action": "list", "query": "second"}, "expect": ["beta"]}
+{"call": "instruction", "label": "20. list: documents missing metadata", "args": {"action": "list", "missingMeta": "any"}}
+
+{"call": "instruction", "label": "21. graph: the relatedDocs graph", "args": {"action": "graph"}}
+{"call": "instruction", "label": "22. graph: one document's neighbourhood", "args": {"action": "graph", "id": "alpha", "depth": 2}}
+
+{"call": "instruction", "label": "23. lint: the corpus", "args": {"action": "lint"}}
+
+{"call": "instruction", "label": "24. update a promoted document: stages a diff", "args": {"action": "update", "id": "alpha", "content": "# Alpha\n\nThe first document, revised again."}, "expect": ["Update prepared", "```diff"]}
+{"call": "instruction", "label": "25. apply: refused once", "args": {"action": "apply", "id": "alpha", "explanation": "This is the revision we discussed."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "26. apply: the repeat writes it", "args": {"action": "apply", "id": "alpha", "explanation": "This is the revision we discussed."}, "expectNot": ["Not Yet"]}
+{"call": "instruction", "label": "27. read: the applied text is there", "args": {"action": "read", "id": "alpha"}, "expect": ["revised again"]}
+
+{"call": "instruction", "label": "28. update beta: stage a diff to throw away", "args": {"action": "update", "id": "beta", "content": "# Beta\n\nA change nobody wants."}, "expect": ["Update prepared"]}
+{"call": "instruction", "label": "29. cancel: discard it", "args": {"action": "cancel", "id": "beta"}, "expect": ["beta"]}
+{"call": "instruction", "label": "30. read beta: unchanged", "args": {"action": "read", "id": "beta"}, "expect": ["The second document."], "expectNot": ["nobody wants"]}
+
+{"call": "instruction", "label": "31. link_remove: refused once", "args": {"action": "link_remove", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "32. link_remove: the repeat removes it", "args": {"action": "link_remove", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expectNot": ["Not Yet"]}
+
+{"call": "instruction", "label": "33. rename a promoted document: attempt 1 of 3", "args": {"action": "rename", "id": "beta", "newId": "gamma", "explanation": "Beta was always going to be called gamma."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "34. rename: attempt 2 of 3", "args": {"action": "rename", "id": "beta", "newId": "gamma", "explanation": "Beta was always going to be called gamma."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "35. rename: attempt 3 goes through", "args": {"action": "rename", "id": "beta", "newId": "gamma", "explanation": "Beta was always going to be called gamma."}, "expectNot": ["Not Yet"]}
+{"call": "instruction", "label": "36. read: the new id answers", "args": {"action": "read", "id": "gamma"}, "expect": ["The second document."]}
+
+{"call": "instruction", "label": "37. delete a promoted document: attempt 1 of 3", "args": {"action": "delete", "id": "gamma", "explanation": "Gamma has served its purpose in this sweep."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "38. delete: attempt 2 of 3", "args": {"action": "delete", "id": "gamma", "explanation": "Gamma has served its purpose in this sweep."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "39. delete: attempt 3 removes it", "args": {"action": "delete", "id": "gamma", "explanation": "Gamma has served its purpose in this sweep."}, "expectNot": ["Not Yet"]}
+
+{"call": "instruction", "label": "40. add then delete a draft: no gate on a draft", "args": {"action": "add", "id": "throwaway", "content": "# Throwaway\n\nHere to be deleted.", "description": "A draft that exists to be deleted", "whenToUse": ["checking the ungated draft path"]}, "expect": ["created successfully"]}
+{"call": "instruction", "label": "41. delete a draft: immediate", "args": {"action": "delete", "id": "throwaway"}, "expectNot": ["Not Yet"]}
+{"call": "instruction", "label": "42. rename a draft: immediate", "args": {"action": "add", "id": "oldname", "content": "# Old\n\nTo be renamed.", "description": "A draft to rename", "whenToUse": ["checking the ungated rename path"]}, "expect": ["created successfully"]}
+{"call": "instruction", "label": "43. rename the draft", "args": {"action": "rename", "id": "oldname", "newId": "newname"}, "expectNot": ["Not Yet"]}
+
+{"call": "instruction", "label": "44. list: what is left", "args": {"action": "list", "recursive": true}, "expect": ["alpha"], "expectNot": ["gamma"]}

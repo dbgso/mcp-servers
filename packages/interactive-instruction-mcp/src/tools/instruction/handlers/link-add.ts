@@ -31,7 +31,7 @@ type Args = z.infer<typeof schema>;
 
 export class LinkAddHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "link_add";
-  readonly help = "Add relatedDocs links to a document's frontmatter.";
+  readonly help = "Add relatedDocs links to a document's frontmatter. Needs `explanation`, and the identical call repeated.";
   readonly schema = schema;
 
   protected async doExecute(params: {

@@ -47,7 +47,7 @@ function buildInputSchema(): Record<string, z.ZodTypeAny> {
   return merged;
 }
 
-function buildDescribeText(config: ReminderConfig): string {
+export function buildDescribeText(config: ReminderConfig): string {
   return `# instruction_describe
 
 This tool explains how to use the instruction tool.
@@ -80,8 +80,8 @@ This tool explains how to use the instruction tool.
 - \`instruction(action: "cancel", id: "<doc-id>")\` - Cancel pending update
 
 ### Metadata & Quality
-- \`instruction(action: "link_add", id: "<id>", relatedDocs: ["doc1", "doc2"])\` - Add related docs
-- \`instruction(action: "link_remove", id: "<id>", relatedDocs: ["doc1"])\` - Remove related docs
+- \`instruction(action: "link_add", id: "<id>", relatedDocs: ["doc1", "doc2"], explanation: "<what you told the user>")\` - Add related docs (repeat the identical call to go through)
+- \`instruction(action: "link_remove", id: "<id>", relatedDocs: ["doc1"], explanation: "<what you told the user>")\` - Remove related docs (repeat the identical call to go through)
 - \`instruction(action: "lint")\` - Check document quality
 - \`instruction(action: "set_status", id: "<id>", status: "<status>")\` - Set draft status (single)
 - \`instruction(action: "set_status", ids: "id1,id2", status: "<status>")\` - Set draft status (batch)
