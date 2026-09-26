@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions, textResponse } from "../types.js";
-import { DRAFT_DIR } from "../../../constants.js";
+import { isInternalDocument } from "../../../constants.js";
 import { stripFrontmatter } from "../../../utils/frontmatter-parser.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
@@ -36,7 +36,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     const { reader } = params.context;
 
     const result = await reader.listDocuments({ recursive: true });
-    const documents = result.documents.filter((d) => !d.id.startsWith(DRAFT_DIR));
+    const documents = result.documents.filter((d) => !isInternalDocument(d.id));
 
     const issues: LintIssue[] = [];
 

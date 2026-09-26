@@ -14,11 +14,15 @@ import { ApproveHandler } from "../tools/instruction/handlers/approve.js";
 import { AddHandler } from "../tools/instruction/handlers/add.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 
-// Spies over the real approval module, wired up in vitest-setup.ts.
-import { requestApproval, validateApproval } from "mcp-shared/approval";
+import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
+import { isRefusal, throughGate } from "./helpers/gate.js";
 
-const mockRequestApproval = vi.mocked(requestApproval);
-const mockValidateApproval = vi.mocked(validateApproval);
+/**
+ * One explanation, reused. It is part of the run key, so a test that wants a
+ * second attempt to count as a repeat has to pass the same string -- which is
+ * the property being relied on, not an incidental detail of the harness.
+ */
+const EXPLANATION = "This document records the decision we just discussed.";
 
 const tempBase = path.join(process.cwd(), "src/__tests__/temp-approve");
 const docsDir = tempBase;
@@ -55,8 +59,7 @@ describe("ApproveHandler", () => {
     approveHandler = new ApproveHandler();
     addHandler = new AddHandler();
 
-    mockRequestApproval.mockClear();
-    mockValidateApproval.mockClear();
+    resetMutationGatesForTesting();
   });
 
   afterEach(async () => {
@@ -83,24 +86,9 @@ describe("ApproveHandler", () => {
    * Helper to create a draft and progress it to a specific state.
    */
   /**
-   * Registers a BATCH approval. The batch request id is built from the id list,
-   * so an approval requested through the single-draft path does not satisfy it.
-   * Spy counts are cleared afterwards so a test counts only its own calls.
-   */
-  async function requestBatchApproval(ids: string): Promise<void> {
-    await approveHandler.execute({
-      rawParams: { action: "approve", ids },
-      context,
-    });
-    mockRequestApproval.mockClear();
-    mockValidateApproval.mockClear();
-  }
-
-  /**
    * `pending_approval` is reached through the handler rather than by driving
-   * the workflow manager directly, because that is the step that registers the
-   * approval. Skipping it used to be invisible -- the stubbed validator
-   * accepted any token -- but the real gate has nothing to validate against.
+   * the workflow manager directly, because the handler is what opens the gate
+   * run -- and a run opened by one call is what the next call continues.
    */
   async function createDraftAtState(
     id: string,
@@ -134,11 +122,12 @@ describe("ApproveHandler", () => {
 
     if (state === "user_reviewing") return;
 
-    // Progress to pending_approval AND request the approval, the way a caller
-    // does. `force` skips the consecutive-approval warning, which is about
-    // caller habits and not what these tests are exercising.
+    // Progress to pending_approval by making the first promotion attempt, the
+    // way a caller does -- the gate refuses it, and that refusal is what leaves
+    // the draft here. `force` skips the consecutive-approval warning, which is
+    // about caller habits and not what these tests are exercising.
     await approveHandler.execute({
-      rawParams: { action: "approve", id, confirmed: true, force: true, ...options },
+      rawParams: { action: "approve", id, explanation: EXPLANATION, force: true, ...options },
       context,
     });
   }
@@ -192,7 +181,7 @@ describe("ApproveHandler", () => {
       expect(result.content[0].text).toContain("notes");
     });
 
-    it("should require confirmed in user_reviewing state", async () => {
+    it("should require an explanation in user_reviewing state", async () => {
       const id = getTestId("test-draft-1");
       await createDraftAtState(id, "user_reviewing");
 
@@ -202,262 +191,125 @@ describe("ApproveHandler", () => {
       });
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("confirmed");
+      expect(result.content[0].text).toContain("explanation");
     });
   });
 
   describe("Batch approval with ids parameter", () => {
-    describe("confirmed: true behavior", () => {
-      it("should send single notification for batch (mock verification)", async () => {
-        const id1 = getTestId("test-draft-1");
-        const id2 = getTestId("test-draft-2");
-        const id3 = getTestId("test-draft-3");
-        await createDraftAtState(id1, "user_reviewing");
-        await createDraftAtState(id2, "user_reviewing");
-        await createDraftAtState(id3, "user_reviewing");
+    it("previews every draft in one refusal", async () => {
+      const id1 = getTestId("test-draft-1");
+      const id2 = getTestId("test-draft-2");
+      const id3 = getTestId("test-draft-3");
+      await createDraftAtState(id1, "user_reviewing");
+      await createDraftAtState(id2, "user_reviewing");
+      await createDraftAtState(id3, "user_reviewing");
 
-        const result = await approveHandler.execute({
-          rawParams: { action: "approve", ids: `${id1},${id2},${id3}`, confirmed: true },
-          context,
-        });
-
-        // Success case
-        expect(result.isError).toBeFalsy();
-        expect(result.content[0].text).toContain("Batch Approval Requested");
-        expect(result.content[0].text).toContain("3 drafts");
-
-        // Verify single notification was sent
-        expect(mockRequestApproval).toHaveBeenCalledTimes(1);
-        expect(mockRequestApproval).toHaveBeenCalledWith(
-          expect.objectContaining({
-            request: expect.objectContaining({
-              operation: "Batch Draft Approval",
-              description: expect.stringContaining("3 drafts"),
-            }),
-          })
-        );
-
-        // Verify state transitions
-        const status1 = await draftWorkflowManager.getStatus({ id: id1 });
-        const status2 = await draftWorkflowManager.getStatus({ id: id2 });
-        const status3 = await draftWorkflowManager.getStatus({ id: id3 });
-        expect(status1?.state).toBe("pending_approval");
-        expect(status2?.state).toBe("pending_approval");
-        expect(status3?.state).toBe("pending_approval");
+      const result = await approveHandler.execute({
+        rawParams: { action: "approve", ids: `${id1},${id2},${id3}`, explanation: EXPLANATION },
+        context,
       });
 
-      it("should return error with isError: true when drafts not in user_reviewing", async () => {
-        const id1 = getTestId("test-draft-1");
-        const id2 = getTestId("test-draft-2");
-        await createDraftAtState(id1, "user_reviewing");
-        await createDraftAtState(id2, "self_review"); // Wrong state
+      // One run over the whole batch, so one explanation and one refusal -- the
+      // caller is not made to account for each document separately.
+      expect(isRefusal(result)).toBe(true);
+      const text = result.content[0].text as string;
+      expect(text).toContain("3 draft(s)");
+      for (const id of [id1, id2, id3]) expect(text).toContain(id);
 
-        const result = await approveHandler.execute({
-          rawParams: { action: "approve", ids: `${id1},${id2}`, confirmed: true },
-          context,
-        });
-
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain(id2);
-        expect(result.content[0].text).toContain("self_review");
-
-        // Verify no notification was sent
-        expect(mockRequestApproval).not.toHaveBeenCalled();
-      });
-
-      it("should send exactly one notification for single draft in batch mode", async () => {
-        const id1 = getTestId("test-draft-1");
-        await createDraftAtState(id1, "user_reviewing");
-
-        const result = await approveHandler.execute({
-          rawParams: { action: "approve", ids: id1, confirmed: true },
-          context,
-        });
-
-        expect(result.isError).toBeFalsy();
-
-        // Single draft should also send exactly 1 notification
-        expect(mockRequestApproval).toHaveBeenCalledTimes(1);
-        expect(mockRequestApproval).toHaveBeenCalledWith(
-          expect.objectContaining({
-            request: expect.objectContaining({
-              operation: "Batch Draft Approval",
-              description: expect.stringContaining("1 drafts"),
-            }),
-          })
-        );
-      });
+      for (const id of [id1, id2, id3]) {
+        expect((await draftWorkflowManager.getStatus({ id }))?.state).toBe("pending_approval");
+      }
     });
 
-    describe("approvalToken behavior", () => {
-      it("should validate token and apply all drafts without sending notification", async () => {
-        const id1 = getTestId("test-draft-1");
-        const id2 = getTestId("test-draft-2");
-        await createDraftAtState(id1, "pending_approval");
-        await createDraftAtState(id2, "pending_approval");
+    it("promotes every draft once the identical call is repeated", async () => {
+      const id1 = getTestId("test-draft-1");
+      const id2 = getTestId("test-draft-2");
+      await createDraftAtState(id1, "user_reviewing");
+      await createDraftAtState(id2, "user_reviewing");
 
-        await requestBatchApproval(`${id1},${id2}`);
-
-        const result = await approveHandler.execute({
-          rawParams: {
-            action: "approve",
-            ids: `${id1},${id2}`,
-            approvalToken: "valid-token",
-          },
+      const { response } = await throughGate(() =>
+        approveHandler.execute({
+          rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: EXPLANATION },
           context,
-        });
+        })
+      );
 
-        expect(result.isError).toBeFalsy();
-        expect(result.content[0].text).toContain("Batch Approval Complete");
-        expect(result.content[0].text).toContain(id1);
-        expect(result.content[0].text).toContain(id2);
-
-        // Final approval with token should NOT send notification
-        expect(mockRequestApproval).not.toHaveBeenCalled();
-      });
-
-      it("should handle missing draft file during batch approval", async () => {
-        const id1 = getTestId("test-draft-missing");
-
-        // Create workflow state without draft file
-        draftWorkflowManager.clear({ id: id1 });
-        await draftWorkflowManager.trigger({
-          id: id1,
-          triggerParams: { action: "submit", content: "# Test" },
-        });
-        await draftWorkflowManager.trigger({
-          id: id1,
-          triggerParams: { action: "review_complete", notes: "Reviewed" },
-        });
-        await draftWorkflowManager.trigger({
-          id: id1,
-          triggerParams: { action: "confirm", confirmed: true },
-        });
-
-        const result = await approveHandler.execute({
-          rawParams: {
-            action: "approve",
-            ids: id1,
-            approvalToken: "valid-token",
-          },
-          context,
-        });
-
-        // A draft that disappeared after approval no longer matches what was
-        // approved, so the batch is refused rather than partly applied. It used
-        // to be reported per item inside a successful response.
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain("no longer exists");
-      });
-
-      it("should reject invalid token", async () => {
-        const id1 = getTestId("test-draft-1");
-        await createDraftAtState(id1, "pending_approval");
-
-        await requestBatchApproval(id1);
-
-        const result = await approveHandler.execute({
-          rawParams: {
-            action: "approve",
-            ids: id1,
-            approvalToken: "invalid-token",
-          },
-          context,
-        });
-
-        expect(result.isError).toBe(true);
-        // Message contains reason from validateApproval
-        expect(result.content[0].text).toContain("invalid_token");
-      });
-
-      it("should require all drafts in pending_approval state", async () => {
-        const id1 = getTestId("test-draft-1");
-        const id2 = getTestId("test-draft-2");
-        await createDraftAtState(id1, "pending_approval");
-        await createDraftAtState(id2, "user_reviewing"); // Wrong state
-
-        await requestBatchApproval(`${id1},${id2}`);
-
-        const result = await approveHandler.execute({
-          rawParams: {
-            action: "approve",
-            ids: `${id1},${id2}`,
-            approvalToken: "valid-token",
-          },
-          context,
-        });
-
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain("pending_approval");
-      });
-
-      it("should request approval when all drafts in pending_approval without token", async () => {
-        const id1 = getTestId("test-draft-1");
-        const id2 = getTestId("test-draft-2");
-        await createDraftAtState(id1, "pending_approval");
-        await createDraftAtState(id2, "pending_approval");
-
-        mockRequestApproval.mockClear();
-
-        const result = await approveHandler.execute({
-          rawParams: {
-            action: "approve",
-            ids: `${id1},${id2}`,
-            // No approvalToken - should request approval
-          },
-          context,
-        });
-
-        expect(result.isError).toBeFalsy();
-        expect(result.content[0].text).toContain("Batch Approval Requested");
-        expect(result.content[0].text).toContain("2 drafts");
-        expect(mockRequestApproval).toHaveBeenCalledTimes(1);
-      });
+      expect(response.isError).toBeFalsy();
+      expect(response.content[0].text).toContain("promoted");
+      expect(await reader.getDocumentContent(id1)).toContain("Test content");
+      expect(await reader.getDocumentContent(id2)).toContain("Test content");
     });
 
-    describe("confirmed + approvalToken precedence", () => {
-      /**
-       * Security requirement: approvalToken must take precedence over confirmed.
-       * This ensures AI cannot bypass user approval by sending confirmed: true.
-       *
-       * These tests define EXPECTED behavior. They will fail until the bug is fixed.
-       */
-      it("should reject when both confirmed and approvalToken are provided", async () => {
-        const id1 = getTestId("test-draft-1");
-        await createDraftAtState(id1, "pending_approval");
+    it("does not let a different set of ids continue an open run", async () => {
+      const id1 = getTestId("test-draft-1");
+      const id2 = getTestId("test-draft-2");
+      await createDraftAtState(id1, "user_reviewing");
+      await createDraftAtState(id2, "user_reviewing");
 
-        const result = await approveHandler.execute({
-          rawParams: {
-            action: "approve",
-            ids: id1,
-            confirmed: true,
-            approvalToken: "valid-token",
-          },
-          context,
-        });
-
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain("Cannot provide both");
+      await approveHandler.execute({
+        rawParams: { action: "approve", ids: id1, explanation: EXPLANATION },
+        context,
       });
 
-      it("should not allow confirmed: true to bypass token requirement in pending_approval", async () => {
-        const id1 = getTestId("test-draft-1");
-        await createDraftAtState(id1, "pending_approval");
-
-        // Only confirmed, no token - should NOT approve
-        const result = await approveHandler.execute({
-          rawParams: {
-            action: "approve",
-            ids: id1,
-            confirmed: true,
-          },
-          context,
-        });
-
-        // When in pending_approval, confirmed: true should fail
-        // (drafts are not in user_reviewing state)
-        expect(result.isError).toBe(true);
+      // The ids are in the key, so widening the batch is a new run rather than
+      // a second attempt at the one the user was shown.
+      const widened = await approveHandler.execute({
+        rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: EXPLANATION },
+        context,
       });
+
+      expect(isRefusal(widened)).toBe(true);
+      expect(await reader.getDocumentContent(id1)).toBeNull();
+      expect(await reader.getDocumentContent(id2)).toBeNull();
+    });
+
+    it("asks for an explanation before touching anything", async () => {
+      const id1 = getTestId("test-draft-1");
+      await createDraftAtState(id1, "user_reviewing");
+
+      const result = await approveHandler.execute({
+        rawParams: { action: "approve", ids: id1 },
+        context,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("explanation");
+      expect((await draftWorkflowManager.getStatus({ id: id1 }))?.state).toBe("user_reviewing");
+    });
+
+    it("returns an error when a draft has not been reviewed", async () => {
+      const id1 = getTestId("test-draft-1");
+      const id2 = getTestId("test-draft-2");
+      await createDraftAtState(id1, "user_reviewing");
+      await createDraftAtState(id2, "self_review"); // Wrong state
+
+      const result = await approveHandler.execute({
+        rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: EXPLANATION },
+        context,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(id2);
+      expect(result.content[0].text).toContain("self_review");
+    });
+
+    it("handles a draft file that vanished mid-batch", async () => {
+      const id1 = getTestId("test-draft-1");
+      const id2 = getTestId("test-draft-2");
+      await createDraftAtState(id1, "pending_approval");
+      await createDraftAtState(id2, "pending_approval");
+
+      await fs.rm(path.join(docsDir, DRAFT_DIR, `${id2}.md`));
+      reader.invalidateCache();
+
+      const result = await approveHandler.execute({
+        rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: EXPLANATION },
+        context,
+      });
+
+      // A missing draft changes the batch `what`, so this is a fresh run rather
+      // than the one opened when both drafts were there.
+      expect(isRefusal(result) || result.isError === true).toBe(true);
     });
   });
 
@@ -472,124 +324,96 @@ describe("ApproveHandler", () => {
       expect(result.content[0].text).toContain("No valid IDs");
     });
 
-    it("should handle rename error in batch approval", async () => {
+    it("reports a failed rename in a batch without claiming success", async () => {
       const id1 = getTestId("test-draft-1");
       await createDraftAtState(id1, "pending_approval");
 
-      // Mock renameDocument to fail
-      const renameSpy = vi.spyOn(reader, "renameDocument").mockResolvedValueOnce({
-        success: false,
-        error: "Batch rename error",
-      });
+      const call = () =>
+        approveHandler.execute({
+          rawParams: { action: "approve", ids: id1, explanation: EXPLANATION },
+          context,
+        });
 
-      await requestBatchApproval(id1);
+      let response = await call();
+      while (isRefusal(response)) {
+        const renameSpy = vi
+          .spyOn(reader, "renameDocument")
+          .mockResolvedValueOnce({ success: false, error: "Batch rename error" });
+        response = await call();
+        renameSpy.mockRestore();
+      }
 
-      const result = await approveHandler.execute({
-        rawParams: {
-          action: "approve",
-          ids: id1,
-          approvalToken: "valid-token",
-        },
-        context,
-      });
-
-      expect(result.isError).toBeFalsy();
-      expect(result.content[0].text).toContain("Batch rename error");
-
-      renameSpy.mockRestore();
+      // A batch that promoted nothing is a failure, not a report. It used to
+      // come back as a success whose body happened to mention the error.
+      expect(response.isError).toBe(true);
+      expect(response.content[0].text).toContain("Batch rename error");
     });
   });
 
-  describe("Single draft approval with token (handleApprovalWithToken)", () => {
-    it("should reject token when draft is not in pending_approval state", async () => {
+  describe("Single draft promotion", () => {
+    it("refuses to promote a draft that has not been reviewed", async () => {
       const id = getTestId("test-draft-1");
       await createDraftAtState(id, "self_review");
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, approvalToken: "valid-token" },
+        rawParams: { action: "approve", id, explanation: EXPLANATION },
         context,
       });
 
+      // self_review wants notes first; the explanation does not skip it.
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Cannot approve yet");
-      expect(result.content[0].text).toContain("self_review");
-      expect(result.content[0].text).toContain("pending_approval");
+      expect(result.content[0].text).toContain("notes");
+      expect(await reader.getDocumentContent(id)).toBeNull();
     });
 
-    it("should reject invalid token in pending_approval state", async () => {
+    it("promotes on the repeat", async () => {
       const id = getTestId("test-draft-1");
       await createDraftAtState(id, "pending_approval");
 
-      const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, approvalToken: "invalid-token" },
-        context,
-      });
+      const { response, attempts } = await throughGate(() =>
+        approveHandler.execute({
+          rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
+          context,
+        })
+      );
 
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Approval Required");
-      expect(result.content[0].text).toContain("invalid_token");
+      expect(response.isError).toBeFalsy();
+      expect(response.content[0].text).toContain("promoted");
+      expect(attempts).toBeGreaterThanOrEqual(1);
+      expect(await reader.getDocumentContent(id)).toContain("Test content");
+      // The draft is gone, not copied.
+      const draftGone = await fs
+        .access(path.join(docsDir, DRAFT_DIR, `${id}.md`))
+        .then(() => false)
+        .catch(() => true);
+      expect(draftGone).toBe(true);
     });
 
-    it("should apply draft with valid token", async () => {
-      const id = getTestId("test-draft-1");
-      await createDraftAtState(id, "pending_approval");
-
-      const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, approvalToken: "valid-token" },
-        context,
-      });
-
-      expect(result.isError).toBeFalsy();
-      expect(result.content[0].text).toContain("approved and promoted");
-      expect(result.content[0].text).toContain(id);
-
-      // Verify draft file was moved to target location
-      const draftContent = await reader.getDocumentContent(`_mcp_drafts__${id}`);
-      expect(draftContent).toBeNull(); // Draft should no longer exist
-
-      const targetContent = await reader.getDocumentContent(id);
-      expect(targetContent).not.toBeNull();
-      expect(targetContent).toContain(id);
-    });
-
-    it("should apply draft to custom targetId with valid token", async () => {
+    it("promotes onto a different id when targetId is given", async () => {
       const id = getTestId("test-draft-1");
       const targetId = getTestId("custom-target");
       await createDraftAtState(id, "pending_approval", { targetId });
 
-      const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, targetId, approvalToken: "valid-token" },
-        context,
-      });
+      const { response } = await throughGate(() =>
+        approveHandler.execute({
+          rawParams: { action: "approve", id, targetId, explanation: EXPLANATION, force: true },
+          context,
+        })
+      );
 
-      expect(result.isError).toBeFalsy();
-      expect(result.content[0].text).toContain(targetId);
-
-      // Verify target file exists
-      const targetContent = await reader.getDocumentContent(targetId);
-      expect(targetContent).not.toBeNull();
+      expect(response.isError).toBeFalsy();
+      expect(await reader.getDocumentContent(targetId)).toContain("Test content");
     });
 
-    it("should return error when draft content not found", async () => {
-      const id = getTestId("test-draft-missing");
+    it("returns an error when the draft file is gone", async () => {
+      const id = getTestId("test-draft-1");
+      await createDraftAtState(id, "pending_approval");
 
-      // Create workflow state without draft file
-      draftWorkflowManager.clear({ id });
-      await draftWorkflowManager.trigger({
-        id,
-        triggerParams: { action: "submit", content: "# Test" },
-      });
-      await draftWorkflowManager.trigger({
-        id,
-        triggerParams: { action: "review_complete", notes: "Reviewed" },
-      });
-      await draftWorkflowManager.trigger({
-        id,
-        triggerParams: { action: "confirm", confirmed: true },
-      });
+      await fs.rm(path.join(docsDir, DRAFT_DIR, `${id}.md`));
+      reader.invalidateCache();
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, approvalToken: "valid-token" },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -597,28 +421,36 @@ describe("ApproveHandler", () => {
       expect(result.content[0].text).toContain("not found");
     });
 
-    it("should return error when renameDocument fails during approval", async () => {
-      const id = getTestId("test-draft-rename-fail");
+    it("leaves the draft alone when the write fails", async () => {
+      const id = getTestId("test-draft-1");
       await createDraftAtState(id, "pending_approval");
 
-      // Mock renameDocument to simulate failure
-      const renameSpy = vi.spyOn(reader, "renameDocument").mockResolvedValueOnce({
-        success: false,
-        error: "Filesystem error: permission denied",
-      });
+      const call = () =>
+        approveHandler.execute({
+          rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
+          context,
+        });
 
-      const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, approvalToken: "valid-token" },
-        context,
-      });
+      // The spy goes in before every attempt, since the one that reaches the
+      // write is the one that has to fail -- and which attempt that is depends
+      // on the configured count, not on this test.
+      let response;
+      do {
+        const renameSpy = vi
+          .spyOn(reader, "renameDocument")
+          .mockResolvedValue({ success: false, error: "Filesystem error: permission denied" });
+        response = await call();
+        renameSpy.mockRestore();
+      } while (isRefusal(response));
 
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Error:");
-      expect(result.content[0].text).toContain("Filesystem error: permission denied");
-
-      renameSpy.mockRestore();
+      expect(response.isError).toBe(true);
+      expect(response.content[0].text).toContain("Filesystem error: permission denied");
+      const draftStillThere = await fs
+        .access(path.join(docsDir, DRAFT_DIR, `${id}.md`))
+        .then(() => true)
+        .catch(() => false);
+      expect(draftStillThere).toBe(true);
     });
-
   });
 
   describe("Single draft workflow (handleApprovalRequest)", () => {
@@ -638,18 +470,16 @@ describe("ApproveHandler", () => {
       expect(status?.state).toBe("user_reviewing");
     });
 
-    it("should transition from user_reviewing to pending_approval with confirmed", async () => {
+    it("should transition from user_reviewing to pending_approval on the first attempt", async () => {
       const id = getTestId("test-draft-1");
       await createDraftAtState(id, "user_reviewing");
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
-      expect(result.isError).toBeFalsy();
-      expect(result.content[0].text).toContain("Approval Requested");
-      expect(mockRequestApproval).toHaveBeenCalledTimes(1);
+      expect(isRefusal(result)).toBe(true);
 
       const status = await draftWorkflowManager.getStatus({ id });
       expect(status?.state).toBe("pending_approval");
@@ -684,7 +514,7 @@ describe("ApproveHandler", () => {
       await createDraftAtState(id, "user_reviewing");
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -706,7 +536,7 @@ describe("ApproveHandler", () => {
       await createDraftAtState(id, "user_reviewing");
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -745,7 +575,7 @@ describe("ApproveHandler", () => {
       });
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -784,7 +614,7 @@ describe("ApproveHandler", () => {
       });
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -824,7 +654,7 @@ describe("ApproveHandler", () => {
       });
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -849,14 +679,15 @@ describe("ApproveHandler", () => {
       // Try to confirm second draft without force
       // Should detect id1 as recently confirmed and return warning
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id: id2, confirmed: true },
+        rawParams: { action: "approve", id: id2, explanation: EXPLANATION },
         context,
       });
 
-      // Warning is returned as isError: true with batch suggestion
+      // Warning is returned as isError: true, and what it suggests is
+      // promoting them together under one explanation.
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Batch");
       expect(result.content[0].text).toContain("Consecutive");
+      expect(result.content[0].text).toContain("ids:");
     });
 
     it("should skip recently confirmed check with force: true", async () => {
@@ -871,13 +702,13 @@ describe("ApproveHandler", () => {
 
       // Confirm with force: true
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id: id2, confirmed: true, force: true },
+        rawParams: { action: "approve", id: id2, explanation: EXPLANATION, force: true },
         context,
       });
 
       expect(result.isError).toBeFalsy();
       // Should not mention batch, should proceed with approval
-      expect(result.content[0].text).toContain("Approval Requested");
+      expect(isRefusal(result)).toBe(true);
     });
   });
 
@@ -885,11 +716,11 @@ describe("ApproveHandler", () => {
     /**
      * Bug reproduction test:
      * 1. approve with notes → should transition to user_reviewing
-     * 2. approve with confirmed: true → should transition to pending_approval
+     * 2. approve with an explanation → should transition to pending_approval
      *
      * Reported issue:
      * - approve with notes returns to self_review
-     * - confirmed: true alone says notes are required
+     * - an explanation alone says notes are required
      * This creates an infinite loop.
      */
     it("should complete full workflow: self_review → user_reviewing → pending_approval", async () => {
@@ -921,9 +752,9 @@ describe("ApproveHandler", () => {
       const status2 = await draftWorkflowManager.getStatus({ id });
       expect(status2?.state).toBe("user_reviewing");
 
-      // Step 3: Approve with confirmed: true → should go to pending_approval
+      // Step 3: first promotion attempt → refused, and left at pending_approval
       const result3 = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -957,9 +788,9 @@ describe("ApproveHandler", () => {
       const status = await draftWorkflowManager.getStatus({ id });
       expect(status?.state).toBe("user_reviewing");
 
-      // Now approve with confirmed: true (no notes) - should NOT error
+      // Now promote (no notes) - should NOT ask for notes again
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -968,7 +799,7 @@ describe("ApproveHandler", () => {
       // Should NOT say "must provide notes" or similar error
       expect(result.content[0].text).not.toContain("must provide");
       expect(result.content[0].text).not.toContain("notes is required");
-      expect(result.content[0].text).toContain("Approval Requested");
+      expect(isRefusal(result)).toBe(true);
     });
 
     it("should NOT return to self_review after providing notes", async () => {
@@ -1088,9 +919,10 @@ describe("ApproveHandler", () => {
         rawParams: { action: "approve", id, notes: "Second review" },
         context,
       });
-      // In user_reviewing, notes are not expected - should ask for confirmed
+      // In user_reviewing, notes are not expected - it asks for the
+      // explanation the user was given.
       expect(result2.isError).toBe(true);
-      expect(result2.content[0].text).toContain("confirmed");
+      expect(result2.content[0].text).toContain("explanation");
 
       // State should still be user_reviewing
       const status2 = await draftWorkflowManager.getStatus({ id });
@@ -1134,13 +966,13 @@ describe("ApproveHandler", () => {
 
       // Now batch confirm
       const batchResult = await approveHandler.execute({
-        rawParams: { action: "approve", ids: `${id1},${id2},${id3}`, confirmed: true },
+        rawParams: { action: "approve", ids: `${id1},${id2},${id3}`, explanation: EXPLANATION },
         context,
       });
 
       expect(batchResult.isError).toBeFalsy();
-      expect(batchResult.content[0].text).toContain("Batch Approval Requested");
-      expect(batchResult.content[0].text).toContain("3 drafts");
+      expect(isRefusal(batchResult)).toBe(true);
+      expect(batchResult.content[0].text).toContain("3 draft(s)");
 
       // Verify all transitioned to pending_approval
       for (const id of [id1, id2, id3]) {
@@ -1192,7 +1024,7 @@ Line C`;
       await draftWorkflowManager.trigger({ id, triggerParams: { action: "review_complete", notes: "Reviewed" } });
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -1242,7 +1074,7 @@ CHANGED line`;
       await draftWorkflowManager.trigger({ id, triggerParams: { action: "review_complete", notes: "Reviewed" } });
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 
@@ -1295,7 +1127,7 @@ Line 2`;
       await draftWorkflowManager.trigger({ id, triggerParams: { action: "review_complete", notes: "Reviewed" } });
 
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id, confirmed: true, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION, force: true },
         context,
       });
 

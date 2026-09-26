@@ -2,7 +2,30 @@
  * Workflow State Machine Types
  */
 
-import type { ApprovalOptions } from "../utils/approval/core.js";
+import type { ApprovalOptions, ApprovalRequest, ApprovalResult } from "../utils/approval/core.js";
+
+/**
+ * How a `requiresApproval` transition asks for, and proves, approval.
+ *
+ * Injected rather than imported. The engine used to call
+ * `utils/approval/core.js` directly, which put `node-notifier` in the module
+ * graph of everything that imported `mcp-shared/workflow` -- including servers
+ * that gate nothing on a token and deliberately carry no notifier. The
+ * dependency was invisible: nothing in the workflow API mentioned
+ * notifications, and the bundle check was what found it.
+ *
+ * `mcp-shared/approval` exports `tokenWorkflowApproval`, which is this
+ * interface over the token flow. A caller that wants the old behaviour passes
+ * it; a caller that passes nothing cannot use `requiresApproval` at all, and is
+ * told so rather than silently proceeding.
+ */
+export interface WorkflowApproval {
+  request(params: {
+    request: ApprovalRequest;
+    options?: ApprovalOptions;
+  }): Promise<{ fallbackPath: string }>;
+  validate(params: { requestId: string; providedToken: string }): ApprovalResult;
+}
 
 /**
  * Precondition validator interface (Strategy pattern)
@@ -161,6 +184,8 @@ export interface WorkflowInstanceOptions<TState extends string = string> {
   instanceId?: string;
   persistDir?: string;
   approvalOptions?: ApprovalOptions;
+  /** Required by any transition with `requiresApproval`. See `WorkflowApproval`. */
+  approval?: WorkflowApproval;
   /** Restore from saved state */
   restoredState?: TState;
   restoredVisitedStates?: TState[];

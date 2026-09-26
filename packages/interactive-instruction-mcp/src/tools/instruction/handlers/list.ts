@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions } from "../types.js";
-import { DRAFT_DIR } from "../../../constants.js";
+import { isInternalDocument } from "../../../constants.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 
 const listSchema = z.object({
@@ -44,8 +44,8 @@ Usage:
       documents: MarkdownSummary[];
       categories: { id: string; docCount: number }[];
     }) => ({
-      documents: result.documents.filter((d) => !d.id.startsWith(DRAFT_DIR)),
-      categories: result.categories.filter((c) => c.id !== DRAFT_DIR),
+      documents: result.documents.filter((d) => !isInternalDocument(d.id)),
+      categories: result.categories.filter((c) => !isInternalDocument(c.id)),
     });
 
     // Helper to check if document matches query.

@@ -5,11 +5,8 @@ import * as os from "node:os";
 import { RenameHandler } from "../tools/instruction/handlers/rename.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 
-// The approval module is spied on (not stubbed) in vitest-setup.ts. This file
-// used to stub `validateApproval` to `{ valid: true }`, which meant the rename
-// approval gate was never actually run here.
-
-import { validateApproval } from "mcp-shared/approval";
+import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
+import { isRefusal, throughGate } from "./helpers/gate.js";
 
 describe("RenameHandler", () => {
   let tempDir: string;
@@ -27,6 +24,9 @@ describe("RenameHandler", () => {
     reader = new MarkdownReader(docsDir);
     handler = new RenameHandler();
 
+    // A gate is process memory, so a run started by one case would otherwise
+    // let the next one through on its first attempt.
+    resetMutationGatesForTesting();
     vi.clearAllMocks();
   });
 
@@ -114,272 +114,143 @@ Content.`;
     });
   });
 
-  describe("promoted document rename - preview", () => {
-    it("shows preview without confirmed flag", async () => {
-      const content = `---
+  describe("promoted document rename", () => {
+    const promoted = `---
 description: A promoted document
 ---
 
 # Promoted Doc
 
 Content.`;
-      await fs.writeFile(path.join(docsDir, "promoted-doc.md"), content);
 
-      const result = await handler.execute({
-        rawParams: { action: "rename", id: "promoted-doc", newId: "new-promoted" },
+    const rename = (params: { id: string; newId: string; explanation?: string }) =>
+      handler.execute({
+        rawParams: {
+          action: "rename",
+          id: params.id,
+          newId: params.newId,
+          ...(params.explanation === undefined ? {} : { explanation: params.explanation }),
+        },
         context: { reader },
       });
 
-      expect(result.isError).toBeFalsy();
+    it("asks for an explanation before anything else", async () => {
+      await fs.writeFile(path.join(docsDir, "promoted-doc.md"), promoted);
+
+      const result = await rename({ id: "promoted-doc", newId: "new-promoted" });
+
+      expect(result.isError).toBe(true);
       const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("Rename Preview");
-      expect(text).toContain("promoted-doc");
-      expect(text).toContain("new-promoted");
-      expect(text).toContain("confirmed: true");
+      expect(text).toContain("explanation");
+      // Nothing moved.
+      expect(await reader.documentExists("promoted-doc")).toBe(true);
     });
 
-    it("shows backlinks in preview", async () => {
-      const docContent = `---
-description: Main document
----
+    it("refuses the first attempt and says what will be edited", async () => {
+      await fs.writeFile(path.join(docsDir, "main-doc.md"), promoted);
+      await fs.writeFile(
+        path.join(docsDir, "ref-doc.md"),
+        `---\ndescription: References main doc\nrelatedDocs:\n  - main-doc\n---\n\n# Referencing Doc`
+      );
 
-# Main Doc
+      const result = await rename({ id: "main-doc", newId: "renamed-doc", explanation: "splitting the hub" });
 
-Content.`;
-      const refContent = `---
-description: References main doc
-relatedDocs:
-  - main-doc
----
-
-# Referencing Doc
-
-References main-doc.`;
-
-      await fs.writeFile(path.join(docsDir, "main-doc.md"), docContent);
-      await fs.writeFile(path.join(docsDir, "ref-doc.md"), refContent);
-
-      const result = await handler.execute({
-        rawParams: { action: "rename", id: "main-doc", newId: "renamed-doc" },
-        context: { reader },
-      });
-
+      expect(isRefusal(result)).toBe(true);
       const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("Backlinks");
+      // The backlink preview rides on the refusal instead of being a step of
+      // its own, so the caller sees the damage while being asked to explain it.
       expect(text).toContain("ref-doc");
-    });
-  });
-
-  describe("promoted document rename - approval flow", () => {
-    it("requests approval with confirmed flag", async () => {
-      const content = `---
-description: A promoted document
----
-
-# Promoted Doc
-
-Content.`;
-      await fs.writeFile(path.join(docsDir, "promoted-doc.md"), content);
-
-      const result = await handler.execute({
-        rawParams: { action: "rename", id: "promoted-doc", newId: "new-promoted", confirmed: true },
-        context: { reader },
-      });
-
-      expect(result.isError).toBeFalsy();
-      const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("Approval Requested");
-      expect(text).toContain("promoted-doc");
-      expect(text).toContain("new-promoted");
-      expect(text).toContain("approvalToken");
+      expect(text).toContain("main-doc");
+      expect(text).toContain("renamed-doc");
+      expect(await reader.documentExists("main-doc")).toBe(true);
     });
 
-    it("applies rename with valid token", async () => {
-      const content = `---
-description: A promoted document
----
+    it("renames once the identical call is repeated", async () => {
+      await fs.writeFile(path.join(docsDir, "promoted-doc.md"), promoted);
 
-# Promoted Doc
+      const { response, attempts } = await throughGate(() =>
+        rename({ id: "promoted-doc", newId: "new-promoted", explanation: "clearer name" })
+      );
 
-Content.`;
-      await fs.writeFile(path.join(docsDir, "promoted-doc.md"), content);
-
-      // First request approval
-      await handler.execute({
-        rawParams: { action: "rename", id: "promoted-doc", newId: "new-promoted", confirmed: true },
-        context: { reader },
-      });
-
-      // Then apply with token
-      const result = await handler.execute({
-        rawParams: { action: "rename", id: "promoted-doc", newId: "new-promoted", approvalToken: "valid-token" },
-        context: { reader },
-      });
-
-      expect(result.isError).toBeFalsy();
-      const text = result.content[0].type === "text" ? result.content[0].text : "";
+      expect(response.isError).toBeFalsy();
+      expect(attempts).toBeGreaterThan(1);
+      const text = response.content[0].type === "text" ? response.content[0].text : "";
       expect(text).toContain("Successfully renamed");
 
-      // Verify file was renamed
-      const oldExists = await fs.access(path.join(docsDir, "promoted-doc.md")).then(() => true).catch(() => false);
-      const newExists = await fs.access(path.join(docsDir, "new-promoted.md")).then(() => true).catch(() => false);
-      expect(oldExists).toBe(false);
-      expect(newExists).toBe(true);
+      expect(await reader.documentExists("promoted-doc")).toBe(false);
+      expect(await reader.documentExists("new-promoted")).toBe(true);
     });
 
-    it("does not strand the request when the rename itself fails", async () => {
-      await fs.writeFile(path.join(docsDir, "doomed.md"), "---\ndescription: d\n---\n\n# Doomed");
+    it("does not accept a reworded explanation as a repeat", async () => {
+      await fs.writeFile(path.join(docsDir, "promoted-doc.md"), promoted);
 
-      await handler.execute({
-        rawParams: { action: "rename", id: "doomed", newId: "doomed-renamed", confirmed: true },
-        context: { reader },
-      });
+      // The reflex on being refused is to retry with altered arguments, and
+      // that is exactly what must not get through: the wording is part of the
+      // key, so this is a new run every time.
+      for (const explanation of ["reason one", "reason two", "reason three", "reason four"]) {
+        const result = await rename({ id: "promoted-doc", newId: "new-promoted", explanation });
+        expect(isRefusal(result)).toBe(true);
+      }
 
-      const renameSpy = vi
-        .spyOn(reader, "renameDocument")
-        .mockResolvedValueOnce({ success: false, error: "simulated disk failure" });
-
-      const result = await handler.execute({
-        rawParams: { action: "rename", id: "doomed", newId: "doomed-renamed", approvalToken: "valid-token" },
-        context: { reader },
-      });
-
-      expect(result.isError).toBe(true);
-      const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("simulated disk failure");
-      // The document is untouched, so the caller can request approval again.
-      expect(await reader.getDocumentContent("doomed")).toContain("Doomed");
-
-      renameSpy.mockRestore();
+      expect(await reader.documentExists("promoted-doc")).toBe(true);
     });
 
-    it("rejects a token for a rename that was never approved", async () => {
-      const content = `---
-description: A document
----
+    it("updates backlinks when it goes through", async () => {
+      await fs.writeFile(path.join(docsDir, "main-doc.md"), promoted);
+      await fs.writeFile(
+        path.join(docsDir, "ref-doc.md"),
+        `---\ndescription: References main doc\nrelatedDocs:\n  - main-doc\n---\n\n# Referencing Doc`
+      );
 
-# Doc
+      const { response } = await throughGate(() =>
+        rename({ id: "main-doc", newId: "renamed-doc", explanation: "renaming the hub" })
+      );
+      expect(response.isError).toBeFalsy();
 
-Content.`;
-      await fs.writeFile(path.join(docsDir, "some-doc.md"), content);
-
-      const result = await handler.execute({
-        rawParams: { action: "rename", id: "some-doc", newId: "other-doc", approvalToken: "some-token" },
-        context: { reader },
-      });
-
-      // The side map this used to consult is gone; it duplicated the approval
-      // store, which has never heard of this request.
-      expect(result.isError).toBe(true);
-      const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("not_found");
-    });
-
-    it("returns error when token is invalid", async () => {
-      const content = `---
-description: A document
----
-
-# Doc
-
-Content.`;
-      await fs.writeFile(path.join(docsDir, "token-test.md"), content);
-
-      // Request approval
-      await handler.execute({
-        rawParams: { action: "rename", id: "token-test", newId: "token-renamed", confirmed: true },
-        context: { reader },
-      });
-
-      // Mock invalid token
-      vi.mocked(validateApproval).mockReturnValueOnce({ valid: false, reason: "Invalid token" });
-
-      const result = await handler.execute({
-        rawParams: { action: "rename", id: "token-test", newId: "token-renamed", approvalToken: "invalid-token" },
-        context: { reader },
-      });
-
-      expect(result.isError).toBe(true);
-      const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("Approval Required");
-    });
-
-    it("updates backlinks when renaming", async () => {
-      const mainContent = `---
-description: Main document
----
-
-# Main Doc
-
-Content.`;
-      const refContent = `---
-description: References main doc
-relatedDocs:
-  - main-doc
----
-
-# Referencing Doc
-
-Content that references another doc.`;
-
-      await fs.writeFile(path.join(docsDir, "main-doc.md"), mainContent);
-      await fs.writeFile(path.join(docsDir, "ref-doc.md"), refContent);
-
-      // Request approval
-      await handler.execute({
-        rawParams: { action: "rename", id: "main-doc", newId: "renamed-doc", confirmed: true },
-        context: { reader },
-      });
-
-      // Apply
-      const result = await handler.execute({
-        rawParams: { action: "rename", id: "main-doc", newId: "renamed-doc", approvalToken: "valid-token" },
-        context: { reader },
-      });
-
-      expect(result.isError).toBeFalsy();
-      const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("Successfully renamed");
-
-      // Check relatedDocs in frontmatter was updated
       const updatedRefContent = await fs.readFile(path.join(docsDir, "ref-doc.md"), "utf-8");
       expect(updatedRefContent).toContain("relatedDocs:");
       expect(updatedRefContent).toContain("renamed-doc");
     });
 
-    it("returns error when renameDocument fails", async () => {
-      const content = `---
-description: A document to rename
----
+    it("refuses a destination that is already taken, before the run starts", async () => {
+      await fs.writeFile(path.join(docsDir, "one.md"), promoted);
+      await fs.writeFile(path.join(docsDir, "two.md"), promoted);
 
-# Doc to rename
-
-Content.`;
-      await fs.writeFile(path.join(docsDir, "rename-fail-doc.md"), content);
-
-      // Request approval
-      await handler.execute({
-        rawParams: { action: "rename", id: "rename-fail-doc", newId: "renamed-fail", confirmed: true },
-        context: { reader },
-      });
-
-      // Mock renameDocument to fail
-      const renameSpy = vi.spyOn(reader, "renameDocument").mockResolvedValueOnce({
-        success: false,
-        error: "File system error: disk full",
-      });
-
-      // Apply with valid token but mock failure
-      const result = await handler.execute({
-        rawParams: { action: "rename", id: "rename-fail-doc", newId: "renamed-fail", approvalToken: "valid-token" },
-        context: { reader },
-      });
+      const result = await rename({ id: "one", newId: "two", explanation: "merging them" });
 
       expect(result.isError).toBe(true);
       const text = result.content[0].type === "text" ? result.content[0].text : "";
-      expect(text).toContain("File system error: disk full");
+      expect(text).toContain("already exists");
+    });
 
-      renameSpy.mockRestore();
+    it("leaves the run standing when the rename itself fails", async () => {
+      await fs.writeFile(path.join(docsDir, "doomed.md"), promoted);
+
+      const explanation = "the old name is wrong";
+      const call = () => rename({ id: "doomed", newId: "doomed-renamed", explanation });
+
+      // Get to the attempt that would write, then make the write fail.
+      // The spy goes in before every attempt: which attempt reaches the write
+      // depends on the configured count, not on this test.
+      let response;
+      do {
+        const renameSpy = vi
+          .spyOn(reader, "renameDocument")
+          .mockResolvedValue({ success: false, error: "simulated disk failure" });
+        response = await call();
+        renameSpy.mockRestore();
+      } while (isRefusal(response));
+
+      expect(response.isError).toBe(true);
+      const text = response.content[0].type === "text" ? response.content[0].text : "";
+      expect(text).toContain("simulated disk failure");
+      expect(await reader.getDocumentContent("doomed")).toContain("Promoted Doc");
+
+      // The user has heard the explanation once already, so the next identical
+      // call writes rather than asking for it again.
+      const retry = await call();
+      expect(retry.isError).toBeFalsy();
+      expect(await reader.documentExists("doomed-renamed")).toBe(true);
     });
   });
 });

@@ -19,12 +19,11 @@ import {
 } from "../tools/instruction/handlers/index.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 
-// Import mocked functions from mcp-shared (mocked globally in vitest-setup.ts)
-import { requestApproval, validateApproval } from "mcp-shared/approval";
+import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
+import { isRefusal, throughGate } from "./helpers/gate.js";
 
-// Get references to the mocked functions
-const mockRequestApproval = vi.mocked(requestApproval);
-const mockValidateApproval = vi.mocked(validateApproval);
+/** Shared across a batch: one run covers the whole set of drafts. */
+const BATCH_EXPLANATION = "These drafts record the conventions we just settled.";
 
 const tempBase = path.join(process.cwd(), "src/__tests__/temp-integration");
 const docsDir = tempBase; // Single directory for both docs and drafts
@@ -261,16 +260,7 @@ describe("Integration Tests", () => {
     beforeEach(() => {
       approveHandler = new ApproveHandler();
 
-      mockRequestApproval.mockResolvedValue({
-        token: "mock-token-12345",
-        fallbackPath: "/tmp/mock-pending.txt",
-      });
-      mockValidateApproval.mockImplementation(({ providedToken }) => {
-        if (providedToken === "valid-token") {
-          return { valid: true };
-        }
-        return { valid: false, reason: "Invalid token" };
-      });
+      resetMutationGatesForTesting();
     });
 
     afterEach(() => {
@@ -660,17 +650,7 @@ describe("Integration Tests", () => {
       batchTestIds = [];
       approveHandler = new ApproveHandler();
 
-      // Setup mock implementations for batch tests
-      mockRequestApproval.mockResolvedValue({
-        token: "mock-token-12345",
-        fallbackPath: "/tmp/mock-pending.txt",
-      });
-      mockValidateApproval.mockImplementation(({ providedToken }) => {
-        if (providedToken === "valid-token") {
-          return { valid: true };
-        }
-        return { valid: false, reason: "Invalid token" };
-      });
+      resetMutationGatesForTesting();
     });
 
     afterEach(() => {
@@ -720,11 +700,11 @@ describe("Integration Tests", () => {
 
         // Create multiple drafts
         await addHandler.execute({
-          rawParams: { action: "add", id: id1, content: "# Batch 1\n\nFirst batch draft." },
+          rawParams: { action: "add", id: id1, content: "# Batch 1\n\nFirst batch draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await addHandler.execute({
-          rawParams: { action: "add", id: id2, content: "# Batch 2\n\nSecond batch draft." },
+          rawParams: { action: "add", id: id2, content: "# Batch 2\n\nSecond batch draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
 
@@ -732,18 +712,15 @@ describe("Integration Tests", () => {
         await progressToState(id1, "user_reviewing");
         await progressToState(id2, "user_reviewing");
 
-        // Batch confirm - should transition all to pending_approval
+        // First attempt - refused, and it moves all of them to
+        // pending_approval so the repeat lands where it expects to.
         const confirmResult = await approveHandler.execute({
-          rawParams: { action: "approve", ids: `${id1},${id2}`, confirmed: true },
+          rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
-        expect(confirmResult.isError).toBeFalsy();
-        expect(confirmResult.content[0].text).toContain("Batch Approval Requested");
-        expect(confirmResult.content[0].text).toContain("2 drafts");
-
-        // Verify single notification was sent
-        expect(mockRequestApproval).toHaveBeenCalledTimes(1);
+        expect(isRefusal(confirmResult)).toBe(true);
+        expect(confirmResult.content[0].text).toContain("2 draft(s)");
 
         // Verify all in pending_approval
         const status1 = await draftWorkflowManager.getStatus({ id: id1 });
@@ -757,11 +734,11 @@ describe("Integration Tests", () => {
         const id2 = getBatchId("batch-draft");
 
         await addHandler.execute({
-          rawParams: { action: "add", id: id1, content: "# Batch 1\n\nFirst draft." },
+          rawParams: { action: "add", id: id1, content: "# Batch 1\n\nFirst draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await addHandler.execute({
-          rawParams: { action: "add", id: id2, content: "# Batch 2\n\nSecond draft." },
+          rawParams: { action: "add", id: id2, content: "# Batch 2\n\nSecond draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
 
@@ -770,50 +747,69 @@ describe("Integration Tests", () => {
         await progressToState(id2, "self_review");
 
         const result = await approveHandler.execute({
-          rawParams: { action: "approve", ids: `${id1},${id2}`, confirmed: true },
+          rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain(id2);
         expect(result.content[0].text).toContain("self_review");
+      });
 
-        // Verify no notification was sent
-        expect(mockRequestApproval).not.toHaveBeenCalled();
+      it("promotes the whole batch on the repeat", async () => {
+        const id1 = getBatchId("batch-draft");
+        const id2 = getBatchId("batch-draft");
+
+        for (const [id, title] of [[id1, "Batch 1"], [id2, "Batch 2"]]) {
+          await addHandler.execute({
+            rawParams: { action: "add", id, content: `# ${title}\n\nBody.`, description: "Batch test draft", whenToUse: ["Testing batches"] },
+            context: context,
+          });
+          await progressToState(id, "user_reviewing");
+        }
+
+        const { response } = await throughGate(() =>
+          approveHandler.execute({
+            rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: BATCH_EXPLANATION },
+            context: context,
+          })
+        );
+
+        expect(response.isError).toBeFalsy();
+        expect(await reader.getDocumentContent(id1)).toContain("Batch 1");
+        expect(await reader.getDocumentContent(id2)).toContain("Batch 2");
       });
     });
 
-    describe("2. Batch notification verification", () => {
-      it("should call requestApproval with correct batch info", async () => {
+    describe("2. What the caller is shown", () => {
+      it("names every draft it is about to promote", async () => {
         const id1 = getBatchId("batch-draft");
         const id2 = getBatchId("batch-draft");
 
         await addHandler.execute({
-          rawParams: { action: "add", id: id1, content: "# Doc 1\n\nFirst doc." },
+          rawParams: { action: "add", id: id1, content: "# Doc 1\n\nFirst doc.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await addHandler.execute({
-          rawParams: { action: "add", id: id2, content: "# Doc 2\n\nSecond doc." },
+          rawParams: { action: "add", id: id2, content: "# Doc 2\n\nSecond doc.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
 
         await progressToState(id1, "user_reviewing");
         await progressToState(id2, "user_reviewing");
 
-        await approveHandler.execute({
-          rawParams: { action: "approve", ids: `${id1},${id2}`, confirmed: true },
+        const refused = await approveHandler.execute({
+          rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
-        // Verify requestApproval was called with batch info
-        expect(mockRequestApproval).toHaveBeenCalledWith(
-          expect.objectContaining({
-            request: expect.objectContaining({
-              operation: "Batch Draft Approval",
-              description: expect.stringContaining("2 drafts"),
-            }),
-          })
-        );
+        // The preview is the only thing the caller reads before committing, so
+        // it has to name what is in the batch. There is no notification to
+        // carry that any more.
+        const text = refused.content[0].text as string;
+        expect(text).toContain("2 draft(s)");
+        expect(text).toContain(id1);
+        expect(text).toContain(id2);
       });
     });
 
@@ -822,18 +818,18 @@ describe("Integration Tests", () => {
         const id = getBatchId("batch-draft");
 
         await addHandler.execute({
-          rawParams: { action: "add", id, content: "# Single\n\nSingle draft." },
+          rawParams: { action: "add", id, content: "# Single\n\nSingle draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await progressToState(id, "user_reviewing");
 
         const result = await approveHandler.execute({
-          rawParams: { action: "approve", ids: id, confirmed: true },
+          rawParams: { action: "approve", ids: id, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
-        expect(result.isError).toBeFalsy();
-        expect(result.content[0].text).toContain("1 drafts");
+        expect(isRefusal(result)).toBe(true);
+        expect(result.content[0].text).toContain("1 draft(s)");
       });
 
       it("should handle whitespace in ids parameter", async () => {
@@ -841,11 +837,11 @@ describe("Integration Tests", () => {
         const id2 = getBatchId("batch-draft");
 
         await addHandler.execute({
-          rawParams: { action: "add", id: id1, content: "# WS1\n\nDraft with whitespace." },
+          rawParams: { action: "add", id: id1, content: "# WS1\n\nDraft with whitespace.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await addHandler.execute({
-          rawParams: { action: "add", id: id2, content: "# WS2\n\nAnother draft." },
+          rawParams: { action: "add", id: id2, content: "# WS2\n\nAnother draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await progressToState(id1, "user_reviewing");
@@ -853,12 +849,12 @@ describe("Integration Tests", () => {
 
         // IDs with extra whitespace
         const result = await approveHandler.execute({
-          rawParams: { action: "approve", ids: `  ${id1} , ${id2}  `, confirmed: true },
+          rawParams: { action: "approve", ids: `  ${id1} , ${id2}  `, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
-        expect(result.isError).toBeFalsy();
-        expect(result.content[0].text).toContain("2 drafts");
+        expect(isRefusal(result)).toBe(true);
+        expect(result.content[0].text).toContain("2 draft(s)");
       });
     });
   });

@@ -6,7 +6,7 @@ MCP server for interactive instruction documents. AI agents discover usage throu
 
 - **Learn by doing**: AI calls `instruction_describe()` to learn available actions, then uses `instruction()` with guided responses
 - **Single source of truth**: Each handler defines its own schema — no manual sync needed
-- **Human oversight**: Draft edits are free. Promoted documents are gated — promotion, deletion and rename need a one-time token delivered out-of-band; content and link changes cannot be applied silently
+- **Human oversight**: Draft edits are free. Every change to a promoted document is gated: the agent has to state what it is doing and why, in its own words, and repeat that identical call before anything is written. Nothing can be changed silently, and a deleted document is moved to the trash rather than erased
 
 ## Compared to skill files
 
@@ -27,9 +27,9 @@ The difference is on the writing side.
 **The corpus is maintained by the agent, under a gate.** A skill file is authored ahead of
 time by a person. An agent that learns something mid-task can only write a file, and nothing
 supervises that. Here it creates a draft, reviews it, explains it to you in its own words,
-and the promotion needs a token you read from a desktop notification — bound to that exact
-content and destination, so what lands is what you approved. The point is not that documents
-can be edited; it is that the agent can add to them and still not be the one who decides.
+and the promotion is refused until it repeats itself — bound to that exact content and
+destination, so what lands is what it described. The point is not that documents can be
+edited; it is that the agent cannot add to them without saying so where you can see it.
 
 **Links are data, not prose.** A skill pointing at another skill is a sentence: nothing can
 check it, and nothing else can use it. `relatedDocs` lives in frontmatter, so backlinks stay
@@ -90,7 +90,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `rename` — Rename a draft (instant) or promoted document (approval required)
 
 **Approval Workflow**
-- `approve` — Progress through: notes → confirmed → token (optional: `targetId`, `force`, `ids` for batch)
+- `approve` — Progress through: notes → `explanation` (repeated) (optional: `targetId`, `force`, `ids` for batch)
 
 **Pending Updates** (for promoted document updates via `update`)
 - `apply` — Apply a pending update (`explanation` required; the first call is refused by design)
@@ -186,92 +186,91 @@ own lines rather than left to be inferred.
 |---|---|---|
 | `add` | Free | Create a draft, then `approve` it |
 | `update` | Direct overwrite | Pending diff → `apply` (deliberation gate) / `cancel` |
-| `delete` | Immediate | Preview → `confirmed: true` → token |
-| `rename` | Immediate | Preview → `confirmed: true` → token |
-| `link_add` / `link_remove` | Preview + refusal → repeat (deliberation gate) | Preview + refusal → repeat (deliberation gate) |
-| Promotion | `approve` (notes → confirmed → token) | — |
+| `delete` | Immediate | Preview + refusal → repeat → moved to `_mcp_trash/` |
+| `rename` | Immediate | Preview + refusal → repeat |
+| `link_add` / `link_remove` | Preview + refusal → repeat | Preview + refusal → repeat |
+| Promotion | `approve` (notes → `explanation`, repeated) | — |
 
 Link changes are the one operation that is gated for drafts too: they rewrite `relatedDocs`
 frontmatter on both sides of the link, so a draft edit can reach a promoted document.
 
-### Approval Model
+### The gate
 
-A gated action is approved out-of-band. The token travels **only** through the desktop
-notification and is never written to disk — the file at `$TMPDIR/mcp-approval/pending.txt`
-records that an approval is pending, without the token — so the agent that requested the
-approval cannot read the token back and approve itself. Tokens are single-use and expire
-after 5 minutes. If the notification cannot be delivered, the response says so instead of
-claiming one was sent.
+Every gated action goes through one mechanism, the **deliberation gate**, and which gate that
+is is decided in one place (`src/services/mutation-gate.ts`). There is no token and no
+desktop notification anywhere in this server.
 
-**An approval is bound to the change it was granted for.** The tool computes what will
-happen — the promotion target, whether anything gets overwritten, the draft body, the
-resulting `relatedDocs`, the content being deleted — hashes it, and recomputes it when the
-token is spent. Anything else fails with `content_mismatch`. So a token approved for
-"create a new note" cannot be redirected onto an existing document, and a draft rewritten
-after approval cannot be promoted on the strength of the diff the user actually read. The
-notification names the target and says whether it overwrites, because it is the only
-channel the human sees.
+Each gated action takes an `explanation`: what the change does and why, in your agent's own
+words, as it gave it to you. **The first call is refused**, with the preview of what would
+change and instructions to explain it to you and then repeat the identical call. Only the
+repeat goes through. The refusal comes back as an ordinary response, not an error: being
+refused is a step in the operation rather than a failure of it.
 
-| Gate | Actions |
-|---|---|
-| Approval token, content-bound | `approve`, `delete` (promoted), `rename` (promoted) |
-| Deliberation, no token | `update` (promoted) → `apply`, `link_add`, `link_remove` |
-| None | `add`, `update` (draft), `delete` (draft), `rename` (draft), `cancel`, `list`, `read`, `lint`, `set_status`, `update_meta` |
+| Gate | Actions | Attempts |
+|---|---|---|
+| Deliberation | `update` (promoted) → `apply`, `link_add`, `link_remove`, `approve` | 2 |
+| Deliberation | `delete` (promoted), `rename` (promoted) | 3 |
+| None | `add`, `update` (draft), `delete` (draft), `rename` (draft), `cancel`, `list`, `read`, `lint`, `set_status`, `update_meta` | — |
 
-### The deliberation gate
+The counts are per operation, and overridable: `IIMCP_DELIBERATION_ATTEMPTS_DELETE=5`. The
+irreversible operations get more because asking for the opposite does not undo them.
 
-Editing a promoted document is the ordinary way documents get maintained, and a notification
-round trip on every edit would make that unworkable — impossible, in a headless session,
-where nothing can deliver a token. So `apply`, `link_add` and `link_remove` are gated
-differently.
-
-Each requires an `explanation`: what the change does and why, in your agent's own words.
-**The first call is always refused**, with instructions to explain the change to you and then
-repeat the identical call. Only a second identical attempt goes through. The refusal comes
-back as an ordinary response, not an error: being refused is a step in the operation rather
-than a failure of it.
-
-For the link actions the refusal carries the preview, so what would change and the request to
-explain it arrive together — and the whole operation is two calls rather than the three the
-token round used to need. A `relatedDocs` entry is metadata, and the operation that undoes it
-is the other one of the pair; deletion, renaming and promotion keep their tokens because
-asking for the opposite does not undo those.
+**A run is bound to the change it was opened for.** The tool computes what will happen — the
+promotion target, whether anything gets overwritten, the draft body, the resulting
+`relatedDocs`, the content being deleted — and that, with the operation and the explanation
+verbatim, is what identifies the run. So a repeat that has quietly changed the target, the
+content or the wording is not a repeat: it is a new run, refused from attempt one. What the
+user was shown and what gets written are the same thing.
 
 Runs are held per change, so relating several documents in one sitting works: an attempt for
-one document does not cancel another's. What identifies a run is the operation, the change
-itself, and the explanation verbatim — reword the explanation or alter the links and the run
-starts over.
+one document does not cancel another's. A run lives in the server process, not on disk.
+Restarting the server — which includes resuming a headless session, since each CLI invocation
+starts its own server — drops any half-finished run, and the next identical call is refused
+as attempt 1 again. That is the safe direction to fail, but a caller that retries
+automatically should know it can be sent around the loop twice.
 
-This is **disclosure, not consent**. Nothing verifies that anyone read the explanation. What
-it guarantees is that the change cannot happen silently: a refused call forces the agent to
-produce user-facing text, and the explanation it commits to is a parameter, so it is on the
-record where you can see it and say no.
+#### This is disclosure, not consent
 
-Repetition is a meaningful signal here for a specific reason. The explanation is part of what
+Nothing verifies that anyone read the explanation. An agent may repeat the call without
+saying a word. What the gate guarantees is that the change cannot happen *silently*: a
+refused call forces the agent to produce user-facing text, and the explanation it commits to
+is a parameter, so it is on the record where you can see it and say no.
+
+Repetition is a meaningful signal for a specific reason. The explanation is part of what
 identifies an attempt, and the reflex on being refused is to retry with *altered* arguments —
 which is a different attempt, refused again. Getting through means committing to one account
-of the change and standing by it verbatim. The count is configurable per operation
-(`requiredAttempts`, default 2) for tools that want more friction.
+of the change and standing by it verbatim.
+
+**Be clear about what this costs.** Until 2.0 the destructive operations used a token
+delivered only through a desktop notification, which an agent with a shell could not read.
+That made a swapped target impossible rather than merely visible. With the token gone, an
+agent that is determined and has been refused can open a new run for the swapped change and
+push that through — it costs it one more disclosure round. What carries the risk instead is
+reversibility: `delete` moves the file into `_mcp_trash/` rather than unlinking it, `rename`
+moves every backlink with it in one operation that can be run backwards, and `apply` refuses
+if the document changed after the diff was computed. If your corpus contains something where
+an uncooperative agent getting through would be genuinely damaging, this is the wrong gate
+for it, and `mcp-shared`'s token strategy is still there to install.
+
+Why it was made this way: the notification cost a human round trip on every maintenance
+operation, and in a headless or SSH session it could not be delivered at all — the failure
+mode was that the operation became impossible and the only remedy was to tell the user their
+notifications were broken. `mcp-shared`'s HTML approval screen is not an alternative, because
+it also depends on the notification-delivered token; without a channel the agent cannot read,
+there is no consent to prove.
+
+#### The gate only sees callers that chose the tool
+
+Measured over fifteen headless runs: with a plain request, 3/3 agents explained the change
+and handed the decision back, against 0/3 without the gate — but told "use whatever method
+you like", 3/3 edited the file directly with `Edit` and never called `apply` at all. The
+control did the same, so that is the prompt talking, not the gate. Nothing here can stop a
+caller that never reaches it; that needs something upstream of tool choice, such as a
+`PreToolUse` hook.
 
 `apply` is also not a blind write: it refuses if the document changed after the diff was
 computed, and refuses — discarding the staged update — if the document has since been
 deleted. Staged updates expire after a day.
-
-A run lives in the server process, not on disk. Restarting the server — which includes
-resuming a headless session, since each CLI invocation starts its own server — drops any
-half-finished run, and the next identical call is refused as attempt 1 again. That is the
-safe direction to fail, but a caller that retries automatically should know it can be sent
-around the loop twice.
-
-The gate sits behind the tool, so it only sees callers that chose the tool. Measured over
-fifteen headless runs: with a plain request, 3/3 agents explained the change and handed the
-decision back, against 0/3 without the gate — but told "use whatever method you like", 3/3
-edited the file directly with `Edit` and never called `apply` at all. The control did the
-same, so that is the prompt talking, not the gate. Nothing here can stop a caller that never
-reaches it; that needs something upstream of tool choice, such as a `PreToolUse` hook.
-
-If an operation would be genuinely damaging when an uncooperative agent gets through, this is
-the wrong gate for it. That is why deletion, rename and promotion use tokens instead.
 
 ### Draft Lifecycle
 
@@ -283,8 +282,9 @@ stateDiagram-v2
     [*] --> editing
     editing --> self_review: add(id, content, description, whenToUse)
     self_review --> user_reviewing: approve(notes)
-    user_reviewing --> pending_approval: approve(confirmed) + desktop notification
-    pending_approval --> applied: approve(approvalToken)
+    user_reviewing --> pending_approval: approve(explanation) — refused, attempt 1
+    pending_approval --> pending_approval: approve(explanation) — reworded, starts over
+    pending_approval --> applied: approve(explanation) — identical repeat
     applied --> [*]
 ```
 
@@ -293,7 +293,7 @@ stateDiagram-v2
 | `editing` | Draft exists. `add` submits its content and moves it on immediately. |
 | `self_review` | AI reviews its own draft and records `notes`. |
 | `user_reviewing` | AI explains the draft to the user **in its own words**. The tool deliberately withholds the content here so the explanation cannot be copied from it. |
-| `pending_approval` | User reads the token from the desktop notification and hands it to the AI. |
+| `pending_approval` | AI repeats the identical `approve` call, with the same `explanation`. Rewording it, or editing the draft, starts the run over. |
 | `applied` | Draft moved out of `_mcp_drafts/` into the documentation tree, and its workflow state is deleted. |
 
 State is stored per documents directory, so two servers on one machine do not share it.
@@ -307,32 +307,35 @@ The same flow as calls:
 1. instruction(action: "add", id: "new-doc", content: "...", description: "...", whenToUse: [...])
 2. instruction(action: "approve", id: "new-doc", notes: "<self-review>")
 3. [AI explains the draft to the user]
-4. instruction(action: "approve", id: "new-doc", confirmed: true)
-5. [User reads the token from the desktop notification]
-6. instruction(action: "approve", id: "new-doc", approvalToken: "<token>")
+4. instruction(action: "approve", id: "new-doc", explanation: "<what you told the user>")
+   → refused, with the diff and a request to explain it
+5. instruction(action: "approve", id: "new-doc", explanation: "<the same words>")
+   → promoted
 ```
 
-Batch the confirmation step with `ids: "a,b,c"`, and skip the consecutive-approval warning
-with `force: true`. Promote to a different location with `targetId`.
+Batch several drafts under one explanation with `ids: "a,b,c"`, and skip the
+consecutive-approval warning with `force: true`. Promote to a different location with
+`targetId`.
 
 ### Promoted Document Operations
 
 Editing an already-promoted document does not go through the draft state machine. Content
-updates take the pending-diff route; everything else takes the token route.
+updates are staged as a diff first; everything else is gated where it stands.
 
 ```mermaid
 stateDiagram-v2
     direction LR
     state "no pending change" as clean
     state "pending update" as pending
-    state "awaiting token" as awaiting
+    state "run open" as open
 
     clean --> pending: update(id, content or metadata) stages a diff
     pending --> clean: apply(id, explanation) twice, writes it
     pending --> clean: cancel(id) discards it
 
-    clean --> awaiting: delete / rename + confirmed
-    awaiting --> clean: same action + approvalToken
+    clean --> open: delete / rename (explanation) — refused, with the preview
+    open --> clean: the identical call again — carried out
+    open --> open: reworded, or the document changed — starts over
 ```
 
 `update` takes no approval parameters at all. On a promoted document it stages the change and
@@ -357,15 +360,22 @@ needs rewriting.
 
 Also worth knowing before you upgrade:
 
-- **`promote` is gone.** Promotion goes through `approve`, which needs a token a human reads
-  from a desktop notification. Anything that promoted drafts unattended will stop.
+- **`promote` is gone.** Promotion goes through `approve`, which requires an `explanation`
+  and refuses the first attempt. Anything that promoted drafts in one unattended call will
+  stop.
 - **`add` requires more.** `description` and `whenToUse` are now mandatory.
 - **Updating a promoted document is two steps**: `update` stages a diff, `apply` writes it.
 - **The server writes to your documents directory at startup**, creating
   `_mcp-interactive-instruction/draft-approval.md` if it is not already there. Existing
   files are never overwritten.
-- **Approvals raise a desktop notification** through `node-notifier`, which needs a working
-  notification daemon — a headless or SSH session cannot approve anything.
+- **No desktop notification, and no approval token.** 1.x delivered a token out-of-band,
+  which needed a working notification daemon and could not be done at all in a headless or
+  SSH session. Every gated operation now takes an `explanation` and a repeated call instead;
+  `approvalToken` and `confirmed` are no longer accepted anywhere. Read
+  [the gate](#the-gate) for what that gains and what it gives up.
+- **A deleted promoted document is moved, not erased.** It goes to `_mcp_trash/` inside the
+  documents directory, which nothing reads back. Add it to `.gitignore` if you would rather
+  not commit deletions.
 
 The command line is unchanged, so `.mcp.json` needs no edit. Documents written by 1.x are
 read as they are: frontmatter is optional, and a document without it still gets a
@@ -536,12 +546,12 @@ Keep each document focused on **ONE topic**:
 1. **Check docs before tasks**: Use `instruction(action: "list")` to see available documentation
 2. **Record new learnings**: When user teaches something new, immediately create a draft
 3. **One topic per file**: Keep drafts focused and granular
-4. **Follow approval flow**: add → approve (notes → explain → confirmed → token)
+4. **Follow approval flow**: add → approve (notes → explain → repeat the identical call)
 
 ### For Users
 
 1. **Review drafts**: Check what AI has recorded
-2. **Approve or reject**: Provide tokens for approved changes
+2. **Approve or reject**: The agent explains each change before it lands — say no and it stops
 3. **Organize**: Use `rename` to reorganize document structure
 
 ## Performance

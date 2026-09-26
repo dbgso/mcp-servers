@@ -14,7 +14,7 @@ import {
 } from "mcp-shared-graph-viz";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
-import { DRAFT_DIR } from "../../../constants.js";
+import { isInternalDocument } from "../../../constants.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 
 /**
@@ -154,7 +154,7 @@ Writes an HTML file and returns its path. Open it in a browser.`;
     const { reader } = params.context;
 
     const listed = await reader.listDocuments({ recursive: true });
-    const documents = listed.documents.filter((doc) => !doc.id.startsWith(DRAFT_DIR));
+    const documents = listed.documents.filter((doc) => !isInternalDocument(doc.id));
 
     if (id !== undefined && !documents.some((doc) => doc.id === id)) {
       return errorResponse(`Error: Document "${id}" not found.` +

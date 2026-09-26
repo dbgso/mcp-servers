@@ -9,6 +9,7 @@ import {
   ValidIdValidator,
 } from "./validators.js";
 import { ID_SEPARATOR, resolveDocumentPathOrThrow } from "./document-id.js";
+import { TRASH_DIR } from "../constants.js";
 import { describeScope, EMPTY_SCOPE, isManaged, type DocumentScope } from "./document-scope.js";
 import { parseFrontmatter, updateFrontmatter } from "../utils/frontmatter-parser.js";
 import { formatDocumentListItem } from "../utils/string-utils.js";
@@ -405,6 +406,56 @@ export class MarkdownReader {
       return {
         success: false,
         error: `Failed to delete document: ${(error as Error).message}`,
+      };
+    }
+  }
+
+  /**
+   * Delete a promoted document by moving it into the trash directory.
+   *
+   * The gate in front of `delete` is deliberation, which proves disclosure and
+   * not consent -- nothing verifies a human agreed. So the safety of the
+   * operation cannot rest on the gate, and rests on this instead: the bytes are
+   * still on disk, in the user's own tree, under a name that says what they
+   * were.
+   *
+   * Kept next to `deleteDocument` rather than layered over it, because the
+   * path resolution and the cache invalidation are the parts that must not be
+   * reimplemented by a caller.
+   */
+  async trashDocument(id: string): Promise<AddResult & { trashPath?: string }> {
+    const outOfScope = unmanagedResult({ reader: this, ids: [id] });
+    if (outOfScope !== null) return outOfScope;
+
+    const exists = await this.documentExists(id);
+    if (!exists) {
+      return { success: false, error: `Document "${id}" not found.` };
+    }
+
+    try {
+      const filePath = this.idToPath(id);
+      const trashDir = path.join(this.directory, TRASH_DIR);
+      await fs.mkdir(trashDir, { recursive: true });
+
+      // The id is safe as a flat filename -- `checkDocumentId` rejects path
+      // separators -- and readable, which a percent-encoded one would not be
+      // for the Japanese ids in this corpus. The timestamp is what keeps a
+      // second deletion of the same id from overwriting the first.
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const trashPath = path.join(trashDir, `${id}--${stamp}.md`);
+
+      await fs.rename(filePath, trashPath);
+
+      // Same as a delete: the directory the document came out of may now be
+      // empty, and an empty category is noise in every listing.
+      await this.removeEmptyDirs(path.dirname(filePath));
+
+      this.invalidateCache();
+      return { success: true, trashPath };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to move document to trash: ${(error as Error).message}`,
       };
     }
   }
