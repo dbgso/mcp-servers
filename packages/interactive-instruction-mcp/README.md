@@ -365,9 +365,11 @@ Also worth knowing before you upgrade:
   stop.
 - **`add` requires more.** `description` and `whenToUse` are now mandatory.
 - **Updating a promoted document is two steps**: `update` stages a diff, `apply` writes it.
-- **The server writes to your documents directory at startup**, creating
-  `_mcp-interactive-instruction/draft-approval.md` if it is not already there. Existing
-  files are never overwritten.
+- **The server no longer writes to your documents directory at startup.** 1.x created
+  `_mcp-interactive-instruction/draft-approval.md` there, 92 lines of approval-format
+  rules that `list` then showed alongside your own documents. The format it carried is
+  returned by `approve` when the self-review is recorded, which is when it is acted on.
+  A copy left over from 1.x is yours to delete; the server will not touch it.
 - **No desktop notification, and no approval token.** 1.x delivered a token out-of-band,
   which needed a working notification daemon and could not be done at all in a headless or
   SSH session. Every gated operation now takes an `explanation` and a repeated call instead;

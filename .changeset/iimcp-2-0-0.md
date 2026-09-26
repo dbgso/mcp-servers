@@ -55,3 +55,5 @@ The promotion state machine also advances only after the file has moved. Trigger
 
 **`update` accepts `relatedDocs`.** It was silently ignored, which is the worst of the three options -- the caller is told the update was prepared and the link is not in it. Passing it replaces the list; `link_add` / `link_remove` remain the incremental pair.
 
+**The server no longer writes to your documents directory at startup.** It used to create `_mcp-interactive-instruction/draft-approval.md` -- 92 lines of approval-format rules -- before anything had been called, and since that path is not one of the internal directories, `list` showed it next to the user's own documents on every call. The format it carried (where the document goes, what it says, why there) is now part of the `approve` response that records the self-review, so it arrives when it is acted on rather than in a document someone has to be told to read. A copy left over from an earlier version is the user's to delete; the server will not touch it.
+
