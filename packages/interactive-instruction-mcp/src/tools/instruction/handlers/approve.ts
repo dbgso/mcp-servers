@@ -718,7 +718,7 @@ Each one needs its \`notes\` recorded first.`);
    *
    * `confirmedAt` goes with them, for the same reason. `approvedAt` stays:
    * when a document became part of the corpus is a fact about the document,
-   * and it is one line. It is reported by `update_meta` -- writing a value
+   * and it is one line. It is reported by `read_meta` -- writing a value
    * into someone's file that no tool will read back is worse than not writing
    * it, and `read` answers with prose.
    */

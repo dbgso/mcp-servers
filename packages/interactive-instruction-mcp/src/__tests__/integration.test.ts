@@ -16,7 +16,7 @@ import {
   RenameHandler,
   ApplyHandler,
   ApproveHandler,
-  UpdateMetaHandler,
+  ReadMetaHandler,
 } from "../tools/instruction/handlers/index.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 
@@ -864,7 +864,7 @@ describe("Integration Tests", () => {
   // ============================================================
   describe("D. Where metadata is read", () => {
     let approveHandler: ApproveHandler;
-    let updateMetaHandler: UpdateMetaHandler;
+    let readMetaHandler: ReadMetaHandler;
 
     /** The document part of an answer, without the next-action suggestions. */
     function body(result: { content: { type: string; text?: string }[] }): string {
@@ -873,7 +873,7 @@ describe("Integration Tests", () => {
 
     beforeEach(() => {
       approveHandler = new ApproveHandler();
-      updateMetaHandler = new UpdateMetaHandler();
+      readMetaHandler = new ReadMetaHandler();
       resetMutationGatesForTesting();
     });
 
@@ -905,8 +905,8 @@ describe("Integration Tests", () => {
       expect(body(draftRead)).not.toContain("whenToUse:");
 
       // The metadata is still readable -- through the action that is for it.
-      const draftMeta = await updateMetaHandler.execute({
-        rawParams: { action: "update_meta", id },
+      const draftMeta = await readMetaHandler.execute({
+        rawParams: { action: "read_meta", id },
         context,
       });
       expect(draftMeta.content[0].text).toContain("**[Draft]**");
@@ -952,8 +952,8 @@ describe("Integration Tests", () => {
       expect(body(promotedRead)).not.toContain("approvedAt:");
 
       // With the metadata still one action away.
-      const promotedMeta = await updateMetaHandler.execute({
-        rawParams: { action: "update_meta", id },
+      const promotedMeta = await readMetaHandler.execute({
+        rawParams: { action: "read_meta", id },
         context,
       });
       expect(promotedMeta.content[0].text).toContain("What the lifecycle document is for");

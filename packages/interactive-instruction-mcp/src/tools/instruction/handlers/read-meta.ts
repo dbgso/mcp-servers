@@ -12,7 +12,7 @@ import {
 } from "../../../services/metadata-completeness.js";
 
 const schema = z.object({
-  action: z.literal("update_meta"),
+  action: z.literal("read_meta"),
   id: z.string().describe("Document ID to update metadata for"),
 });
 
@@ -68,11 +68,12 @@ export function buildNeighbourhood(params: {
   return { related, candidates, category };
 }
 
-export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContext> {
-  readonly action = "update_meta";
+export class ReadMetaHandler extends BaseActionHandler<Args, InstructionContext> {
+  readonly action = "read_meta";
   readonly help =
-    "Gather what the corpus knows about a document -- its own metadata, its neighbours, and where it might belong -- and ask for better metadata. " +
-    "This is where metadata is read: `read` answers with prose alone. Works on a draft as well as a promoted document.";
+    "Read a document's metadata, and what the corpus knows about where it sits: its neighbours, and where it might belong. " +
+    "`read` answers with prose alone, so this is where metadata is read -- for a draft as well as a promoted document. " +
+    "Writes nothing: it ends with the `update` call that would apply better metadata.";
   readonly schema = schema;
 
   protected async doExecute(params: {

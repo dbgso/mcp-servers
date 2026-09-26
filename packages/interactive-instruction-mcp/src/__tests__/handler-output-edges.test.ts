@@ -20,7 +20,7 @@ import { ReadHandler } from "../tools/instruction/handlers/read.js";
 import { GraphHandler } from "../tools/instruction/handlers/graph.js";
 import { LintHandler } from "../tools/instruction/handlers/lint.js";
 import { UpdateHandler } from "../tools/instruction/handlers/update.js";
-import { UpdateMetaHandler } from "../tools/instruction/handlers/update-meta.js";
+import { ReadMetaHandler } from "../tools/instruction/handlers/read-meta.js";
 import { LinkAddHandler } from "../tools/instruction/handlers/link-add.js";
 import { LinkRemoveHandler } from "../tools/instruction/handlers/link-remove.js";
 import { formatNextActions } from "../tools/instruction/types.js";
@@ -50,7 +50,7 @@ const read = new ReadHandler();
 const graph = new GraphHandler();
 const lint = new LintHandler();
 const update = new UpdateHandler();
-const updateMeta = new UpdateMetaHandler();
+const readMeta = new ReadMetaHandler();
 const linkAdd = new LinkAddHandler();
 const linkRemove = new LinkRemoveHandler();
 
@@ -251,8 +251,8 @@ describe("updating metadata", () => {
     await write({ id: "topic__one", frontmatter: "", body: "# One\n" });
     await write({ id: "topic__two", frontmatter: "", body: "# Two\n" });
 
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "topic__one" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "topic__one" },
       context,
     });
 

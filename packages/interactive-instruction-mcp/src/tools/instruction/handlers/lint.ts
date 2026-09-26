@@ -126,7 +126,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     return textResponse(
       lines.join("\n") +
       formatNextActions([
-        { action: "update_meta", description: "Update metadata for a document", example: `instruction(action: "update_meta", id: "<doc-id>")` },
+        { action: "read_meta", description: "Update metadata for a document", example: `instruction(action: "read_meta", id: "<doc-id>")` },
         { action: "link_add", description: "Add related documents", example: `instruction(action: "link_add", id: "<doc-id>", relatedDocs: ["other-doc"])` },
       ]),
     );

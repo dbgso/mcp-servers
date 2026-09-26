@@ -16,7 +16,7 @@ import {
   LinkRemoveHandler,
   LintHandler,
   SetStatusHandler,
-  UpdateMetaHandler,
+  ReadMetaHandler,
   GraphHandler,
 } from "./handlers/index.js";
 
@@ -42,7 +42,7 @@ export function createActionRegistry(): ActionRegistry<InstructionContext> {
     new LinkRemoveHandler(),
     new LintHandler(),
     new SetStatusHandler(),
-    new UpdateMetaHandler(),
+    new ReadMetaHandler(),
     new GraphHandler(),
   ]);
 

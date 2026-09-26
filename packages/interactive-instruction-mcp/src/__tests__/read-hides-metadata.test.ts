@@ -18,7 +18,7 @@ import * as os from "node:os";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import { DRAFT_DIR, DRAFT_PREFIX } from "../constants.js";
 import { ReadHandler } from "../tools/instruction/handlers/read.js";
-import { UpdateMetaHandler } from "../tools/instruction/handlers/update-meta.js";
+import { ReadMetaHandler } from "../tools/instruction/handlers/read-meta.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";
 
 const config: ReminderConfig = {
@@ -35,7 +35,7 @@ let reader: MarkdownReader;
 let context: InstructionContext;
 
 const read = new ReadHandler();
-const updateMeta = new UpdateMetaHandler();
+const readMeta = new ReadMetaHandler();
 
 const text = (r: { content: { type: string; text?: string }[] }) =>
   r.content.map((c) => c.text ?? "").join("\n");
@@ -138,7 +138,7 @@ describe("reading a promoted document", () => {
   it("says where the metadata can be read instead", async () => {
     const result = await read.execute({ rawParams: { action: "read", id: "promoted" }, context });
 
-    expect(text(result)).toContain('action: "update_meta"');
+    expect(text(result)).toContain('action: "read_meta"');
   });
 });
 
@@ -168,13 +168,13 @@ describe("reading a draft", () => {
 });
 
 describe("asking for metadata", () => {
-  it("is what update_meta answers", async () => {
+  it("is what read_meta answers", async () => {
     // The rule is not "metadata is hidden" but "metadata comes out when it is
     // what was asked for".
     await write({ id: "promoted", content: PROMOTED });
 
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "promoted" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "promoted" },
       context,
     });
 
@@ -194,15 +194,15 @@ describe("what a document with no frontmatter reads as", () => {
   });
 });
 
-describe("update_meta on a draft", () => {
+describe("read_meta on a draft", () => {
   it("finds it under the draft prefix, and says it is one", async () => {
     // `read` answers with prose, and a draft never appears in `list`, so this
     // is the only way to see what a draft's metadata says -- which is when it
     // most needs work.
     await write({ id: path.join(DRAFT_DIR, "drafted"), content: DRAFT });
 
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "drafted" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "drafted" },
       context,
     });
 
@@ -218,8 +218,8 @@ describe("update_meta on a draft", () => {
     // writing a description -- not for reading back the review.
     await write({ id: path.join(DRAFT_DIR, "drafted"), content: DRAFT });
 
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "drafted" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "drafted" },
       context,
     });
 
@@ -234,8 +234,8 @@ describe("update_meta on a draft", () => {
     await write({ id: "both", content: PROMOTED });
     await write({ id: path.join(DRAFT_DIR, "both"), content: DRAFT });
 
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "both" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "both" },
       context,
     });
 
@@ -244,8 +244,8 @@ describe("update_meta on a draft", () => {
   });
 
   it("still reports an id that is neither", async () => {
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "absent" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "absent" },
       context,
     });
 
@@ -263,8 +263,8 @@ describe("the fields the tools wrote", () => {
     // does not read as an invitation to set it.
     await write({ id: "promoted", content: PROMOTED });
 
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "promoted" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "promoted" },
       context,
     });
 
@@ -283,8 +283,8 @@ describe("the fields the tools wrote", () => {
       content: `---\ndescription: A long one\nsizeExemption: it is a single decision record\n---\n\n# Long\n\nBody.\n`,
     });
 
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "exempt" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "exempt" },
       context,
     });
 
@@ -296,8 +296,8 @@ describe("the fields the tools wrote", () => {
     // A heading with nothing under it is noise on every draft.
     await write({ id: path.join(DRAFT_DIR, "drafted"), content: DRAFT });
 
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "drafted" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "drafted" },
       context,
     });
 
@@ -308,8 +308,8 @@ describe("the fields the tools wrote", () => {
     // `confirmedAt` is the workflow's, not a record of the document.
     await write({ id: path.join(DRAFT_DIR, "drafted"), content: DRAFT });
 
-    const result = await updateMeta.execute({
-      rawParams: { action: "update_meta", id: "drafted" },
+    const result = await readMeta.execute({
+      rawParams: { action: "read_meta", id: "drafted" },
       context,
     });
 

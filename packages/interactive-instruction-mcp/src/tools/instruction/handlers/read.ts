@@ -19,13 +19,13 @@ export class ReadHandler extends BaseActionHandler<ReadArgs, InstructionContext>
 Usage:
 - \`instruction(action: "read", id: "doc-id")\` - Read a promoted document
 - \`instruction(action: "read", id: "draft-id")\` - Read a draft (checks _mcp_drafts first)
-- \`instruction(action: "update_meta", id: "doc-id")\` - Read the metadata instead
+- \`instruction(action: "read_meta", id: "doc-id")\` - Read the metadata instead
 
 The frontmatter is left out on purpose: \`description\`, \`whenToUse\` and
 \`relatedDocs\` are how the corpus is navigated, not part of what a document
 says, and a draft's \`status\` and \`selfReviewNotes\` are the approval
 conversation. None of it belongs in the answer to "what does this document
-say". \`update_meta\` is where metadata is read.`;
+say". \`read_meta\` is where metadata is read.`;
 
   readonly schema = readSchema;
 
@@ -106,9 +106,9 @@ To list available documents:
         example: `instruction(action: "link_add", id: "${id}", relatedDocs: ["other-doc"])`,
       },
       {
-        action: "update_meta",
+        action: "read_meta",
         description: "See this document's metadata, and what it sits next to",
-        example: `instruction(action: "update_meta", id: "${id}")`,
+        example: `instruction(action: "read_meta", id: "${id}")`,
       },
       {
         action: "list",
