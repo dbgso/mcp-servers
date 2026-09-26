@@ -632,6 +632,9 @@ importers:
 
   scripts:
     devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.26.0(supports-color@7.2.0)(zod@3.25.76)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
