@@ -3,7 +3,7 @@ import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions, textResponse } from "../types.js";
 import { isInternalDocument } from "../../../constants.js";
-import { stripFrontmatter } from "../../../utils/frontmatter-parser.js";
+import { parseFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
 
@@ -23,6 +23,38 @@ interface LintIssue {
 const MAX_LINES = 150;
 const SIMILARITY_THRESHOLD = 0.6;
 
+
+/**
+ * The headings of a markdown body, skipping fenced code.
+ *
+ * A `# comment` inside a shell block is not a section, and a document that
+ * shows two similar commands would otherwise report a duplicate heading for
+ * every example it contains.
+ */
+function headingsOf(body: string): { level: number; text: string }[] {
+  const headings: { level: number; text: string }[] = [];
+  let fence: string | null = null;
+
+  for (const line of body.split("\n")) {
+    const fenceMatch = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (fenceMatch !== null) {
+      const marker = fenceMatch[1][0];
+      // A fence closes only on its own kind, so a ``` inside a ~~~ block is
+      // content rather than the end of it.
+      if (fence === null) fence = marker;
+      else if (fence === marker) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+
+    const heading = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (heading !== null) {
+      headings.push({ level: heading[1].length, text: heading[2].trim() });
+    }
+  }
+
+  return headings;
+}
 
 export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "lint";
@@ -44,6 +76,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     issues.push(...this.checkMissingMetadata({ documents }));
     issues.push(...this.checkOrphanedDocs({ documents }));
     issues.push(...(await this.checkDocumentSize({ reader, documents })));
+    issues.push(...(await this.checkDuplicateHeadings({ reader, documents })));
     issues.push(...this.checkSimilarDocs({ documents }));
     issues.push(...this.checkCircularReferences({ documents }));
 
@@ -160,6 +193,19 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     return issues;
   }
 
+  /**
+   * Size, and what a document is allowed to say back about it.
+   *
+   * Line count is a proxy for "one topic, one claim", and the documents it is
+   * wrong about are a recognisable kind: a reference table is worth more whole
+   * than split across three files, and a runbook read out of order is not a
+   * runbook. Raising the threshold does not help -- it just moves the line and
+   * buries the documents that really should be split.
+   *
+   * So a document can exempt itself, but only by saying why. The reason is the
+   * feature: it is what tells the next reader that a long document was a
+   * decision rather than a warning nobody got to.
+   */
   private async checkDocumentSize(params: {
     reader: MarkdownReader;
     documents: MarkdownSummary[];
@@ -176,12 +222,93 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
       // line against the limit, so the rule rewarded thin metadata and
       // eventually warned about documents whose prose was well within it.
       const lineCount = stripFrontmatter(content).split("\n").length;
-      if (lineCount > MAX_LINES) {
+      const tooLarge = lineCount > MAX_LINES;
+      const exemption = parseFrontmatter(content).sizeExemption;
+      const hasReason = exemption !== undefined && exemption.trim() !== "";
+
+      if (exemption !== undefined && !hasReason) {
+        issues.push({
+          severity: "warning",
+          docId: doc.id,
+          rule: "size-exemption-without-reason",
+          message:
+            "`sizeExemption` needs a reason for keeping the document whole. " +
+            "Without one it is a mute button, and the next reader cannot tell " +
+            "a decision from an unaddressed warning.",
+        });
+      }
+
+      if (tooLarge && !hasReason) {
         issues.push({
           severity: "warning",
           docId: doc.id,
           rule: "document-too-large",
-          message: `Document body has ${lineCount} lines (max recommended: ${MAX_LINES}). Consider splitting.`,
+          message:
+            `Document body has ${lineCount} lines (max recommended: ${MAX_LINES}). ` +
+            "Consider splitting, or set `sizeExemption` to say why it stays whole.",
+        });
+      }
+
+      if (!tooLarge && hasReason) {
+        // Nothing else would ever mention it again, and a stale exemption is
+        // how the next long document gets waved through.
+        issues.push({
+          severity: "info",
+          docId: doc.id,
+          rule: "stale-size-exemption",
+          message:
+            `Document body is ${lineCount} lines, within the limit, but still carries ` +
+            "`sizeExemption`. Remove it, or the exemption outlives the reason for it.",
+        });
+      }
+    }
+
+    return issues;
+  }
+
+  /**
+   * The same heading twice in one document.
+   *
+   * A more specific signal than length, and a different one: it is what
+   * appending to a document looks like. A `## Related` in the middle and
+   * another at the end means a section was added after the one that was
+   * already there rather than into it -- and in the case this came from, the
+   * appended part turned out to be a separable topic.
+   *
+   * Reported whatever the document's size says, including when it is exempt:
+   * being deliberately long says nothing about the structure being sound.
+   */
+  private async checkDuplicateHeadings(params: {
+    reader: MarkdownReader;
+    documents: MarkdownSummary[];
+  }): Promise<LintIssue[]> {
+    const { reader, documents } = params;
+    const issues: LintIssue[] = [];
+
+    for (const doc of documents) {
+      const content = await reader.getDocumentContent(doc.id);
+      if (!content) continue;
+
+      const counts = new Map<string, { level: number; text: string; times: number }>();
+      for (const heading of headingsOf(stripFrontmatter(content))) {
+        // Keyed by level as well as text: `# Setup` with a `## Setup` under it
+        // is nesting, not a section that came back.
+        const key = `${heading.level}:${heading.text.toLowerCase()}`;
+        const seen = counts.get(key);
+        counts.set(key, { ...heading, times: (seen?.times ?? 0) + 1 });
+      }
+
+      for (const { level, text, times } of counts.values()) {
+        if (times < 2) continue;
+        issues.push({
+          severity: "warning",
+          docId: doc.id,
+          rule: "duplicate-heading",
+          message:
+            `"${"#".repeat(level)} ${text}" appears ${times} times. ` +
+            "A section that comes back usually means something was appended to the " +
+            "end of the document rather than into it; the later part is often a " +
+            "topic of its own.",
         });
       }
     }

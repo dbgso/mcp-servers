@@ -30,6 +30,7 @@ const WHEN_TO_USE_KEY = "whenToUse" as const;
 const RELATED_DOCS_KEY = "relatedDocs" as const;
 const STATUS_KEY = "status" as const;
 const SELF_REVIEW_NOTES_KEY = "selfReviewNotes" as const;
+const SIZE_EXEMPTION_KEY = "sizeExemption" as const;
 const CONFIRMED_AT_KEY = "confirmedAt" as const;
 const APPROVED_AT_KEY = "approvedAt" as const;
 
@@ -130,6 +131,9 @@ export function parseFrontmatter(content: string): DocumentFrontmatter {
   const selfReviewNotes = readString({ doc, key: SELF_REVIEW_NOTES_KEY });
   if (selfReviewNotes !== undefined) result.selfReviewNotes = selfReviewNotes;
 
+  const sizeExemption = readString({ doc, key: SIZE_EXEMPTION_KEY });
+  if (sizeExemption !== undefined) result.sizeExemption = sizeExemption;
+
   const confirmedAt = readString({ doc, key: CONFIRMED_AT_KEY });
   if (confirmedAt !== undefined) result.confirmedAt = confirmedAt;
 
@@ -168,6 +172,7 @@ export function updateFrontmatter(params: {
   applyField({ doc, key: RELATED_DOCS_KEY, value: nonEmpty(frontmatter.relatedDocs) });
   applyField({ doc, key: STATUS_KEY, value: frontmatter.status });
   applyField({ doc, key: SELF_REVIEW_NOTES_KEY, value: frontmatter.selfReviewNotes });
+  applyField({ doc, key: SIZE_EXEMPTION_KEY, value: frontmatter.sizeExemption });
   applyField({ doc, key: CONFIRMED_AT_KEY, value: frontmatter.confirmedAt });
   applyField({ doc, key: APPROVED_AT_KEY, value: frontmatter.approvedAt });
 
