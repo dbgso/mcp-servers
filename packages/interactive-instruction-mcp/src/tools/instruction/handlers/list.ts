@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions } from "../types.js";
-import { isInternalDocument } from "../../../constants.js";
+import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 import {
   isDescriptionMissing,
@@ -16,7 +16,8 @@ const listSchema = z.object({
   query: z.string().optional().describe("Search by description or whenToUse"),
   missingMeta: z.enum(["description", "whenToUse", "any"]).optional()
     .describe("Find documents with missing metadata"),
-  backlinks: z.boolean().optional().describe("Find documents referencing this ID"),
+  backlinks: z.boolean().optional().describe("Find documents referencing this ID. Requires `id`"),
+  drafts: z.boolean().optional().describe("List drafts instead of promoted documents"),
 });
 
 type ListArgs = z.infer<typeof listSchema>;
@@ -31,7 +32,9 @@ Usage:
 - \`instruction(action: "list", id: "category")\` - List documents in category
 - \`instruction(action: "list", query: "search term")\` - Search documents
 - \`instruction(action: "list", missingMeta: "any")\` - Find docs with missing metadata
-- \`instruction(action: "list", id: "doc-id", backlinks: true)\` - Find documents referencing this doc`;
+- \`instruction(action: "list", id: "doc-id", backlinks: true)\` - Find documents referencing this doc
+  (\`backlinks\` needs \`id\`; on its own it is ignored)
+- \`instruction(action: "list", drafts: true)\` - List drafts, by the plain id every other action takes`;
 
   readonly schema = listSchema;
 
@@ -41,16 +44,33 @@ Usage:
   }): Promise<ToolResponse> {
     const { args, context } = params;
     const { reader } = context;
-    const { id, recursive, query, missingMeta, backlinks } = args;
+    const { id, recursive, query, missingMeta, backlinks, drafts } = args;
 
-    // Helper to filter out drafts from public listing
+    /**
+     * Which documents this listing is about.
+     *
+     * The default is the corpus: a listing of what has been written, not of
+     * what is being written. `drafts: true` asks for the other set, by the
+     * plain id -- `approve` and `set_status` both take a batch of ids, and
+     * until now there was no call that produced one.
+     */
     const filterDrafts = (result: {
       documents: MarkdownSummary[];
       categories: { id: string; docCount: number }[];
-    }) => ({
-      documents: result.documents.filter((d) => !isInternalDocument(d.id)),
-      categories: result.categories.filter((c) => !isInternalDocument(c.id)),
-    });
+    }) => {
+      if (drafts === true) {
+        return {
+          documents: result.documents
+            .filter((d) => d.id.startsWith(DRAFT_PREFIX))
+            .map((d) => ({ ...d, id: d.id.slice(DRAFT_PREFIX.length) })),
+          categories: [],
+        };
+      }
+      return {
+        documents: result.documents.filter((d) => !isInternalDocument(d.id)),
+        categories: result.categories.filter((c) => !isInternalDocument(c.id)),
+      };
+    };
 
     // Helper to check if document matches query.
     // Includes id so locale-mismatched queries (e.g. English term against a
@@ -199,9 +219,45 @@ Usage:
       };
     }
 
-    // Root listing
-    const result = await reader.listDocuments({ recursive });
+    // Root listing. Drafts are nested under their own directory, so asking for
+    // them has to descend whatever the caller said about the corpus.
+    const result = await reader.listDocuments({ recursive: recursive || drafts === true });
     const { documents, categories } = filterDrafts(result);
+
+    if (drafts === true) {
+      const ids = documents.map((doc) => doc.id);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              (ids.length === 0
+                ? "No drafts."
+                : `${ids.length} draft(s):\n\n` + reader.formatDocumentList({ documents, categories: [] })) +
+              formatNextActions(
+                ids.length === 0
+                  ? [{
+                      action: "add",
+                      description: "Create a new draft",
+                      example: 'instruction(action: "add", id: "new-doc", content: "...", description: "...", whenToUse: [...])',
+                    }]
+                  : [
+                      {
+                        action: "read",
+                        description: "Read one of them",
+                        example: `instruction(action: "read", id: "${ids[0]}")`,
+                      },
+                      {
+                        action: "approve",
+                        description: "Promote several under one explanation",
+                        example: `instruction(action: "approve", ids: "${ids.join(",")}", explanation: "<what these say and why>")`,
+                      },
+                    ]
+              ),
+          },
+        ],
+      };
+    }
 
     const nextActions = formatNextActions([
       {

@@ -59,11 +59,12 @@ This tool explains how to use the instruction tool.
 - \`instruction(action: "list", recursive: true)\` - List all including nested
 - \`instruction(action: "list", query: "<keyword>")\` - Search documents
 - \`instruction(action: "list", missingMeta: "any")\` - Find docs with missing metadata
-- \`instruction(action: "list", backlinks: true)\` - Show backlinks
+- \`instruction(action: "list", id: "<id>", backlinks: true)\` - Which documents reference this one (needs \`id\`)
+- \`instruction(action: "list", drafts: true)\` - List drafts, by the plain id every other action takes
 - \`instruction(action: "read", id: "<id>")\` - Read a document
 
 ### Draft Operations
-- \`instruction(action: "add", id: "<id>", content: "...", description: "...", whenToUse: [...])\` - Create draft
+- \`instruction(action: "add", id: "<id>", content: "...", description: "...", whenToUse: [...], relatedDocs: [...])\` - Create draft (\`relatedDocs\` optional)
 - \`instruction(action: "update", id: "<id>", content: "...")\` - Update draft (direct) or promoted doc (pending + apply/cancel)
 - \`instruction(action: "delete", id: "<id>")\` - Delete draft (immediate); promoted doc needs \`explanation\` and repeated calls
 - \`instruction(action: "rename", id: "<id>", newId: "<new-id>")\` - Rename draft (immediate); promoted doc needs \`explanation\` and repeated calls
@@ -90,6 +91,8 @@ This tool explains how to use the instruction tool.
 ### Seeing the corpus
 - \`instruction(action: "graph")\` - Render the relatedDocs graph as an interactive page
 - \`instruction(action: "graph", id: "<id>", depth: 2)\` - Draw one document's neighbourhood
+- \`instruction(action: "graph", format: "text")\` - The same graph as an adjacency list, which is the form to read here
+- \`instruction(action: "graph", layout: "<name>", direction: "LR", spacing: 1.5, edgeStyle: "<style>", includeUnlinked: true, outputPath: "<file>")\` - How the page is drawn and where it goes
 
 ## Reminder
 

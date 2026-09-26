@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions, textResponse } from "../types.js";
-import { isInternalDocument } from "../../../constants.js";
+import { DRAFT_PREFIX, isInternalDocument, isTrashedDocument } from "../../../constants.js";
 import {
   checkDocument,
   configuredSimilarityThreshold,
@@ -14,6 +14,17 @@ import type { MarkdownSummary } from "../../../types/index.js";
 const schema = z.object({
   action: z.literal("lint"),
 });
+
+/**
+ * What to call a document in the report.
+ *
+ * A draft is stored under `_mcp_drafts__<id>`, but that is where the file is,
+ * not what anything else calls it: every other action takes the plain id, so
+ * printing the prefixed one would name something the caller cannot act on.
+ */
+function displayId(id: string): string {
+  return id.startsWith(DRAFT_PREFIX) ? `${id.slice(DRAFT_PREFIX.length)} (draft)` : id;
+}
 
 type Args = z.infer<typeof schema>;
 
@@ -29,22 +40,38 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     const { reader } = params.context;
 
     const result = await reader.listDocuments({ recursive: true });
-    const documents = result.documents.filter((d) => !isInternalDocument(d.id));
+
+    // Two scopes, decided by what a rule can answer rather than by where the
+    // document lives.
+    //
+    // A rule a document answers on its own means the same thing before and
+    // after promotion: a draft forty lines over the limit is over it now, and
+    // the author is the one person who still remembers why. Those used to stop
+    // at the corpus boundary because drafts share one "internal" predicate with
+    // the trash directory -- a grouping argued for on the trash's behalf, never
+    // on the draft's.
+    //
+    // A rule about the set cannot say anything useful about a draft. Nothing
+    // links to a document still being written, so every draft would report
+    // `orphaned-document` on every run, which is worse than reporting nothing.
+    const documents = result.documents.filter((d) => !isTrashedDocument(d.id));
+    const corpus = documents.filter((d) => !isInternalDocument(d.id));
 
     const issues: LintIssue[] = [];
 
-    // Per document: the same rules `add` and `update` report at write time, so
-    // a document cannot be clean on the way in and dirty in the report.
+    // Per document, drafts included: the same rules `add` and `update` report
+    // at write time, so a document cannot be clean on the way in and dirty in
+    // the report.
     for (const doc of documents) {
       const content = await reader.getDocumentContent(doc.id);
       if (content === null) continue;
-      issues.push(...checkDocument({ docId: doc.id, content }));
+      issues.push(...checkDocument({ docId: displayId(doc.id), content }));
     }
 
     // Corpus-wide: properties of the set, which no single write can decide.
-    issues.push(...this.checkOrphanedDocs({ documents }));
-    issues.push(...this.checkSimilarDocs({ documents }));
-    issues.push(...this.checkCircularReferences({ documents }));
+    issues.push(...this.checkOrphanedDocs({ documents: corpus }));
+    issues.push(...this.checkSimilarDocs({ documents: corpus }));
+    issues.push(...this.checkCircularReferences({ documents: corpus }));
 
     if (issues.length === 0) {
       return textResponse(
@@ -83,7 +110,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
       lines.join("\n") +
       formatNextActions([
         { action: "read_meta", description: "Update metadata for a document", example: `instruction(action: "read_meta", id: "<doc-id>")` },
-        { action: "link_add", description: "Add related documents", example: `instruction(action: "link_add", id: "<doc-id>", relatedDocs: ["other-doc"])` },
+        { action: "link_add", description: "Add related documents", example: `instruction(action: "link_add", id: "<doc-id>", relatedDocs: ["other-doc"], explanation: "<what the link means>")` },
       ]),
     );
   }

@@ -14,7 +14,7 @@ import {
 } from "mcp-shared-graph-viz";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
-import { isInternalDocument } from "../../../constants.js";
+import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import { isDescriptionMissing } from "../../../services/metadata-completeness.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 
@@ -158,12 +158,36 @@ Writes an HTML file and returns its path. Open it in a browser.`;
     const documents = listed.documents.filter((doc) => !isInternalDocument(doc.id));
 
     if (id !== undefined && !documents.some((doc) => doc.id === id)) {
-      return errorResponse(`Error: Document "${id}" not found.` +
-        formatNextActions([{
-          action: "list",
-          description: "See what exists",
-          example: `instruction(action: "list", recursive: true)`,
-        }]));
+      // Being out of scope and being absent are different facts, and reporting
+      // the first as the second sends the caller off to check the id it just
+      // used. A draft is not in the relation graph because the graph is of the
+      // corpus -- it is not missing.
+      const isDraft = listed.documents.some((doc) => doc.id === DRAFT_PREFIX + id);
+
+      return errorResponse(
+        (isDraft
+          ? `"${id}" is a draft, and the relation graph is drawn over the promoted corpus. Its links are readable now, and it joins the graph when it is promoted.`
+          : `Error: Document "${id}" not found.`) +
+        formatNextActions(
+          isDraft
+            ? [
+                {
+                  action: "read_meta",
+                  description: "Read the draft's links",
+                  example: `instruction(action: "read_meta", id: "${id}")`,
+                },
+                {
+                  action: "graph",
+                  description: "Draw the corpus it will join",
+                  example: `instruction(action: "graph")`,
+                },
+              ]
+            : [{
+                action: "list",
+                description: "See what exists",
+                example: `instruction(action: "list", recursive: true)`,
+              }]
+        ));
     }
 
     const { nodes, edges } = buildGraph({ documents, focusId: id, depth, includeUnlinked });
@@ -174,7 +198,7 @@ Writes an HTML file and returns its path. Open it in a browser.`;
         formatNextActions([{
           action: "link_add",
           description: "Relate two documents",
-          example: `instruction(action: "link_add", id: "<id>", relatedDocs: ["<other-id>"])`,
+          example: `instruction(action: "link_add", id: "<id>", relatedDocs: ["<other-id>"], explanation: "<what the link means>")`,
         }]));
     }
 

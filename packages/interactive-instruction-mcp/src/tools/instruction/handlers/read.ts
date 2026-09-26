@@ -103,7 +103,7 @@ To list available documents:
       {
         action: "link_add",
         description: "Add related documents",
-        example: `instruction(action: "link_add", id: "${id}", relatedDocs: ["other-doc"])`,
+        example: `instruction(action: "link_add", id: "${id}", relatedDocs: ["other-doc"], explanation: "<what the link means>")`,
       },
       {
         action: "read_meta",

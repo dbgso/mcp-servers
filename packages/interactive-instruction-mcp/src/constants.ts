@@ -35,3 +35,17 @@ const INTERNAL_DIRS = [DRAFT_DIR, TRASH_DIR];
 export function isInternalDocument(id: string): boolean {
   return INTERNAL_DIRS.some((dir) => id === dir || id.startsWith(dir + ID_SEPARATOR));
 }
+
+/**
+ * Whether an id belongs to the trash.
+ *
+ * Apart from `isInternalDocument`, because the two directories are internal for
+ * different reasons and only one of them is a reason to ignore a document
+ * outright. A trashed document is not a document any more. A draft is a
+ * document that is not finished -- and `lint` reads the rules it can answer on
+ * its own, which was only ever skipping drafts because they shared a predicate
+ * written for the trash.
+ */
+export function isTrashedDocument(id: string): boolean {
+  return id === TRASH_DIR || id.startsWith(TRASH_DIR + ID_SEPARATOR);
+}

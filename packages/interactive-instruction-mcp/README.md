@@ -79,7 +79,9 @@ instruction(action: "read", id: "doc-id") → Read a document
 ### Available Actions
 
 **Reading**
-- `list` — List documents (optional: `id`, `recursive`, `query`, `missingMeta`, `backlinks`)
+- `list` — List documents (optional: `id`, `recursive`, `query`, `missingMeta`, `drafts`;
+  `backlinks` needs `id` and is ignored without it). `drafts: true` lists drafts by the plain id
+  every other action takes, which is where the `ids` for a batch `approve` comes from
 - `read` — Read a document's prose by ID. Metadata is not included: `read_meta` is where it is read
 
 **Draft Operations**
@@ -99,7 +101,8 @@ instruction(action: "read", id: "doc-id") → Read a document
 **Metadata & Quality**
 - `link_add` / `link_remove` — Manage related document links, on a draft or a promoted document (deliberation gate, drafts included). `relatedDocs` names documents by their plain id either way
 - `lint` — Check document quality: missing metadata, orphans, size, similarity, circular
-  references, and repeated headings. A document that is deliberately long declares
+  references, and repeated headings. A draft is held to the rules it can answer on its own; the
+  corpus-wide ones wait until it is promoted. A document that is deliberately long declares
   `sizeExemption: <why>` in its frontmatter. The rules a single document can answer on its own
   — size, repeated headings, missing metadata — are also reported by `add` and `update` as they
   write, so the author hears them while they still remember why the document has the shape it
@@ -199,6 +202,23 @@ own lines rather than left to be inferred.
 | `rename` | Immediate | Preview + refusal → repeat |
 | `link_add` / `link_remove` | Preview + refusal → repeat | Preview + refusal → repeat |
 | Promotion | `approve` (notes → `explanation`, repeated) | — |
+| `set_status` | Reset to `editing` | Not applicable -- no workflow state |
+| `apply` / `cancel` | Not applicable -- nothing is staged | The staged update |
+| `lint`, document's own rules | Reported | Reported |
+| `lint`, corpus-wide rules | Not applied | Reported |
+| `list` | `drafts: true` | Listed by default |
+| `graph` | Not drawn | Drawn |
+
+**Which state an action is about is decided by the nature of the rule, not by where the file
+sits.** What a document answers on its own -- its size, a heading that comes back, missing
+metadata -- means the same thing before and after promotion, so `lint` reports it for a draft
+too. What only the set can answer -- orphans, similarity, cycles -- says nothing useful about a
+document still being written: nothing links to a draft yet, so every draft would report
+`orphaned-document` on every run. An action that is about the workflow exists only in the state
+that has one.
+
+An action that does not cover a state says so, and does not say the document is missing. A draft
+is not absent from the graph; it is not in the corpus yet.
 
 Link changes are the one operation that is gated for drafts too: they rewrite `relatedDocs`
 frontmatter on both sides of the link, so a draft edit can reach a promoted document.
