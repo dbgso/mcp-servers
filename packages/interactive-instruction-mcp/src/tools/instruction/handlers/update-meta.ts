@@ -3,7 +3,7 @@ import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
 import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
-import type { MarkdownSummary } from "../../../types/index.js";
+import type { DocumentFrontmatter, MarkdownSummary } from "../../../types/index.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { buildGraph } from "./graph.js";
 import {
@@ -111,6 +111,7 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
       `- **description**: ${frontmatter.description ?? "(not set)"}`,
       `- **whenToUse**: ${formatList(frontmatter.whenToUse)}`,
       `- **relatedDocs**: ${formatList(frontmatter.relatedDocs)}`,
+      ...recordedSection(frontmatter),
       "",
       neighbourhoodSection({ related, candidates, category }),
       "",
@@ -166,6 +167,31 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
 
 function formatList(values: string[] | undefined): string {
   return values === undefined || values.length === 0 ? "(not set)" : values.join(", ");
+}
+
+/**
+ * The fields the tools wrote, kept apart from the ones the caller is being
+ * asked to write.
+ *
+ * `approvedAt` is a record, not a setting: `approve` stamps it when the
+ * document enters the corpus. Listing it beside `description` would read as an
+ * invitation to set it. It is reported here because a value written into
+ * someone's file with no way to read it back is worse than not writing it --
+ * and `read` answers with prose now, so this is the only place it surfaces.
+ *
+ * `sizeExemption` is the caller's, but it is written for `lint` rather than
+ * for navigation, and `lint` is where it is discussed. It is shown so that
+ * the answer to "what does this document's frontmatter say" is complete.
+ */
+function recordedSection(frontmatter: DocumentFrontmatter): string[] {
+  const lines: string[] = [];
+  if (frontmatter.sizeExemption !== undefined) {
+    lines.push(`- **sizeExemption**: ${frontmatter.sizeExemption}`);
+  }
+  if (frontmatter.approvedAt !== undefined) {
+    lines.push(`- **approvedAt**: ${frontmatter.approvedAt} (recorded on promotion)`);
+  }
+  return lines.length === 0 ? [] : ["", "## Also recorded", ...lines];
 }
 
 function describe(doc: MarkdownSummary): string {

@@ -958,6 +958,10 @@ describe("Integration Tests", () => {
       });
       expect(promotedMeta.content[0].text).toContain("What the lifecycle document is for");
       expect(promotedMeta.content[0].text).not.toContain("**[Draft]**");
+      // The one field promotion writes is readable again -- in the action for
+      // metadata, marked as a record rather than as something to set.
+      expect(promotedMeta.content[0].text).toContain("## Also recorded");
+      expect(promotedMeta.content[0].text).toContain("approvedAt");
     });
   });
 });

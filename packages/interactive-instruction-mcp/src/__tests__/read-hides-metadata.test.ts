@@ -253,3 +253,66 @@ describe("update_meta on a draft", () => {
     expect(text(result)).toContain("not found");
   });
 });
+
+describe("the fields the tools wrote", () => {
+  it("reports approvedAt, marked as a record rather than a setting", async () => {
+    // `approve` stamps it when a document enters the corpus, and `read` no
+    // longer shows it. A value written into someone's file with no way to read
+    // it back is worse than not writing it, so this is where it surfaces --
+    // apart from the fields the caller is being asked to write, so the list
+    // does not read as an invitation to set it.
+    await write({ id: "promoted", content: PROMOTED });
+
+    const result = await updateMeta.execute({
+      rawParams: { action: "update_meta", id: "promoted" },
+      context,
+    });
+
+    expect(text(result)).toContain("## Also recorded");
+    expect(text(result)).toContain("approvedAt");
+    expect(text(result)).toContain("2026-01-01T00:00:00.000Z");
+    expect(text(result)).toContain("recorded on promotion");
+    // Not among the three it asks for.
+    const asksFor = text(result).split("## Also recorded")[0];
+    expect(asksFor).not.toContain("approvedAt");
+  });
+
+  it("reports a size exemption, which is written for lint rather than navigation", async () => {
+    await write({
+      id: "exempt",
+      content: `---\ndescription: A long one\nsizeExemption: it is a single decision record\n---\n\n# Long\n\nBody.\n`,
+    });
+
+    const result = await updateMeta.execute({
+      rawParams: { action: "update_meta", id: "exempt" },
+      context,
+    });
+
+    expect(text(result)).toContain("sizeExemption");
+    expect(text(result)).toContain("a single decision record");
+  });
+
+  it("leaves the section out when there is nothing recorded", async () => {
+    // A heading with nothing under it is noise on every draft.
+    await write({ id: path.join(DRAFT_DIR, "drafted"), content: DRAFT });
+
+    const result = await updateMeta.execute({
+      rawParams: { action: "update_meta", id: "drafted" },
+      context,
+    });
+
+    expect(text(result)).not.toContain("## Also recorded");
+  });
+
+  it("still keeps the approval conversation out of it", async () => {
+    // `confirmedAt` is the workflow's, not a record of the document.
+    await write({ id: path.join(DRAFT_DIR, "drafted"), content: DRAFT });
+
+    const result = await updateMeta.execute({
+      rawParams: { action: "update_meta", id: "drafted" },
+      context,
+    });
+
+    expect(text(result)).not.toContain("confirmedAt");
+  });
+});
