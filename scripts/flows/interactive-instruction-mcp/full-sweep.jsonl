@@ -3,11 +3,13 @@
 # linked, promoted, edited through the pending flow, renamed and deleted.
 #
 #   node scripts/mcp-session.mjs interactive-instruction-mcp \
-#     scripts/flows/interactive-instruction-mcp/full-sweep.jsonl -- '{{TMPDIR}}'
+#     scripts/flows/interactive-instruction-mcp/full-sweep.jsonl
 #
 # Gated actions appear as many times as their gate takes: two for apply, link
 # and approve, three for rename and delete. That repetition is the point --
 # it is what a one-call-per-process harness cannot express.
+
+{"server": {"args": ["{{TMPDIR}}"]}}
 
 {"tools": true, "label": "0. the tools on offer"}
 {"call": "instruction_describe", "label": "0b. describe", "args": {}, "expect": ["Available Actions", "read_meta"]}

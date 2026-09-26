@@ -135,8 +135,18 @@ the call:
 - The server runs from `src/index.ts`, not `dist`: a built bundle goes stale
   the moment someone edits a source file
 
-Committed flows live in `scripts/flows/<package>/`. A session that found
-something is worth committing -- it is the replay of the bug.
+Committed flows live in `scripts/flows/<package>/`, and each declares the server it
+is written against:
+
+```jsonl
+{"server": {"args": ["{{TMPDIR}}"], "env": {"IIMCP_LINT_MAX_LINES": "20"}}}
+```
+
+so running one needs no remembered command line. **They run in CI.**
+`packages/interactive-instruction-mcp/src/__tests__/flows.test.ts` discovers every
+flow in the directory and fails if any expectation is unmet, so adding a flow adds
+regression coverage without writing a test -- and a session that found something is
+worth committing, because it becomes the thing that keeps it found.
 
 ### And a stdio test, for what must not regress
 

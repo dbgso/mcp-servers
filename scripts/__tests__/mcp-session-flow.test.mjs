@@ -224,3 +224,44 @@ describe("parseArgs", () => {
     expect(parseArgs(["p", "f", flag])[field]).toBe(true);
   });
 });
+
+describe("the server directive", () => {
+  it("reads the invocation the flow was written against", () => {
+    const { server, steps, errors } = parseFlow(
+      '{"server": {"args": ["{{TMPDIR}}"], "env": {"LIMIT": "20"}}}\n{"call": "t"}\n'
+    );
+
+    expect(errors).toEqual([]);
+    expect(server).toEqual({ args: ["{{TMPDIR}}"], env: { LIMIT: "20" } });
+    // It is not a step: a flow of one call must not become a flow of two.
+    expect(steps).toHaveLength(1);
+  });
+
+  it("is null when the flow does not declare one", () => {
+    expect(parseFlow('{"call": "t"}\n').server).toBeNull();
+  });
+
+  it.each([
+    { name: "only args", line: '{"server": {"args": ["x"]}}', expected: { args: ["x"], env: {} } },
+    { name: "only env", line: '{"server": {"env": {"A": "1"}}}', expected: { args: [], env: { A: "1" } } },
+    { name: "neither", line: '{"server": {}}', expected: { args: [], env: {} } },
+  ])("defaults what is left out, given $name", ({ line, expected }) => {
+    expect(parseFlow(`${line}\n`).server).toEqual(expected);
+  });
+
+  it.each([
+    { name: "a second declaration", text: '{"server": {}}\n{"server": {}}\n', message: "more than one" },
+    { name: "args that are not a list", text: '{"server": {"args": "x"}}\n', message: "`server.args`" },
+    { name: "a non-string argument", text: '{"server": {"args": [1]}}\n', message: "`server.args`" },
+    { name: "env that is not an object", text: '{"server": {"env": []}}\n', message: "`server.env`" },
+    { name: "a non-string env value", text: '{"server": {"env": {"A": 1}}}\n', message: "values must be strings" },
+    { name: "a server that is not an object", text: '{"server": "npx"}\n', message: "must be a JSON object" },
+  ])("rejects $name", ({ text, message }) => {
+    // A flow whose declaration is wrong must not fall back to running with no
+    // arguments: for this server that means no documents directory, and the
+    // failure would look like the server's own rather than the flow's.
+    const { errors } = parseFlow(text);
+
+    expect(errors[0].message).toContain(message);
+  });
+});

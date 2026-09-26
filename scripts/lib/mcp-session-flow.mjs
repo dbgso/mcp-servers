@@ -17,6 +17,7 @@
 export function parseFlow(text) {
   const steps = [];
   const errors = [];
+  let server = null;
 
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -34,12 +35,53 @@ export function parseFlow(text) {
       continue;
     }
 
+    // `{"server": {...}}` is not a step: it says how to start the server this
+    // flow is written against. Declared in the file rather than passed on the
+    // command line so that running a flow does not depend on remembering one --
+    // and so a test can run every flow in a directory without a mapping.
+    if (isServerDirective(parsed)) {
+      if (server !== null) errors.push({ line: at, message: "more than one `server` line" });
+      else {
+        const declared = toServer({ parsed, at });
+        if (declared.error !== undefined) errors.push({ line: at, message: declared.error });
+        else server = declared.server;
+      }
+      continue;
+    }
+
     const step = toStep({ parsed, at });
     if (step.error !== undefined) errors.push({ line: at, message: step.error });
     else steps.push(step.step);
   }
 
-  return { steps, errors };
+  return { steps, server, errors };
+}
+
+function isServerDirective(parsed) {
+  return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) && "server" in parsed;
+}
+
+function toServer(params) {
+  const declared = params.parsed.server;
+
+  if (declared === null || typeof declared !== "object" || Array.isArray(declared)) {
+    return { error: "`server` must be a JSON object" };
+  }
+
+  const args = declared.args ?? [];
+  if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string")) {
+    return { error: "`server.args` must be a list of strings" };
+  }
+
+  const env = declared.env ?? {};
+  if (env === null || typeof env !== "object" || Array.isArray(env)) {
+    return { error: "`server.env` must be a JSON object" };
+  }
+  if (Object.values(env).some((value) => typeof value !== "string")) {
+    return { error: "`server.env` values must be strings" };
+  }
+
+  return { server: { args, env } };
 }
 
 function toStep(params) {
