@@ -100,7 +100,12 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `link_add` / `link_remove` — Manage related document links (deliberation gate, drafts included)
 - `lint` — Check document quality: missing metadata, orphans, size, similarity, circular
   references, and repeated headings. A document that is deliberately long declares
-  `sizeExemption: <why>` in its frontmatter
+  `sizeExemption: <why>` in its frontmatter. The rules a single document can answer on its own
+  — size, repeated headings, missing metadata — are also reported by `add` and `update` as they
+  write, so the author hears them while they still remember why the document has the shape it
+  has. The write succeeds either way. Thresholds: `IIMCP_LINT_MAX_LINES` (default 150) and
+  `IIMCP_LINT_SIMILARITY` (default 0.6); an unreadable or out-of-range value falls back to the
+  default rather than stopping the server
 - `set_status` — Reset drafts to `editing`, discarding their workflow state (single `id` or batch `ids`)
 - `read_meta` — Read a document's metadata -- a draft's as well as a promoted one's -- alongside
   its neighbours in the `relatedDocs` graph, or same-category candidates when it has none, and

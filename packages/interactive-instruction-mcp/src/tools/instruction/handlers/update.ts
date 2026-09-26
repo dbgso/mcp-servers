@@ -7,6 +7,7 @@ import type { DocumentFrontmatter } from "../../../types/index.js";
 import { updateFrontmatter, parseFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { generateDiff, removeDiffFile, writeDiffToFile } from "../../../utils/diff-utils.js";
 import { getPendingUpdate, savePendingUpdate } from "../../../utils/pending-update.js";
+import { checkDocument, formatWriteLint } from "../../../services/document-lint.js";
 
 // Deliberately a plain object, with no `.refine`: the tool's inputSchema is
 // assembled by merging every handler's `.shape`, and a refinement wraps the
@@ -142,8 +143,14 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
       return errorResponse(`Error: ${updateResult.error}`);
     }
 
+    // Reported on every draft write, not only the first: a document goes over
+    // the limit by being edited, and `add` alone would miss exactly the
+    // documents that grew into the warning.
+    const lint = formatWriteLint(checkDocument({ docId: id, content: finalContent }));
+
     return textResponse(
       `Draft "${id}" updated successfully.` +
+        lint +
         formatNextActions([
           {
             action: "read",

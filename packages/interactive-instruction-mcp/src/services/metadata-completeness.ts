@@ -13,12 +13,16 @@
  * them -- while being the action whose help says it is how you find them.
  */
 
-import type { MarkdownSummary } from "../types/index.js";
-
 /** What the reader prints when a document supplies no description at all. */
 export const MISSING_DESCRIPTION_PLACEHOLDER = "(No description)";
 
-export function isDescriptionMissing(doc: Pick<MarkdownSummary, "description">): boolean {
+/**
+ * Asked of a `MarkdownSummary` (where the reader has already substituted the
+ * placeholder) and of raw frontmatter (where an absent description is simply
+ * `undefined`), so the parameter is the shape both satisfy rather than a
+ * `Pick` of either.
+ */
+export function isDescriptionMissing(doc: { description?: string }): boolean {
   const { description } = doc;
   return (
     !description ||
@@ -27,6 +31,6 @@ export function isDescriptionMissing(doc: Pick<MarkdownSummary, "description">):
   );
 }
 
-export function isWhenToUseMissing(doc: Pick<MarkdownSummary, "whenToUse">): boolean {
+export function isWhenToUseMissing(doc: { whenToUse?: string[] }): boolean {
   return doc.whenToUse === undefined || doc.whenToUse.length === 0;
 }
