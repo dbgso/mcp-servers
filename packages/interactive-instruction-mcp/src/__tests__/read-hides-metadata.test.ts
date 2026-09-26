@@ -196,7 +196,7 @@ describe("what a document with no frontmatter reads as", () => {
 
 describe("read_meta on a draft", () => {
   it("finds it under the draft prefix, and says it is one", async () => {
-    // `read` answers with prose, and a draft never appears in `list`, so this
+    // `read` answers with prose, and a draft appears in `list` only when asked for with `drafts: true`, so this
     // is the only way to see what a draft's metadata says -- which is when it
     // most needs work.
     await write({ id: path.join(DRAFT_DIR, "drafted"), content: DRAFT });

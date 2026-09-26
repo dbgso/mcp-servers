@@ -22,6 +22,7 @@ import { LintHandler } from "../tools/instruction/handlers/lint.js";
 import { ListHandler } from "../tools/instruction/handlers/list.js";
 import { GraphHandler } from "../tools/instruction/handlers/graph.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";
+import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 
 const config: ReminderConfig = {
   remindMcp: false,
@@ -79,13 +80,45 @@ describe("lint", () => {
   });
 
   it("does not hold a draft to rules only the corpus can answer", async () => {
-    // Nothing links to a document still being written. Reporting that on every
-    // run would bury the findings that mean something.
-    await write({ id: `${DRAFT_DIR}__lonely`, body: "# Lonely\n\nShort." });
+    // A draft is usually a near-copy of the document it will replace, so the
+    // similarity rule fires on almost every one -- against an id nothing
+    // accepts, about a resemblance that is the point rather than a problem.
+    //
+    // `similar-documents`, not `orphaned-document`: the orphan rule already
+    // skips any id starting with `_`, so it could never have reported a draft
+    // and asserting on it proves nothing about the split.
+    await write({ id: "widgets", body: "# Widgets\n\nThe promoted one." });
+    await write({ id: `${DRAFT_DIR}__widgets`, body: "# Widgets\n\nThe draft that will replace it." });
 
     const report = await text(lint, { action: "lint" });
 
-    expect(report).not.toContain("orphaned-document");
+    // The promoted one is legitimately an orphan here; what must not appear is
+    // a corpus rule aimed at the draft.
+    expect(report).not.toContain("similar-documents");
+    expect(report).not.toContain("(draft)");
+  });
+
+  it("still reports similarity between two promoted documents", async () => {
+    // The other half: the split must not have turned the rule off.
+    await write({ id: "widget-handling", body: "# One" });
+    await write({ id: "widget-handling-notes", body: "# Two" });
+
+    expect(await text(lint, { action: "lint" })).toContain("similar-documents");
+  });
+
+  it("does not let a draft into a cycle report", async () => {
+    await write({
+      id: `${DRAFT_DIR}__a`,
+      body: "# A",
+      frontmatter: "description: A\nwhenToUse:\n  - testing\nrelatedDocs:\n  - b",
+    });
+    await write({
+      id: "b",
+      body: "# B",
+      frontmatter: "description: B\nwhenToUse:\n  - testing\nrelatedDocs:\n  - a",
+    });
+
+    expect(await text(lint, { action: "lint" })).not.toContain("circular-reference");
   });
 
   it("still holds a promoted document to both", async () => {
@@ -129,13 +162,48 @@ describe("list", () => {
     expect(listing).not.toContain(DRAFT_DIR);
   });
 
-  it("hands back ids that `approve` can be given directly", async () => {
+  it("offers the self-review a fresh draft needs, not a batch that would be refused", async () => {
+    // `approve(ids:)` refuses unless every draft in the batch has had its
+    // self-review recorded, so offering it for drafts straight out of `add` --
+    // the commonest case, and the one this listing exists for -- would hand
+    // back a call the server rejects.
+    await write({ id: `${DRAFT_DIR}__one`, body: "# One" });
+    await write({ id: `${DRAFT_DIR}__two`, body: "# Two" });
+
+    const listing = await text(list, { action: "list", drafts: true });
+
+    expect(listing).toContain("Awaiting self-review: one, two");
+    expect(listing).toContain('action: "approve", id: "one", notes:');
+    expect(listing).not.toContain("ids:");
+  });
+
+  it("hands back the batch once the drafts are ready for it", async () => {
     // The hole this closes: both `approve` and `set_status` take a batch of
     // ids, and no call produced one.
     await write({ id: `${DRAFT_DIR}__one`, body: "# One" });
     await write({ id: `${DRAFT_DIR}__two`, body: "# Two" });
+    for (const id of ["one", "two"]) {
+      await draftWorkflowManager.trigger({ id, triggerParams: { action: "submit", content: "x" } });
+      await draftWorkflowManager.trigger({ id, triggerParams: { action: "review_complete", notes: "reviewed" } });
+    }
 
     expect(await text(list, { action: "list", drafts: true })).toContain('ids: "one,two"');
+  });
+
+  it.each([
+    { name: "a category", args: { id: "cat" } },
+    { name: "a search", args: { query: "anything" } },
+    { name: "a metadata filter", args: { missingMeta: "any" } },
+    { name: "backlinks", args: { id: "x", backlinks: true } },
+  ])("refuses to combine the draft listing with $name", async ({ args }) => {
+    // These used to reshape the other branches on the way past them:
+    // `list(drafts: true, id: "cat")` answered "no documents" about a category
+    // that had drafts in it. A wrong answer is worse than a refused one.
+    await write({ id: `${DRAFT_DIR}__cat__beta`, body: "# Beta" });
+
+    const answer = await text(list, { action: "list", drafts: true, ...args });
+
+    expect(answer).toContain("takes no other filter");
   });
 
   it("says so when there are none", async () => {

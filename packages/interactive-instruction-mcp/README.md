@@ -213,8 +213,8 @@ own lines rather than left to be inferred.
 sits.** What a document answers on its own -- its size, a heading that comes back, missing
 metadata -- means the same thing before and after promotion, so `lint` reports it for a draft
 too. What only the set can answer -- orphans, similarity, cycles -- says nothing useful about a
-document still being written: nothing links to a draft yet, so every draft would report
-`orphaned-document` on every run. An action that is about the workflow exists only in the state
+document still being written: a draft is usually a near-copy of the document it will replace,
+so it would be reported as `similar-documents` against the very document it is a draft of. An action that is about the workflow exists only in the state
 that has one.
 
 An action that does not cover a state says so, and does not say the document is missing. A draft

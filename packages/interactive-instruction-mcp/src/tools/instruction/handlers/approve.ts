@@ -53,6 +53,23 @@ function stableDraftBody(content: string): string {
   ].join("\n");
 }
 
+/**
+ * Why there is no draft under this id.
+ *
+ * Out of scope and absent are different facts. A document that has already been
+ * promoted exists -- there is simply nothing left to approve -- and calling
+ * that "not found" sends the caller off to re-check an id that was right.
+ */
+async function noDraftReason(params: {
+  reader: InstructionContext["reader"];
+  id: string;
+}): Promise<string> {
+  const { reader, id } = params;
+  return (await reader.documentExists(id))
+    ? `"${id}" is already promoted, so there is nothing left to approve.`
+    : `Error: Draft "${id}" not found.`;
+}
+
 export class ApproveHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "approve";
   readonly help = `Promote a draft to a managed document.
@@ -105,7 +122,7 @@ promote. \`ids\` promotes several drafts under one explanation.`;
     if (currentState === "editing") {
       const draftContent = await reader.getDocumentContent(DRAFT_PREFIX + id);
       if (draftContent === null) {
-        return errorResponse(`Error: Draft "${id}" not found.`);
+        return errorResponse(await noDraftReason({ reader, id }));
       }
 
       const submitted = await draftWorkflowManager.trigger({
@@ -360,7 +377,7 @@ Expected: self_review, user_reviewing or pending_approval` +
     const sourceDraftId = DRAFT_PREFIX + id;
     const targetPath = reader.getFilePath(finalTargetId);
     const draftContent = await reader.getDocumentContent(sourceDraftId);
-    if (!draftContent) return `**Error:** Draft "${id}" not found.`;
+    if (!draftContent) return await noDraftReason({ reader, id });
     const existingContent = await reader.getDocumentContent(finalTargetId);
     if (existingContent === null) {
       return this.generateSummary({ content: draftContent, targetId: finalTargetId, targetPath });
@@ -613,7 +630,7 @@ Each one needs its \`notes\` recorded first.`);
     // already in progress rather than the one being gated.
     const what = await this.buildApprovalWhat({ id, targetId, reader });
     if (what === null) {
-      return errorResponse(`Error: Draft "${id}" not found.`);
+      return errorResponse(await noDraftReason({ reader, id }));
     }
 
     const changeInfo = await this.generateChangeInfo({ id, targetId, reader });
@@ -682,7 +699,7 @@ Each one needs its \`notes\` recorded first.`);
 
     const draftContent = await reader.getDocumentContent(sourceDraftId);
     if (draftContent === null) {
-      return errorResponse(`Error: Draft "${id}" not found.`);
+      return errorResponse(await noDraftReason({ reader, id }));
     }
 
     // Move first, mark approved second. The other order left a failed rename

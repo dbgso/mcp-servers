@@ -1,0 +1,16 @@
+# Does `drafts` survive the merged inputSchema? The handler tests call the
+# handler; only a real call crosses the tool boundary that assembles one
+# schema out of every action's shape.
+{"server": {"args": ["{{TMPDIR}}"], "env": {"IIMCP_LINT_MAX_LINES": "3"}}}
+
+{"call": "instruction", "label": "no drafts yet", "args": {"action": "list", "drafts": true}, "expect": ["No drafts."], "expectNot": ["Unrecognized", "invalid_type", "Unknown action"]}
+{"call": "instruction", "label": "add two", "args": {"action": "add", "id": "one", "content": "# One", "description": "First", "whenToUse": ["w"]}, "expect": ["created"]}
+{"call": "instruction", "label": "add another", "args": {"action": "add", "id": "two", "content": "# Two", "description": "Second", "whenToUse": ["w"]}, "expect": ["created"]}
+{"call": "instruction", "label": "both listed by plain id, with the ids approve takes", "args": {"action": "list", "drafts": true}, "expect": ["2 draft(s)", "one", "two"], "expectNot": ["_mcp_drafts"]}
+{"call": "instruction", "label": "the ordinary listing still hides them", "args": {"action": "list", "recursive": true}, "expectNot": ["one", "two"]}
+{"call": "instruction", "label": "it offers the self-review they need, not a batch that would be refused", "args": {"action": "list", "drafts": true}, "expect": ["Awaiting self-review", "notes:"], "expectNot": ["ids:"]}
+{"call": "instruction", "label": "combining it with a filter is refused rather than answered wrongly", "args": {"action": "list", "drafts": true, "query": "one"}, "expect": ["takes no other filter"]}
+{"call": "instruction", "label": "a draft with something for lint to find", "args": {"action": "add", "id": "repeats", "content": "## Related\n\nOne.\n\n## Related\n\nTwo.", "description": "A draft with a heading that comes back", "whenToUse": ["w"]}, "expect": ["duplicate-heading"]}
+{"call": "instruction", "label": "lint holds a draft to its own rules", "args": {"action": "lint"}, "expect": ["repeats (draft)", "duplicate-heading"], "expectNot": ["orphaned-document", "similar-documents"]}
+{"call": "instruction", "label": "graph says a draft is out of scope, not missing", "args": {"action": "graph", "id": "one"}, "expect": ["is a draft"], "expectNot": ["not found"]}
+{"call": "instruction", "label": "set_status tells a promoted document apart from a missing one", "args": {"action": "set_status", "id": "nowhere", "status": "editing"}, "expect": ["not found"]}

@@ -89,7 +89,15 @@ through \`approve\`, not by declaring them.`;
       const content = await reader.getDocumentContent(draftId);
 
       if (content === null) {
-        results.push(`- ${targetId}: not found`);
+        // Out of scope and absent are different facts. A promoted document
+        // exists; it simply has no workflow state to reset, and reporting that
+        // as "not found" sends the caller off to re-check an id that was right.
+        const promoted = await reader.documentExists(targetId);
+        results.push(
+          promoted
+            ? `- ${targetId}: promoted, so it has no workflow state to reset`
+            : `- ${targetId}: not found`
+        );
         errorCount++;
         continue;
       }
@@ -128,12 +136,23 @@ through \`approve\`, not by declaring them.`;
       }
     }
 
+    // Chosen by what happened, not by how many were asked for. Picking on the
+    // count alone printed `Status updated for "x".` above a detail line saying
+    // `x: not found`, with no `isError` anywhere.
     const summary =
-      targetIds.length === 1
-        ? `Status updated for "${targetIds[0]}".`
-        : `Batch status update: ${successCount} succeeded, ${errorCount} failed.`;
+      errorCount === 0
+        ? targetIds.length === 1
+          ? `Status updated for "${targetIds[0]}".`
+          : `Batch status update: ${successCount} succeeded.`
+        : successCount === 0
+          ? targetIds.length === 1
+            ? `Could not set the status of "${targetIds[0]}".`
+            : `Batch status update: none of ${errorCount} succeeded.`
+          : `Batch status update: ${successCount} succeeded, ${errorCount} failed.`;
 
-    return textResponse(
+    const respond = errorCount === 0 ? textResponse : errorResponse;
+
+    return respond(
       `# Set Status Result
 
 ${summary}

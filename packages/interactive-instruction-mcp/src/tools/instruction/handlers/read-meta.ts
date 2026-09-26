@@ -84,9 +84,10 @@ export class ReadMetaHandler extends BaseActionHandler<Args, InstructionContext>
     const { reader } = params.context;
 
     // A draft is looked up under its prefix when there is no promoted
-    // document by that id. `read` answers with prose alone, and a draft never
-    // appears in `list`, so this is the only way to see what a draft's
-    // metadata currently says -- which is exactly when it most needs work.
+    // document by that id. `read` answers with prose alone and `list` names a
+    // draft without its metadata, so this is the only way to see what a
+    // draft's metadata currently says -- which is exactly when it most needs
+    // work.
     const promoted = await reader.getDocumentContent(id);
     const content = promoted ?? (await reader.getDocumentContent(DRAFT_PREFIX + id));
     if (content === null) {

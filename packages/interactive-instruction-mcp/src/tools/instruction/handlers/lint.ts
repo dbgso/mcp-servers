@@ -51,9 +51,12 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     // the trash directory -- a grouping argued for on the trash's behalf, never
     // on the draft's.
     //
-    // A rule about the set cannot say anything useful about a draft. Nothing
-    // links to a document still being written, so every draft would report
-    // `orphaned-document` on every run, which is worse than reporting nothing.
+    // A rule about the set cannot say anything useful about a draft. A draft is
+    // usually a near-copy of what it will replace, so `checkSimilarDocs` fires
+    // on almost every one -- about a resemblance that is the point rather than
+    // a problem, and naming an id nothing else accepts. (`checkOrphanedDocs`
+    // skips any id starting with `_` and never saw a draft either way; the
+    // rules this split is actually for are similarity and cycles.)
     const documents = result.documents.filter((d) => !isTrashedDocument(d.id));
     const corpus = documents.filter((d) => !isInternalDocument(d.id));
 

@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
-import { formatNextActions } from "../types.js";
+import { errorResponse, formatNextActions, type NextActionSuggestion } from "../types.js";
 import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
+import { draftWorkflowManager } from "../../../workflows/draft-workflow.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 import {
   isDescriptionMissing,
@@ -21,6 +22,52 @@ const listSchema = z.object({
 });
 
 type ListArgs = z.infer<typeof listSchema>;
+
+/**
+ * What to offer after listing drafts, given what each of them is ready for.
+ *
+ * `approve(ids:)` only appears when a batch of them would go through.
+ */
+function draftNextActions(params: { ready: string[]; unreviewed: string[] }): NextActionSuggestion[] {
+  const { ready, unreviewed } = params;
+
+  if (ready.length === 0 && unreviewed.length === 0) {
+    return [{
+      action: "add",
+      description: "Create a new draft",
+      example: 'instruction(action: "add", id: "new-doc", content: "...", description: "...", whenToUse: [...])',
+    }];
+  }
+
+  const suggestions: NextActionSuggestion[] = [];
+
+  if (unreviewed.length > 0) {
+    suggestions.push({
+      action: "approve",
+      description:
+        unreviewed.length === 1
+          ? "Record the self-review this draft still needs"
+          : `Record the self-review each of these ${unreviewed.length} still needs, one at a time`,
+      example: `instruction(action: "approve", id: "${unreviewed[0]}", notes: "<self-review>")`,
+    });
+  }
+
+  if (ready.length > 1) {
+    suggestions.push({
+      action: "approve",
+      description: `Promote the ${ready.length} that have been reviewed, under one explanation`,
+      example: `instruction(action: "approve", ids: "${ready.join(",")}", explanation: "<what these say and why>")`,
+    });
+  } else if (ready.length === 1) {
+    suggestions.push({
+      action: "approve",
+      description: "Promote the one that has been reviewed",
+      example: `instruction(action: "approve", id: "${ready[0]}", explanation: "<what it says and why>")`,
+    });
+  }
+
+  return suggestions;
+}
 
 export class ListHandler extends BaseActionHandler<ListArgs, InstructionContext> {
   readonly action = "list";
@@ -45,6 +92,37 @@ Usage:
     const { args, context } = params;
     const { reader } = context;
     const { id, recursive, query, missingMeta, backlinks, drafts } = args;
+
+    // `drafts` reaches its own branch last, and the filter it changes is shared
+    // by the ones before it -- so combining it with a search or a category
+    // silently reshaped those instead of being ignored, and
+    // `list(drafts: true, id: "cat")` answered "no documents" about a category
+    // that has drafts in it. A wrong answer is worse than a refused one.
+    if (drafts === true) {
+      const conflicting = [
+        ["id", id !== undefined],
+        ["query", query !== undefined],
+        ["missingMeta", missingMeta !== undefined],
+        ["backlinks", backlinks === true],
+      ].filter(([, given]) => given).map(([name]) => name as string);
+
+      if (conflicting.length > 0) {
+        return errorResponse(
+          `\`drafts: true\` lists every draft and takes no other filter, but ${conflicting.join(", ")} ${conflicting.length === 1 ? "was" : "were"} given.` +
+          formatNextActions([
+            {
+              action: "list",
+              description: "List the drafts",
+              example: 'instruction(action: "list", drafts: true)',
+            },
+            {
+              action: "list",
+              description: "Search the promoted corpus instead",
+              example: 'instruction(action: "list", query: "<term>")',
+            },
+          ]));
+      }
+    }
 
     /**
      * Which documents this listing is about.
@@ -226,6 +304,23 @@ Usage:
 
     if (drafts === true) {
       const ids = documents.map((doc) => doc.id);
+
+      // What `approve` will actually accept.
+      //
+      // A batch promotion refuses unless every draft in it has had its
+      // self-review recorded, so offering `ids: "<all of them>"` after `add`
+      // -- the commonest case, and the one this listing exists for -- hands
+      // back a call the server rejects. Suggesting a call that does not work
+      // is the defect this listing was added to help with, not a smaller
+      // version of it.
+      const ready: string[] = [];
+      const unreviewed: string[] = [];
+      for (const id of ids) {
+        const state = (await draftWorkflowManager.getStatus({ id }))?.state ?? "editing";
+        if (state === "user_reviewing" || state === "pending_approval") ready.push(id);
+        else unreviewed.push(id);
+      }
+
       return {
         content: [
           {
@@ -233,27 +328,12 @@ Usage:
             text:
               (ids.length === 0
                 ? "No drafts."
-                : `${ids.length} draft(s):\n\n` + reader.formatDocumentList({ documents, categories: [] })) +
-              formatNextActions(
-                ids.length === 0
-                  ? [{
-                      action: "add",
-                      description: "Create a new draft",
-                      example: 'instruction(action: "add", id: "new-doc", content: "...", description: "...", whenToUse: [...])',
-                    }]
-                  : [
-                      {
-                        action: "read",
-                        description: "Read one of them",
-                        example: `instruction(action: "read", id: "${ids[0]}")`,
-                      },
-                      {
-                        action: "approve",
-                        description: "Promote several under one explanation",
-                        example: `instruction(action: "approve", ids: "${ids.join(",")}", explanation: "<what these say and why>")`,
-                      },
-                    ]
-              ),
+                : `${ids.length} draft(s):\n\n` +
+                  reader.formatDocumentList({ documents, categories: [] }) +
+                  (unreviewed.length === 0
+                    ? ""
+                    : `\nAwaiting self-review: ${unreviewed.join(", ")}`)) +
+              formatNextActions(draftNextActions({ ready, unreviewed })),
           },
         ],
       };

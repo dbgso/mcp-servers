@@ -116,14 +116,31 @@ description: Test
       expect(result.content[0].text).toContain("invalid_literal");
     });
 
-    it("should return error when draft not found", async () => {
+    it("reports a failure as a failure", async () => {
+      // It used to print `Status updated for "nonexistent".` above a detail
+      // line saying `nonexistent: not found`, with no `isError` -- a caller
+      // reading the summary, or checking the flag, was told it worked.
       const result = await handler.execute({
         rawParams: { action: "set_status", id: "nonexistent", status: "editing" },
         context: { reader, config: { reminderEnabled: false } },
       });
 
-      expect(result.isError).toBeFalsy(); // Not an error, just reports in results
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Could not set the status");
       expect(result.content[0].text).toContain("not found");
+    });
+
+    it("tells a promoted document apart from a missing one", async () => {
+      // A promoted document exists; it just has no workflow state to reset.
+      fs.writeFileSync(path.join(docsDir, "promoted.md"), "---\ndescription: d\n---\n\n# Promoted\n");
+
+      const result = await handler.execute({
+        rawParams: { action: "set_status", id: "promoted", status: "editing" },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(result.content[0].text).toContain("no workflow state to reset");
+      expect(result.content[0].text).not.toContain("not found");
     });
   });
 
@@ -175,7 +192,8 @@ status: editing
         context: { reader, config: { reminderEnabled: false } },
       });
 
-      expect(result.isError).toBeFalsy();
+      // A batch that half worked is not a batch that worked.
+      expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("1 succeeded");
       expect(result.content[0].text).toContain("1 failed");
       expect(result.content[0].text).toContain("existing: editing -> editing");
@@ -278,7 +296,7 @@ description: Doc 2
         context: { reader, config: { reminderEnabled: false } },
       });
 
-      expect(result.isError).toBeFalsy();
+      expect(result.isError).toBe(true);
       const text = result.content[0].text as string;
       expect(text).toContain("1 succeeded");
       expect(text).toContain("1 failed");

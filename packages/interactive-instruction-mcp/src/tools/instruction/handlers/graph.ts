@@ -162,11 +162,14 @@ Writes an HTML file and returns its path. Open it in a browser.`;
       // the first as the second sends the caller off to check the id it just
       // used. A draft is not in the relation graph because the graph is of the
       // corpus -- it is not missing.
-      const isDraft = listed.documents.some((doc) => doc.id === DRAFT_PREFIX + id);
+      // Either form: the plain id every action takes, and the prefixed one the
+      // report used to print, which is a plausible thing to paste back.
+      const bare = id.startsWith(DRAFT_PREFIX) ? id.slice(DRAFT_PREFIX.length) : id;
+      const isDraft = listed.documents.some((doc) => doc.id === DRAFT_PREFIX + bare);
 
       return errorResponse(
         (isDraft
-          ? `"${id}" is a draft, and the relation graph is drawn over the promoted corpus. Its links are readable now, and it joins the graph when it is promoted.`
+          ? `"${bare}" is a draft, and the relation graph is drawn over the promoted corpus. Its links are readable now, and it joins the graph when it is promoted.`
           : `Error: Document "${id}" not found.`) +
         formatNextActions(
           isDraft
@@ -174,7 +177,7 @@ Writes an HTML file and returns its path. Open it in a browser.`;
                 {
                   action: "read_meta",
                   description: "Read the draft's links",
-                  example: `instruction(action: "read_meta", id: "${id}")`,
+                  example: `instruction(action: "read_meta", id: "${bare}")`,
                 },
                 {
                   action: "graph",

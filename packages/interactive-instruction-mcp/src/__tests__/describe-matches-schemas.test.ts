@@ -45,8 +45,10 @@ function examplesFor(action: string): string[] {
 /** Where a caller could learn a parameter exists at all. */
 function mentions(params: { action: string; param: string; help: string }): boolean {
   const { action, param, help } = params;
+  // `param + ":"`, not the bare name: `"provide"` contains `id`, so a bare
+  // substring can never fail for the commonest parameter of all.
   return (
-    examplesFor(action).some((line) => line.includes(`${param}:`)) || help.includes(param)
+    examplesFor(action).some((line) => line.includes(`${param}:`)) || help.includes(`${param}:`)
   );
 }
 
@@ -130,26 +132,65 @@ function examplesInSource(): Example[] {
   const found: Example[] = [];
 
   for (const file of sourceFiles(toolDir)) {
-    for (const line of readFileSync(file, "utf-8").split("\n")) {
-      // Examples are written on one line, and the call ends at the first `)`
-      // that is not inside the arguments -- good enough for a literal.
-      const matches = line.matchAll(/instruction\(action: \\?"([a-z_]+)\\?"([^)]*)\)/g);
-      for (const match of matches) {
-        // `instruction(action: "add", ...)` points at an action; it does not
-        // claim to be a call. An ellipsis standing where arguments would go is
-        // the difference between a reference and an example.
-        if (/,\s*\.\.\.\s*$/.test(match[2])) continue;
-        found.push({
-          file: file.slice(toolDir.length + 1),
-          action: match[1],
-          params: [...match[2].matchAll(/([a-zA-Z]+):/g)].map((p) => p[1]),
-          text: match[0],
-        });
-      }
+    // Whole file, not line by line: an example long enough to wrap is exactly
+    // the one most likely to have lost an argument, and a per-line scan cannot
+    // see it. `graph`'s help already wraps one.
+    const source = readFileSync(file, "utf-8");
+
+    for (const start of source.matchAll(/instruction\(action: \\?"([a-z_]+)\\?"/g)) {
+      const args = argumentsFrom({ source, from: start.index + start[0].length });
+      if (args === null) continue;
+
+      // `instruction(action: "add", ...)` points at an action; it does not
+      // claim to be a call. An ellipsis standing where arguments would go is
+      // the difference between a reference and an example.
+      if (/,\s*\.\.\.\s*$/.test(args)) continue;
+
+      found.push({
+        file: file.slice(toolDir.length + 1),
+        action: start[1],
+        params: parameterNames(args),
+        text: `${start[0]}${args})`.replace(/\s+/g, " "),
+      });
     }
   }
 
   return found;
+}
+
+/**
+ * The argument text up to the `)` that closes the call.
+ *
+ * Counting parentheses rather than stopping at the first one: a value may well
+ * contain a bracket, and treating that as the end of the call made a perfectly
+ * valid example look like one missing half its arguments.
+ */
+function argumentsFrom(params: { source: string; from: number }): string | null {
+  const { source, from } = params;
+  let depth = 0;
+
+  for (let i = from; i < source.length; i++) {
+    const char = source[i];
+    if (char === "(") depth++;
+    else if (char === ")") {
+      if (depth === 0) return source.slice(from, i);
+      depth--;
+    } else if (char === "\n" && source.slice(from, i).trim() === "") return null;
+  }
+
+  return null;
+}
+
+/**
+ * The parameter names in an argument list, ignoring anything inside a value.
+ *
+ * Without that, `content: "Usage: run it"` contributes a parameter called
+ * `Usage`, which makes the extracted names untrustworthy for anything stricter
+ * than "is the required one present".
+ */
+function parameterNames(args: string): string[] {
+  const outsideValues = args.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+  return [...outsideValues.matchAll(/([a-zA-Z]+):/g)].map((match) => match[1]);
 }
 
 describe("the examples this server prints", () => {
@@ -182,5 +223,41 @@ describe("the examples this server prints", () => {
     });
 
     expect(broken).toEqual([]);
+  });
+
+  it("shows a real value where the schema accepts only a few", () => {
+    // Names were checked; values were not. `set_status(status: "<status>")`
+    // reads like every other placeholder here, and the schema is
+    // `z.literal("editing")` -- so the documented call is rejected, which is
+    // the class #62 was about. Where the schema fixes the set of values, the
+    // example has to name one of them.
+    const allowed = new Map<string, string[]>();
+    for (const handler of HANDLERS) {
+      for (const [name, field] of Object.entries((handler.schema as z.ZodObject<z.ZodRawShape>).shape)) {
+        const inner = field instanceof z.ZodOptional ? (field.unwrap() as z.ZodTypeAny) : field;
+        if (inner instanceof z.ZodLiteral && typeof inner.value === "string") {
+          allowed.set(`${handler.action}.${name}`, [inner.value]);
+        } else if (inner instanceof z.ZodEnum) {
+          allowed.set(`${handler.action}.${name}`, inner.options as string[]);
+        }
+      }
+    }
+
+    const wrong: string[] = [];
+    for (const example of examplesInSource()) {
+      for (const [param, values] of allowed) {
+        const [action, name] = param.split(".");
+        if (action !== example.action || name === "action") continue;
+
+        const shown = new RegExp(`${name}: "([^"]*)"`).exec(example.text);
+        // `${...}` is filled in at runtime with whatever the caller passed, so
+        // the literal in the source is not the value anyone sees.
+        if (shown !== null && !shown[1].includes("${") && !values.includes(shown[1])) {
+          wrong.push(`${example.file}: ${name}: "${shown[1]}" (allowed: ${values.join(", ")})`);
+        }
+      }
+    }
+
+    expect(wrong).toEqual([]);
   });
 });
