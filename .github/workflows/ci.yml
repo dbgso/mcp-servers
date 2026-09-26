@@ -22,8 +22,12 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # `-- --coverage` puts the flag after vitest's `--`, where it is read as a
+      # test-name filter and silently dropped. Coverage has therefore never run
+      # in CI, and the thresholds in every vitest.config.ts have never been
+      # checked -- which is how a package came to sit 7 points under its own.
       - name: Test with coverage
-        run: pnpm -r test -- --coverage
+        run: pnpm -r test --coverage
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v5

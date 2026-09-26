@@ -4,6 +4,10 @@ import type { InstructionContext } from "../types.js";
 import { formatNextActions } from "../types.js";
 import { isInternalDocument } from "../../../constants.js";
 import type { MarkdownSummary } from "../../../types/index.js";
+import {
+  isDescriptionMissing,
+  isWhenToUseMissing,
+} from "../../../services/metadata-completeness.js";
 
 const listSchema = z.object({
   action: z.literal("list"),
@@ -66,8 +70,12 @@ Usage:
       type: "description" | "whenToUse" | "any";
     }): boolean => {
       const { doc, type } = params;
-      const noDescription = !doc.description || doc.description.trim() === "";
-      const noWhenToUse = !doc.whenToUse || doc.whenToUse.length === 0;
+      // Shared with `lint`, which is the other half of this question. Checking
+      // for an empty string here missed every document the reader had given
+      // the `(No description)` placeholder to -- which is all of the ones
+      // `lint` reports.
+      const noDescription = isDescriptionMissing(doc);
+      const noWhenToUse = isWhenToUseMissing(doc);
 
       switch (type) {
         case "description":

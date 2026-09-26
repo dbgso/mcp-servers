@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve, dirname, join, extname } from "node:path";
 import Asciidoctor from "@asciidoctor/core";
 import { BaseHandler } from "./base.js";
+import { convertBlocks } from "./asciidoc-convert.js";
 import { diffStructures, type DiffableItem, type GoToDefinitionResult, getErrorMessage } from "mcp-shared";
 import type {
   AstReadResult,
@@ -33,8 +34,6 @@ const asciidoctor = Asciidoctor();
 const MARKERS = {
   INCLUDE: "__ADOC_INCLUDE__",
   COMMENT: "__ADOC_COMMENT__",
-  COMMENT_BLOCK_START: "__ADOC_COMMENT_BLOCK_START__",
-  COMMENT_BLOCK_END: "__ADOC_COMMENT_BLOCK_END__",
 } as const;
 
 /**
@@ -48,21 +47,13 @@ function preprocess(source: string): string {
   // Include directives: include::path[attrs]
   result = result.replace(/^(include::.*?\[.*?\])$/gm, `${MARKERS.INCLUDE}$1${MARKERS.INCLUDE}`);
 
-  // Single-line comments: // comment
+  // Single-line comments: // comment. A block comment's `////` delimiters are
+  // matched by this rule too -- they are a line starting with `//` -- so each
+  // one comes back through the same marker and the block survives a round trip
+  // without a rule of its own. The pair of markers that used to do that never
+  // ran: this replace had already consumed the delimiters by the time it was
+  // reached.
   result = result.replace(/^(\/\/.*)$/gm, `${MARKERS.COMMENT}$1${MARKERS.COMMENT}`);
-
-  // Block comments: //// ... ////
-  result = result.replace(
-    /^(\/\/\/\/)$/gm,
-     
-    (match, _, offset) => {
-      // Count how many //// we've seen before this one
-      const before = result.slice(0, offset);
-      const count = (before.match(/^\/\/\/\/$/gm) || []).length;
-      // Even count = start, odd count = end
-      return count % 2 === 0 ? MARKERS.COMMENT_BLOCK_START : MARKERS.COMMENT_BLOCK_END;
-    }
-  );
 
   return result;
 }
@@ -77,12 +68,8 @@ function postprocess(output: string): string {
   // Restore include directives
   result = result.replace(new RegExp(`${MARKERS.INCLUDE}(.+?)${MARKERS.INCLUDE}`, "g"), "$1");
 
-  // Restore single-line comments
+  // Restore single-line comments, block-comment delimiters included.
   result = result.replace(new RegExp(`${MARKERS.COMMENT}(.+?)${MARKERS.COMMENT}`, "g"), "$1");
-
-  // Restore block comment delimiters
-  result = result.replace(new RegExp(MARKERS.COMMENT_BLOCK_START, "g"), "////");
-  result = result.replace(new RegExp(MARKERS.COMMENT_BLOCK_END, "g"), "////");
 
   return result;
 }
@@ -121,7 +108,7 @@ export class AsciidocHandler extends BaseHandler {
       type: "asciidoc",
       title: doc.getTitle() as string | undefined,
       docAttributes: docAttributes.length > 0 ? docAttributes : undefined,
-      blocks: this.convertBlocks({ blocks: doc.getBlocks() }),
+      blocks: convertBlocks({ blocks: doc.getBlocks() }),
     };
 
     return {
@@ -155,7 +142,7 @@ export class AsciidocHandler extends BaseHandler {
       const ast: AsciidocDocument = {
         type: "asciidoc",
         title: doc.getTitle() as string | undefined,
-        blocks: this.convertBlocks({ blocks: doc.getBlocks() }),
+        blocks: convertBlocks({ blocks: doc.getBlocks() }),
       };
       // Return section as full query
       return {
@@ -244,131 +231,6 @@ export class AsciidocHandler extends BaseHandler {
     }
 
     return attributes;
-  }
-
-  private convertBlocks(params: {
-    blocks: unknown[];
-    visited?: WeakSet<object>;
-  }): AsciidocBlock[] {
-    const { blocks, visited = new WeakSet<object>() } = params;
-    return blocks.map((block: unknown) => {
-      // Prevent circular reference
-      if (typeof block === "object" && block !== null) {
-        if (visited.has(block)) {
-          return { context: "circular_ref" };
-        }
-        visited.add(block);
-      }
-
-      const b = block as {
-        getContext(): string;
-        getContent?(): string;
-        getLines?(): string[];
-        getBlocks?(): unknown[];
-        getLevel?(): number;
-        getTitle?(): string;
-        getStyle?(): string;
-        getAttributes?(): Record<string, unknown>;
-        getMarker?(): string;
-      };
-
-      const result: AsciidocBlock = {
-        context: b.getContext(),
-      };
-
-      // Capture level for sections and lists
-      if (typeof b.getLevel === "function") {
-        const level = b.getLevel();
-        if (typeof level === "number") {
-          result.level = level;
-        }
-      }
-
-      // Capture title for sections
-      if (typeof b.getTitle === "function") {
-        const title = b.getTitle();
-        if (title) {
-          result.title = title;
-        }
-      }
-
-      // Capture style for listings (e.g., "source")
-      if (typeof b.getStyle === "function") {
-        const style = b.getStyle();
-        if (style) {
-          result.style = style;
-        }
-      }
-
-      // Capture relevant attributes
-      if (typeof b.getAttributes === "function") {
-        const attrs = b.getAttributes();
-        if (attrs && typeof attrs === "object") {
-          const relevantAttrs: Record<string, string> = {};
-          const keysToCapture = ["language", "source-language", "linenums", "role"];
-          for (const key of keysToCapture) {
-            if (key in attrs && typeof attrs[key] === "string") {
-              relevantAttrs[key] = attrs[key] as string;
-            }
-          }
-          if (Object.keys(relevantAttrs).length > 0) {
-            result.attributes = relevantAttrs;
-          }
-        }
-      }
-
-      // Capture marker for list items
-      if (typeof b.getMarker === "function") {
-        const marker = b.getMarker();
-        if (marker) {
-          result.marker = marker;
-        }
-      }
-
-      // Capture source for paragraphs (getSource returns raw AsciiDoc)
-      const bWithSource = b as { getSource?(): string };
-      if (typeof bWithSource.getSource === "function") {
-        const source = bWithSource.getSource();
-        if (source) {
-          result.source = source;
-        }
-      }
-
-      // Capture text for list items
-      // For list items, prefer raw .text property over getText() method
-      // .text preserves raw AsciiDoc syntax (e.g., link:url[text])
-      // .getText() returns rendered HTML (e.g., <a href="url">text</a>)
-      const bWithTextProp = b as { text?: string };
-      if (typeof bWithTextProp.text === "string" && bWithTextProp.text) {
-        result.text = bWithTextProp.text;
-      } else {
-        const bWithText = b as { getText?(): string };
-        if (typeof bWithText.getText === "function") {
-          const text = bWithText.getText();
-          if (text) {
-            result.text = text;
-          }
-        }
-      }
-
-      // Capture lines
-      if (typeof b.getLines === "function") {
-        const lines = b.getLines();
-        if (Array.isArray(lines)) {
-          result.lines = lines;
-        }
-      }
-
-      // Process nested blocks
-      if (typeof b.getBlocks === "function") {
-        const nestedBlocks = b.getBlocks();
-        if (nestedBlocks && nestedBlocks.length > 0) {
-          result.blocks = this.convertBlocks({ blocks: nestedBlocks, visited });
-        }
-      }
-
-      return result;
-    });
   }
 
   /**
@@ -486,33 +348,11 @@ export class AsciidocHandler extends BaseHandler {
         break;
 
       case "ulist":
-        // Unordered list
-        if (block.blocks) {
-          for (const item of block.blocks) {
-            if (item.context === "list_item") {
-              const marker = item.marker ?? "*";
-              // Prefer source (raw AsciiDoc) over text (rendered HTML)
-              const text = item.source ?? item.text ?? item.lines?.join(" ") ?? "";
-              lines.push(`${marker} ${text}`);
-            }
-          }
-          lines.push("");
-        }
+        this.serializeListItems({ block, lines, depth, defaultMarker: "*" });
         break;
 
       case "olist":
-        // Ordered list
-        if (block.blocks) {
-          for (const item of block.blocks) {
-            if (item.context === "list_item") {
-              const marker = item.marker ?? ".";
-              // Prefer source (raw AsciiDoc) over text (rendered HTML)
-              const text = item.source ?? item.text ?? item.lines?.join(" ") ?? "";
-              lines.push(`${marker} ${text}`);
-            }
-          }
-          lines.push("");
-        }
+        this.serializeListItems({ block, lines, depth, defaultMarker: "." });
         break;
 
       case "quote":
@@ -568,6 +408,13 @@ export class AsciidocHandler extends BaseHandler {
           if (block.lines) {
             lines.push(block.lines.join("\n"));
           }
+          // A multi-line admonition is parsed as a delimited block with its
+          // prose in nested blocks rather than in `lines`, so an arm that read
+          // only `lines` wrote `[WARNING]` and an empty `====` pair -- the body
+          // gone, and nothing said about it.
+          if (block.blocks) {
+            this.serializeBlocks({ blocks: block.blocks, lines, depth: depth + 1 });
+          }
           lines.push("====");
         }
         lines.push("");
@@ -584,6 +431,42 @@ export class AsciidocHandler extends BaseHandler {
           this.serializeBlocks({ blocks: block.blocks, lines, depth: depth + 1 });
         }
     }
+  }
+
+
+  /**
+   * The items of a list, and whatever hangs off them.
+   *
+   * Ordered and unordered lists differ only in the marker to fall back on, so
+   * they share this. An item's nested blocks are serialised after its own line:
+   * a sub-list under a bullet is ordinary AsciiDoc, and the arm this replaces
+   * wrote the item text and stopped, so `ast_write` dropped every nested list
+   * without reporting anything. Each item carries the marker it was parsed
+   * with, so writing the nested list straight after its parent item reproduces
+   * the nesting the parser found.
+   */
+  private serializeListItems(params: {
+    block: AsciidocBlock;
+    lines: string[];
+    depth: number;
+    defaultMarker: string;
+  }): void {
+    const { block, lines, depth, defaultMarker } = params;
+    if (!block.blocks) return;
+
+    for (const item of block.blocks) {
+      if (item.context !== "list_item") continue;
+
+      const marker = item.marker ?? defaultMarker;
+      // Prefer source (raw AsciiDoc) over text (rendered HTML)
+      const text = item.source ?? item.text ?? item.lines?.join(" ") ?? "";
+      lines.push(`${marker} ${text}`);
+
+      if (item.blocks) {
+        this.serializeBlocks({ blocks: item.blocks, lines, depth: depth + 1 });
+      }
+    }
+    lines.push("");
   }
 
   /**

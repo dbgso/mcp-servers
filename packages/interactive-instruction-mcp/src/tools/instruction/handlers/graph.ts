@@ -15,6 +15,7 @@ import {
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
 import { isInternalDocument } from "../../../constants.js";
+import { isDescriptionMissing } from "../../../services/metadata-completeness.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 
 /**
@@ -289,7 +290,11 @@ export function buildGraph(params: {
       id: nodeId,
       label: nodeId,
       group: linked ? groupOf(nodeId) : ORPHAN_GROUP,
-      tooltip: doc.description === "" ? nodeId : `${nodeId} — ${doc.description}`,
+      // A document whose description was never written carries the placeholder
+      // `list` shows, not an empty string -- so testing for `""` here left
+      // every such node tooltipped `id — (No description)`, which says less
+      // than the id on its own.
+      tooltip: isDescriptionMissing(doc) ? nodeId : `${nodeId} — ${doc.description}`,
     };
   });
 
