@@ -1,13 +1,11 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
-import { formatNextActions } from "../types.js";
+import { errorResponse, formatNextActions } from "../types.js";
 import {
   parseFrontmatter,
   updateFrontmatter,
 } from "../../../utils/frontmatter-parser.js";
-import * as fs from "node:fs/promises";
-import { errorResponse } from "../types.js";
 import {
   textResponse,
   findInvalidDocs,
@@ -128,9 +126,15 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
       frontmatter: newFrontmatter,
     });
 
-    const filePath = reader.getFilePath(id);
-    await fs.writeFile(filePath, newContent, "utf-8");
-    reader.invalidateCache();
+    // Written through the reader, which is the only write path that normalises
+    // the trailing newline, invalidates the list cache and checks that the
+    // document is one this server manages. Writing with `fs.writeFile` and a
+    // path from `getFilePath` skipped all three -- and the missing newline in
+    // #51 was reported for exactly this route alongside the others.
+    const written = await reader.updateDocument({ id, content: newContent });
+    if (!written.success) {
+      return errorResponse(`Error: ${written.error ?? "Unknown error"}`);
+    }
 
 
     return textResponse(

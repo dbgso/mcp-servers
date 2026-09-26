@@ -157,9 +157,15 @@ ${warningSection}`
       frontmatter: newFrontmatter,
     });
 
-    const filePath = reader.getFilePath(id);
-    await fs.writeFile(filePath, newContent, "utf-8");
-    reader.invalidateCache();
+    // Written through the reader, which is the only write path that normalises
+    // the trailing newline, invalidates the list cache and checks that the
+    // document is one this server manages. Writing with `fs.writeFile` and a
+    // path from `getFilePath` skipped all three -- and the missing newline in
+    // #51 was reported for exactly this route alongside the others.
+    const written = await reader.updateDocument({ id, content: newContent });
+    if (!written.success) {
+      return errorResponse(`Error: ${written.error ?? "Unknown error"}`);
+    }
 
 
     return textResponse(

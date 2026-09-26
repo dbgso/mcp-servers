@@ -691,8 +691,20 @@ Each one needs its \`notes\` recorded first.`);
   }
 
   /**
-   * Stamp the promoted document as approved. Runs after the move succeeds, so a
-   * failed promotion leaves the draft exactly as it was.
+   * Clear the workflow's own fields from the promoted document, and record when
+   * it was approved. Runs after the move succeeds, so a failed promotion leaves
+   * the draft exactly as it was.
+   *
+   * `status` and `selfReviewNotes` exist to run the approval conversation: the
+   * state machine reads the first, and the second is the AI's account of its
+   * own draft. Neither means anything once the document is promoted -- every
+   * promoted document is approved -- and they were being published. Reported
+   * as #50: a reader got a paragraph of review notes at the top of the
+   * document on every `read`, for all 7 documents in that session.
+   *
+   * `confirmedAt` goes with them, for the same reason. `approvedAt` stays: when
+   * a document became part of the corpus is a fact about the document, and it
+   * is one line.
    */
   private async markApproved(params: {
     id: string;
@@ -702,13 +714,19 @@ Each one needs its \`notes\` recorded first.`);
     const content = await reader.getDocumentContent(id);
     if (content === null) return;
 
+    const {
+      status: _status,
+      selfReviewNotes: _selfReviewNotes,
+      confirmedAt: _confirmedAt,
+      ...published
+    } = parseFrontmatter(content);
+
     await reader.updateDocument({
       id,
       content: updateFrontmatter({
         content: stripFrontmatter(content),
         frontmatter: {
-          ...parseFrontmatter(content),
-          status: "approved" as const,
+          ...published,
           approvedAt: new Date().toISOString(),
         },
       }),

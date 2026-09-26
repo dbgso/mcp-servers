@@ -4,7 +4,11 @@ import type { InstructionContext } from "../types.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
 import { draftWorkflowManager } from "../../../workflows/draft-workflow.js";
-import { updateFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
+import {
+  parseFrontmatter,
+  updateFrontmatter,
+  stripFrontmatter,
+} from "../../../utils/frontmatter-parser.js";
 
 const schema = z.object({
   action: z.literal("add"),
@@ -78,6 +82,16 @@ Path: ${result.path}${workflowStatus}` +
 
   /**
    * Generate content with frontmatter.
+   *
+   * What the caller wrote in the content's own frontmatter is the base; the
+   * arguments are written over the top. It used to be discarded outright, so
+   * `relatedDocs` written there was dropped in silence -- reported as #50
+   * after 7 documents lost 11 edges between them. Nothing about the document
+   * said so, because the prose still read correctly; it showed up only when
+   * the graph was drawn, which is the one place those links are used.
+   *
+   * Arguments win where both say something: they are the ones the tool
+   * validated and the ones the caller passed most recently.
    */
   private generateContentWithFrontmatter(params: {
     content: string;
@@ -87,15 +101,17 @@ Path: ${result.path}${workflowStatus}` +
   }): string {
     const { content, description, whenToUse, relatedDocs } = params;
 
-    // Strip any existing frontmatter from content
+    const fromContent = parseFrontmatter(content);
     const bodyContent = stripFrontmatter(content);
 
     return updateFrontmatter({
       content: bodyContent,
       frontmatter: {
+        ...fromContent,
         description,
         whenToUse,
-        relatedDocs,
+        relatedDocs: relatedDocs ?? fromContent.relatedDocs,
+        // The draft is entering the workflow, whatever the content claimed.
         status: "editing",
       },
     });

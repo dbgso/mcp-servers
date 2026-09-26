@@ -23,6 +23,12 @@ const schema = z.object({
     ),
   description: z.string().optional().describe("Updated description"),
   whenToUse: z.array(z.string()).optional().describe("Updated usage scenarios"),
+  relatedDocs: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Replaces the document's relatedDocs. Pass the whole list, not an addition -- `link_add` / `link_remove` are the incremental pair."
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -34,8 +40,8 @@ export class UpdateHandler extends BaseActionHandler<Args, InstructionContext> {
 
 Usage:
 - \`instruction(action: "update", id: "doc-id", content: "...")\` - Update the body
-- \`instruction(action: "update", id: "doc-id", description: "...", whenToUse: ["..."])\` - Update
-  the metadata alone; omitting \`content\` keeps the body as it is
+- \`instruction(action: "update", id: "doc-id", description: "...", whenToUse: ["..."], relatedDocs: ["..."])\`
+  - Update the metadata alone; omitting \`content\` keeps the body as it is
 - Draft: direct overwrite. Promoted: pending flow with diff preview.`;
 
   readonly schema = schema;
@@ -44,16 +50,21 @@ Usage:
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, content, description, whenToUse } = params.args;
+    const { id, content, description, whenToUse, relatedDocs } = params.args;
     const { reader } = params.context;
 
     // Every field but the id is optional, so nothing in the schema stops
     // `update(id)` on its own -- which would rewrite the document with exactly
     // what it already said, and on a promoted document stage an empty diff for
     // someone to approve.
-    if (content === undefined && description === undefined && whenToUse === undefined) {
+    if (
+      content === undefined &&
+      description === undefined &&
+      whenToUse === undefined &&
+      relatedDocs === undefined
+    ) {
       return errorResponse(
-        `Nothing to update for "${id}". Pass \`content\` to change the body, or \`description\` / \`whenToUse\` to change the metadata.` +
+        `Nothing to update for "${id}". Pass \`content\` to change the body, or \`description\` / \`whenToUse\` / \`relatedDocs\` to change the metadata.` +
         formatNextActions([{
           action: "update_meta",
           description: "See what the metadata should say",
@@ -71,7 +82,7 @@ Usage:
 
     // Check if draft exists first
     if (draftExists) {
-      return this.handleDraftUpdate({ id, draftId, content, description, whenToUse, reader });
+      return this.handleDraftUpdate({ id, draftId, content, description, whenToUse, relatedDocs, reader });
     }
 
     // Check if promoted document exists
@@ -90,6 +101,7 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
       content,
       description,
       whenToUse,
+      relatedDocs,
       originalContent,
       originalPath,
       reader,
@@ -105,9 +117,10 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
     content?: string;
     description?: string;
     whenToUse?: string[];
+    relatedDocs?: string[];
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, draftId, content, description, whenToUse, reader } = params;
+    const { id, draftId, content, description, whenToUse, relatedDocs, reader } = params;
 
     // Get existing draft to preserve frontmatter
     const existingContent = await reader.getDocumentContent(draftId);
@@ -120,6 +133,7 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
       content: content ?? existingContent ?? "",
       description,
       whenToUse,
+      relatedDocs,
       existingFrontmatter,
     });
 
@@ -154,11 +168,12 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
     content?: string;
     description?: string;
     whenToUse?: string[];
+    relatedDocs?: string[];
     originalContent: string;
     originalPath: string;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, content, description, whenToUse, originalContent, originalPath, reader } = params;
+    const { id, content, description, whenToUse, relatedDocs, originalContent, originalPath, reader } = params;
 
     // Preserve existing frontmatter if not overridden
     const existingFrontmatter = parseFrontmatter(originalContent);
@@ -170,6 +185,7 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
       content: content ?? originalContent,
       description,
       whenToUse,
+      relatedDocs,
       existingFrontmatter,
     });
 
@@ -232,9 +248,10 @@ ${diff}\`\`\`` +
     content: string;
     description?: string;
     whenToUse?: string[];
+    relatedDocs?: string[];
     existingFrontmatter: DocumentFrontmatter;
   }): string {
-    const { content, description, whenToUse, existingFrontmatter } = params;
+    const { content, description, whenToUse, relatedDocs, existingFrontmatter } = params;
 
     // Check if new content already has frontmatter
     const newFrontmatter = parseFrontmatter(content);
@@ -252,6 +269,9 @@ ${diff}\`\`\`` +
     }
     if (whenToUse !== undefined) {
       merged.whenToUse = whenToUse;
+    }
+    if (relatedDocs !== undefined) {
+      merged.relatedDocs = relatedDocs;
     }
 
     // Only infer description as a last-resort default when nothing is set.
