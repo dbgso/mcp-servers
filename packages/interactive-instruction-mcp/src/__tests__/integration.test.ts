@@ -16,6 +16,7 @@ import {
   RenameHandler,
   ApplyHandler,
   ApproveHandler,
+  ReadMetaHandler,
 } from "../tools/instruction/handlers/index.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 
@@ -856,6 +857,111 @@ describe("Integration Tests", () => {
         expect(isRefusal(result)).toBe(true);
         expect(result.content[0].text).toContain("2 draft(s)");
       });
+    });
+  });
+  // ============================================================
+  // D. Metadata leaves the corpus only when it is asked for
+  // ============================================================
+  describe("D. Where metadata is read", () => {
+    let approveHandler: ApproveHandler;
+    let readMetaHandler: ReadMetaHandler;
+
+    /** The document part of an answer, without the next-action suggestions. */
+    function body(result: { content: { type: string; text?: string }[] }): string {
+      return result.content.map((c) => c.text ?? "").join("\n").split("**Next actions:**")[0];
+    }
+
+    beforeEach(() => {
+      approveHandler = new ApproveHandler();
+      readMetaHandler = new ReadMetaHandler();
+      resetMutationGatesForTesting();
+    });
+
+    it("carries a document from draft to promoted without ever printing its frontmatter", async () => {
+      // The whole lifecycle in one test, because the leak reported as #50 was
+      // not in any single step: `add` writes the metadata, `approve` writes
+      // the review notes, and it was `read` -- three steps later -- that put
+      // them in front of a reader.
+      const id = "lifecycle-metadata";
+
+      await addHandler.execute({
+        rawParams: {
+          action: "add",
+          id,
+          content: "# Lifecycle\n\nThe prose a reader wants.",
+          description: "What the lifecycle document is for",
+          whenToUse: ["reviewing the lifecycle"],
+        },
+        context,
+      });
+
+      // As a draft: prose only.
+      const draftRead = await readHandler.execute({
+        rawParams: { action: "read", id },
+        context,
+      });
+      expect(body(draftRead)).toContain("The prose a reader wants.");
+      expect(body(draftRead)).not.toContain("description:");
+      expect(body(draftRead)).not.toContain("whenToUse:");
+
+      // The metadata is still readable -- through the action that is for it.
+      const draftMeta = await readMetaHandler.execute({
+        rawParams: { action: "read_meta", id },
+        context,
+      });
+      expect(draftMeta.content[0].text).toContain("**[Draft]**");
+      expect(draftMeta.content[0].text).toContain("What the lifecycle document is for");
+      expect(draftMeta.content[0].text).toContain("reviewing the lifecycle");
+
+      // Record a self-review, which writes `selfReviewNotes` into the draft.
+      await approveHandler.execute({
+        rawParams: { action: "approve", id, notes: "reviewed: one topic, ready" },
+        context,
+      });
+
+      const reviewedRead = await readHandler.execute({
+        rawParams: { action: "read", id },
+        context,
+      });
+      expect(body(reviewedRead)).not.toContain("selfReviewNotes");
+      expect(body(reviewedRead)).not.toContain("reviewed: one topic");
+      expect(body(reviewedRead)).not.toContain("status:");
+
+      // Promote it, past the gate.
+      const explanation = "This records the lifecycle, and belongs at the top level.";
+      await throughGate(() =>
+        approveHandler.execute({
+          rawParams: { action: "approve", id, explanation, force: true },
+          context,
+        })
+      );
+
+      // Promoted: the workflow fields are gone from the file itself.
+      const promotedFile = await fs.readFile(path.join(docsDir, `${id}.md`), "utf-8");
+      expect(promotedFile).not.toContain("selfReviewNotes");
+      expect(promotedFile).not.toContain("status:");
+      expect(promotedFile).toContain("description:");
+
+      // And `read` still answers with prose alone.
+      const promotedRead = await readHandler.execute({
+        rawParams: { action: "read", id },
+        context,
+      });
+      expect(body(promotedRead)).toContain("The prose a reader wants.");
+      expect(body(promotedRead)).not.toContain("description:");
+      expect(body(promotedRead)).not.toContain("approvedAt:");
+
+      // With the metadata still one action away.
+      const promotedMeta = await readMetaHandler.execute({
+        rawParams: { action: "read_meta", id },
+        context,
+      });
+      expect(promotedMeta.content[0].text).toContain("What the lifecycle document is for");
+      expect(promotedMeta.content[0].text).not.toContain("**[Draft]**");
+      // The one field promotion writes is readable again -- in the action for
+      // metadata, marked as a record rather than as something to set.
+      expect(promotedMeta.content[0].text).toContain("## Also recorded");
+      expect(promotedMeta.content[0].text).toContain("approvedAt");
     });
   });
 });

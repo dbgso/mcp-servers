@@ -66,9 +66,9 @@ Usage:
       return errorResponse(
         `Nothing to update for "${id}". Pass \`content\` to change the body, or \`description\` / \`whenToUse\` / \`relatedDocs\` to change the metadata.` +
         formatNextActions([{
-          action: "update_meta",
+          action: "read_meta",
           description: "See what the metadata should say",
-          example: `instruction(action: "update_meta", id: "${id}")`,
+          example: `instruction(action: "read_meta", id: "${id}")`,
         }]));
     }
 

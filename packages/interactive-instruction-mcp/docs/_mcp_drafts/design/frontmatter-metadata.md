@@ -37,9 +37,9 @@ whenToUse:
 2. **Fallback**: If no frontmatter, extract description from first paragraph
 3. **Display**: Show whenToUse as "When to use" in help output
 
-## update_meta Tool
+## read_meta Tool
 
-Added `update_meta` tool that returns a prompt for AI to generate/update metadata:
+Added `read_meta` tool that returns a prompt for AI to generate/update metadata:
 - Shows current metadata
 - Shows document content
 - Provides instructions for generating description and whenToUse

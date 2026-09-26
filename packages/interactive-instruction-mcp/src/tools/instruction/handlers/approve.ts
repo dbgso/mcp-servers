@@ -716,9 +716,11 @@ Each one needs its \`notes\` recorded first.`);
    * as #50: a reader got a paragraph of review notes at the top of the
    * document on every `read`, for all 7 documents in that session.
    *
-   * `confirmedAt` goes with them, for the same reason. `approvedAt` stays: when
-   * a document became part of the corpus is a fact about the document, and it
-   * is one line.
+   * `confirmedAt` goes with them, for the same reason. `approvedAt` stays:
+   * when a document became part of the corpus is a fact about the document,
+   * and it is one line. It is reported by `read_meta` -- writing a value
+   * into someone's file that no tool will read back is worse than not writing
+   * it, and `read` answers with prose.
    */
   private async markApproved(params: {
     id: string;

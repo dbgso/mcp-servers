@@ -2,16 +2,16 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { UpdateMetaHandler } from "../tools/instruction/handlers/update-meta.js";
+import { ReadMetaHandler } from "../tools/instruction/handlers/read-meta.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import type { ReminderConfig } from "../types/index.js";
 import type { InstructionContext } from "../tools/instruction/types.js";
 
-describe("UpdateMetaHandler", () => {
+describe("ReadMetaHandler", () => {
   let tempDir: string;
   let docsDir: string;
   let reader: MarkdownReader;
-  let handler: UpdateMetaHandler;
+  let handler: ReadMetaHandler;
   let context: InstructionContext;
 
   const defaultConfig: ReminderConfig = {
@@ -23,12 +23,12 @@ describe("UpdateMetaHandler", () => {
   };
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "update-meta-test-"));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "read-meta-test-"));
     docsDir = path.join(tempDir, "docs");
     await fs.mkdir(docsDir, { recursive: true });
 
     reader = new MarkdownReader(docsDir);
-    handler = new UpdateMetaHandler();
+    handler = new ReadMetaHandler();
     context = { reader, config: defaultConfig };
   });
 
@@ -38,7 +38,7 @@ describe("UpdateMetaHandler", () => {
 
   it("returns error for non-existent document", async () => {
     const result = await handler.execute({
-      rawParams: { action: "update_meta", id: "nonexistent" },
+      rawParams: { action: "read_meta", id: "nonexistent" },
       context,
     });
 
@@ -60,7 +60,7 @@ Some content here.`;
     await fs.writeFile(path.join(docsDir, "test-doc.md"), content);
 
     const result = await handler.execute({
-      rawParams: { action: "update_meta", id: "test-doc" },
+      rawParams: { action: "read_meta", id: "test-doc" },
       context,
     });
 
@@ -86,7 +86,7 @@ A distinctive sentence that only appears in the body.`;
     await fs.writeFile(path.join(docsDir, "test-doc.md"), content);
 
     const result = await handler.execute({
-      rawParams: { action: "update_meta", id: "test-doc" },
+      rawParams: { action: "read_meta", id: "test-doc" },
       context,
     });
 
@@ -100,7 +100,7 @@ A distinctive sentence that only appears in the body.`;
     );
 
     const result = await handler.execute({
-      rawParams: { action: "update_meta", id: "no-meta" },
+      rawParams: { action: "read_meta", id: "no-meta" },
       context,
     });
 
@@ -112,7 +112,7 @@ A distinctive sentence that only appears in the body.`;
     await fs.writeFile(path.join(docsDir, "doc.md"), "---\ndescription: Test\n---\n\n# Doc");
 
     const result = await handler.execute({
-      rawParams: { action: "update_meta", id: "doc" },
+      rawParams: { action: "read_meta", id: "doc" },
       context,
     });
 
@@ -138,7 +138,7 @@ A distinctive sentence that only appears in the body.`;
       await write("cat__detail", "description: The detail");
 
       const result = await handler.execute({
-        rawParams: { action: "update_meta", id: "cat__detail" },
+        rawParams: { action: "read_meta", id: "cat__detail" },
         context,
       });
 
@@ -154,7 +154,7 @@ A distinctive sentence that only appears in the body.`;
       await write("other__unrelated", "description: Elsewhere");
 
       const result = await handler.execute({
-        rawParams: { action: "update_meta", id: "cat__lonely" },
+        rawParams: { action: "read_meta", id: "cat__lonely" },
         context,
       });
 
@@ -170,7 +170,7 @@ A distinctive sentence that only appears in the body.`;
       await write("cat__sibling", "description: A sibling");
 
       const lonely = await handler.execute({
-        rawParams: { action: "update_meta", id: "cat__lonely" },
+        rawParams: { action: "read_meta", id: "cat__lonely" },
         context,
       });
       expect(lonely.content[0].text).toContain("Links run one way");
@@ -179,7 +179,7 @@ A distinctive sentence that only appears in the body.`;
       reader.invalidateCache();
 
       const linked = await handler.execute({
-        rawParams: { action: "update_meta", id: "cat__lonely" },
+        rawParams: { action: "read_meta", id: "cat__lonely" },
         context,
       });
       expect(linked.content[0].text).not.toContain("Links run one way");
@@ -189,7 +189,7 @@ A distinctive sentence that only appears in the body.`;
       await write("solo", "description: Only one");
 
       const result = await handler.execute({
-        rawParams: { action: "update_meta", id: "solo" },
+        rawParams: { action: "read_meta", id: "solo" },
         context,
       });
 

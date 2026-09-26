@@ -11,5 +11,5 @@ export { LinkAddHandler } from "./link-add.js";
 export { LinkRemoveHandler } from "./link-remove.js";
 export { LintHandler } from "./lint.js";
 export { SetStatusHandler } from "./set-status.js";
-export { UpdateMetaHandler } from "./update-meta.js";
+export { ReadMetaHandler } from "./read-meta.js";
 export { GraphHandler } from "./graph.js";

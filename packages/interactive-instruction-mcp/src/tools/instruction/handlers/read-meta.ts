@@ -2,8 +2,8 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
-import { isInternalDocument } from "../../../constants.js";
-import type { MarkdownSummary } from "../../../types/index.js";
+import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
+import type { DocumentFrontmatter, MarkdownSummary } from "../../../types/index.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { buildGraph } from "./graph.js";
 import {
@@ -12,7 +12,7 @@ import {
 } from "../../../services/metadata-completeness.js";
 
 const schema = z.object({
-  action: z.literal("update_meta"),
+  action: z.literal("read_meta"),
   id: z.string().describe("Document ID to update metadata for"),
 });
 
@@ -68,10 +68,12 @@ export function buildNeighbourhood(params: {
   return { related, candidates, category };
 }
 
-export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContext> {
-  readonly action = "update_meta";
+export class ReadMetaHandler extends BaseActionHandler<Args, InstructionContext> {
+  readonly action = "read_meta";
   readonly help =
-    "Gather what the corpus knows about a document -- its own metadata, its neighbours, and where it might belong -- and ask for better metadata.";
+    "Read a document's metadata, and what the corpus knows about where it sits: its neighbours, and where it might belong. " +
+    "`read` answers with prose alone, so this is where metadata is read -- for a draft as well as a promoted document. " +
+    "Writes nothing: it ends with the `update` call that would apply better metadata.";
   readonly schema = schema;
 
   protected async doExecute(params: {
@@ -81,7 +83,12 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
     const { id } = params.args;
     const { reader } = params.context;
 
-    const content = await reader.getDocumentContent(id);
+    // A draft is looked up under its prefix when there is no promoted
+    // document by that id. `read` answers with prose alone, and a draft never
+    // appears in `list`, so this is the only way to see what a draft's
+    // metadata currently says -- which is exactly when it most needs work.
+    const promoted = await reader.getDocumentContent(id);
+    const content = promoted ?? (await reader.getDocumentContent(DRAFT_PREFIX + id));
     if (content === null) {
       return errorResponse(`Error: Document "${id}" not found.` +
         formatNextActions([{
@@ -90,6 +97,7 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
           example: `instruction(action: "list")`,
         }]));
     }
+    const isDraft = promoted === null;
 
     const listed = await reader.listDocuments({ recursive: true });
     const documents = listed.documents.filter((doc) => !isInternalDocument(doc.id));
@@ -98,12 +106,13 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
     const frontmatter = parseFrontmatter(content);
 
     const sections = [
-      `# Metadata review: ${id}`,
+      `# Metadata review: ${isDraft ? "**[Draft]** " : ""}${id}`,
       "",
       "## What it says now",
       `- **description**: ${frontmatter.description ?? "(not set)"}`,
       `- **whenToUse**: ${formatList(frontmatter.whenToUse)}`,
       `- **relatedDocs**: ${formatList(frontmatter.relatedDocs)}`,
+      ...recordedSection(frontmatter),
       "",
       neighbourhoodSection({ related, candidates, category }),
       "",
@@ -159,6 +168,31 @@ export class UpdateMetaHandler extends BaseActionHandler<Args, InstructionContex
 
 function formatList(values: string[] | undefined): string {
   return values === undefined || values.length === 0 ? "(not set)" : values.join(", ");
+}
+
+/**
+ * The fields the tools wrote, kept apart from the ones the caller is being
+ * asked to write.
+ *
+ * `approvedAt` is a record, not a setting: `approve` stamps it when the
+ * document enters the corpus. Listing it beside `description` would read as an
+ * invitation to set it. It is reported here because a value written into
+ * someone's file with no way to read it back is worse than not writing it --
+ * and `read` answers with prose now, so this is the only place it surfaces.
+ *
+ * `sizeExemption` is the caller's, but it is written for `lint` rather than
+ * for navigation, and `lint` is where it is discussed. It is shown so that
+ * the answer to "what does this document's frontmatter say" is complete.
+ */
+function recordedSection(frontmatter: DocumentFrontmatter): string[] {
+  const lines: string[] = [];
+  if (frontmatter.sizeExemption !== undefined) {
+    lines.push(`- **sizeExemption**: ${frontmatter.sizeExemption}`);
+  }
+  if (frontmatter.approvedAt !== undefined) {
+    lines.push(`- **approvedAt**: ${frontmatter.approvedAt} (recorded on promotion)`);
+  }
+  return lines.length === 0 ? [] : ["", "## Also recorded", ...lines];
 }
 
 function describe(doc: MarkdownSummary): string {

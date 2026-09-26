@@ -85,7 +85,7 @@ This tool explains how to use the instruction tool.
 - \`instruction(action: "lint")\` - Check document quality
 - \`instruction(action: "set_status", id: "<id>", status: "<status>")\` - Set draft status (single)
 - \`instruction(action: "set_status", ids: "id1,id2", status: "<status>")\` - Set draft status (batch)
-- \`instruction(action: "update_meta", id: "<id>")\` - Review a document's metadata against its neighbours
+- \`instruction(action: "read_meta", id: "<id>")\` - Review a document's metadata against its neighbours
 
 ### Seeing the corpus
 - \`instruction(action: "graph")\` - Render the relatedDocs graph as an interactive page

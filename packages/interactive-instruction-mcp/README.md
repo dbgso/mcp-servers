@@ -80,7 +80,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 
 **Reading**
 - `list` — List documents (optional: `id`, `recursive`, `query`, `missingMeta`, `backlinks`)
-- `read` — Read a document by ID
+- `read` — Read a document's prose by ID. Metadata is not included: `read_meta` is where it is read
 
 **Draft Operations**
 - `add` — Create a new draft (`id`, `content`, `description`, `whenToUse` required)
@@ -102,8 +102,10 @@ instruction(action: "read", id: "doc-id") → Read a document
   references, and repeated headings. A document that is deliberately long declares
   `sizeExemption: <why>` in its frontmatter
 - `set_status` — Reset drafts to `editing`, discarding their workflow state (single `id` or batch `ids`)
-- `update_meta` — Show a document's metadata alongside its neighbours in the `relatedDocs` graph,
-  or same-category candidates when it has none, and ask for better metadata (`id` only)
+- `read_meta` — Read a document's metadata -- a draft's as well as a promoted one's -- alongside
+  its neighbours in the `relatedDocs` graph, or same-category candidates when it has none, and
+  what better metadata would say. Writes nothing; it ends with the `update` call that would
+  apply it (`id` only)
 
 **Seeing the corpus**
 - `graph` — Render the `relatedDocs` graph as an interactive page, or return it as text
@@ -212,7 +214,7 @@ refused is a step in the operation rather than a failure of it.
 |---|---|---|
 | Deliberation | `update` (promoted) → `apply`, `link_add`, `link_remove`, `approve` | 2 |
 | Deliberation | `delete` (promoted), `rename` (promoted) | 3 |
-| None | `add`, `update` (draft), `delete` (draft), `rename` (draft), `cancel`, `list`, `read`, `lint`, `set_status`, `update_meta` | — |
+| None | `add`, `update` (draft), `delete` (draft), `rename` (draft), `cancel`, `list`, `read`, `lint`, `set_status`, `read_meta` | — |
 
 The counts are per operation, and overridable: `IIMCP_DELIBERATION_ATTEMPTS_DELETE=5`. The
 irreversible operations get more because asking for the opposite does not undo them.
