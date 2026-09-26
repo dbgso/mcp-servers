@@ -26,6 +26,29 @@ import * as path from "node:path";
 import { DRAFT_DIR } from "../constants.js";
 
 const packageRoot = path.resolve(import.meta.dirname, "../..");
+const repoRoot = path.resolve(packageRoot, "../..");
+
+/**
+ * Where pnpm put the tsx binary.
+ *
+ * `tsx` is this package's own devDependency, so the package-local `.bin` is
+ * where it belongs -- but a workspace whose root declares it too can leave the
+ * package-local link absent, and CI failed on exactly that (`spawn
+ * .../node_modules/.bin/tsx ENOENT`) while every developer machine had the
+ * link from an earlier install. Look in both rather than depend on which.
+ */
+async function tsxBinary(): Promise<string> {
+  const candidates = [
+    path.join(packageRoot, "node_modules", ".bin", "tsx"),
+    path.join(repoRoot, "node_modules", ".bin", "tsx"),
+  ];
+
+  for (const candidate of candidates) {
+    if (await fs.access(candidate).then(() => true, () => false)) return candidate;
+  }
+
+  throw new Error(`tsx not found in any of:\n${candidates.join("\n")}`);
+}
 
 /** The limit this server is started with, low enough to trip on a short document. */
 const MAX_LINES = 20;
@@ -44,7 +67,7 @@ beforeAll(async () => {
   docsDir = await fs.mkdtemp(path.join(os.tmpdir(), "iimcp-stdio-"));
 
   transport = new StdioClientTransport({
-    command: path.join(packageRoot, "node_modules", ".bin", "tsx"),
+    command: await tsxBinary(),
     args: [path.join(packageRoot, "src", "index.ts"), docsDir],
     env: {
       ...process.env,

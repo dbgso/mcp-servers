@@ -45,10 +45,27 @@ function fail(message) {
 const options = parseArgs(process.argv.slice(2));
 if (options.error !== undefined) fail(options.error);
 
-const entry = path.join(repoRoot, "packages", options.package, "src", "index.ts");
+const packageRoot = path.join(repoRoot, "packages", options.package);
+const entry = path.join(packageRoot, "src", "index.ts");
 if (!(await exists(entry))) {
   fail(`No such server: ${path.relative(repoRoot, entry)}`);
 }
+
+// pnpm may link tsx into the package, the workspace root, or both, depending
+// on which of them declares it. Looking in one place only is how this spawn
+// came to fail in CI while working on every developer machine.
+const tsxCandidates = [
+  path.join(packageRoot, "node_modules", ".bin", "tsx"),
+  path.join(repoRoot, "node_modules", ".bin", "tsx"),
+];
+let tsx = null;
+for (const candidate of tsxCandidates) {
+  if (await exists(candidate)) {
+    tsx = candidate;
+    break;
+  }
+}
+if (tsx === null) fail(`tsx not found in any of:\n${tsxCandidates.join("\n")}`);
 
 const flowText = await fs.readFile(options.flowPath, "utf-8").catch((error) => {
   fail(`Cannot read flow: ${error.message}`);
@@ -76,7 +93,7 @@ const env = {
 };
 
 const transport = new StdioClientTransport({
-  command: path.join(repoRoot, "node_modules", ".bin", "tsx"),
+  command: tsx,
   args: [entry, ...substitute({ value: options.serverArgs, vars })],
   env,
   // Inherited, not piped: when a server refuses to start -- a missing
