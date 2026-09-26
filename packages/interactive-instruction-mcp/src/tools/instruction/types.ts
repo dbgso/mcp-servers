@@ -1,6 +1,7 @@
 import type { ToolResponse } from "mcp-shared";
 import type { MarkdownReader } from "../../services/markdown-reader.js";
 import type { ReminderConfig } from "../../types/index.js";
+import type { InstructionAction } from "./registry.js";
 
 /**
  * Build a text ToolResponse.
@@ -31,13 +32,21 @@ export interface InstructionContext {
 }
 
 /**
- * Common response helpers for action handlers.
+ * One suggested next call.
+ *
+ * The action and the example are tied together by type: each member of this
+ * union fixes `example` to a template that names that action. So an example
+ * cannot suggest an action nobody registered, and cannot disagree with the
+ * `action` beside it -- both were free-form strings, and a rename left it to a
+ * search-and-replace to keep nine occurrences across five files in step.
  */
-export interface NextActionSuggestion {
-  action: string;
-  description: string;
-  example: string;
-}
+export type NextActionSuggestion = {
+  [A in InstructionAction]: {
+    action: A;
+    description: string;
+    example: `instruction(action: "${A}"${string})`;
+  };
+}[InstructionAction];
 
 export function formatNextActions(suggestions: NextActionSuggestion[]): string {
   if (suggestions.length === 0) return "";
