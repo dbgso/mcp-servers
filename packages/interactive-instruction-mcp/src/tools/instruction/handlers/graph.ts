@@ -122,7 +122,7 @@ type Args = z.infer<typeof schema>;
 
 export class GraphHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "graph";
-  readonly help = `Render the relatedDocs graph as an interactive page.
+  readonly help = `Render the relatedDocs graph of the promoted corpus as an interactive page. Drafts are not in it.
 
 Usage:
 - \`instruction(action: "graph")\` - the whole corpus

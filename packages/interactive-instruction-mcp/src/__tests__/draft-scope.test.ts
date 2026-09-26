@@ -21,6 +21,7 @@ import { DRAFT_DIR } from "../constants.js";
 import { LintHandler } from "../tools/instruction/handlers/lint.js";
 import { ListHandler } from "../tools/instruction/handlers/list.js";
 import { GraphHandler } from "../tools/instruction/handlers/graph.js";
+import { ApproveHandler } from "../tools/instruction/handlers/approve.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 
@@ -39,6 +40,7 @@ let context: InstructionContext;
 const lint = new LintHandler();
 const list = new ListHandler();
 const graph = new GraphHandler();
+const approve = new ApproveHandler();
 
 async function write(params: { id: string; body: string; frontmatter?: string }) {
   const { id, body, frontmatter = "description: A document\nwhenToUse:\n  - testing" } = params;
@@ -106,7 +108,13 @@ describe("lint", () => {
     expect(await text(lint, { action: "lint" })).toContain("similar-documents");
   });
 
-  it("does not let a draft into a cycle report", async () => {
+  it("cannot put a draft in a cycle, whatever the links say", async () => {
+    // This does not pin the corpus split -- it passes either way, because a
+    // draft could never reach a cycle report in the first place. `relatedDocs`
+    // stores the plain id while the graph is keyed by the stored one, so a
+    // reference to a draft never resolves. What it pins is that invariant: the
+    // day `relatedDocs` starts holding stored ids, or the graph starts keying
+    // by the plain one, this fails and the exclusion stops being redundant.
     await write({
       id: `${DRAFT_DIR}__a`,
       body: "# A",
@@ -213,6 +221,47 @@ describe("list", () => {
   });
 });
 
+describe("approve", () => {
+  it("says a promoted document is already promoted, not that it is missing", async () => {
+    // The commit that added this claimed `set_status` and `approve` both went
+    // through one helper; only `set_status` had a test, so collapsing the
+    // helper back left the whole suite green.
+    await write({ id: "done", body: "# Done" });
+
+    const answer = await text(approve, { action: "approve", id: "done", notes: "reviewed" });
+
+    expect(answer).toContain("already promoted");
+    expect(answer).not.toContain("not found");
+  });
+
+  it("says the same on the promotion attempt, not only the self-review one", async () => {
+    await write({ id: "done", body: "# Done" });
+
+    const answer = await text(approve, { action: "approve", id: "done", explanation: "Promoting." });
+
+    expect(answer).toContain("already promoted");
+  });
+
+  it("still says not found for an id that is nowhere", async () => {
+    expect(await text(approve, { action: "approve", id: "nowhere", notes: "x" })).toContain("not found");
+  });
+
+  it("does not call a promoted document an unreviewed draft in a batch", async () => {
+    // Promotion deletes the workflow state, so a promoted id reads back as
+    // `editing` and the batch path told the caller to record `notes` on it --
+    // work that would then be refused for being promoted.
+    await write({ id: "done", body: "# Done" });
+    await write({ id: `${DRAFT_DIR}__fresh`, body: "# Fresh" });
+
+    const answer = await text(approve, { action: "approve", ids: "done,fresh", explanation: "Both." });
+
+    expect(answer).toContain("already promoted");
+    expect(answer).toContain("done");
+    // The genuinely unreviewed one is still reported as such.
+    expect(answer).toContain("fresh (editing)");
+  });
+});
+
 describe("graph", () => {
   it("tells a caller its draft is out of scope, not that it is missing", async () => {
     // "not found" sends them back to check an id that was right.
@@ -226,5 +275,16 @@ describe("graph", () => {
 
   it("still says not found for an id that is nowhere", async () => {
     expect(await text(graph, { action: "graph", id: "nowhere" })).toContain("not found");
+  });
+
+  it("accepts the prefixed id the report used to print", async () => {
+    // `lint` printed `_mcp_drafts__x` before this change, so it is a plausible
+    // thing for a caller to paste back.
+    await write({ id: `${DRAFT_DIR}__pending`, body: "# Pending" });
+
+    const answer = await text(graph, { action: "graph", id: `${DRAFT_DIR}__pending` });
+
+    expect(answer).toContain('"pending" is a draft');
+    expect(answer).toContain('id: "pending"');
   });
 });

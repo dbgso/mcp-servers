@@ -377,7 +377,9 @@ Expected: self_review, user_reviewing or pending_approval` +
     const sourceDraftId = DRAFT_PREFIX + id;
     const targetPath = reader.getFilePath(finalTargetId);
     const draftContent = await reader.getDocumentContent(sourceDraftId);
-    if (!draftContent) return await noDraftReason({ reader, id });
+    // Spliced into the gate preview rather than returned as an error, so it
+    // keeps the marker that tells a reader this block is a failure.
+    if (!draftContent) return `**Error:** ${await noDraftReason({ reader, id })}`;
     const existingContent = await reader.getDocumentContent(finalTargetId);
     if (existingContent === null) {
       return this.generateSummary({ content: draftContent, targetId: finalTargetId, targetPath });
@@ -465,7 +467,17 @@ ${headerSection}`;
     // in a batch without self-review. Persisted state is deleted on promotion
     // now, but the check costs nothing and does not depend on that cleanup.
     const notReady: string[] = [];
+    const alreadyPromoted: string[] = [];
     for (const id of idList) {
+      // Promotion deletes the workflow state, so a promoted document reads back
+      // as `editing` and would be reported as an unreviewed draft -- telling
+      // the caller to record `notes` on an id that will then be refused for
+      // being promoted. Out of scope is not "you have more work to do".
+      if (!(await reader.documentExists(DRAFT_PREFIX + id)) && (await reader.documentExists(id))) {
+        alreadyPromoted.push(id);
+        continue;
+      }
+
       const status = await draftWorkflowManager.getStatus({ id });
       const state = status?.state ?? "editing";
       if (state !== "user_reviewing" && state !== "pending_approval") {
@@ -477,13 +489,24 @@ ${headerSection}`;
       }
     }
 
-    if (notReady.length > 0) {
-      return errorResponse(`# Cannot batch approve
+    if (alreadyPromoted.length > 0 || notReady.length > 0) {
+      const sections = [
+        ...(alreadyPromoted.length === 0
+          ? []
+          : [
+              "These are already promoted, so there is nothing left to approve:",
+              alreadyPromoted.map((id) => `- ${id}`).join("\n"),
+            ]),
+        ...(notReady.length === 0
+          ? []
+          : [
+              "These drafts have not been reviewed yet:",
+              notReady.map((entry) => `- ${entry}`).join("\n"),
+              "Each one needs its \`notes\` recorded first.",
+            ]),
+      ];
 
-These drafts have not been reviewed yet:
-${notReady.map((s) => `- ${s}`).join("\n")}
-
-Each one needs its \`notes\` recorded first.`);
+      return errorResponse(`# Cannot batch approve\n\n${sections.join("\n\n")}`);
     }
 
     // Moved before the gate runs, for the same reason as the single path: the

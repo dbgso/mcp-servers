@@ -214,7 +214,9 @@ sits.** What a document answers on its own -- its size, a heading that comes bac
 metadata -- means the same thing before and after promotion, so `lint` reports it for a draft
 too. What only the set can answer -- orphans, similarity, cycles -- says nothing useful about a
 document still being written: a draft is usually a near-copy of the document it will replace,
-so it would be reported as `similar-documents` against the very document it is a draft of. An action that is about the workflow exists only in the state
+so it would be reported as `similar-documents` against the very document it is a draft of.
+(Similarity is the only one of the three whose answer the exclusion changes; the other two
+could never have reported a draft. They are excluded for consistency.) An action that is about the workflow exists only in the state
 that has one.
 
 An action that does not cover a state says so, and does not say the document is missing. A draft

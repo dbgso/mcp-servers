@@ -169,8 +169,24 @@ function argumentsFrom(params: { source: string; from: number }): string | null 
   const { source, from } = params;
   let depth = 0;
 
+  let inString: string | null = null;
+
   for (let i = from; i < source.length; i++) {
     const char = source[i];
+
+    // Parentheses inside a value are text. Counting them made an unbalanced
+    // `(` in an example run the scan past the call's own `)` and report a
+    // parameter list belonging to whatever came next.
+    if (inString !== null) {
+      if (char === "\\") i++;
+      else if (char === inString) inString = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      inString = char;
+      continue;
+    }
+
     if (char === "(") depth++;
     else if (char === ")") {
       if (depth === 0) return source.slice(from, i);

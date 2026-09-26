@@ -159,10 +159,20 @@ ${summary}
 
 ## Details
 ${results.join("\n")}` +
-      formatNextActions([
-        { action: "list", description: "View all documents", example: `instruction(action: "list")` },
-        { action: "read", description: "Read a draft", example: `instruction(action: "read", id: "${targetIds[0]}")` },
-      ]),
+      // Suggesting `read` on the id that just failed sends the caller back to
+      // the thing that did not work. Offer the listing that would have shown
+      // which ids are drafts in the first place.
+      formatNextActions(
+        errorCount === 0
+          ? [
+              { action: "read", description: "Read the draft", example: `instruction(action: "read", id: "${targetIds[0]}")` },
+              { action: "list", description: "List the drafts", example: 'instruction(action: "list", drafts: true)' },
+            ]
+          : [
+              { action: "list", description: "See which ids are drafts", example: 'instruction(action: "list", drafts: true)' },
+              { action: "list", description: "See the promoted documents", example: 'instruction(action: "list", recursive: true)' },
+            ]
+      ),
     );
   }
 }
