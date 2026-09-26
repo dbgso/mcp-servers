@@ -97,7 +97,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `cancel` — Cancel a pending update
 
 **Metadata & Quality**
-- `link_add` / `link_remove` — Manage related document links (deliberation gate, drafts included)
+- `link_add` / `link_remove` — Manage related document links, on a draft or a promoted document (deliberation gate, drafts included). `relatedDocs` names documents by their plain id either way
 - `lint` — Check document quality: missing metadata, orphans, size, similarity, circular
   references, and repeated headings. A document that is deliberately long declares
   `sizeExemption: <why>` in its frontmatter. The rules a single document can answer on its own

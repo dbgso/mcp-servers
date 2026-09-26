@@ -72,3 +72,14 @@
 {"call": "instruction", "label": "43. rename the draft", "args": {"action": "rename", "id": "oldname", "newId": "newname"}, "expectNot": ["Not Yet"]}
 
 {"call": "instruction", "label": "44. list: what is left", "args": {"action": "list", "recursive": true}, "expect": ["alpha"], "expectNot": ["gamma"]}
+
+# Links on drafts. The README says these two actions cover drafts, and they did
+# not reach one at all: a bare id only ever found a promoted document. The
+# sweep missed it too, because it linked alpha and beta after promoting them.
+{"call": "instruction", "label": "45. add two drafts to link together", "args": {"action": "add", "id": "draft-x", "content": "# Draft X\n\nStill a draft.", "description": "A draft that links to another draft", "whenToUse": ["checking links on drafts"]}, "expect": ["created successfully"]}
+{"call": "instruction", "label": "46. the second draft", "args": {"action": "add", "id": "draft-y", "content": "# Draft Y\n\nAlso still a draft.", "description": "The draft on the other end of the link", "whenToUse": ["checking links on drafts"]}, "expect": ["created successfully"]}
+{"call": "instruction", "label": "47. link_add on a draft: refused once", "args": {"action": "link_add", "id": "draft-x", "relatedDocs": ["draft-y"], "explanation": "The two drafts are halves of one topic."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "48. link_add on a draft: the repeat writes it", "args": {"action": "link_add", "id": "draft-x", "relatedDocs": ["draft-y"], "explanation": "The two drafts are halves of one topic."}, "expect": ["Successfully added"], "expectNot": ["not found"]}
+{"call": "instruction", "label": "49. read_meta shows the draft's new link", "args": {"action": "read_meta", "id": "draft-x"}, "expect": ["draft-y"]}
+{"call": "instruction", "label": "50. link_remove on a draft: refused once", "args": {"action": "link_remove", "id": "draft-x", "relatedDocs": ["draft-y"], "explanation": "They turned out to be separate topics after all."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "51. link_remove on a draft: the repeat removes it", "args": {"action": "link_remove", "id": "draft-x", "relatedDocs": ["draft-y"], "explanation": "They turned out to be separate topics after all."}, "expect": ["Successfully removed"], "expectNot": ["not found"]}

@@ -6,6 +6,7 @@ import { MarkdownReader } from "../services/markdown-reader.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { DRAFT_DIR } from "../constants.js";
 
 describe("LinkHandler", () => {
   let addHandler: LinkAddHandler;
@@ -523,6 +524,134 @@ description: Document A
 
       expect(result.isError).toBeFalsy();
       expect(result.content[0].text as string).toContain("None of the specified documents are in relatedDocs");
+    });
+  });
+  /**
+   * Drafts, which the README says these two actions cover and which they did
+   * not reach at all.
+   *
+   * `getDocumentContent(id)` with a bare id only ever finds a promoted
+   * document, so `link_add` on a draft answered `Document "x" not found` --
+   * while the README's own table showed the draft column behaving exactly like
+   * the promoted one, and the prose said link changes are "the one operation
+   * that is gated for drafts too". A draft's neighbours are usually drafts as
+   * well, so the target has to resolve the same way.
+   *
+   * Found by driving the server through mcp-lab rather than by a test: no test
+   * had ever named a draft here.
+   */
+  describe("drafts", () => {
+    const createDraft = (id: string, content: string) => {
+      createDoc(`${DRAFT_DIR}__${id}`, content);
+    };
+
+    /** Twice, because the gate refuses the first identical call by design. */
+    const throughGate = async (
+      handler: LinkAddHandler | LinkRemoveHandler,
+      rawParams: Record<string, unknown>
+    ) => {
+      await handler.execute({ rawParams, context: { reader, config: { reminderEnabled: false } } });
+      return handler.execute({ rawParams, context: { reader, config: { reminderEnabled: false } } });
+    };
+
+    const draftFile = (id: string) => fs.readFileSync(path.join(docsDir, DRAFT_DIR, `${id}.md`), "utf-8");
+
+    it("adds a link to a draft, naming the target by its plain id", async () => {
+      createDraft("draft-a", `---\ndescription: Draft A\n---\n\n# Draft A`);
+      createDraft("draft-b", `---\ndescription: Draft B\n---\n\n# Draft B`);
+
+      const result = await throughGate(addHandler, {
+        action: "link_add",
+        id: "draft-a",
+        relatedDocs: ["draft-b"],
+        explanation: "These two drafts belong together.",
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text as string).toContain("Successfully added");
+      // The prefix is where the file lives, not what the graph calls it.
+      expect(draftFile("draft-a")).toContain("- draft-b");
+      expect(draftFile("draft-a")).not.toContain(DRAFT_DIR);
+    });
+
+    it("removes a link from a draft", async () => {
+      createDraft("draft-a", `---\ndescription: Draft A\nrelatedDocs:\n  - draft-b\n---\n\n# Draft A`);
+      createDraft("draft-b", `---\ndescription: Draft B\n---\n\n# Draft B`);
+
+      const result = await throughGate(removeHandler, {
+        action: "link_remove",
+        id: "draft-a",
+        relatedDocs: ["draft-b"],
+        explanation: "They turned out to be separate topics.",
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(draftFile("draft-a")).not.toContain("draft-b");
+    });
+
+    it("links a draft to a promoted document", async () => {
+      createDraft("draft-a", `---\ndescription: Draft A\n---\n\n# Draft A`);
+      createDoc("promoted-b", `---\ndescription: Promoted B\n---\n\n# Promoted B`);
+
+      const result = await throughGate(addHandler, {
+        action: "link_add",
+        id: "draft-a",
+        relatedDocs: ["promoted-b"],
+        explanation: "The draft belongs with the promoted note.",
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(draftFile("draft-a")).toContain("- promoted-b");
+    });
+
+    it("still reports an id that is neither a draft nor promoted", async () => {
+      const result = await addHandler.execute({
+        rawParams: {
+          action: "link_add",
+          id: "nowhere",
+          relatedDocs: ["also-nowhere"],
+          explanation: "Neither of these exists.",
+        },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text as string).toContain('Document "nowhere" not found');
+    });
+
+    it("reports a target that exists nowhere, by the id the caller used", async () => {
+      createDraft("draft-a", `---\ndescription: Draft A\n---\n\n# Draft A`);
+
+      const result = await addHandler.execute({
+        rawParams: {
+          action: "link_add",
+          id: "draft-a",
+          relatedDocs: ["missing"],
+          explanation: "Pointing at something that is not there.",
+        },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text as string).toContain("missing");
+    });
+
+    it("sees a cycle that runs through drafts", async () => {
+      // draft-b already points back at draft-a, so adding a -> b closes it.
+      createDraft("draft-a", `---\ndescription: Draft A\n---\n\n# Draft A`);
+      createDraft("draft-b", `---\ndescription: Draft B\nrelatedDocs:\n  - draft-a\n---\n\n# Draft B`);
+
+      const refused = await addHandler.execute({
+        rawParams: {
+          action: "link_add",
+          id: "draft-a",
+          relatedDocs: ["draft-b"],
+          explanation: "Closing the loop on purpose.",
+        },
+        context: { reader, config: { reminderEnabled: false } },
+      });
+
+      expect(refused.content[0].text as string).toContain("Circular reference detected");
     });
   });
 });

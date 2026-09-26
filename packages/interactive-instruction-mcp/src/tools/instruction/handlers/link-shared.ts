@@ -1,4 +1,5 @@
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
+import { DRAFT_PREFIX } from "../../../constants.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
 import type { ToolResponse } from "mcp-shared";
 import { gateMutation } from "../../../services/mutation-gate.js";
@@ -11,6 +12,31 @@ export { textResponse } from "../types.js";
 
 
 /**
+ * Where a document actually lives, given the id a caller used.
+ *
+ * `relatedDocs` name documents by their plain id whether the document is a
+ * draft or promoted, but only a promoted one is stored under that id -- a
+ * draft is under `_mcp_drafts__`. Reading with the bare id therefore missed
+ * every draft, so `link_add` on one answered `Document "x" not found` while
+ * the README's table showed the draft column behaving exactly like the
+ * promoted one.
+ *
+ * Promoted wins when both exist, matching `read_meta`. The prefix is where the
+ * file is; it is never what the graph calls the document, so nothing here
+ * changes what gets written into `relatedDocs`.
+ */
+export async function resolveStorageId(params: {
+  reader: MarkdownReader;
+  id: string;
+}): Promise<string | null> {
+  const { reader, id } = params;
+
+  if (await reader.documentExists(id)) return id;
+  if (await reader.documentExists(DRAFT_PREFIX + id)) return DRAFT_PREFIX + id;
+  return null;
+}
+
+/**
  * Validate that all target documents exist.
  * Returns list of invalid (non-existent) document IDs.
  */
@@ -21,8 +47,10 @@ export async function findInvalidDocs(params: {
   const { reader, relatedDocs } = params;
   const invalidDocs: string[] = [];
   for (const docId of relatedDocs) {
-    const exists = await reader.documentExists(docId);
-    if (!exists) {
+    // A draft's neighbours are usually drafts as well, so a target resolves
+    // the same way the subject does.
+    const storageId = await resolveStorageId({ reader, id: docId });
+    if (storageId === null) {
       invalidDocs.push(docId);
     }
   }
@@ -72,7 +100,10 @@ async function findCyclePath(params: {
   if (visited.has(startId)) return null;
   visited.add(startId);
 
-  const content = await reader.getDocumentContent(startId);
+  const storageId = await resolveStorageId({ reader, id: startId });
+  if (storageId === null) return null;
+
+  const content = await reader.getDocumentContent(storageId);
   if (content === null) return null;
 
   const frontmatter = parseFrontmatter(content);
