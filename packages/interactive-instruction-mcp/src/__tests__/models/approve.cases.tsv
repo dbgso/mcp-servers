@@ -1,0 +1,16 @@
+state	draft	notes	explanation	force	mode	attempts
+user_reviewing	present	omitted	given	off	single	once
+pending_approval	present	omitted	given	off	single	once
+self_review	present	omitted	omitted	off	batch	repeated
+missing	present	given	omitted	on	single	repeated
+user_reviewing	absent	given	omitted	on	single	once
+pending_approval	present	omitted	given	off	batch	repeated
+self_review	absent	given	given	on	single	once
+pending_approval	absent	omitted	omitted	on	single	once
+user_reviewing	absent	omitted	omitted	off	batch	once
+missing	absent	omitted	given	off	batch	once
+editing	present	given	omitted	off	single	repeated
+editing	absent	omitted	given	off	batch	once
+editing	absent	omitted	given	on	single	once
+pending_approval	absent	given	given	off	single	once
+user_reviewing	present	omitted	given	off	batch	repeated
