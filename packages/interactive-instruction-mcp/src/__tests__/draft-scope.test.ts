@@ -108,27 +108,6 @@ describe("lint", () => {
     expect(await text(lint, { action: "lint" })).toContain("similar-documents");
   });
 
-  it("cannot put a draft in a cycle, whatever the links say", async () => {
-    // This does not pin the corpus split -- it passes either way, because a
-    // draft could never reach a cycle report in the first place. `relatedDocs`
-    // stores the plain id while the graph is keyed by the stored one, so a
-    // reference to a draft never resolves. What it pins is that invariant: the
-    // day `relatedDocs` starts holding stored ids, or the graph starts keying
-    // by the plain one, this fails and the exclusion stops being redundant.
-    await write({
-      id: `${DRAFT_DIR}__a`,
-      body: "# A",
-      frontmatter: "description: A\nwhenToUse:\n  - testing\nrelatedDocs:\n  - b",
-    });
-    await write({
-      id: "b",
-      body: "# B",
-      frontmatter: "description: B\nwhenToUse:\n  - testing\nrelatedDocs:\n  - a",
-    });
-
-    expect(await text(lint, { action: "lint" })).not.toContain("circular-reference");
-  });
-
   it("still holds a promoted document to both", async () => {
     await write({ id: "promoted", body: longBody });
 

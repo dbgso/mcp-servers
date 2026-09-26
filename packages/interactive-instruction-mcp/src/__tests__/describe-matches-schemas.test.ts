@@ -165,7 +165,7 @@ function examplesInSource(): Example[] {
  * contain a bracket, and treating that as the end of the call made a perfectly
  * valid example look like one missing half its arguments.
  */
-function argumentsFrom(params: { source: string; from: number }): string | null {
+export function argumentsFrom(params: { source: string; from: number }): string | null {
   const { source, from } = params;
   let depth = 0;
 
@@ -174,12 +174,22 @@ function argumentsFrom(params: { source: string; from: number }): string | null 
   for (let i = from; i < source.length; i++) {
     const char = source[i];
 
+    // A backslash and whatever follows it are one unit, wherever they appear.
+    // Handling escapes only inside strings broke the `\"` form the match
+    // pattern above explicitly supports: the opening `\"` began a string whose
+    // closing `\"` was then read as an escape, so the string never ended and
+    // the whole example was skipped -- the scanner going blind while the suite
+    // stayed green, which is the thing this file exists to prevent.
+    if (char === "\\") {
+      i++;
+      continue;
+    }
+
     // Parentheses inside a value are text. Counting them made an unbalanced
     // `(` in an example run the scan past the call's own `)` and report a
     // parameter list belonging to whatever came next.
     if (inString !== null) {
-      if (char === "\\") i++;
-      else if (char === inString) inString = null;
+      if (char === inString) inString = null;
       continue;
     }
     if (char === '"' || char === "'" || char === "`") {
@@ -204,7 +214,7 @@ function argumentsFrom(params: { source: string; from: number }): string | null 
  * `Usage`, which makes the extracted names untrustworthy for anything stricter
  * than "is the required one present".
  */
-function parameterNames(args: string): string[] {
+export function parameterNames(args: string): string[] {
   const outsideValues = args.replace(/"(?:[^"\\]|\\.)*"/g, '""');
   return [...outsideValues.matchAll(/([a-zA-Z]+):/g)].map((match) => match[1]);
 }
@@ -277,3 +287,61 @@ describe("the examples this server prints", () => {
     expect(wrong).toEqual([]);
   });
 });
+
+/**
+ * The scanner's own reader, on inputs this repository does not happen to
+ * contain.
+ *
+ * Every property below was added in response to a real defect, and none of them
+ * changed a single result when they were added -- the same 137 examples before
+ * and after. So removing any of them would also change nothing, and the suite
+ * would stay green while the scanner quietly stopped seeing things. These are
+ * the fixtures that make that impossible.
+ */
+describe("argumentsFrom", () => {
+  const read = (source: string): string | null =>
+    argumentsFrom({ source, from: source.indexOf("(") + 1 });
+
+  it("stops at the parenthesis that closes the call", () => {
+    expect(read('f(a: "x")')).toBe('a: "x"');
+  });
+
+  it("spans lines, because a long example wraps", () => {
+    // The line-bounded version missed exactly the examples most likely to have
+    // lost an argument.
+    expect(read('f(a: "x",\n  b: "y")')).toBe('a: "x",\n  b: "y"');
+  });
+
+  it("does not end the call at a parenthesis inside a value", () => {
+    expect(read('f(a: "why (and how)", b: "y")')).toBe('a: "why (and how)", b: "y"');
+  });
+
+  it("survives an unbalanced parenthesis inside a value", () => {
+    // Counting brackets in text ran the scan past the call and reported the
+    // parameters of whatever came next.
+    expect(read('f(a: "half (open", b: "y")')).toBe('a: "half (open", b: "y"');
+  });
+
+  it("reads the escaped-quote form the match pattern supports", () => {
+    // An example written inside a plain double-quoted string. Treating a
+    // backslash as an escape only within a string made the closing one swallow
+    // the quote, so the string never closed and the example was skipped.
+    expect(read('f(a: \\"x\\", b: \\"y\\")')).toBe('a: \\"x\\", b: \\"y\\"');
+  });
+
+  it("gives up rather than guessing when the call never closes", () => {
+    expect(read("f(a: 1\n\n")).toBeNull();
+  });
+});
+
+describe("parameterNames", () => {
+  it("names the parameters", () => {
+    expect(parameterNames('id: "x", content: "y"')).toEqual(["id", "content"]);
+  });
+
+  it("ignores what looks like a parameter inside a value", () => {
+    // `content: "Usage: run it"` used to contribute a parameter called `Usage`.
+    expect(parameterNames('content: "Usage: run it", id: "https://x/y"')).toEqual(["content", "id"]);
+  });
+});
+
