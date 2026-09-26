@@ -11,6 +11,7 @@ import {
   findInvalidDocs,
   calculateNewRelatedDocs,
   deliberateLinkChange,
+  resolveStorageId,
 } from "./link-shared.js";
 
 const schema = z.object({
@@ -29,7 +30,7 @@ type Args = z.infer<typeof schema>;
 
 export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "link_remove";
-  readonly help = "Remove relatedDocs links from a document's frontmatter.";
+  readonly help = "Remove relatedDocs links from a document's frontmatter. Needs `explanation`, and the identical call repeated.";
   readonly schema = schema;
 
   protected async doExecute(params: {
@@ -39,8 +40,14 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
     const { id, relatedDocs, explanation } = params.args;
     const { reader } = params.context;
 
-    // Check if document exists
-    const content = await reader.getDocumentContent(id);
+    // A draft is stored under a prefixed id, so the bare one has to be
+    // resolved before anything can be read or written.
+    const storageId = await resolveStorageId({ reader, id });
+    if (storageId === null) {
+      return errorResponse(`Error: Document "${id}" not found.`);
+    }
+
+    const content = await reader.getDocumentContent(storageId);
     if (content === null) {
       return errorResponse(`Error: Document "${id}" not found.`);
     }
@@ -76,7 +83,7 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
       newRelated,
       explanation,
       preview: this.buildPreview({ id, currentRelated, newRelated, relatedDocs }),
-      work: () => this.applyLink({ reader, id, content, frontmatter, newRelated }),
+      work: () => this.applyLink({ reader, id, storageId, content, frontmatter, newRelated }),
     });
   }
 
@@ -108,12 +115,15 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
    */
   private async applyLink(params: {
     reader: InstructionContext["reader"];
+    /** What the caller called it, and what the response says. */
     id: string;
+    /** Where it is stored, which is the same thing unless it is a draft. */
+    storageId: string;
     content: string;
     frontmatter: ReturnType<typeof parseFrontmatter>;
     newRelated: string[];
   }): Promise<ToolResponse> {
-    const { reader, id, content, frontmatter, newRelated } = params;
+    const { reader, id, storageId, content, frontmatter, newRelated } = params;
 
     // Apply the change
     const newFrontmatter = {
@@ -131,7 +141,7 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
     // document is one this server manages. Writing with `fs.writeFile` and a
     // path from `getFilePath` skipped all three -- and the missing newline in
     // #51 was reported for exactly this route alongside the others.
-    const written = await reader.updateDocument({ id, content: newContent });
+    const written = await reader.updateDocument({ id: storageId, content: newContent });
     if (!written.success) {
       return errorResponse(`Error: ${written.error ?? "Unknown error"}`);
     }

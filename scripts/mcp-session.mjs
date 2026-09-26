@@ -71,7 +71,7 @@ const flowText = await fs.readFile(options.flowPath, "utf-8").catch((error) => {
   fail(`Cannot read flow: ${error.message}`);
 });
 
-const { steps, errors } = parseFlow(flowText);
+const { steps, server, errors } = parseFlow(flowText);
 if (errors.length > 0) {
   fail(["Flow file has errors:", ...errors.map((e) => `  line ${e.line}: ${e.message}`)].join("\n"));
 }
@@ -79,6 +79,12 @@ if (steps.length === 0) fail("Flow file has no steps.");
 
 const scratch = await fs.mkdtemp(path.join(os.tmpdir(), `mcp-session-${options.package}-`));
 const vars = { TMPDIR: scratch };
+
+// What the flow declared, with the command line on top: a flow carries the
+// invocation it was written against, and the caller can still override it for
+// one run without editing the file.
+const serverArgs = options.serverArgs.length > 0 ? options.serverArgs : (server?.args ?? []);
+const declaredEnv = server?.env ?? {};
 
 // Every on-disk store this repository's servers keep is overridable by
 // environment, and a session that shared them with the developer's own running
@@ -89,12 +95,13 @@ const env = {
   MCP_DRAFT_PERSIST_DIR: path.join(scratch, ".state", "drafts"),
   MCP_INSTRUCTION_PENDING_DIR: path.join(scratch, ".state", "pending"),
   MCP_INSTRUCTION_DIFF_DIR: path.join(scratch, ".state", "diffs"),
+  ...substitute({ value: declaredEnv, vars }),
   ...substitute({ value: options.env, vars }),
 };
 
 const transport = new StdioClientTransport({
   command: tsx,
-  args: [entry, ...substitute({ value: options.serverArgs, vars })],
+  args: [entry, ...substitute({ value: serverArgs, vars })],
   env,
   // Inherited, not piped: when a server refuses to start -- a missing
   // documents directory, a bad flag -- what it printed on the way out is the

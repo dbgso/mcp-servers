@@ -2,7 +2,9 @@
 # the thing `mcp-test.sh` cannot express, since it exits between calls.
 #
 #   node scripts/mcp-session.mjs interactive-instruction-mcp \
-#     scripts/flows/interactive-instruction-mcp/approve-promote.jsonl -- '{{TMPDIR}}'
+#     scripts/flows/interactive-instruction-mcp/approve-promote.jsonl
+
+{"server": {"args": ["{{TMPDIR}}"]}}
 
 {"tools": true, "label": "the two tools this server offers"}
 

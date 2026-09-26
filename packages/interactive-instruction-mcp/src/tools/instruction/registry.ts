@@ -31,7 +31,7 @@ export { ActionRegistry };
  * error everywhere it was not applied rather than a broken example a caller
  * finds at runtime.
  */
-const HANDLERS = [
+export const HANDLERS = [
   new ListHandler(),
   new ReadHandler(),
   new AddHandler(),
