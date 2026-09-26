@@ -60,6 +60,7 @@
     "mcp-shared": "workspace:*",
     "mcp-shared-graph-viz": "workspace:*",
     "tsup": "catalog:",
+    "tsx": "catalog:",
     "vitest": "catalog:"
   }
 }
