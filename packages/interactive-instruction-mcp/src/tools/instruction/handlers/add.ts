@@ -9,6 +9,7 @@ import {
   updateFrontmatter,
   stripFrontmatter,
 } from "../../../utils/frontmatter-parser.js";
+import { checkDocument, formatWriteLint } from "../../../services/document-lint.js";
 
 const schema = z.object({
   action: z.literal("add"),
@@ -62,9 +63,16 @@ Usage:
       ? `\n**Workflow:** editing → ${workflowResult.to}`
       : "";
 
+    // What `lint` would say about this document, said now. The author is the
+    // one person who still remembers why the document has the shape it has,
+    // and `lint` is a separate call nobody makes until something else prompts
+    // it -- by which time the draft is approved and the reason is gone.
+    const lint = formatWriteLint(checkDocument({ docId: id, content: finalContent }));
+
     return textResponse(
       `Draft "${id}" created successfully.
 Path: ${result.path}${workflowStatus}` +
+        lint +
         formatNextActions([
           {
             action: "approve",

@@ -17,6 +17,7 @@ import {
   ApplyHandler,
   ApproveHandler,
   ReadMetaHandler,
+  LintHandler,
 } from "../tools/instruction/handlers/index.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 
@@ -962,6 +963,74 @@ describe("Integration Tests", () => {
       // metadata, marked as a record rather than as something to set.
       expect(promotedMeta.content[0].text).toContain("## Also recorded");
       expect(promotedMeta.content[0].text).toContain("approvedAt");
+    });
+  });
+  // ============================================================
+  // E. A rule says the same thing at write time and in `lint`
+  // ============================================================
+  describe("E. Write-time lint", () => {
+    /**
+     * The point of sharing the checks is that the two calls cannot drift: a
+     * document `add` passed and `lint` later objects to is the failure this
+     * section exists to catch, and it is invisible in either handler's own
+     * tests.
+     */
+    it("reports on the way in what lint reports about the corpus", async () => {
+      process.env.IIMCP_LINT_MAX_LINES = "20";
+      const approveHandler = new ApproveHandler();
+      const lintHandler = new LintHandler();
+      resetMutationGatesForTesting();
+
+      const id = "write-time-lint";
+      const longBody = Array.from({ length: 50 }, (_, i) => `Line ${i + 1}.`).join("\n");
+
+      try {
+        const added = await addHandler.execute({
+          rawParams: {
+            action: "add",
+            id,
+            content: longBody,
+            description: "A document that is over the limit on the day it is written",
+            whenToUse: ["reviewing write-time lint"],
+          },
+          context,
+        });
+
+        // Said at the moment the author could still act on it...
+        expect(added.isError).toBeFalsy();
+        expect(added.content[0].text).toContain("document-too-large");
+
+        // ...and the document is saved regardless.
+        await approveHandler.execute({
+          rawParams: { action: "approve", id, notes: "reviewed: long on purpose" },
+          context,
+        });
+        await throughGate(() =>
+          approveHandler.execute({
+            rawParams: {
+              action: "approve",
+              id,
+              explanation: "This is the long document we agreed to keep whole.",
+              force: true,
+            },
+            context,
+          })
+        );
+        expect(await reader.getDocumentContent(id)).toContain("Line 50.");
+
+        // And `lint` says the same thing about it, from the same code.
+        const linted = await lintHandler.execute({
+          rawParams: { action: "lint" },
+          context,
+        });
+        const report = linted.content[0].text as string;
+        expect(report).toContain(`**${id}**`);
+        expect(report).toContain("document-too-large");
+        expect(report).toContain("max recommended: 20");
+      } finally {
+        delete process.env.IIMCP_LINT_MAX_LINES;
+        await draftWorkflowManager.delete({ id }).catch(() => {});
+      }
     });
   });
 });
