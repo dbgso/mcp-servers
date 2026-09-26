@@ -293,7 +293,7 @@ describe("the examples this server prints", () => {
  * contain.
  *
  * Every property below was added in response to a real defect, and none of them
- * changed a single result when they were added -- the same 137 examples before
+ * changed a single result when they were added -- the same 136 examples before
  * and after. So removing any of them would also change nothing, and the suite
  * would stay green while the scanner quietly stopped seeing things. These are
  * the fixtures that make that impossible.

@@ -108,6 +108,21 @@ describe("lint", () => {
     expect(await text(lint, { action: "lint" })).toContain("similar-documents");
   });
 
+  it("does not let a draft's links decide whether a promoted document is an orphan", async () => {
+    // The orphan rule reads `relatedDocs` from every document it is given and
+    // only filters which ids it *reports*, so including drafts would let a
+    // link written in a draft quietly un-orphan a promoted document -- a
+    // finding suppressed by a document that is not published yet.
+    await write({ id: "widgets", body: "# Widgets\n\nReferenced by nothing that counts." });
+    await write({
+      id: `${DRAFT_DIR}__mentions-it`,
+      body: "# Draft",
+      frontmatter: "description: D\nwhenToUse:\n  - testing\nrelatedDocs:\n  - widgets",
+    });
+
+    expect(await text(lint, { action: "lint" })).toContain("orphaned-document");
+  });
+
   it("still holds a promoted document to both", async () => {
     await write({ id: "promoted", body: longBody });
 

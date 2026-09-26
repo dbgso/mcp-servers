@@ -59,13 +59,17 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     // on almost every one -- about a resemblance that is the point rather than
     // a problem, and naming an id nothing else accepts.
     //
-    // Similarity is the only rule the split changes the answer for, and the
-    // only one with a test: removing `corpus` from `checkSimilarDocs` fails the
-    // suite, removing it from the other two does not. The orphan check skips
-    // any id starting with `_`, and a draft cannot enter a cycle at all --
+    // Two of the three rules need this, for different reasons. Similarity
+    // fires on a draft against the document it is a draft of. And the orphan
+    // check reads `relatedDocs` from every document it is handed while only
+    // filtering which ids it *reports*, so a link written in a draft would
+    // quietly un-orphan a promoted document -- a finding suppressed by a
+    // document nobody has published yet.
+    //
+    // Cycles are the exception: a draft cannot enter one at all, because
     // `relatedDocs` stores plain ids while the graph is keyed by the stored
-    // one, so a reference to a draft never resolves. Both are excluded for
-    // consistency, and there is nothing to assert about either: any test would
+    // one, so a reference to a draft never resolves. It is excluded for
+    // consistency, and there is nothing to assert about it -- a test would
     // pass with the exclusion removed.
     const documents = result.documents.filter((d) => !isTrashedDocument(d.id));
     const corpus = documents.filter((d) => !isInternalDocument(d.id));
