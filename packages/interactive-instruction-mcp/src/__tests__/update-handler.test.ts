@@ -73,7 +73,7 @@ describe("UpdateHandler", () => {
   });
 
   describe("basic functionality", () => {
-    it("requires id and content", async () => {
+    it("requires an id", async () => {
       const result = await handler.execute({
         rawParams: { action: "update" },
         context: { reader },
@@ -130,6 +130,101 @@ Same content here.`;
       expect(result.isError).toBeFalsy();
       const text = result.content[0].type === "text" ? result.content[0].text : "";
       expect(text).toContain("No changes detected");
+    });
+  });
+
+  describe("metadata-only updates", () => {
+    const doc = `---
+description: Original description
+whenToUse:
+  - Original trigger
+relatedDocs:
+  - some__other-doc
+---
+
+# Title
+
+The body, which the caller should not have to resend.`;
+
+    const applyTwice = async (params: { id: string }) => {
+      const applyHandler = new ApplyHandler();
+      // The first attempt is refused by design; the second identical one applies.
+      const rawParams = {
+        action: "apply",
+        id: params.id,
+        explanation: "test: applies the staged metadata change",
+      };
+      await applyHandler.execute({ rawParams, context: { reader } });
+      return applyHandler.execute({ rawParams, context: { reader } });
+    };
+
+    it("changes the metadata and leaves the body as it is", async () => {
+      await fs.writeFile(path.join(docsDir, "meta-only.md"), doc);
+
+      const updateResult = await handler.execute({
+        rawParams: {
+          action: "update",
+          id: "meta-only",
+          description: "Rewritten description",
+          whenToUse: ["A better trigger", "And another"],
+        },
+        context: { reader },
+      });
+      expect(updateResult.isError).toBeFalsy();
+
+      expect((await applyTwice({ id: "meta-only" })).isError).toBeFalsy();
+
+      const written = await fs.readFile(path.join(docsDir, "meta-only.md"), "utf-8");
+      expect(written).toContain("description: Rewritten description");
+      expect(written).toContain("- A better trigger");
+      expect(written).toContain("- And another");
+      expect(written).not.toContain("Original trigger");
+      // Neither the body nor the metadata it was not asked about.
+      expect(written).toContain("The body, which the caller should not have to resend.");
+      expect(written).toContain("- some__other-doc");
+    });
+
+    it("can change the description alone", async () => {
+      await fs.writeFile(path.join(docsDir, "desc-only.md"), doc);
+
+      await handler.execute({
+        rawParams: { action: "update", id: "desc-only", description: "Just the description" },
+        context: { reader },
+      });
+      await applyTwice({ id: "desc-only" });
+
+      const written = await fs.readFile(path.join(docsDir, "desc-only.md"), "utf-8");
+      expect(written).toContain("description: Just the description");
+      expect(written).toContain("- Original trigger");
+      expect(written).toContain("The body, which the caller should not have to resend.");
+    });
+
+    it("rejects an update that says nothing", async () => {
+      await fs.writeFile(path.join(docsDir, "nothing.md"), doc);
+
+      const result = await handler.execute({
+        rawParams: { action: "update", id: "nothing" },
+        context: { reader },
+      });
+
+      expect(result.isError).toBe(true);
+      const text = result.content[0].type === "text" ? result.content[0].text : "";
+      expect(text).toContain("Nothing to update");
+    });
+
+    it("keeps a draft body when only the metadata changes", async () => {
+      const draftBody = "# Draft\n\nA body that exists only in the draft.";
+      await fs.writeFile(path.join(draftsDir, "drafted.md"), draftBody);
+
+      const result = await handler.execute({
+        rawParams: { action: "update", id: "drafted", description: "Draft description" },
+        context: { reader },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const written = await fs.readFile(path.join(draftsDir, "drafted.md"), "utf-8");
+      expect(written).toContain("A body that exists only in the draft.");
+      expect(written).toContain("description: Draft description");
     });
   });
 

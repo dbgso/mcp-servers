@@ -251,6 +251,33 @@ ${lines}`;
       expect(text).toContain("document-too-large");
       expect(text).toContain("large-doc");
     });
+
+    it("does not count the frontmatter against the size limit", async () => {
+      // Describing a document well should not spend its size budget: a fifth
+      // `whenToUse` entry used to be a line against the limit, so the rule
+      // rewarded thin metadata.
+      const whenToUse = Array.from({ length: 40 }, (_, i) => `  - Trigger ${i}`).join("\n");
+      const body = Array(120).fill("Line content here.").join("\n");
+      const content = `---
+description: Thoroughly described
+whenToUse:
+${whenToUse}
+---
+
+# Well Described Doc
+
+${body}`;
+      await fs.writeFile(path.join(docsDir, "described-doc.md"), content);
+
+      const result = await handler.execute({
+        rawParams: { action: "lint" },
+        context,
+      });
+
+      const text = result.content[0].type === "text" ? result.content[0].text : "";
+      expect(content.split("\n").length).toBeGreaterThan(150);
+      expect(text).not.toContain("document-too-large");
+    });
   });
 
   describe("similar documents", () => {
