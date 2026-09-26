@@ -101,12 +101,53 @@ ${scripts}
   var head = document.getElementById("head");
   document.documentElement.style.setProperty("--header-height", head.offsetHeight + "px");
 
+  // Constructed without a layout on purpose. Nodes here are sized by their
+  // label (\`width: label\`), and that is not resolved until cytoscape has
+  // rendered once and measured the text -- so a layout run from the
+  // constructor sees every node as a point. cytoscape caches \`takesUpSpace()\`
+  // per style revision, and with a zero width it caches false, which makes
+  // \`layoutDimensions()\` return 1x1 for the rest of the page's life. The
+  // cose-family layouts then place 350px-wide nodes 60px apart: they cover
+  // each other, the edges vanish underneath, and nothing reports an error.
+  //
+  // Measured on a 93-node, 126-edge graph with long ids: 456 of 4278 node
+  // pairs overlapped, the worst by 87% of a node's area. Re-running the layout
+  // after the first render does not fix it (449 pairs) -- the cached value is
+  // still false. Giving each node the size its label measured does (79 pairs),
+  // because a concrete width is one cytoscape can compute from.
   var cy = cytoscape({
     container: document.getElementById("cy"),
     elements: elements,
     style: style,
-    layout: layout,
   });
+
+  function sizeNodesFromLabels() {
+    cy.batch(function () {
+      cy.nodes().forEach(function (node) {
+        // A caller that supplied its own size keeps it; \`node[width]\` in the
+        // stylesheet is what both paths go through.
+        if (node.data("width") === undefined) {
+          node.data("width", Math.ceil(node.width()));
+        }
+        if (node.data("height") === undefined) {
+          node.data("height", Math.ceil(node.height()));
+        }
+      });
+    });
+  }
+
+  var laidOut = false;
+  function layOut() {
+    if (laidOut) { return; }
+    laidOut = true;
+    sizeNodesFromLabels();
+    cy.layout(layout).run();
+  }
+
+  // Whichever comes first: the render that measures the labels, or the next
+  // frame if this build renders synchronously and the event has already gone.
+  cy.one("render", layOut);
+  requestAnimationFrame(layOut);
 
   var tip = document.getElementById("tip");
 

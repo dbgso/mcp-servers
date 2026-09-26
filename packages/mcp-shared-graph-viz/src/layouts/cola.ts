@@ -9,6 +9,7 @@ export const COLA_SCRIPT_URLS = [
 /** Constraint-based force layout; keeps nodes from overlapping. */
 export class ColaLayout extends BaseLayout {
   readonly name = "cola";
+  override readonly sizesNodesByLabel = true;
   override readonly scriptUrls = COLA_SCRIPT_URLS;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {

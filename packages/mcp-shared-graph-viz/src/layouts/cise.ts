@@ -16,6 +16,7 @@ export const CISE_SCRIPT_URLS = [
  */
 export class CiseLayout extends BaseLayout {
   readonly name = "cise";
+  override readonly sizesNodesByLabel = true;
   override readonly scriptUrls = CISE_SCRIPT_URLS;
 
   buildSpec(params: BuildSpecParams): Record<string, unknown> {
