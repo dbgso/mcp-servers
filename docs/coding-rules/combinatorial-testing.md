@@ -65,12 +65,22 @@ thing it guards and watch it go red:
 | mutation | caught |
 |---|---|
 | remove the batch `explanation` guard | yes -- a third row promoted |
+| stop saying OVERWRITE in the preview | yes -- the disclosure assertion |
 | gate 2 attempts -> 1 | only after seeding |
 
 That second row is why `approve.seed.tsv` exists. Pairwise generation covers
 every *pair*, which is not the same as covering the boundary: no generated row
 happened to meet every promotion condition except the repeat, so weakening the
 gate passed unnoticed. Seed the boundary rows the property turns on.
+
+## Keep the rows independent
+
+A row must start from the state its own line describes. Shared process state
+leaks between them: leaving each promoted draft's workflow entry in place made
+the next row trip the consecutive-approval warning, so it returned early and
+never reached the code the row was about. Real behaviour, with its own tests,
+but nothing the model says anything about -- and it silently emptied the set of
+rows that promoted. Tear down what the row created before the next one.
 
 ## When not to bother
 

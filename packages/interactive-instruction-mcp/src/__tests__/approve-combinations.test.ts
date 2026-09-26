@@ -19,6 +19,13 @@
  * Any combination that promotes without all four is the bug this is looking
  * for. The suite also holds the tool to answering rather than throwing, for
  * every combination including the incoherent ones.
+ *
+ * `targetId` is in the model because it is where the worst version of this
+ * went wrong: it used to be read again after the human handed over a token, so
+ * an approval for "create a new note" could be spent overwriting any promoted
+ * document. So the promotion is checked to land at the id that was asked for,
+ * and an overwrite is checked to have been disclosed in the refusal the caller
+ * had to read before repeating the call.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -52,6 +59,7 @@ interface Case {
   explanation: "given" | "omitted";
   force: "on" | "off";
   mode: "single" | "batch";
+  target: "same" | "other_free" | "other_occupied";
   attempts: "once" | "repeated";
 }
 
@@ -80,9 +88,24 @@ function uniqueId(base: string): string {
   return id;
 }
 
-/** Put the draft and its workflow entry into the state the case names. */
+/** The id this case promotes to, and whether something is already there. */
+function targetFor(params: { id: string; testCase: Case }): string {
+  const { id, testCase } = params;
+  return testCase.target === "same" ? id : `${id}-target`;
+}
+
+/** Put the draft, its workflow entry, and the target into the case's state. */
 async function arrange(params: { id: string; testCase: Case }): Promise<void> {
   const { id, testCase } = params;
+
+  if (testCase.target === "other_occupied") {
+    await fs.writeFile(
+      path.join(docsDir, `${targetFor({ id, testCase })}.md`),
+      `---\ndescription: the document already there\n---\n\n# Occupant\n\nOriginal body.\n`,
+      "utf-8"
+    );
+    reader.invalidateCache();
+  }
 
   await add.execute({
     rawParams: {
@@ -134,6 +157,7 @@ function argumentsFor(params: { id: string; testCase: Case }): Record<string, un
   return {
     action: "approve",
     ...(testCase.mode === "batch" ? { ids: id } : { id }),
+    ...(testCase.target !== "same" && { targetId: targetFor({ id, testCase }) }),
     ...(testCase.notes === "given" && { notes: "reviewed: one topic, ready" }),
     ...(testCase.explanation === "given" && { explanation: EXPLANATION }),
     ...(testCase.force === "on" && { force: true }),
@@ -182,18 +206,45 @@ describe("every pair of inputs to approve", () => {
       const args = argumentsFor({ id, testCase });
 
       const runs = testCase.attempts === "repeated" ? 2 : 1;
+      const answers: string[] = [];
       for (let run = 0; run < runs; run++) {
         const result = await approve.execute({ rawParams: args, context });
 
         // Whatever the combination, the tool answers rather than throwing.
         expect(Array.isArray(result.content), JSON.stringify(testCase)).toBe(true);
         expect(result.content.length, JSON.stringify(testCase)).toBeGreaterThan(0);
+        answers.push(result.content.map((c) => c.text ?? "").join("\n"));
       }
 
       reader.invalidateCache();
-      if (await reader.documentExists(id)) {
+      const targetId = targetFor({ id, testCase });
+      const landed = await reader.getDocumentContent(targetId);
+      const isPromotedDraft = landed !== null && landed.includes(`# ${id}`);
+
+      if (isPromotedDraft) {
         promoted.push(testCase);
+
+        // Nothing is promoted to an id other than the one asked for.
+        if (testCase.target !== "same") {
+          expect(await reader.documentExists(id), JSON.stringify(testCase)).toBe(false);
+        }
+
+        // An overwrite has to have been named before it happened: the caller
+        // reads the refusal, then repeats the call. This is the whole of what
+        // binding the approval to the change buys.
+        if (testCase.target === "other_occupied") {
+          expect(answers[0], JSON.stringify(testCase)).toContain("OVERWRITE");
+        }
+      } else if (testCase.target === "other_occupied") {
+        // A refused promotion leaves the occupant exactly as it was.
+        expect(landed, JSON.stringify(testCase)).toContain("Original body.");
       }
+
+      // Each row starts from the state its own line describes. Left in place,
+      // a row that reached `pending_approval` makes the next row trip the
+      // consecutive-approval warning -- real behaviour, with its own tests,
+      // but nothing this model says anything about.
+      await draftWorkflowManager.delete({ id });
     }
 
     const expected = cases.filter(shouldPromote);

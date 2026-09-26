@@ -1,16 +1,19 @@
-state	draft	notes	explanation	force	mode	attempts
-user_reviewing	present	omitted	given	off	single	once
-pending_approval	present	omitted	given	off	single	once
-self_review	present	omitted	omitted	off	batch	repeated
-missing	present	given	omitted	on	single	repeated
-user_reviewing	absent	given	omitted	on	single	once
-pending_approval	present	omitted	given	off	batch	repeated
-self_review	absent	given	given	on	single	once
-pending_approval	absent	omitted	omitted	on	single	once
-user_reviewing	absent	omitted	omitted	off	batch	once
-missing	absent	omitted	given	off	batch	once
-editing	present	given	omitted	off	single	repeated
-editing	absent	omitted	given	off	batch	once
-editing	absent	omitted	given	on	single	once
-pending_approval	absent	given	given	off	single	once
-user_reviewing	present	omitted	given	off	batch	repeated
+state	draft	notes	explanation	force	mode	target	attempts
+user_reviewing	present	omitted	given	off	single	same	once
+pending_approval	present	omitted	given	off	single	same	once
+user_reviewing	present	omitted	given	off	single	other_occupied	repeated
+pending_approval	present	omitted	given	off	single	other_occupied	once
+pending_approval	present	given	omitted	on	single	other_free	repeated
+editing	absent	given	omitted	on	single	other_occupied	once
+self_review	present	omitted	omitted	off	single	other_occupied	repeated
+self_review	absent	omitted	given	off	batch	same	once
+missing	absent	given	given	off	single	other_free	once
+missing	present	omitted	omitted	on	single	other_occupied	repeated
+user_reviewing	present	given	omitted	on	single	other_free	repeated
+user_reviewing	present	omitted	omitted	off	batch	same	repeated
+missing	absent	omitted	omitted	off	batch	same	once
+user_reviewing	absent	given	given	on	single	same	once
+self_review	present	given	omitted	on	single	other_free	once
+editing	present	omitted	given	off	single	other_free	repeated
+editing	present	omitted	omitted	off	batch	same	repeated
+pending_approval	absent	omitted	omitted	off	batch	same	once

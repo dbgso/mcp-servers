@@ -41,12 +41,20 @@ force: on, off
 # One draft, or a batch under a single explanation.
 mode: single, batch
 
+# Where the draft is promoted to. `targetId` is the argument that used to be
+# read again after the human handed over a token, so that an approval for
+# "create a new note" could be spent overwriting any promoted document. It is
+# bound into the approval now, and the preview says OVERWRITE -- which is the
+# guarantee this factor is here to hold.
+target: same, other_free, other_occupied
+
 # Whether the caller repeats the identical call, which is what the
 # deliberation gate requires before it lets a write through.
 attempts: once, repeated
 
 # `notes` and `force` are single-draft arguments; the batch path takes neither.
-IF [mode] = "batch" THEN [notes] = "omitted" AND [force] = "off";
+# Nor does it take a `targetId`: a batch promotes each draft to its own id.
+IF [mode] = "batch" THEN [notes] = "omitted" AND [force] = "off" AND [target] = "same";
 
 # A missing workflow entry and a present state are the same situation for a
 # draft that is not on disk: there is nothing to promote either way. Keep the
