@@ -199,6 +199,110 @@ describe("the same heading twice in one document", () => {
     expect(await run()).not.toContain("duplicate-heading");
   });
 
+  /**
+   * The parent, which is what made this rule usable on specifications.
+   *
+   * Counting by text and level alone reported every repeated subsection in a
+   * document that writes the same headings once per feature. In one corpus of 47
+   * documents that was eleven findings, and the one document that really had
+   * been appended to was nearly missed among them.
+   */
+  it("does not report the same subsection under different parents", async () => {
+    await write({
+      id: "api-spec",
+      frontmatter: meta,
+      body: [
+        "# API",
+        "",
+        "## Feature A",
+        "",
+        "### Endpoint",
+        "",
+        "POST /a",
+        "",
+        "### Request body",
+        "",
+        "`{}`",
+        "",
+        "## Feature B",
+        "",
+        "### Endpoint",
+        "",
+        "POST /b",
+        "",
+        "### Request body",
+        "",
+        "`{}`",
+      ].join("\n"),
+    });
+
+    expect(await run()).not.toContain("duplicate-heading");
+  });
+
+  it("reports the same subsection twice under one parent", async () => {
+    await write({
+      id: "appended-sub",
+      frontmatter: meta,
+      body: "# API\n\n## Feature A\n\n### Endpoint\n\nPOST /a\n\n### Endpoint\n\nPOST /a2",
+    });
+
+    const text = await run();
+    expect(text).toContain("duplicate-heading");
+    // The whole chain is named, because that is what the reader has to look at.
+    expect(text).toContain('under "api > feature a"');
+  });
+
+  it("still reports a section repeated under the document's title", async () => {
+    // The true positive the eleven false ones were burying: `## Security` twice
+    // under one `# T`, with another section in between.
+    await write({
+      id: "appended-top",
+      frontmatter: meta,
+      body: "# T\n\n## Security\n\na\n\n## Operations\n\nb\n\n## Security\n\nc",
+    });
+
+    const text = await run();
+    expect(text).toContain("duplicate-heading");
+    expect(text).toContain('under "t"');
+  });
+
+  it("says \"the top level\" for a heading with no ancestor", async () => {
+    // A document with two `#` headings has nothing above them to name.
+    await write({
+      id: "two-titles",
+      frontmatter: meta,
+      body: "# Title\n\na\n\n# Title\n\nb",
+    });
+
+    const text = await run();
+    expect(text).toContain("duplicate-heading");
+    expect(text).toContain("under the top level");
+  });
+
+  it("compares the whole ancestry, not just the nearest parent", async () => {
+    // `#### Request` under two different endpoints of one feature is as
+    // intended as the endpoints are. Keying on the nearest parent alone would
+    // be enough here; keying on the chain is what keeps it right when two
+    // features each have an `### Endpoint`.
+    await write({
+      id: "deep",
+      frontmatter: meta,
+      body: [
+        "# API", "",
+        "## Feature A", "",
+        "### Endpoint one", "",
+        "#### Request", "", "a", "",
+        "### Endpoint two", "",
+        "#### Request", "", "b", "",
+        "## Feature B", "",
+        "### Endpoint one", "",
+        "#### Request", "", "c",
+      ].join("\n"),
+    });
+
+    expect(await run()).not.toContain("duplicate-heading");
+  });
+
   it("is not silenced by a size exemption", async () => {
     // The exemption says the document is deliberately long, which says nothing
     // about its structure being broken.

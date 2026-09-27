@@ -69,7 +69,7 @@ to have had its self-review recorded first.
 | `read` | The prose. No frontmatter, for a draft or a promoted document |
 | `read_meta` | The metadata, its neighbours in the `relatedDocs` graph, and what better metadata would say. Writes nothing |
 | `list` | The promoted corpus. `drafts: true` lists drafts instead, by the plain id every other action takes |
-| `lint` | Quality checks. See `specification__file-structure` for which ones reach a draft |
+| `lint` | Quality checks. See `specification__file-structure` for which ones reach a draft. `document-too-large` is answered with `update(id, sizeExemption: "<why>")` and `sizeExemption: null` removes it; `duplicate-heading` counts a heading as repeated only under the same ancestry |
 | `backlinks` | Which promoted documents reference one document, in one hop, with their descriptions. `id` is required |
 
 `approve`'s `targetId` and `notes` are single-promotion arguments. The batch form

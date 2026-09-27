@@ -1,0 +1,19 @@
+# The three things 2.0.0 shipped that using it turned up (#66, #67, #68).
+#
+# Run with the reminder flags, because #67 is only visible with them: the block
+# is what names the tools, and it named `help` and `help(id:)` -- removed in
+# 2.0.0. An agent reading it called a tool that does not exist, on every
+# response, which made it the most-read wrong text the server emitted.
+{"server": {"args": ["{{TMPDIR}}", "--remind-mcp", "--remind-organize", "--topic-for-every-task", "critical-rules", "--info-expires", "120"], "env": {"IIMCP_LINT_MAX_LINES": "5"}}}
+
+{"call": "instruction", "label": "#67 the reminders name tools that exist", "args": {"action": "list"}, "expect": ["instruction(action: \"list\")", "instruction(action: \"read\", id: \"critical-rules\")"], "expectNot": ["help(id:", "the 'help' tool"]}
+
+{"call": "instruction", "label": "#66 a long document is reported, and told how to answer", "args": {"action": "add", "id": "big", "content": "# Big\n\na\nb\nc\nd\ne\nf\ng\nh", "description": "a long document", "whenToUse": ["testing"]}, "expect": ["document-too-large", "sizeExemption: \"<why>\""]}
+{"call": "instruction", "label": "#66 and the answer can be written", "args": {"action": "update", "id": "big", "sizeExemption": "A reference table; it is worth more in one piece."}, "expectNot": ["Nothing to update", "Unrecognized", "invalid_type"]}
+{"call": "instruction", "label": "#66 after which lint stops reporting it", "args": {"action": "lint"}, "expectNot": ["document-too-large"]}
+{"call": "instruction", "label": "#66 read_meta shows the reason", "args": {"action": "read_meta", "id": "_mcp_drafts__big"}, "expect": ["A reference table"]}
+{"call": "instruction", "label": "#66 and null takes it off again", "args": {"action": "update", "id": "big", "sizeExemption": null}, "expectNot": ["Nothing to update", "invalid_type"]}
+{"call": "instruction", "label": "#66 so the finding comes back", "args": {"action": "lint"}, "expect": ["document-too-large"]}
+
+{"call": "instruction", "label": "#68 the same subsection under different parents is not a duplicate", "args": {"action": "add", "id": "api", "content": "# API\n\n## Feature A\n\n### Endpoint\n\nPOST /a\n\n## Feature B\n\n### Endpoint\n\nPOST /b", "description": "an api spec", "whenToUse": ["testing"], "sizeExemption": "Reference table."}, "expectNot": ["duplicate-heading"]}
+{"call": "instruction", "label": "#68 twice under one parent still is", "args": {"action": "add", "id": "appended", "content": "# T\n\n## Security\n\na\n\n## Operations\n\nb\n\n## Security\n\nc", "description": "an appended document", "whenToUse": ["testing"], "sizeExemption": "Reference table."}, "expect": ["duplicate-heading", "under \"t\""]}

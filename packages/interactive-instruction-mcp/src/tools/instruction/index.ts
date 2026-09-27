@@ -95,6 +95,7 @@ This tool explains how to use the instruction tool.
 ### Draft Operations
 - \`instruction(action: "add", id: "<id>", content: "...", description: "...", whenToUse: [...], relatedDocs: [...])\` - Create draft (\`relatedDocs\` optional)
 - \`instruction(action: "update", id: "<id>", content: "...")\` - Update draft (direct) or promoted doc (pending + apply/cancel)
+- \`instruction(action: "update", id: "<id>", sizeExemption: "<why>")\` - Keep a long document whole, with the reason on the record (null removes it)
 - \`instruction(action: "delete", id: "<id>")\` - Delete a draft (immediate)
 - \`instruction(action: "delete", id: "<id>", explanation: "<what you told the user>")\` - Delete a promoted document (repeat the identical call twice more)
 - \`instruction(action: "rename", id: "<id>", newId: "<new-id>")\` - Rename a draft (immediate)

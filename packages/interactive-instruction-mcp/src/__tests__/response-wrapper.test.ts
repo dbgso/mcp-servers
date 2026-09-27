@@ -16,7 +16,7 @@ describe("buildReminderBlock", () => {
     {
       name: "includes MCP reminder only",
       config: { remindMcp: true, remindOrganize: false, customReminders: [], topicForEveryTask: null, infoValidSeconds: 60 },
-      expected: ["Always refer to this MCP", "help"],
+      expected: ['Always refer to this MCP', 'instruction(action: "list")'],
     },
     {
       name: "includes organize reminder only",
@@ -46,7 +46,7 @@ describe("buildReminderBlock", () => {
     {
       name: "includes topic-for-every-task reminder with custom seconds",
       config: { remindMcp: false, remindOrganize: false, customReminders: [], topicForEveryTask: "always-check", infoValidSeconds: 30 },
-      expected: ["30 seconds", "always-check", "help(id:"],
+      expected: ["30 seconds", "always-check", 'instruction(action: "read", id: "always-check")'],
     },
   ])("$name", ({ config, expected }) => {
     const result = buildReminderBlock({ config });
@@ -166,5 +166,37 @@ describe("wrapResponse", () => {
     const result = wrapResponse({ result: originalResult, config });
 
     expect(result.customProperty).toBe("value");
+  });
+});
+
+/**
+ * The reminders are the most-read text this server emits -- appended to every
+ * response -- and until 2.0.1 they named `help` and `help(id:)`, tools 2.0.0 had
+ * removed. An agent following them called a tool that does not exist.
+ *
+ * Asserting the new wording is not enough on its own: the old wording could come
+ * back alongside it. So the retired names are asserted absent.
+ */
+describe("the reminders name tools that exist", () => {
+  const every = {
+    remindMcp: true,
+    remindOrganize: true,
+    customReminders: [],
+    topicForEveryTask: "critical-rules",
+    infoValidSeconds: 120,
+  };
+
+  it.each(["help(id:", "the 'help' tool", "`help`", "draft(action:", "apply(action:", "description()"])(
+    "does not name the retired %s",
+    (retired) => {
+      expect(buildReminderBlock({ config: every })).not.toContain(retired);
+    }
+  );
+
+  it("names the two tools the server registers", () => {
+    const block = buildReminderBlock({ config: every });
+
+    expect(block).toContain('instruction(action: "list")');
+    expect(block).toContain('instruction(action: "read", id: "critical-rules")');
   });
 });
