@@ -27,7 +27,18 @@ const schema = z.object({
  * printing the prefixed one would name something the caller cannot act on.
  */
 function displayId(id: string): string {
-  return id.startsWith(DRAFT_PREFIX) ? `${id.slice(DRAFT_PREFIX.length)} (draft)` : id;
+  return id.startsWith(DRAFT_PREFIX) ? `${bareId(id)} (draft)` : id;
+}
+
+/**
+ * The same id with nothing added, for an example call.
+ *
+ * `displayId` appends ` (draft)` so a reader can tell the two sets apart, and
+ * that suffix is not part of any id. A finding whose message names the call that
+ * answers it has to use this one, or it hands the caller a call that fails.
+ */
+function bareId(id: string): string {
+  return id.startsWith(DRAFT_PREFIX) ? id.slice(DRAFT_PREFIX.length) : id;
 }
 
 type Args = z.infer<typeof schema>;
@@ -86,7 +97,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     for (const doc of documents) {
       const content = await reader.getDocumentContent(doc.id);
       if (content === null) continue;
-      issues.push(...checkDocument({ docId: displayId(doc.id), content }));
+      issues.push(...checkDocument({ docId: displayId(doc.id), callId: bareId(doc.id), content }));
     }
 
     // Corpus-wide: properties of the set, which no single write can decide.

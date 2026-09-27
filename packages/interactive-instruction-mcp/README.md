@@ -105,8 +105,10 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `lint` — Check document quality: missing metadata, orphans, size, similarity, copied passages,
   circular references, and repeated headings. A draft is held to the rules it can answer on its own; the
   corpus-wide ones wait until it is promoted. A document that is deliberately long says so with
-  `update(id, sizeExemption: "<why>")`, and `sizeExemption: null` takes it off again once the
-  document is back within the limit. A repeated heading counts as repeated only under the same
+  `update(id, sizeExemption: "<why>")`, and `sizeExemption: null` -- or `""`, for a client that
+  renders arguments as strings and so cannot send null -- takes it off again once the document is
+  back within the limit. A value that is not a reason, such as the string `"null"`, is refused
+  rather than stored. A repeated heading counts as repeated only under the same
   parent, so a specification that writes `### Endpoint` once per feature is not reported for it.
   The rules a single document can answer on its own
   — size, repeated headings, missing metadata — are also reported by `add` and `update` as they

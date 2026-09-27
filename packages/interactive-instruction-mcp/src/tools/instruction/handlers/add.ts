@@ -9,7 +9,7 @@ import {
   updateFrontmatter,
   stripFrontmatter,
 } from "../../../utils/frontmatter-parser.js";
-import { checkDocument, formatWriteLint } from "../../../services/document-lint.js";
+import { checkDocument, formatWriteLint, isReasonGiven } from "../../../services/document-lint.js";
 
 const schema = z.object({
   action: z.literal("add"),
@@ -37,6 +37,50 @@ const schema = z.object({
 type Args = z.infer<typeof schema>;
 
 
+/**
+ * What `sizeExemption` was given, as one of three intents.
+ *
+ * `null` means remove, and a client that renders tool arguments as strings
+ * cannot send it: what arrives is `"null"`, which 2.0.1 stored as the reason. So
+ * the call `stale-size-exemption` recommends did nothing and the finding came
+ * back unchanged. An empty string is accepted as remove for that reason -- it is
+ * the one "no value" a stringifying client can express -- and the placeholders
+ * are refused rather than stored, because a document whose reason reads "null"
+ * is one the next reader cannot make sense of.
+ */
+function readSizeExemption(value: string | null | undefined):
+  | { kind: "unchanged" }
+  | { kind: "remove" }
+  | { kind: "set"; reason: string }
+  | { kind: "refused"; given: string } {
+  if (value === undefined) return { kind: "unchanged" };
+  if (value === null) return { kind: "remove" };
+
+  const trimmed = value.trim();
+  if (trimmed === "") return { kind: "remove" };
+  if (!isReasonGiven(trimmed)) return { kind: "refused", given: trimmed };
+  return { kind: "set", reason: value };
+}
+
+/** The refusal, naming both ways to remove it and what a reason is for. */
+function refuseSizeExemption(params: { id: string; given: string }): ToolResponse {
+  const { id, given } = params;
+  return errorResponse(
+    `\`sizeExemption: "${given}"\` is not a reason for keeping the document whole, and storing it would leave the next reader unable to tell a decision from a warning nobody got to.` +
+    formatNextActions([
+      {
+        action: "update",
+        description: "Remove the exemption",
+        example: `instruction(action: "update", id: "${id}", sizeExemption: "")`,
+      },
+      {
+        action: "update",
+        description: "Say why the document stays whole",
+        example: `instruction(action: "update", id: "${id}", sizeExemption: "<why>")`,
+      },
+    ]));
+}
+
 export class AddHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "add";
   readonly help = `Create a new draft document with frontmatter metadata.
@@ -54,13 +98,18 @@ Usage:
     const { id, content, description, whenToUse, relatedDocs, sizeExemption } = params.args;
     const { reader } = params.context;
 
+    const exemption = readSizeExemption(sizeExemption);
+    if (exemption.kind === "refused") {
+      return refuseSizeExemption({ id, given: exemption.given });
+    }
+
     // Generate content with frontmatter
     const finalContent = this.generateContentWithFrontmatter({
       content,
       description,
       whenToUse,
       relatedDocs,
-      sizeExemption,
+      sizeExemption: exemption.kind === "set" ? exemption.reason : exemption.kind === "remove" ? null : undefined,
     });
 
     const draftId = DRAFT_PREFIX + id;
@@ -136,7 +185,10 @@ Path: ${result.path}${workflowStatus}` +
         description,
         whenToUse,
         relatedDocs: relatedDocs ?? fromContent.relatedDocs,
-        sizeExemption: sizeExemption ?? fromContent.sizeExemption ?? undefined,
+        // `null` is "explicitly none", which is what an empty string at creation
+        // means; `undefined` is "nothing said", which falls back to whatever the
+        // frontmatter inside `content` claimed.
+        sizeExemption: sizeExemption === null ? undefined : (sizeExemption ?? fromContent.sizeExemption),
         // The draft is entering the workflow, whatever the content claimed.
         status: "editing",
       },

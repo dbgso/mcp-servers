@@ -176,20 +176,64 @@ export function headingsOf(body: string): { level: number; text: string }[] {
 }
 
 /**
+ * Values that arrive where a reason should be, and are not one.
+ *
+ * `null` removes the exemption, and a client that renders tool arguments as
+ * strings cannot send it -- what reaches the server is the four characters
+ * `null`, which was accepted and stored as the reason. So the call the
+ * `stale-size-exemption` finding recommends did nothing, and the finding came
+ * back, saying the same thing.
+ *
+ * Kept to the two that come from serialising an absent value. "none" and "n/a"
+ * are things somebody might actually mean, however unhelpfully, and guessing at
+ * those would be deciding what a reason is allowed to say.
+ */
+const PLACEHOLDER_REASONS = new Set(["null", "undefined"]);
+
+/**
+ * Whether a `sizeExemption` value says anything.
+ *
+ * Shared by the write path, which refuses these before they are stored, and by
+ * `lint`, which reports the ones already in a corpus -- 2.0.1 stored them for
+ * anyone whose client stringifies, and a document whose reason reads "null" is
+ * one the next reader cannot make sense of either way.
+ */
+export function isReasonGiven(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  const trimmed = value.trim();
+  return trimmed !== "" && !PLACEHOLDER_REASONS.has(trimmed.toLowerCase());
+}
+
+/**
  * Every document-local rule, run over one document's raw file content.
  *
  * `add`, `update` and `lint` all call this, which is the point: a rule added
  * here starts reporting at write time and in the corpus report together,
  * rather than in whichever one the author happened to edit.
  */
-export function checkDocument(params: { docId: string; content: string }): LintIssue[] {
-  const { docId, content } = params;
+export function checkDocument(params: {
+  docId: string;
+  content: string;
+  /**
+   * The id to write into an example call, when that differs from the one to
+   * print.
+   *
+   * `lint` labels a draft `<id> (draft)`, because the stored id names a path
+   * rather than anything an action takes. Once these messages began naming the
+   * call that answers them, that label went into the call too, and every
+   * finding on a draft offered `id: "big (draft)"` -- an id no action accepts.
+   * The label and the argument are different things and are now passed
+   * separately.
+   */
+  callId?: string;
+}): LintIssue[] {
+  const { docId, content, callId = params.docId } = params;
   const frontmatter = parseFrontmatter(content);
   const body = stripFrontmatter(content);
 
   return [
     ...checkMissingMetadata({ docId, frontmatter }),
-    ...checkDocumentSize({ docId, body, frontmatter }),
+    ...checkDocumentSize({ docId, callId, body, frontmatter }),
     ...checkDuplicateHeadings({ docId, body }),
   ];
 }
@@ -237,10 +281,11 @@ function checkMissingMetadata(params: {
  */
 function checkDocumentSize(params: {
   docId: string;
+  callId: string;
   body: string;
   frontmatter: DocumentFrontmatter;
 }): LintIssue[] {
-  const { docId, body, frontmatter } = params;
+  const { docId, callId, body, frontmatter } = params;
   const issues: LintIssue[] = [];
 
   // The body only. Counting the frontmatter meant that describing a document
@@ -251,7 +296,7 @@ function checkDocumentSize(params: {
   const lineCount = body.split("\n").length;
   const tooLarge = lineCount > maxLines;
   const exemption = frontmatter.sizeExemption;
-  const hasReason = exemption !== undefined && exemption.trim() !== "";
+  const hasReason = isReasonGiven(exemption);
 
   if (exemption !== undefined && !hasReason) {
     issues.push({
@@ -259,10 +304,10 @@ function checkDocumentSize(params: {
       docId,
       rule: "size-exemption-without-reason",
       message:
-        "`sizeExemption` needs a reason for keeping the document whole. " +
-        "Without one it is a mute button, and the next reader cannot tell " +
+        `\`sizeExemption\` is set to ${exemption === undefined || exemption.trim() === "" ? "nothing" : `"${exemption.trim()}"`}, which says nothing about why the document stays whole. ` +
+        "Without a reason it is a mute button, and the next reader cannot tell " +
         "a decision from an unaddressed warning: " +
-        `\`instruction(action: "update", id: "${docId}", sizeExemption: "<why>")\`.`,
+        `\`instruction(action: "update", id: "${callId}", sizeExemption: "<why>")\`.`,
     });
   }
 
@@ -274,7 +319,7 @@ function checkDocumentSize(params: {
       message:
         `Document body has ${lineCount} lines (max recommended: ${maxLines}). ` +
         "Consider splitting, or say why it stays whole: " +
-        `\`instruction(action: "update", id: "${docId}", sizeExemption: "<why>")\`.`,
+        `\`instruction(action: "update", id: "${callId}", sizeExemption: "<why>")\`.`,
     });
   }
 
@@ -288,7 +333,7 @@ function checkDocumentSize(params: {
       message:
         `Document body is ${lineCount} lines, within the limit, but still carries ` +
         "`sizeExemption`, and an exemption outlives the reason for it: " +
-        `\`instruction(action: "update", id: "${docId}", sizeExemption: null)\`.`,
+        `\`instruction(action: "update", id: "${callId}", sizeExemption: null)\`.`,
     });
   }
 
