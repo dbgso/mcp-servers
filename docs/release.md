@@ -96,9 +96,13 @@ try to publish an ignored package whose version is ahead of the registry.
 
 ## Nothing publishes unless it is marked publishable
 
-**Every package in this repository currently has `private: true`**, so a push to
-`main` publishes nothing. That is the intended resting state: publishing is an
-opt-in, per package, and removing `private` is the act of opting in.
+**Almost every package in this repository has `private: true`.** Two have opted
+in -- `mcp-interactive-instruction` and `kroki-mcp` -- and a push to `main`
+publishes those two, and only when their version is ahead of npm. That is the
+intended resting state: publishing is an opt-in, per package, and removing
+`private` is the act of opting in. `node scripts/bootstrap-npm-names.mjs`, or
+`jq -r 'select(.private != true) | .name' packages/*/package.json`, says which
+packages are currently opted in.
 
 It matters because `changeset publish` decides what to publish by comparing each
 package's version against the registry, not by looking at which changesets were
@@ -112,6 +116,26 @@ intent rather than mechanism:
 - the shared `mcp-shared*` libraries, and the Docker-distributed servers — never
   published to npm at all;
 - a server that will be published, but is not ready yet.
+
+### A package published before Trusted Publishing was set up
+
+Opting in is two separate things, and having one does not imply the other: no
+`private`, and a Trusted Publisher on npm. A package published by hand long
+enough ago has the first and not the second, and nothing says so until a release
+runs -- the publish fails with `E404 undefined`, which reads as "no such
+package" about a package that plainly exists.
+
+That is what `mcp-interactive-instruction` did on the 2.0.0 release: 1.2.0 went
+to npm in February 2026 and 2.0.0 was cut in September, `private` had been gone
+the whole time, and the OIDC exchange answered 404 because no Trusted Publisher
+had ever been attached. The fix is the
+same as step 2 below, done against the existing package, and then re-running the
+release -- the versions are already correct on `main`, so `changeset publish`
+simply tries again.
+
+The `Check whether npm accepts our OIDC identity` step reports this before the
+build, per package, with the claims npm matched against. Read it when a release
+fails at publish.
 
 ### Releasing a package for the first time
 

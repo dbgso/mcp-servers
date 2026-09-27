@@ -80,10 +80,20 @@ jobs:
               -H "Authorization: Bearer $id_token" -H "Content-Length: 0" \
               "${REGISTRY}/-/npm/v1/oidc/token/exchange/package/${escaped}")
 
-            if [ "$status" = "200" ]; then
-              echo "$name: npm accepted this workflow as a trusted publisher"
-              continue
-            fi
+            # Any 2xx. npm answers a successful exchange with 201, not 200,
+            # so testing for 200 reported every correctly configured package as
+            # refused -- which is how this step came to print
+            # "npm refused this workflow (HTTP 201)" about the two packages it
+            # had just accepted, in the same run as a genuine 404 from the one
+            # that really was unconfigured. A check that says the wrong thing
+            # about a working setup is worse than no check: the real refusal was
+            # sitting next to two false ones.
+            case "$status" in
+              2??)
+                echo "$name: npm accepted this workflow as a trusted publisher"
+                continue
+                ;;
+            esac
 
             echo "::warning::$name: npm refused this workflow (HTTP $status) -- $(jq -r '.error // .message // "no detail"' "$body" 2>/dev/null). Compare the claims below against https://www.npmjs.com/package/$name/access"
             ID_TOKEN="$id_token" node -e '
