@@ -86,8 +86,8 @@ describe("a parameter declared by more than one action", () => {
           accepted.length === 0 || rejected.length === 0,
           `\`${name}\` given ${probe.label}: accepted by ${accepted.join(", ") || "none"}; ` +
           `rejected by ${rejected.join(", ") || "none"}. ` +
-          "The merged tool schema keeps whichever of these is registered first, so " +
-          "the others are advertising a contract the tool will not honour. Declare " +
+          "The tool publishes one schema for every action, so the server now refuses " +
+          "to start rather than dropping one of two disagreeing contracts. Declare " +
           "the field the same way in each, or give them different names."
         ).toBe(true);
       }
