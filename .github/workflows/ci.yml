@@ -29,8 +29,14 @@ jobs:
       - name: Test with coverage
         run: pnpm -r test --coverage
 
+      # v7 rather than v5 for the same reason as the rest: v5 pins
+      # `actions/github-script@v7.0.1` internally, which is node20, and the
+      # runner reported it as the last one left. v6 is the release that bumped
+      # it; v7 only changes which account holds the gpg key. Coverage upload
+      # already tolerates its own failure below, so this is the cheapest of the
+      # bumps to be wrong about.
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
