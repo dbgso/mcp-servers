@@ -14,6 +14,14 @@ import {
 } from "../../../services/document-lint.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
+import {
+  checkHubIndex,
+  checkPrefersHub,
+  childCandidates,
+  childrenByParent,
+  referencesOf,
+  type HubDocument,
+} from "../../../services/hub-lint.js";
 
 const schema = z.object({
   action: z.literal("lint"),
@@ -172,8 +180,8 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "lint";
   readonly help =
     "Run quality checks. A draft is held to the rules it can answer on its own (size, repeated " +
-    "headings, missing metadata); orphans, similarity and circular references are reported for the " +
-    "promoted corpus only. The trash is never checked.";
+    "headings, missing metadata); orphans, similarity, hub structure and circular references are " +
+    "reported for the promoted corpus only. The trash is never checked.";
   readonly schema = schema;
 
   protected async doExecute(params: {
@@ -214,12 +222,17 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     const documents = result.documents;
     const corpus = documents.filter((d) => !isInternalDocument(d.id));
 
+    // Read once. Three of these rules want the body, and reading per rule meant
+    // a rule could disagree with another about what a document said.
+    const contents = await this.contentsOf({ reader, documents });
+
     const issues: LintIssue[] = [
-      ...(await this.checkEachDocument({ reader, documents })),
+      ...this.checkEachDocument({ documents, contents }),
       // Corpus-wide: properties of the set, which no single write can decide.
       ...this.checkOrphanedDocs({ documents: corpus }),
       ...this.checkSimilarDocs({ documents: corpus }),
-      ...(await this.checkCopiedContent({ reader, documents: corpus })),
+      ...this.checkCopiedContent({ documents: corpus, contents }),
+      ...this.checkHubStructure({ documents: corpus, contents }),
       ...this.checkCircularReferences({ documents: corpus }),
     ];
 
@@ -248,20 +261,89 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
    * write time, so a document cannot be clean on the way in and dirty in the
    * report.
    */
-  private async checkEachDocument(params: {
-    reader: MarkdownReader;
+  private checkEachDocument(params: {
     documents: MarkdownSummary[];
-  }): Promise<LintIssue[]> {
-    const { reader, documents } = params;
+    contents: Map<string, string>;
+  }): LintIssue[] {
+    const { documents, contents } = params;
     const issues: LintIssue[] = [];
 
     for (const doc of documents) {
-      const content = await reader.getDocumentContent(doc.id);
-      if (content === null) continue;
+      const content = contents.get(doc.id);
+      if (content === undefined) continue;
       issues.push(...checkDocument({ docId: displayId(doc.id), callId: bareId(doc.id), content }));
     }
 
     return issues;
+  }
+
+  /** Documents whose file could not be read drop out rather than read as empty. */
+  private async contentsOf(params: {
+    reader: MarkdownReader;
+    documents: MarkdownSummary[];
+  }): Promise<Map<string, string>> {
+    const { reader, documents } = params;
+    const contents = new Map<string, string>();
+
+    for (const doc of documents) {
+      const content = await reader.getDocumentContent(doc.id);
+      if (content === null) continue;
+      contents.set(doc.id, content);
+    }
+
+    return contents;
+  }
+
+  /**
+   * The hub rules, which need the whole set and the bodies at once.
+   *
+   * A hub is an id other ids are built from *and* a document that exists --
+   * `workflow__x` alone does not make `workflow` a hub, and telling a caller to
+   * read a document that was never written is worse than the list it replaces.
+   */
+  private checkHubStructure(params: {
+    documents: MarkdownSummary[];
+    contents: Map<string, string>;
+  }): LintIssue[] {
+    const docs = this.hubDocuments(params);
+    const ids = docs.map((doc) => doc.id);
+    const existing = new Set(ids);
+    const families = childrenByParent(ids);
+    const hubs = new Set([...families.keys()].filter((id) => existing.has(id)));
+    const candidates = childCandidates(ids);
+
+    return docs.flatMap((doc) => {
+      const referenced = referencesOf({ doc, candidates });
+      return [
+        ...checkPrefersHub({ doc, referenced, hubs }),
+        ...this.hubIndexIssues({ doc, referenced, hubs, families }),
+      ];
+    });
+  }
+
+  private hubIndexIssues(params: {
+    doc: HubDocument;
+    referenced: Set<string>;
+    hubs: Set<string>;
+    families: Map<string, string[]>;
+  }): LintIssue[] {
+    const { doc, referenced, hubs, families } = params;
+    if (!hubs.has(doc.id)) return [];
+    return checkHubIndex({ hub: doc, children: families.get(doc.id) ?? [], referenced });
+  }
+
+  private hubDocuments(params: {
+    documents: MarkdownSummary[];
+    contents: Map<string, string>;
+  }): HubDocument[] {
+    const { documents, contents } = params;
+    return documents
+      .filter((doc) => contents.has(doc.id))
+      .map((doc) => ({
+        id: doc.id,
+        relatedDocs: doc.relatedDocs,
+        content: contents.get(doc.id) ?? "",
+      }));
   }
 
   private checkOrphanedDocs(params: {
@@ -287,13 +369,13 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
    * Reported as one issue per pair, naming where the run starts in the first of
    * them, because the fix is a single decision about the pair.
    */
-  private async checkCopiedContent(params: {
-    reader: MarkdownReader;
+  private checkCopiedContent(params: {
     documents: MarkdownSummary[];
-  }): Promise<LintIssue[]> {
-    const { reader, documents } = params;
+    contents: Map<string, string>;
+  }): LintIssue[] {
+    const { documents, contents } = params;
     const minLines = configuredMinDuplicateLines();
-    const bodies = await this.comparableBodies({ reader, documents });
+    const bodies = this.comparableBodies({ documents, contents });
 
     const issues: LintIssue[] = [];
     for (let i = 0; i < bodies.length; i++) {
@@ -305,17 +387,16 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     return issues;
   }
 
-  /** Documents whose file could not be read drop out rather than compare as empty. */
-  private async comparableBodies(params: {
-    reader: MarkdownReader;
+  private comparableBodies(params: {
     documents: MarkdownSummary[];
-  }): Promise<ComparableBody[]> {
-    const { reader, documents } = params;
+    contents: Map<string, string>;
+  }): ComparableBody[] {
+    const { documents, contents } = params;
     const bodies: ComparableBody[] = [];
 
     for (const doc of documents) {
-      const content = await reader.getDocumentContent(doc.id);
-      if (content === null) continue;
+      const content = contents.get(doc.id);
+      if (content === undefined) continue;
       bodies.push({ id: doc.id, lines: comparableBody(content) });
     }
 
