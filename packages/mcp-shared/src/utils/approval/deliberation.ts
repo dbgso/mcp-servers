@@ -129,6 +129,38 @@ interface Run {
   expiresAt: number;
 }
 
+function isPositiveInteger(value: number): boolean {
+  return Number.isInteger(value) && value >= 1;
+}
+
+/**
+ * A gate configured with zero or half an attempt would let everything through
+ * while looking configured, so it is refused at construction rather than
+ * discovered at the first call.
+ */
+function checkedRequiredAttempts(configured: number | undefined): number {
+  const requiredAttempts = configured ?? DEFAULT_REQUIRED_ATTEMPTS;
+  if (!isPositiveInteger(requiredAttempts)) {
+    throw new Error(
+      `requiredAttempts must be a positive integer, got ${String(requiredAttempts)}`
+    );
+  }
+  return requiredAttempts;
+}
+
+/** The settings a gate runs on, with every default applied and the one invalid setting rejected. */
+function settledDeliberationConfig(config: DeliberationConfig): {
+  requiredAttempts: number;
+  ttlMs: number;
+  now: () => number;
+} {
+  return {
+    requiredAttempts: checkedRequiredAttempts(config.requiredAttempts),
+    ttlMs: config.ttlMs ?? DEFAULT_DELIBERATION_TTL_MS,
+    now: config.now ?? Date.now,
+  };
+}
+
 export class DeliberationGate {
   private readonly requiredAttempts: number;
   private readonly ttlMs: number;
@@ -138,18 +170,7 @@ export class DeliberationGate {
   private readonly runs = new Map<string, Run>();
 
   constructor(config: DeliberationConfig = {}) {
-    const {
-      requiredAttempts = DEFAULT_REQUIRED_ATTEMPTS,
-      ttlMs = DEFAULT_DELIBERATION_TTL_MS,
-      now = Date.now,
-    } = config;
-
-    if (!Number.isInteger(requiredAttempts) || requiredAttempts < 1) {
-      throw new Error(
-        `requiredAttempts must be a positive integer, got ${String(requiredAttempts)}`
-      );
-    }
-
+    const { requiredAttempts, ttlMs, now } = settledDeliberationConfig(config);
     this.requiredAttempts = requiredAttempts;
     this.ttlMs = ttlMs;
     this.now = now;

@@ -20,6 +20,15 @@ export function trimString(params: {
  * Format a document summary as a markdown list item.
  * Includes description and optional "When to use" and "Related" sections.
  */
+/** An indented `- Label: a, b` line, or nothing at all when there is no list. */
+function labelledSubItem(params: { label: string; items?: string[] }): string {
+  const { label, items } = params;
+  if (!items || items.length === 0) {
+    return "";
+  }
+  return `\n  - ${label}: ${items.join(", ")}`;
+}
+
 export function formatDocumentListItem(params: {
   id: string;
   description: string;
@@ -27,14 +36,11 @@ export function formatDocumentListItem(params: {
   relatedDocs?: string[];
 }): string {
   const { id, description, whenToUse, relatedDocs } = params;
-  let line = `- **${id}**: ${description}`;
-  if (whenToUse && whenToUse.length > 0) {
-    line += `\n  - When to use: ${whenToUse.join(", ")}`;
-  }
-  if (relatedDocs && relatedDocs.length > 0) {
-    line += `\n  - Related: ${relatedDocs.join(", ")}`;
-  }
-  return line;
+  return (
+    `- **${id}**: ${description}` +
+    labelledSubItem({ label: "When to use", items: whenToUse }) +
+    labelledSubItem({ label: "Related", items: relatedDocs })
+  );
 }
 
 /**

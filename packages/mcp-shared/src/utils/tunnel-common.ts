@@ -12,7 +12,7 @@
  * here so a single SIGINT / SIGTERM tears every tunnel down regardless of
  * kind. Idempotent — safe to import from multiple sites.
  */
-import { type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, Socket } from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -89,24 +89,64 @@ export async function waitForPort(params: {
   /** Tool name interpolated into error messages. Default: `"tunnel process"`. */
   childLabel?: string;
 }): Promise<void> {
-  const label = params.childLabel ?? "tunnel process";
   const deadline = Date.now() + params.timeoutMs;
   while (Date.now() < deadline) {
-    if (params.child.exitCode !== null) {
-      throw new Error(
-        `${label} exited before tunnel was ready (exit code ${params.child.exitCode})`,
-      );
-    }
-    if (
-      await isPortAcceptingConnections({ host: params.host, port: params.port })
-    ) {
-      return;
-    }
+    if (await tunnelPortReady(params)) return;
     await new Promise((r) => setTimeout(r, params.intervalMs));
   }
   throw new Error(
     `Timeout waiting for tunnel on ${params.host}:${params.port} after ${params.timeoutMs}ms`,
   );
+}
+
+/**
+ * One readiness attempt, named so `waitForPort`'s loop shows only the two ways
+ * out: the port answered, or the deadline passed.
+ */
+async function tunnelPortReady(params: {
+  host: string;
+  port: number;
+  child: ChildProcess;
+  childLabel?: string;
+}): Promise<boolean> {
+  if (params.child.exitCode !== null) {
+    const label = params.childLabel ?? "tunnel process";
+    throw new Error(
+      `${label} exited before tunnel was ready (exit code ${params.child.exitCode})`,
+    );
+  }
+  return isPortAcceptingConnections({ host: params.host, port: params.port });
+}
+
+/**
+ * Spawn a tunnel process with its stderr relayed to the parent.
+ *
+ * Both tunnel kinds shell out to a tool that manages its own authentication,
+ * so this is the one place that decides how such a child is launched.
+ */
+export function spawnTunnelProcess(params: {
+  command: string;
+  args: readonly string[];
+  /** Prefix for relayed stderr lines, e.g. `"ssh-tunnel"`. */
+  label: string;
+  /** Override for testing. Default is `child_process.spawn`. */
+  spawnFn?: (command: string, args: readonly string[]) => ChildProcess;
+}): ChildProcess {
+  const child = (params.spawnFn ?? spawn)(params.command, params.args);
+  child.unref?.();
+  relayStderr({ child, label: params.label });
+  return child;
+}
+
+/**
+ * ssh and the aws CLI both explain their own failures on stderr — a rejected
+ * key, a missing session-manager-plugin. Swallowing it would leave the caller
+ * with a readiness timeout and no reason for it.
+ */
+function relayStderr(params: { child: ChildProcess; label: string }): void {
+  params.child.stderr?.on("data", (chunk: Buffer) => {
+    process.stderr.write(`[${params.label}] ${chunk}`);
+  });
 }
 
 /**
@@ -119,6 +159,18 @@ export async function waitForPort(params: {
  */
 export interface TunnelHandle {
   kill(): void;
+}
+
+/**
+ * The only handle either tunnel kind needs: both own a child process, and the
+ * registry only ever asks a handle to kill it.
+ */
+export class ChildTunnelHandle implements TunnelHandle {
+  constructor(private readonly child: ChildProcess) {}
+
+  kill(): void {
+    this.child.kill();
+  }
 }
 
 const liveTunnels = new Set<TunnelHandle>();
@@ -153,6 +205,75 @@ export function registerTunnel(handle: TunnelHandle): void {
 
 export function unregisterTunnel(handle: TunnelHandle): void {
   liveTunnels.delete(handle);
+}
+
+/**
+ * Everything a tunnel is, minus how it shuts down.
+ *
+ * Both kinds forward a local endpoint through a child process and are "active"
+ * until either side ends it; they differ only in how the child has to be taken
+ * down, which is what {@link SpawnedTunnel.shutdown} names. Keeping the
+ * bookkeeping here is what makes `close()` idempotent in one place rather than
+ * two.
+ */
+export abstract class SpawnedTunnel {
+  readonly localPort: number;
+  readonly localBindHost: string;
+  protected readonly child: ChildProcess;
+  private readonly handle: TunnelHandle;
+  private alive = true;
+
+  constructor(params: {
+    child: ChildProcess;
+    handle: TunnelHandle;
+    localPort: number;
+    localBindHost: string;
+  }) {
+    this.child = params.child;
+    this.handle = params.handle;
+    this.localPort = params.localPort;
+    this.localBindHost = params.localBindHost;
+    // The child can die without us asking — a dropped connection, a killed
+    // session. Owning the handler here is what keeps `active` honest whichever
+    // side ended it, and stops the registry holding a dead process.
+    this.child.once("exit", () => {
+      this.alive = false;
+      unregisterTunnel(this.handle);
+    });
+  }
+
+  get active(): boolean {
+    return this.alive;
+  }
+
+  async close(): Promise<void> {
+    if (!this.alive) return;
+    this.alive = false;
+    unregisterTunnel(this.handle);
+    await this.shutdown();
+  }
+
+  protected abstract shutdown(): Promise<void>;
+}
+
+/**
+ * Await readiness, and take the child down if it never arrives.
+ *
+ * A tunnel that failed to come up must not be left in the live registry, or
+ * the exit handlers would later kill a process nobody is waiting on.
+ */
+export async function awaitTunnelReadyOrKill(params: {
+  child: ChildProcess;
+  handle: TunnelHandle;
+  wait: () => Promise<void>;
+}): Promise<void> {
+  try {
+    await params.wait();
+  } catch (err) {
+    params.child.kill();
+    unregisterTunnel(params.handle);
+    throw err;
+  }
 }
 
 /**

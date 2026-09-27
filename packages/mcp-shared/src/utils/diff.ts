@@ -56,6 +56,148 @@ export interface DiffOptions {
   level: "summary" | "detailed";
 }
 
+type ItemsByKey = Map<string, DiffableItem>;
+
+/** An item under the same key on both sides, so it can only have been modified. */
+interface ItemPair {
+  itemA: DiffableItem;
+  itemB: DiffableItem;
+}
+
+function indexByKey(items: DiffableItem[]): ItemsByKey {
+  const byKey: ItemsByKey = new Map();
+  for (const item of items) {
+    byKey.set(item.key, item);
+  }
+  return byKey;
+}
+
+function addedItems(params: { mapA: ItemsByKey; mapB: ItemsByKey }): DiffChange[] {
+  const { mapA, mapB } = params;
+  const added: DiffChange[] = [];
+  for (const [key, itemB] of mapB) {
+    if (!mapA.has(key)) {
+      added.push({ key, kind: itemB.kind, lineB: itemB.line });
+    }
+  }
+  return added;
+}
+
+function removedItems(params: { mapA: ItemsByKey; mapB: ItemsByKey }): DiffChange[] {
+  const { mapA, mapB } = params;
+  const removed: DiffChange[] = [];
+  for (const [key, itemA] of mapA) {
+    if (!mapB.has(key)) {
+      removed.push({ key, kind: itemA.kind, lineA: itemA.line });
+    }
+  }
+  return removed;
+}
+
+function commonPairs(params: { mapA: ItemsByKey; mapB: ItemsByKey }): ItemPair[] {
+  const { mapA, mapB } = params;
+  const pairs: ItemPair[] = [];
+  for (const [key, itemA] of mapA) {
+    const itemB = mapB.get(key);
+    if (itemB !== undefined) {
+      pairs.push({ itemA, itemB });
+    }
+  }
+  return pairs;
+}
+
+function kindChange(params: ItemPair): string | null {
+  const { itemA, itemB } = params;
+  if (itemA.kind === itemB.kind) return null;
+  return `kind: ${itemA.kind} -> ${itemB.kind}`;
+}
+
+function lineChange(params: ItemPair): string | null {
+  const { itemA, itemB } = params;
+  if (itemA.line === itemB.line) return null;
+  return `line: ${itemA.line} -> ${itemB.line}`;
+}
+
+/**
+ * Both sides must carry properties: diffing against a missing set would report
+ * every key as added or removed, which says nothing about the item itself.
+ */
+function propertyChanges(params: ItemPair): string | null {
+  const { properties: propsA } = params.itemA;
+  const { properties: propsB } = params.itemB;
+  if (propsA === undefined || propsB === undefined) return null;
+  return diffProperties({ propsA, propsB });
+}
+
+/**
+ * A move and a property edit are only changes in detailed mode: a summary diff
+ * deliberately treats an item that merely moved as unchanged.
+ */
+function detailedChanges(params: {
+  itemA: DiffableItem;
+  itemB: DiffableItem;
+  options: DiffOptions;
+}): (string | null)[] {
+  const { itemA, itemB, options } = params;
+  if (options.level !== "detailed") return [];
+  return [lineChange({ itemA, itemB }), propertyChanges({ itemA, itemB })];
+}
+
+function describeChanges(params: {
+  itemA: DiffableItem;
+  itemB: DiffableItem;
+  options: DiffOptions;
+}): string | null {
+  const { itemA, itemB, options } = params;
+  const found = [kindChange({ itemA, itemB }), ...detailedChanges({ itemA, itemB, options })];
+  const changes = found.filter((change): change is string => change !== null);
+  if (changes.length === 0) return null;
+  return changes.join("; ");
+}
+
+function modifiedItems(params: {
+  mapA: ItemsByKey;
+  mapB: ItemsByKey;
+  options: DiffOptions;
+}): DiffChange[] {
+  const { mapA, mapB, options } = params;
+  const modified: DiffChange[] = [];
+  for (const { itemA, itemB } of commonPairs({ mapA, mapB })) {
+    const details = describeChanges({ itemA, itemB, options });
+    if (details !== null) {
+      modified.push({
+        key: itemA.key,
+        kind: itemB.kind,
+        lineA: itemA.line,
+        lineB: itemB.line,
+        details,
+      });
+    }
+  }
+  return modified;
+}
+
+function countPart(params: { label: string; items: DiffChange[] }): string[] {
+  const { label, items } = params;
+  if (items.length === 0) return [];
+  return [`${label} ${items.length}`];
+}
+
+function summarise(params: {
+  added: DiffChange[];
+  removed: DiffChange[];
+  modified: DiffChange[];
+}): string {
+  const { added, removed, modified } = params;
+  const parts = [
+    ...countPart({ label: "Added", items: added }),
+    ...countPart({ label: "Removed", items: removed }),
+    ...countPart({ label: "Modified", items: modified }),
+  ];
+  if (parts.length === 0) return "No changes";
+  return parts.join(", ");
+}
+
 /**
  * Compare two lists of diffable items and return the structural differences.
  *
@@ -77,78 +219,12 @@ export function diffStructures(params: {
   options?: DiffOptions;
 }): DiffResult {
   const { itemsA, itemsB, options = { level: "summary" } } = params;
-  const mapA = new Map<string, DiffableItem>();
-  const mapB = new Map<string, DiffableItem>();
+  const mapA = indexByKey(itemsA);
+  const mapB = indexByKey(itemsB);
 
-  // Build maps
-  for (const item of itemsA) {
-    mapA.set(item.key, item);
-  }
-  for (const item of itemsB) {
-    mapB.set(item.key, item);
-  }
-
-  const added: DiffChange[] = [];
-  const removed: DiffChange[] = [];
-  const modified: DiffChange[] = [];
-
-  // Find added items (in B but not in A)
-  for (const [key, itemB] of mapB) {
-    if (!mapA.has(key)) {
-      added.push({
-        key,
-        kind: itemB.kind,
-        lineB: itemB.line,
-      });
-    }
-  }
-
-  // Find removed items (in A but not in B)
-  for (const [key, itemA] of mapA) {
-    if (!mapB.has(key)) {
-      removed.push({
-        key,
-        kind: itemA.kind,
-        lineA: itemA.line,
-      });
-    }
-  }
-
-  // Find modified items (in both A and B)
-  for (const [key, itemA] of mapA) {
-    const itemB = mapB.get(key);
-    if (!itemB) continue;
-
-    const changes: string[] = [];
-
-    // Check kind change
-    if (itemA.kind !== itemB.kind) {
-      changes.push(`kind: ${itemA.kind} -> ${itemB.kind}`);
-    }
-
-    // Check line change (only in detailed mode, indicates move)
-    if (options.level === "detailed" && itemA.line !== itemB.line) {
-      changes.push(`line: ${itemA.line} -> ${itemB.line}`);
-    }
-
-    // Check property changes in detailed mode
-    if (options.level === "detailed" && itemA.properties && itemB.properties) {
-      const propChanges = diffProperties({ propsA: itemA.properties, propsB: itemB.properties });
-      if (propChanges) {
-        changes.push(propChanges);
-      }
-    }
-
-    if (changes.length > 0) {
-      modified.push({
-        key,
-        kind: itemB.kind,
-        lineA: itemA.line,
-        lineB: itemB.line,
-        details: changes.join("; "),
-      });
-    }
-  }
+  const added = addedItems({ mapA, mapB });
+  const removed = removedItems({ mapA, mapB });
+  const modified = modifiedItems({ mapA, mapB, options });
 
   // Sort by line number, so the diff reads in the order of the file.
   //
@@ -161,26 +237,43 @@ export function diffStructures(params: {
   removed.sort((a, b) => (a.lineA as number) - (b.lineA as number));
   modified.sort((a, b) => (a.lineB as number) - (b.lineB as number));
 
-  // Generate summary
-  const parts: string[] = [];
-  if (added.length > 0) {
-    parts.push(`Added ${added.length}`);
-  }
-  if (removed.length > 0) {
-    parts.push(`Removed ${removed.length}`);
-  }
-  if (modified.length > 0) {
-    parts.push(`Modified ${modified.length}`);
-  }
-
-  const summary = parts.length > 0 ? parts.join(", ") : "No changes";
-
   return {
     added,
     removed,
     modified,
-    summary,
+    summary: summarise({ added, removed, modified }),
   };
+}
+
+function onlyInB(params: { valueA: unknown; valueB: unknown }): boolean {
+  return params.valueA === undefined && params.valueB !== undefined;
+}
+
+function onlyInA(params: { valueA: unknown; valueB: unknown }): boolean {
+  return params.valueA !== undefined && params.valueB === undefined;
+}
+
+/**
+ * A key only one side has is reported as gained or lost rather than as a value
+ * change: there is no before-and-after to show for it.
+ */
+function presenceChange(params: { key: string; valueA: unknown; valueB: unknown }): string | null {
+  const { key, valueA, valueB } = params;
+  if (onlyInB({ valueA, valueB })) return `+${key}`;
+  if (onlyInA({ valueA, valueB })) return `-${key}`;
+  return null;
+}
+
+function valueChange(params: { key: string; valueA: unknown; valueB: unknown }): string | null {
+  const { key, valueA, valueB } = params;
+  if (JSON.stringify(valueA) === JSON.stringify(valueB)) return null;
+  return `${key}: ${formatValue(valueA)} -> ${formatValue(valueB)}`;
+}
+
+function propertyChange(params: { key: string; valueA: unknown; valueB: unknown }): string | null {
+  const presence = presenceChange(params);
+  if (presence !== null) return presence;
+  return valueChange(params);
 }
 
 /**
@@ -191,43 +284,46 @@ function diffProperties(params: {
   propsB: Record<string, unknown>;
 }): string | null {
   const { propsA, propsB } = params;
-  const changes: string[] = [];
   const allKeys = new Set([...Object.keys(propsA), ...Object.keys(propsB)]);
 
-  for (const key of allKeys) {
-    const valueA = propsA[key];
-    const valueB = propsB[key];
+  const changes = [...allKeys]
+    .map((key) => propertyChange({ key, valueA: propsA[key], valueB: propsB[key] }))
+    .filter((change): change is string => change !== null);
 
-    if (valueA === undefined && valueB !== undefined) {
-      changes.push(`+${key}`);
-    } else if (valueA !== undefined && valueB === undefined) {
-      changes.push(`-${key}`);
-    } else if (JSON.stringify(valueA) !== JSON.stringify(valueB)) {
-      changes.push(`${key}: ${formatValue(valueA)} -> ${formatValue(valueB)}`);
-    }
-  }
+  if (changes.length === 0) return null;
+  return changes.join(", ");
+}
 
-  return changes.length > 0 ? changes.join(", ") : null;
+/** Long strings are truncated: a diff line reports that a value changed, not the value. */
+const MAX_STRING_LENGTH = 20;
+
+function formatString(value: string): string {
+  if (value.length > MAX_STRING_LENGTH) return `"${value.slice(0, MAX_STRING_LENGTH)}..."`;
+  return `"${value}"`;
+}
+
+/** Numbers and booleans read unambiguously bare; a string needs its quotes. */
+function isBareScalar(value: unknown): boolean {
+  return typeof value === "number" || typeof value === "boolean";
+}
+
+/** A collection is summarised by its shape, since its contents are not the point. */
+function formatObject(value: object): string {
+  if (Array.isArray(value)) return `[${value.length} items]`;
+  return "{...}";
+}
+
+function formatComposite(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value !== "object") return String(value);
+  return formatObject(value);
 }
 
 /**
  * Format a value for display in diff output.
  */
 function formatValue(value: unknown): string {
-  if (typeof value === "string") {
-    return value.length > 20 ? `"${value.slice(0, 20)}..."` : `"${value}"`;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.length} items]`;
-  }
-  if (value === null) {
-    return "null";
-  }
-  if (typeof value === "object") {
-    return "{...}";
-  }
-  return String(value);
+  if (typeof value === "string") return formatString(value);
+  if (isBareScalar(value)) return String(value);
+  return formatComposite(value);
 }

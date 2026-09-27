@@ -16,7 +16,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { MarkdownReader } from "../services/markdown-reader.js";
-import { DRAFT_DIR, DRAFT_PREFIX } from "../constants.js";
+import { DRAFT_DIR } from "../constants.js";
 import { ReadHandler } from "../tools/instruction/handlers/read.js";
 import { ReadMetaHandler } from "../tools/instruction/handlers/read-meta.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";

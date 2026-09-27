@@ -2,16 +2,16 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions } from "../types.js";
-import {
-  parseFrontmatter,
-  updateFrontmatter,
-} from "../../../utils/frontmatter-parser.js";
+import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
 import {
   textResponse,
-  findInvalidDocs,
   calculateNewRelatedDocs,
   deliberateLinkChange,
-  resolveStorageId,
+  loadLinkTarget,
+  refuseMissingDocument,
+  formatRelatedDocs,
+  reportNoChange,
+  writeRelatedDocs,
 } from "./link-shared.js";
 
 const schema = z.object({
@@ -40,17 +40,24 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
     const { id, relatedDocs, explanation } = params.args;
     const { reader } = params.context;
 
-    // A draft is stored under a prefixed id, so the bare one has to be
-    // resolved before anything can be read or written.
-    const storageId = await resolveStorageId({ reader, id });
-    if (storageId === null) {
-      return errorResponse(`Error: Document "${id}" not found.`);
+    const target = await loadLinkTarget({ reader, id });
+    if (target === null) {
+      return refuseMissingDocument(id);
     }
 
-    const content = await reader.getDocumentContent(storageId);
-    if (content === null) {
-      return errorResponse(`Error: Document "${id}" not found.`);
-    }
+    return this.removeLinks({ reader, id, relatedDocs, explanation, target });
+  }
+
+  /** The change itself, once the document is known to exist. */
+  private async removeLinks(params: {
+    reader: InstructionContext["reader"];
+    id: string;
+    relatedDocs: string[];
+    explanation: string;
+    target: { storageId: string; content: string };
+  }): Promise<ToolResponse> {
+    const { reader, id, relatedDocs, explanation, target } = params;
+    const { storageId, content } = target;
 
     const frontmatter = parseFrontmatter(content);
     const currentRelated = frontmatter.relatedDocs || [];
@@ -63,14 +70,7 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
     });
 
     if (calcResult.noChange) {
-      return textResponse(
-        calcResult.message +
-        formatNextActions([{
-          action: "read",
-          description: "Read the document",
-          example: `instruction(action: "read", id: "${id}")`,
-        }]),
-      );
+      return reportNoChange({ id, message: calcResult.message });
     }
 
     const newRelated = calcResult.newRelated;
@@ -101,18 +101,14 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
 
 **Document:** ${id}
 
-**Current relatedDocs:** ${currentRelated.length > 0 ? currentRelated.join(", ") : "(none)"}
+**Current relatedDocs:** ${formatRelatedDocs(currentRelated)}
 
 **Removing:** ${changedDocs.join(", ")}
 
-**New relatedDocs:** ${newRelated.length > 0 ? newRelated.join(", ") : "(none)"}`
+**New relatedDocs:** ${formatRelatedDocs(newRelated)}`
     );
   }
 
-  /**
-   * The write itself, once the gate has let it through. Failure is returned
-   * rather than thrown, which is what decides that the run is over.
-   */
   private async applyLink(params: {
     reader: InstructionContext["reader"];
     /** What the caller called it, and what the response says. */
@@ -125,32 +121,15 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
   }): Promise<ToolResponse> {
     const { reader, id, storageId, content, frontmatter, newRelated } = params;
 
-    // Apply the change
-    const newFrontmatter = {
-      ...frontmatter,
-      relatedDocs: newRelated.length > 0 ? newRelated : undefined,
-    };
-
-    const newContent = updateFrontmatter({
-      content,
-      frontmatter: newFrontmatter,
-    });
-
-    // Written through the reader, which is the only write path that normalises
-    // the trailing newline, invalidates the list cache and checks that the
-    // document is one this server manages. Writing with `fs.writeFile` and a
-    // path from `getFilePath` skipped all three -- and the missing newline in
-    // #51 was reported for exactly this route alongside the others.
-    const written = await reader.updateDocument({ id: storageId, content: newContent });
-    if (!written.success) {
-      return errorResponse(`Error: ${written.error ?? "Unknown error"}`);
+    const failure = await writeRelatedDocs({ reader, storageId, content, frontmatter, newRelated });
+    if (failure !== null) {
+      return errorResponse(`Error: ${failure.error}`);
     }
-
 
     return textResponse(
       `Successfully removed relatedDocs for "${id}".
 
-**New relatedDocs:** ${newRelated.length > 0 ? newRelated.join(", ") : "(none)"}` +
+**New relatedDocs:** ${formatRelatedDocs(newRelated)}` +
       formatNextActions([
         { action: "read", description: "Read the document", example: `instruction(action: "read", id: "${id}")` },
         { action: "list", description: "View all documents", example: `instruction(action: "list")` },

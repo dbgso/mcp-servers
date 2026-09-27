@@ -83,14 +83,8 @@ export class ReadMetaHandler extends BaseActionHandler<Args, InstructionContext>
     const { id } = params.args;
     const { reader } = params.context;
 
-    // A draft is looked up under its prefix when there is no promoted
-    // document by that id. `read` answers with prose alone and `list` names a
-    // draft without its metadata, so this is the only way to see what a
-    // draft's metadata currently says -- which is exactly when it most needs
-    // work.
-    const promoted = await reader.getDocumentContent(id);
-    const content = promoted ?? (await reader.getDocumentContent(DRAFT_PREFIX + id));
-    if (content === null) {
+    const found = await loadForReview({ reader, id });
+    if (found === null) {
       return errorResponse(`Error: Document "${id}" not found.` +
         formatNextActions([{
           action: "list",
@@ -98,59 +92,17 @@ export class ReadMetaHandler extends BaseActionHandler<Args, InstructionContext>
           example: `instruction(action: "list")`,
         }]));
     }
-    const isDraft = promoted === null;
 
     const listed = await reader.listDocuments({ recursive: true });
     const documents = listed.documents.filter((doc) => !isInternalDocument(doc.id));
-    const { related, candidates, category } = buildNeighbourhood({ id, documents });
-
-    const frontmatter = parseFrontmatter(content);
-
-    const sections = [
-      `# Metadata review: ${isDraft ? "**[Draft]** " : ""}${id}`,
-      "",
-      "## What it says now",
-      `- **description**: ${frontmatter.description ?? "(not set)"}`,
-      `- **whenToUse**: ${formatList(frontmatter.whenToUse)}`,
-      `- **relatedDocs**: ${formatList(frontmatter.relatedDocs)}`,
-      ...recordedSection(frontmatter),
-      "",
-      neighbourhoodSection({ related, candidates, category }),
-      "",
-      "## What to write",
-      "",
-      "**description** — one or two sentences on what this document is for. Third",
-      "person, under 150 characters. It has to distinguish this document from the",
-      "ones listed above; if it cannot, the two probably want merging.",
-      "",
-      "**whenToUse** — 2 to 5 phrases naming the situation that should send someone",
-      "here. Name the trigger, not the topic.",
-    ];
-
-    if (candidates.length > 0) {
-      sections.push(
-        "",
-        "**relatedDocs** — this document is linked to nothing. Links run one way, from",
-        "the document that gives an overview to the one that holds the detail. If one of",
-        "the documents above is the hub this belongs under, add this document to that",
-        "hub's `relatedDocs` rather than the reverse. If it genuinely stands alone,",
-        "leave it unlinked -- an invented link is worse than none."
-      );
-    }
-
-    sections.push(
-      "",
-      "## Applying it",
-      "",
-      "`update` takes the metadata on its own; the body does not have to be resent:",
-      "",
-      "```",
-      `instruction(action: "update", id: "${id}", description: "...", whenToUse: ["...", "..."])`,
-      "```"
-    );
 
     return textResponse(
-      sections.join("\n") +
+      reviewSections({
+        id,
+        isDraft: found.isDraft,
+        frontmatter: parseFrontmatter(found.content),
+        neighbourhood: buildNeighbourhood({ id, documents }),
+      }).join("\n") +
         formatNextActions([
           {
             action: "update",
@@ -172,6 +124,90 @@ function formatList(values: string[] | undefined): string {
 }
 
 /**
+ * A draft is looked up under its prefix when there is no promoted document by
+ * that id. `read` answers with prose alone and `list` names a draft without its
+ * metadata, so this is the only way to see what a draft's metadata currently
+ * says -- which is exactly when it most needs work.
+ */
+async function loadForReview(params: {
+  reader: InstructionContext["reader"];
+  id: string;
+}): Promise<{ content: string; isDraft: boolean } | null> {
+  const { reader, id } = params;
+
+  const promoted = await reader.getDocumentContent(id);
+  if (promoted !== null) return { content: promoted, isDraft: false };
+
+  const draft = await reader.getDocumentContent(DRAFT_PREFIX + id);
+  if (draft === null) return null;
+  return { content: draft, isDraft: true };
+}
+
+/** A draft's review must not read as the promoted document's. */
+function draftMarker(isDraft: boolean): string {
+  return isDraft ? "**[Draft]** " : "";
+}
+
+/**
+ * Offered only when the document is linked to nothing: with neighbours already
+ * listed, advice on how to link is noise.
+ */
+const LINKING_GUIDANCE = [
+  "",
+  "**relatedDocs** — this document is linked to nothing. Links run one way, from",
+  "the document that gives an overview to the one that holds the detail. If one of",
+  "the documents above is the hub this belongs under, add this document to that",
+  "hub's `relatedDocs` rather than the reverse. If it genuinely stands alone,",
+  "leave it unlinked -- an invented link is worse than none.",
+];
+
+function applyingSection(id: string): string[] {
+  return [
+    "",
+    "## Applying it",
+    "",
+    "`update` takes the metadata on its own; the body does not have to be resent:",
+    "",
+    "```",
+    `instruction(action: "update", id: "${id}", description: "...", whenToUse: ["...", "..."])`,
+    "```",
+  ];
+}
+
+function reviewSections(params: {
+  id: string;
+  isDraft: boolean;
+  frontmatter: DocumentFrontmatter;
+  neighbourhood: ReturnType<typeof buildNeighbourhood>;
+}): string[] {
+  const { id, isDraft, frontmatter, neighbourhood } = params;
+  const { related, candidates, category } = neighbourhood;
+
+  return [
+    `# Metadata review: ${draftMarker(isDraft)}${id}`,
+    "",
+    "## What it says now",
+    `- **description**: ${frontmatter.description ?? "(not set)"}`,
+    `- **whenToUse**: ${formatList(frontmatter.whenToUse)}`,
+    `- **relatedDocs**: ${formatList(frontmatter.relatedDocs)}`,
+    ...recordedSection(frontmatter),
+    "",
+    neighbourhoodSection({ related, candidates, category }),
+    "",
+    "## What to write",
+    "",
+    "**description** — one or two sentences on what this document is for. Third",
+    "person, under 150 characters. It has to distinguish this document from the",
+    "ones listed above; if it cannot, the two probably want merging.",
+    "",
+    "**whenToUse** — 2 to 5 phrases naming the situation that should send someone",
+    "here. Name the trigger, not the topic.",
+    ...(candidates.length > 0 ? LINKING_GUIDANCE : []),
+    ...applyingSection(id),
+  ];
+}
+
+/**
  * The fields the tools wrote, kept apart from the ones the caller is being
  * asked to write.
  *
@@ -186,14 +222,22 @@ function formatList(values: string[] | undefined): string {
  * the answer to "what does this document's frontmatter say" is complete.
  */
 function recordedSection(frontmatter: DocumentFrontmatter): string[] {
-  const lines: string[] = [];
-  if (frontmatter.sizeExemption !== undefined) {
-    lines.push(`- **sizeExemption**: ${frontmatter.sizeExemption}`);
-  }
-  if (frontmatter.approvedAt !== undefined) {
-    lines.push(`- **approvedAt**: ${frontmatter.approvedAt} (recorded on promotion)`);
-  }
-  return lines.length === 0 ? [] : ["", "## Also recorded", ...lines];
+  const lines = [
+    recordedLine({ label: "sizeExemption", value: frontmatter.sizeExemption }),
+    recordedLine({ label: "approvedAt", value: frontmatter.approvedAt, note: "recorded on promotion" }),
+  ].filter((line): line is string => line !== null);
+
+  if (lines.length === 0) return [];
+  return ["", "## Also recorded", ...lines];
+}
+
+/** Nothing at all when the field was never written: an empty value is not a record. */
+function recordedLine(params: { label: string; value: string | undefined; note?: string }): string | null {
+  const { label, value, note } = params;
+
+  if (value === undefined) return null;
+  if (note === undefined) return `- **${label}**: ${value}`;
+  return `- **${label}**: ${value} (${note})`;
 }
 
 function describe(doc: MarkdownSummary): string {

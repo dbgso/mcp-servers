@@ -65,9 +65,13 @@ const DEFAULT_ATTEMPTS: Record<GatedOperation, number> = {
 function configuredAttempts(operation: GatedOperation): number {
   const raw = process.env[`IIMCP_DELIBERATION_ATTEMPTS_${operation.toUpperCase()}`];
   if (raw === undefined) return DEFAULT_ATTEMPTS[operation];
+  return overrideAttempts(raw) ?? DEFAULT_ATTEMPTS[operation];
+}
 
+/** An override that is not a usable attempt count is no override at all. */
+function overrideAttempts(raw: string): number | undefined {
   const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_ATTEMPTS[operation];
+  if (!Number.isInteger(parsed) || parsed < 1) return undefined;
   return parsed;
 }
 

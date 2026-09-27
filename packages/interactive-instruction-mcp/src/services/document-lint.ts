@@ -48,36 +48,59 @@ const DEFAULT_SIMILARITY_THRESHOLD = 0.6;
 const DEFAULT_MIN_DUPLICATE_LINES = 8;
 
 /**
- * `IIMCP_LINT_MAX_LINES`, the body-line count a document may reach before
- * `document-too-large` is reported.
+ * An environment override, or undefined when there is nothing usable there.
  *
  * An unreadable or out-of-range value falls back to the default rather than
  * throwing, as `configuredAttempts` does: a typo in an environment variable
- * should not stop the server from starting.
+ * should not stop the server from starting. The three settings below differ only
+ * in what counts as in range, so that is the one thing each of them passes in.
  */
-export function configuredMaxLines(): number {
-  const raw = process.env.IIMCP_LINT_MAX_LINES;
-  if (raw === undefined) return DEFAULT_MAX_LINES;
+function envOverride(params: {
+  raw: string | undefined;
+  isInRange: (value: number) => boolean;
+}): number | undefined {
+  const { raw, isInRange } = params;
+  if (raw === undefined) return undefined;
 
   const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_MAX_LINES;
+  if (!isInRange(parsed)) return undefined;
   return parsed;
+}
+
+function isLineCount(value: number): boolean {
+  return Number.isInteger(value) && value >= 1;
+}
+
+/** A ratio: 0 would make every pair of documents similar to every other. */
+function isRatio(value: number): boolean {
+  return Number.isFinite(value) && value > 0 && value <= 1;
+}
+
+/** One shared line is a coincidence, so a run has to be at least two. */
+function isRunLength(value: number): boolean {
+  return Number.isInteger(value) && value >= 2;
+}
+
+/**
+ * `IIMCP_LINT_MAX_LINES`, the body-line count a document may reach before
+ * `document-too-large` is reported.
+ */
+export function configuredMaxLines(): number {
+  return (
+    envOverride({ raw: process.env.IIMCP_LINT_MAX_LINES, isInRange: isLineCount }) ??
+    DEFAULT_MAX_LINES
+  );
 }
 
 /**
  * `IIMCP_LINT_SIMILARITY`, the overlap above which two documents are reported
- * as similar. A ratio, so only values in (0, 1] are meaningful -- 0 would make
- * every pair of documents similar to every other.
+ * as similar.
  */
 export function configuredSimilarityThreshold(): number {
-  const raw = process.env.IIMCP_LINT_SIMILARITY;
-  if (raw === undefined) return DEFAULT_SIMILARITY_THRESHOLD;
-
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) {
-    return DEFAULT_SIMILARITY_THRESHOLD;
-  }
-  return parsed;
+  return (
+    envOverride({ raw: process.env.IIMCP_LINT_SIMILARITY, isInRange: isRatio }) ??
+    DEFAULT_SIMILARITY_THRESHOLD
+  );
 }
 
 /**
@@ -85,12 +108,12 @@ export function configuredSimilarityThreshold(): number {
  * reported as copied between two documents.
  */
 export function configuredMinDuplicateLines(): number {
-  const raw = process.env.IIMCP_LINT_MIN_DUPLICATE_LINES;
-  if (raw === undefined) return DEFAULT_MIN_DUPLICATE_LINES;
-
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 2) return DEFAULT_MIN_DUPLICATE_LINES;
-  return parsed;
+  return (
+    envOverride({
+      raw: process.env.IIMCP_LINT_MIN_DUPLICATE_LINES,
+      isInRange: isRunLength,
+    }) ?? DEFAULT_MIN_DUPLICATE_LINES
+  );
 }
 
 /**
@@ -128,19 +151,34 @@ export function longestSharedRun(params: { a: string[]; b: string[] }): { lines:
   let previous = Array.from<number>({ length: b.length + 1 }).fill(0);
 
   for (let i = 1; i <= a.length; i++) {
-    const current = Array.from<number>({ length: b.length + 1 }).fill(0);
-    for (let j = 1; j <= b.length; j++) {
-      if (a[i - 1] !== b[j - 1]) continue;
-      current[j] = previous[j - 1] + 1;
-      if (current[j] > best) {
-        best = current[j];
-        endInA = i;
-      }
+    const current = runsEndingAt({ previous, a, b, i });
+    const longest = current.reduce((max, run) => (run > max ? run : max), 0);
+    if (longest > best) {
+      best = longest;
+      endInA = i;
     }
     previous = current;
   }
 
   return { lines: best, at: endInA - best + 1 };
+}
+
+/**
+ * How long a shared run ending at `a[i - 1]` is, for every position in `b`.
+ *
+ * Split from the search above so the recurrence stands on its own: this is the
+ * table, and the caller is only about which of its rows held the longest run.
+ */
+function runsEndingAt(params: { previous: number[]; a: string[]; b: string[]; i: number }): number[] {
+  const { previous, a, b, i } = params;
+  const current = Array.from<number>({ length: b.length + 1 }).fill(0);
+
+  for (let j = 1; j <= b.length; j++) {
+    if (a[i - 1] !== b[j - 1]) continue;
+    current[j] = previous[j - 1] + 1;
+  }
+
+  return current;
 }
 
 /**
@@ -150,29 +188,77 @@ export function longestSharedRun(params: { a: string[]; b: string[] }): { lines:
  * shows two similar commands would otherwise report a duplicate heading for
  * every example it contains.
  */
-export function headingsOf(body: string): { level: number; text: string }[] {
-  const headings: { level: number; text: string }[] = [];
-  let fence: string | null = null;
+export function headingsOf(body: string): Heading[] {
+  const headings: Heading[] = [];
 
-  for (const line of body.split("\n")) {
-    const fenceMatch = /^\s*(`{3,}|~{3,})/.exec(line);
-    if (fenceMatch !== null) {
-      const marker = fenceMatch[1][0];
-      // A fence closes only on its own kind, so a ``` inside a ~~~ block is
-      // content rather than the end of it.
-      if (fence === null) fence = marker;
-      else if (fence === marker) fence = null;
-      continue;
-    }
-    if (fence !== null) continue;
-
-    const heading = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
-    if (heading !== null) {
-      headings.push({ level: heading[1].length, text: heading[2].trim() });
-    }
+  for (const line of outsideFences(body.split("\n"))) {
+    const heading = headingOf(line);
+    if (heading !== null) headings.push(heading);
   }
 
   return headings;
+}
+
+interface Heading {
+  level: number;
+  text: string;
+}
+
+/**
+ * The lines that are neither inside a fenced block nor a fence themselves.
+ *
+ * A pass of its own, because whether a line is inside a fence depends on every
+ * line before it while whether it is a heading depends on the line alone. Doing
+ * both in one loop meant the fence state machine was only ever readable together
+ * with the heading regex.
+ */
+function outsideFences(lines: string[]): string[] {
+  const kept: string[] = [];
+  let fence: string | null = null;
+
+  for (const line of lines) {
+    const marker = fenceMarkerOf(line);
+    if (isContentLine({ fence, marker })) kept.push(line);
+    fence = fenceAfter({ fence, marker });
+  }
+
+  return kept;
+}
+
+/** Judged before the state moves on, so a fence line is never content itself. */
+function isContentLine(params: { fence: string | null; marker: string | null }): boolean {
+  return params.fence === null && params.marker === null;
+}
+
+/** The character a fence line is drawn with, or null when the line is not one. */
+function fenceMarkerOf(line: string): string | null {
+  const match = /^\s*(`{3,}|~{3,})/.exec(line);
+  if (match === null) return null;
+  return match[1][0];
+}
+
+function fenceAfter(params: { fence: string | null; marker: string | null }): string | null {
+  const { fence, marker } = params;
+  if (marker === null) return fence;
+  return fenceToggled({ fence, marker });
+}
+
+/**
+ * Null means no fence is open; otherwise the state is the character the open
+ * fence was drawn with, because a fence closes only on its own kind -- a ```
+ * inside a ~~~ block is content rather than the end of it.
+ */
+function fenceToggled(params: { fence: string | null; marker: string }): string | null {
+  const { fence, marker } = params;
+  if (fence === null) return marker;
+  if (fence === marker) return null;
+  return fence;
+}
+
+function headingOf(line: string): Heading | null {
+  const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+  if (match === null) return null;
+  return { level: match[1].length, text: match[2].trim() };
 }
 
 /**
@@ -286,7 +372,6 @@ function checkDocumentSize(params: {
   frontmatter: DocumentFrontmatter;
 }): LintIssue[] {
   const { docId, callId, body, frontmatter } = params;
-  const issues: LintIssue[] = [];
 
   // The body only. Counting the frontmatter meant that describing a document
   // well spent its size budget: a fifth `whenToUse` entry is a line against the
@@ -298,21 +383,55 @@ function checkDocumentSize(params: {
   const exemption = frontmatter.sizeExemption;
   const hasReason = isReasonGiven(exemption);
 
-  if (exemption !== undefined && !hasReason) {
-    issues.push({
+  return [
+    ...exemptionWithoutReason({ docId, callId, exemption, hasReason }),
+    ...documentTooLarge({ docId, callId, lineCount, maxLines, tooLarge, hasReason }),
+    ...staleExemption({ docId, callId, lineCount, tooLarge, hasReason }),
+  ];
+}
+
+function exemptionWithoutReason(params: {
+  docId: string;
+  callId: string;
+  exemption: string | undefined;
+  hasReason: boolean;
+}): LintIssue[] {
+  const { docId, callId, exemption, hasReason } = params;
+  if (exemption === undefined || hasReason) return [];
+
+  return [
+    {
       severity: "warning",
       docId,
       rule: "size-exemption-without-reason",
       message:
-        `\`sizeExemption\` is set to ${exemption === undefined || exemption.trim() === "" ? "nothing" : `"${exemption.trim()}"`}, which says nothing about why the document stays whole. ` +
+        `\`sizeExemption\` is set to ${quotedReason(exemption)}, which says nothing about why the document stays whole. ` +
         "Without a reason it is a mute button, and the next reader cannot tell " +
         "a decision from an unaddressed warning: " +
         `\`instruction(action: "update", id: "${callId}", sizeExemption: "<why>")\`.`,
-    });
-  }
+    },
+  ];
+}
 
-  if (tooLarge && !hasReason) {
-    issues.push({
+/** `set to ""` reads as a bug in the message rather than as an empty reason. */
+function quotedReason(exemption: string | undefined): string {
+  if (exemption === undefined || exemption.trim() === "") return "nothing";
+  return `"${exemption.trim()}"`;
+}
+
+function documentTooLarge(params: {
+  docId: string;
+  callId: string;
+  lineCount: number;
+  maxLines: number;
+  tooLarge: boolean;
+  hasReason: boolean;
+}): LintIssue[] {
+  const { docId, callId, lineCount, maxLines, tooLarge, hasReason } = params;
+  if (!tooLarge || hasReason) return [];
+
+  return [
+    {
       severity: "warning",
       docId,
       rule: "document-too-large",
@@ -320,13 +439,26 @@ function checkDocumentSize(params: {
         `Document body has ${lineCount} lines (max recommended: ${maxLines}). ` +
         "Consider splitting, or say why it stays whole: " +
         `\`instruction(action: "update", id: "${callId}", sizeExemption: "<why>")\`.`,
-    });
-  }
+    },
+  ];
+}
 
-  if (!tooLarge && hasReason) {
-    // Nothing else would ever mention it again, and a stale exemption is how
-    // the next long document gets waved through.
-    issues.push({
+/**
+ * Nothing else would ever mention the exemption again, and a stale one is how
+ * the next long document gets waved through.
+ */
+function staleExemption(params: {
+  docId: string;
+  callId: string;
+  lineCount: number;
+  tooLarge: boolean;
+  hasReason: boolean;
+}): LintIssue[] {
+  const { docId, callId, lineCount, tooLarge, hasReason } = params;
+  if (tooLarge || !hasReason) return [];
+
+  return [
+    {
       severity: "info",
       docId,
       rule: "stale-size-exemption",
@@ -334,10 +466,8 @@ function checkDocumentSize(params: {
         `Document body is ${lineCount} lines, within the limit, but still carries ` +
         "`sizeExemption`, and an exemption outlives the reason for it: " +
         `\`instruction(action: "update", id: "${callId}", sizeExemption: null)\`.`,
-    });
-  }
-
-  return issues;
+    },
+  ];
 }
 
 /**
@@ -355,7 +485,7 @@ function checkDocumentSize(params: {
  * the chain; the shallower entries stay as they are, which is what an author
  * skipping `###` to reach `####` means by it.
  */
-function ancestryOf(headings: { level: number; text: string }[]): string[] {
+function ancestryOf(headings: Heading[]): string[] {
   const keys: string[] = [];
   const chain: string[] = [];
 
@@ -394,36 +524,62 @@ function checkDuplicateHeadings(params: { docId: string; body: string }): LintIs
   const { docId, body } = params;
   const issues: LintIssue[] = [];
 
+  for (const counted of countedHeadings(body).values()) {
+    if (counted.times < 2) continue;
+    issues.push(duplicateHeadingIssue({ docId, counted }));
+  }
+
+  return issues;
+}
+
+interface CountedHeading extends Heading {
+  under: string;
+  times: number;
+}
+
+function countedHeadings(body: string): Map<string, CountedHeading> {
   const headings = headingsOf(body);
   const ancestry = ancestryOf(headings);
 
-  const counts = new Map<string, { level: number; text: string; under: string; times: number }>();
+  const counts = new Map<string, CountedHeading>();
   for (const [index, heading] of headings.entries()) {
     // Level as well as text, so `# Setup` with a `## Setup` under it is nesting
     // rather than a section that came back; and ancestry, so the same subsection
     // under two different sections is the shape of a reference table.
     const under = ancestry[index];
     const key = `${under}\u0000${heading.level}:${heading.text.toLowerCase()}`;
-    const seen = counts.get(key);
-    counts.set(key, { ...heading, under, times: (seen?.times ?? 0) + 1 });
+    counts.set(key, { ...heading, under, times: timesSeen({ counts, key }) + 1 });
   }
 
-  for (const { level, text, under, times } of counts.values()) {
-    if (times < 2) continue;
-    issues.push({
-      severity: "warning",
-      docId,
-      rule: "duplicate-heading",
-      message:
-        `"${"#".repeat(level)} ${text}" appears ${times} times under ` +
-        `${under === "" ? "the top level" : `"${under}"`}. ` +
-        "A section that comes back under the same parent usually means something " +
-        "was appended to the end of the document rather than into it; the later " +
-        "part is often a topic of its own.",
-    });
-  }
+  return counts;
+}
 
-  return issues;
+/** A key we have not seen counts as zero, so the caller adds one either way. */
+function timesSeen(params: { counts: Map<string, CountedHeading>; key: string }): number {
+  return params.counts.get(params.key)?.times ?? 0;
+}
+
+function duplicateHeadingIssue(params: { docId: string; counted: CountedHeading }): LintIssue {
+  const { docId, counted } = params;
+  const { level, text, under, times } = counted;
+
+  return {
+    severity: "warning",
+    docId,
+    rule: "duplicate-heading",
+    message:
+      `"${"#".repeat(level)} ${text}" appears ${times} times under ` +
+      `${describeParent(under)}. ` +
+      "A section that comes back under the same parent usually means something " +
+      "was appended to the end of the document rather than into it; the later " +
+      "part is often a topic of its own.",
+  };
+}
+
+/** The top level has no heading to quote. */
+function describeParent(under: string): string {
+  if (under === "") return "the top level";
+  return `"${under}"`;
 }
 
 export function severityIcon(severity: LintIssue["severity"]): string {

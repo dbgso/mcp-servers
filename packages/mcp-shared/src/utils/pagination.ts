@@ -36,6 +36,17 @@ export function encodeCursor(offset: number): string {
 }
 
 /**
+ * The offset a decoded cursor names, or 0 when it names none. The cursor is
+ * opaque to clients, so anything unrecognised means "start from the beginning"
+ * rather than an error.
+ */
+function offsetIn(decoded: string): number {
+  const match = decoded.match(/^offset:(\d+)$/);
+  if (!match) return 0;
+  return parseInt(match[1], 10);
+}
+
+/**
  * Decode a cursor string back to an offset.
  * Returns 0 if cursor is invalid or undefined.
  */
@@ -43,12 +54,7 @@ export function decodeCursor(cursor: string | undefined): number {
   if (!cursor) return 0;
 
   try {
-    const decoded = Buffer.from(cursor, "base64").toString("utf-8");
-    const match = decoded.match(/^offset:(\d+)$/);
-    if (match) {
-      return parseInt(match[1], 10);
-    }
-    return 0;
+    return offsetIn(Buffer.from(cursor, "base64").toString("utf-8"));
   } catch {
     return 0;
   }

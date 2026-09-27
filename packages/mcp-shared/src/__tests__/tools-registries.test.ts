@@ -7,7 +7,7 @@
  * throws, and only one of those is a deliberate difference.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { ActionRegistry } from "../tools/action-registry.js";
 import { BaseActionHandler } from "../tools/base-action-handler.js";

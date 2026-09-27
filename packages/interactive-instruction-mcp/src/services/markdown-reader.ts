@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import * as path from "node:path";
 import type { MarkdownSummary } from "../types/index.js";
 import {
@@ -30,6 +31,14 @@ interface CacheEntry {
   categories: CategoryInfo[];
   timestamp: number;
 }
+
+/** What a listing answers with: the documents at this level and what is below. */
+export interface Listing {
+  documents: MarkdownSummary[];
+  categories: CategoryInfo[];
+}
+
+type RenameCheck = { refusal: AddResult } | { refusal: null; replacing: boolean };
 
 const CACHE_TTL = 60_000; // 1 minute
 
@@ -99,51 +108,56 @@ export class MarkdownReader {
 
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
-
       for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-
-        if (entry.isDirectory()) {
-          const subDocs = await this.scanDirectory(fullPath);
-          summaries.push(...subDocs);
-        } else if (entry.isFile() && entry.name.endsWith(".md")) {
-          const id = this.pathToId(fullPath);
-          if (!this.isManaged(id)) continue;
-          const metadata = await this.extractMetadata(fullPath);
-          summaries.push({
-            id,
-            description: metadata.description,
-            whenToUse: metadata.whenToUse,
-            relatedDocs: metadata.relatedDocs,
-          });
-        }
+        summaries.push(...(await this.scanEntry({ dir, entry })));
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
-      }
+      rethrowUnlessMissing(error);
     }
 
     return summaries;
+  }
+
+  /** What one entry contributes: its whole subtree, one document, or nothing. */
+  private async scanEntry(params: { dir: string; entry: Dirent }): Promise<MarkdownSummary[]> {
+    const { dir, entry } = params;
+    const fullPath = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) return this.scanDirectory(fullPath);
+    return this.scanFile({ fullPath, entry });
+  }
+
+  private async scanFile(params: { fullPath: string; entry: Dirent }): Promise<MarkdownSummary[]> {
+    const { fullPath, entry } = params;
+    if (!isMarkdownFile(entry)) return [];
+
+    const id = this.pathToId(fullPath);
+    if (!this.isManaged(id)) return [];
+
+    const metadata = await this.extractMetadata(fullPath);
+    return [
+      {
+        id,
+        description: metadata.description,
+        whenToUse: metadata.whenToUse,
+        relatedDocs: metadata.relatedDocs,
+      },
+    ];
   }
 
   /**
    * Build category info from documents
    */
   private buildCategories(documents: MarkdownSummary[]): CategoryInfo[] {
-    const categoryMap = new Map<string, number>();
+    const counts = new Map<string, number>();
 
     for (const doc of documents) {
       const parts = doc.id.split(ID_SEPARATOR);
-      if (parts.length > 1) {
-        const category = parts[0];
-        categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
-      }
+      if (parts.length === 1) continue;
+      increment({ counts, key: parts[0] });
     }
 
-    return Array.from(categoryMap.entries())
-      .map(([id, docCount]) => ({ id, docCount }))
-      .sort((a, b) => a.id.localeCompare(b.id));
+    return sortedCategories(counts);
   }
 
   /**
@@ -179,50 +193,8 @@ export class MarkdownReader {
   async listDocuments(params?: {
     parentId?: string;
     recursive?: boolean;
-  }): Promise<{ documents: MarkdownSummary[]; categories: CategoryInfo[] }> {
-    const { parentId, recursive = false } = params ?? {};
-    const cache = await this.getCache();
-
-    if (!parentId) {
-      if (recursive) {
-        return { documents: cache.documents, categories: [] };
-      }
-      // Show root-level docs and categories
-      const rootDocs = cache.documents.filter(
-        (d) => !d.id.includes(ID_SEPARATOR)
-      );
-      return { documents: rootDocs, categories: cache.categories };
-    }
-
-    // Filter by parent
-    const prefix = parentId + ID_SEPARATOR;
-    const filtered = cache.documents.filter((d) => d.id.startsWith(prefix));
-
-    if (recursive) {
-      return { documents: filtered, categories: [] };
-    }
-
-    // Show immediate children only
-    const immediateChildren: MarkdownSummary[] = [];
-    const subCategories = new Map<string, number>();
-
-    for (const doc of filtered) {
-      const remainder = doc.id.slice(prefix.length);
-      const parts = remainder.split(ID_SEPARATOR);
-
-      if (parts.length === 1) {
-        immediateChildren.push(doc);
-      } else {
-        const subCat = parentId + ID_SEPARATOR + parts[0];
-        subCategories.set(subCat, (subCategories.get(subCat) || 0) + 1);
-      }
-    }
-
-    const categories = Array.from(subCategories.entries())
-      .map(([id, docCount]) => ({ id, docCount }))
-      .sort((a, b) => a.id.localeCompare(b.id));
-
-    return { documents: immediateChildren, categories };
+  }): Promise<Listing> {
+    return listing({ cache: await this.getCache(), request: params ?? {} });
   }
 
   /**
@@ -239,35 +211,16 @@ export class MarkdownReader {
     categories: CategoryInfo[];
   }): string {
     const { documents, categories } = params;
-    if (documents.length === 0 && categories.length === 0) {
+    if (isEmptyListing({ documents, categories })) {
       return "No markdown documents found.";
     }
 
-    const lines = ["Available documents:", ""];
-
-    if (categories.length > 0) {
-      lines.push("**Categories:**");
-      for (const cat of categories) {
-        lines.push(`- **${cat.id}/** (${cat.docCount} docs)`);
-      }
-      lines.push("");
-    }
-
-    if (documents.length > 0) {
-      if (categories.length > 0) {
-        lines.push("**Documents:**");
-      }
-      for (const doc of documents) {
-        lines.push(formatDocumentListItem({
-          id: doc.id,
-          description: doc.description,
-          whenToUse: doc.whenToUse,
-          relatedDocs: doc.relatedDocs,
-        }));
-      }
-    }
-
-    return lines.join("\n");
+    return [
+      "Available documents:",
+      "",
+      ...categorySection(categories),
+      ...documentSection({ documents, categories }),
+    ].join("\n");
   }
 
   async getDocumentContent(id: string): Promise<string | null> {
@@ -275,13 +228,9 @@ export class MarkdownReader {
     const filePath = this.idToPath(id);
 
     try {
-      const content = await fs.readFile(filePath, "utf-8");
-      return content;
+      return await fs.readFile(filePath, "utf-8");
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return null;
-      }
-      throw error;
+      return nullIfMissing(error);
     }
   }
 
@@ -302,32 +251,45 @@ export class MarkdownReader {
   }): Promise<AddResult> {
     const { id, content } = params;
 
-    // Containment first so that a traversing id gets the containment error
-    // rather than "outside this server's scope", which would send the caller
-    // looking at configuration instead of at the id. Not a safety ordering --
-    // `isManaged` only compares strings, and the containment that matters is
-    // enforced inside `idToPath` whichever way round these two sit. Both run
-    // before `documentExists`, which resolves the id.
-    const idValidation = runValidators({ validators: [new ValidIdValidator({ id })] });
-    if (!idValidation.success) {
-      return idValidation;
-    }
+    const refusal = await this.refuseAdd({ id, content });
+    if (refusal !== null) return refusal;
 
-    const outOfScope = unmanagedResult({ reader: this, ids: [id] });
-    if (outOfScope !== null) return outOfScope;
+    return this.writeNewDocument({ id, content });
+  }
 
-    const description = this.parseDescription(content);
-    const exists = await this.documentExists(id);
+  /**
+   * The first reason an `add` is refused, or null when there is none.
+   *
+   * Containment first so that a traversing id gets the containment error
+   * rather than "outside this server's scope", which would send the caller
+   * looking at configuration instead of at the id. Not a safety ordering --
+   * `isManaged` only compares strings, and the containment that matters is
+   * enforced inside `idToPath` whichever way round these two sit. Both run
+   * before `documentExists`, which resolves the id.
+   */
+  private async refuseAdd(params: { id: string; content: string }): Promise<AddResult | null> {
+    const { id, content } = params;
 
-    const validation = runValidators({
+    return (
+      failureOf(runValidators({ validators: [new ValidIdValidator({ id })] })) ??
+      unmanagedResult({ reader: this, ids: [id] }) ??
+      failureOf(await this.validateNewDocument({ id, content }))
+    );
+  }
+
+  private async validateNewDocument(params: { id: string; content: string }): Promise<AddResult> {
+    const { id, content } = params;
+
+    return runValidators({
       validators: [
-        new HasDescriptionValidator({ description }),
-        new NotExistsValidator({ id, exists }),
+        new HasDescriptionValidator({ description: this.parseDescription(content) }),
+        new NotExistsValidator({ id, exists: await this.documentExists(id) }),
       ],
     });
-    if (!validation.success) {
-      return validation;
-    }
+  }
+
+  private async writeNewDocument(params: { id: string; content: string }): Promise<AddResult> {
+    const { id, content } = params;
 
     try {
       const filePath = this.idToPath(id);
@@ -350,21 +312,30 @@ export class MarkdownReader {
   }): Promise<AddResult> {
     const { id, content } = params;
 
-    const outOfScope = unmanagedResult({ reader: this, ids: [id] });
-    if (outOfScope !== null) return outOfScope;
+    const refusal = await this.refuseUpdate({ id, content });
+    if (refusal !== null) return refusal;
 
-    const description = this.parseDescription(content);
-    const exists = await this.documentExists(id);
+    return this.writeExistingDocument({ id, content });
+  }
 
-    const validation = runValidators({
-      validators: [
-        new HasDescriptionValidator({ description }),
-        new ExistsValidator({ id, exists }),
-      ],
-    });
-    if (!validation.success) {
-      return validation;
-    }
+  private async refuseUpdate(params: { id: string; content: string }): Promise<AddResult | null> {
+    const { id, content } = params;
+
+    return (
+      unmanagedResult({ reader: this, ids: [id] }) ??
+      failureOf(
+        runValidators({
+          validators: [
+            new HasDescriptionValidator({ description: this.parseDescription(content) }),
+            new ExistsValidator({ id, exists: await this.documentExists(id) }),
+          ],
+        })
+      )
+    );
+  }
+
+  private async writeExistingDocument(params: { id: string; content: string }): Promise<AddResult> {
+    const { id, content } = params;
 
     try {
       const filePath = this.idToPath(id);
@@ -380,9 +351,15 @@ export class MarkdownReader {
   }
 
   async deleteDocument(id: string): Promise<AddResult> {
+    const refusal = await this.refuseDelete(id);
+    if (refusal !== null) return refusal;
+
+    return this.unlinkDocument(id);
+  }
+
+  private async refuseDelete(id: string): Promise<AddResult | null> {
     const outOfScope = unmanagedResult({ reader: this, ids: [id] });
     if (outOfScope !== null) return outOfScope;
-
 
     const exists = await this.documentExists(id);
     if (!exists) {
@@ -392,6 +369,10 @@ export class MarkdownReader {
       };
     }
 
+    return null;
+  }
+
+  private async unlinkDocument(id: string): Promise<AddResult> {
     try {
       const filePath = this.idToPath(id);
       await fs.unlink(filePath);
@@ -427,32 +408,67 @@ export class MarkdownReader {
     overwrite?: boolean;
     updateBacklinks?: boolean;
   }): Promise<AddResult & { updatedBacklinks?: string[] }> {
-    const { oldId, newId, overwrite = false, updateBacklinks = true } = params;
+    const check = await this.checkRename(params);
+    if (check.refusal !== null) return check.refusal;
+
+    return this.moveDocument({ ...params, replacing: check.replacing });
+  }
+
+  /**
+   * Whether the rename may go ahead, and the one fact the move needs from the
+   * checks.
+   *
+   * `replacing` travels with the verdict because the same answer decides both
+   * things: whether to refuse an overwrite nobody asked for, and whether the
+   * move has a file to remove first. Asking the filesystem twice would be the
+   * only alternative.
+   */
+  private async checkRename(params: {
+    oldId: string;
+    newId: string;
+    overwrite?: boolean;
+  }): Promise<RenameCheck> {
+    const { oldId, newId } = params;
 
     const outOfScope = unmanagedResult({ reader: this, ids: [oldId, newId] });
-    if (outOfScope !== null) return outOfScope;
+    if (outOfScope !== null) return { refusal: outOfScope };
+
     const oldExists = await this.documentExists(oldId);
     if (!oldExists) {
-      return {
-        success: false,
-        error: `Document "${oldId}" not found.`,
-      };
+      return { refusal: { success: false, error: `Document "${oldId}" not found.` } };
     }
 
+    return this.checkRenameTarget(params);
+  }
+
+  private async checkRenameTarget(params: {
+    newId: string;
+    overwrite?: boolean;
+  }): Promise<RenameCheck> {
+    const { newId, overwrite } = params;
+
     const newExists = await this.documentExists(newId);
-    if (newExists && !overwrite) {
-      return {
-        success: false,
-        error: `Document "${newId}" already exists.`,
-      };
+    if (wouldClobber({ newExists, overwrite })) {
+      return { refusal: { success: false, error: `Document "${newId}" already exists.` } };
     }
+
+    return { refusal: null, replacing: newExists };
+  }
+
+  private async moveDocument(params: {
+    oldId: string;
+    newId: string;
+    replacing: boolean;
+    updateBacklinks?: boolean;
+  }): Promise<AddResult & { updatedBacklinks?: string[] }> {
+    const { oldId, newId, replacing } = params;
 
     try {
       const oldPath = this.idToPath(oldId);
       const newPath = this.idToPath(newId);
 
       // Delete existing file if overwriting
-      if (newExists && overwrite) {
+      if (replacing) {
         await fs.unlink(newPath);
       }
 
@@ -467,21 +483,7 @@ export class MarkdownReader {
       const oldDir = path.dirname(oldPath);
       await this.removeEmptyDirs(oldDir);
 
-      // Update backlinks if enabled
-      const updatedBacklinks: string[] = [];
-      if (updateBacklinks) {
-        const backlinks = await this.findBacklinks(oldId);
-        for (const doc of backlinks) {
-          const updated = await this.updateRelatedDocsReference({
-            docId: doc.id,
-            oldRef: oldId,
-            newRef: newId,
-          });
-          if (updated) {
-            updatedBacklinks.push(doc.id);
-          }
-        }
-      }
+      const updatedBacklinks = await this.retargetBacklinks(params);
 
       this.invalidateCache();
       return { success: true, updatedBacklinks };
@@ -491,6 +493,43 @@ export class MarkdownReader {
         error: `Failed to rename document: ${(error as Error).message}`,
       };
     }
+  }
+
+  /**
+   * Point the documents that referenced `oldId` at `newId`.
+   *
+   * Inside the rename rather than left to the caller: a rename that moved the
+   * file and left the references behind is the failure nobody notices until the
+   * links have gone cold.
+   */
+  private async retargetBacklinks(params: {
+    oldId: string;
+    newId: string;
+    updateBacklinks?: boolean;
+  }): Promise<string[]> {
+    const { updateBacklinks = true } = params;
+    if (!updateBacklinks) return [];
+
+    return this.rewriteBacklinks(params);
+  }
+
+  /** The ids actually changed, which is not every document that was looked at. */
+  private async rewriteBacklinks(params: { oldId: string; newId: string }): Promise<string[]> {
+    const { oldId, newId } = params;
+    const updatedBacklinks: string[] = [];
+
+    for (const doc of await this.findBacklinks(oldId)) {
+      const updated = await this.updateRelatedDocsReference({
+        docId: doc.id,
+        oldRef: oldId,
+        newRef: newId,
+      });
+      if (updated) {
+        updatedBacklinks.push(doc.id);
+      }
+    }
+
+    return updatedBacklinks;
   }
 
   /**
@@ -506,13 +545,10 @@ export class MarkdownReader {
     if (!content) return false;
 
     const frontmatter = parseFrontmatter(content);
-    if (!frontmatter.relatedDocs?.includes(oldRef)) return false;
+    const retargeted = retargetRef({ relatedDocs: frontmatter.relatedDocs, oldRef, newRef });
+    if (retargeted === null) return false;
 
-    // Replace old reference with new
-    frontmatter.relatedDocs = frontmatter.relatedDocs.map((ref) =>
-      ref === oldRef ? newRef : ref
-    );
-
+    frontmatter.relatedDocs = retargeted;
     const newContent = updateFrontmatter({ content, frontmatter });
     const filePath = this.idToPath(docId);
     // A backlink rewrite touches a document nobody asked about, so it least of
@@ -522,21 +558,27 @@ export class MarkdownReader {
   }
 
   private async removeEmptyDirs(dir: string): Promise<void> {
-    // Don't remove the root directory
-    if (dir === this.directory || !dir.startsWith(this.directory)) {
-      return;
-    }
+    if (!this.isPrunable(dir)) return;
 
     try {
-      const entries = await fs.readdir(dir);
-      if (entries.length === 0) {
-        await fs.rmdir(dir);
-        // Recursively try parent
-        await this.removeEmptyDirs(path.dirname(dir));
-      }
+      await this.pruneIfEmpty(dir);
     } catch {
       // Ignore errors (directory not empty or doesn't exist)
     }
+  }
+
+  /** The documents directory itself stays, and nothing above it is ours to remove. */
+  private isPrunable(dir: string): boolean {
+    return dir !== this.directory && dir.startsWith(this.directory);
+  }
+
+  private async pruneIfEmpty(dir: string): Promise<void> {
+    const entries = await fs.readdir(dir);
+    if (entries.length > 0) return;
+
+    await fs.rmdir(dir);
+    // Recursively try parent
+    await this.removeEmptyDirs(path.dirname(dir));
   }
 
   private async extractMetadata(
@@ -585,34 +627,7 @@ export class MarkdownReader {
   }
 
   private parseDescriptionFromBody(content: string): string {
-    const lines = content.split("\n");
-    let foundTitle = false;
-    const descriptionLines: string[] = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-
-      if (!foundTitle && trimmed.startsWith("# ")) {
-        foundTitle = true;
-        continue;
-      }
-
-      if (foundTitle) {
-        if (trimmed === "") {
-          if (descriptionLines.length > 0) {
-            break;
-          }
-          continue;
-        }
-
-        if (trimmed.startsWith("#")) {
-          break;
-        }
-
-        descriptionLines.push(trimmed);
-      }
-    }
-
+    const descriptionLines = firstParagraphAfterTitle(content);
     if (descriptionLines.length === 0) {
       return MISSING_DESCRIPTION_PLACEHOLDER;
     }
@@ -627,6 +642,196 @@ export class MarkdownReader {
     }
     return description;
   }
+}
+
+/**
+ * The first block of prose under the `# ` title.
+ *
+ * Blank lines between the title and the paragraph are spacing; the paragraph
+ * itself ends at the next blank line or the next heading, so a document whose
+ * first section follows the title immediately does not end up describing itself
+ * with that section's heading.
+ */
+function firstParagraphAfterTitle(content: string): string[] {
+  const lines = content.split("\n").map((line) => line.trim());
+
+  const titleAt = lines.findIndex((line) => line.startsWith("# "));
+  if (titleAt === -1) return [];
+
+  const under = lines.slice(titleAt + 1);
+  const firstContent = under.findIndex((line) => line !== "");
+  if (firstContent === -1) return [];
+
+  return takeProse(under.slice(firstContent));
+}
+
+/** From the first prose line, up to whatever ends the paragraph. */
+function takeProse(lines: string[]): string[] {
+  const end = lines.findIndex((line) => !isProse(line));
+  if (end === -1) return lines;
+  return lines.slice(0, end);
+}
+
+function isProse(line: string): boolean {
+  return line !== "" && !line.startsWith("#");
+}
+
+/**
+ * `relatedDocs` with `oldRef` pointed at `newRef`, or null when the document
+ * does not mention it -- which is the difference between a rewrite and writing a
+ * document back unchanged.
+ */
+function retargetRef(params: {
+  relatedDocs: string[] | undefined;
+  oldRef: string;
+  newRef: string;
+}): string[] | null {
+  const { relatedDocs, oldRef, newRef } = params;
+  if (relatedDocs?.includes(oldRef) !== true) return null;
+
+  return relatedDocs.map((ref) => (ref === oldRef ? newRef : ref));
+}
+
+/** Replacing a document is allowed, but only when the caller asked for it. */
+function wouldClobber(params: { newExists: boolean; overwrite?: boolean }): boolean {
+  const { newExists, overwrite = false } = params;
+  return newExists && !overwrite;
+}
+
+/** A failed validation is the result to return; a passed one refuses nothing. */
+function failureOf(result: AddResult): AddResult | null {
+  if (result.success) return null;
+  return result;
+}
+
+/**
+ * A documents directory that is not there yet is an empty corpus rather than a
+ * failure: it is created by the first `add`.
+ */
+function rethrowUnlessMissing(error: unknown): void {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    throw error;
+  }
+}
+
+/** A document that is not there reads as absent; anything else is a real failure. */
+function nullIfMissing(error: unknown): null {
+  if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+  throw error;
+}
+
+function isMarkdownFile(entry: Dirent): boolean {
+  return entry.isFile() && entry.name.endsWith(".md");
+}
+
+function increment(params: { counts: Map<string, number>; key: string }): void {
+  const { counts, key } = params;
+  counts.set(key, (counts.get(key) || 0) + 1);
+}
+
+/** By id, so the order does not depend on the order the directory was scanned in. */
+function sortedCategories(counts: Map<string, number>): CategoryInfo[] {
+  return Array.from(counts.entries())
+    .map(([id, docCount]) => ({ id, docCount }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function listing(params: {
+  cache: CacheEntry;
+  request: { parentId?: string; recursive?: boolean };
+}): Listing {
+  const { cache, request } = params;
+  const { parentId, recursive = false } = request;
+
+  if (!parentId) return rootListing({ cache, recursive });
+  return childListing({ cache, parentId, recursive });
+}
+
+/**
+ * Without `recursive`, one level plus the names of the categories below it: that
+ * is what lets a caller ask for the next level by name instead of reading the
+ * whole corpus to find it.
+ */
+function rootListing(params: { cache: CacheEntry; recursive: boolean }): Listing {
+  const { cache, recursive } = params;
+  if (recursive) return { documents: cache.documents, categories: [] };
+
+  const rootDocs = cache.documents.filter((d) => !d.id.includes(ID_SEPARATOR));
+  return { documents: rootDocs, categories: cache.categories };
+}
+
+function childListing(params: {
+  cache: CacheEntry;
+  parentId: string;
+  recursive: boolean;
+}): Listing {
+  const { cache, parentId, recursive } = params;
+
+  const prefix = parentId + ID_SEPARATOR;
+  const filtered = cache.documents.filter((d) => d.id.startsWith(prefix));
+  if (recursive) return { documents: filtered, categories: [] };
+
+  return {
+    documents: filtered.filter((doc) => isImmediateChild({ doc, prefix })),
+    categories: sortedCategories(subCategoryCounts({ documents: filtered, prefix, parentId })),
+  };
+}
+
+function isImmediateChild(params: { doc: MarkdownSummary; prefix: string }): boolean {
+  return !params.doc.id.slice(params.prefix.length).includes(ID_SEPARATOR);
+}
+
+function subCategoryCounts(params: {
+  documents: MarkdownSummary[];
+  prefix: string;
+  parentId: string;
+}): Map<string, number> {
+  const { documents, prefix, parentId } = params;
+  const counts = new Map<string, number>();
+
+  for (const doc of documents) {
+    const parts = doc.id.slice(prefix.length).split(ID_SEPARATOR);
+    if (parts.length === 1) continue;
+    increment({ counts, key: parentId + ID_SEPARATOR + parts[0] });
+  }
+
+  return counts;
+}
+
+function isEmptyListing(params: Listing): boolean {
+  return params.documents.length === 0 && params.categories.length === 0;
+}
+
+function categorySection(categories: CategoryInfo[]): string[] {
+  if (categories.length === 0) return [];
+
+  return [
+    "**Categories:**",
+    ...categories.map((cat) => `- **${cat.id}/** (${cat.docCount} docs)`),
+    "",
+  ];
+}
+
+function documentSection(params: Listing): string[] {
+  const { documents, categories } = params;
+  if (documents.length === 0) return [];
+
+  return [...documentsHeading(categories), ...documents.map(listItemOf)];
+}
+
+/** Only worth a heading when the categories above it need telling apart from it. */
+function documentsHeading(categories: CategoryInfo[]): string[] {
+  if (categories.length === 0) return [];
+  return ["**Documents:**"];
+}
+
+function listItemOf(doc: MarkdownSummary): string {
+  return formatDocumentListItem({
+    id: doc.id,
+    description: doc.description,
+    whenToUse: doc.whenToUse,
+    relatedDocs: doc.relatedDocs,
+  });
 }
 
 /**

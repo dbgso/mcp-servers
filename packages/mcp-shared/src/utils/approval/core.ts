@@ -11,6 +11,8 @@ export { contentHash };
 // Default paths
 const DEFAULT_APPROVAL_DIR = path.join(os.tmpdir(), "mcp-approval");
 const DEFAULT_APPROVAL_FILE = "pending.txt";
+const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_TOKEN_DIGITS = 4;
 
 export interface ApprovalRequest {
   id: string;
@@ -82,7 +84,7 @@ const pendingApprovals = new Map<string, PendingApproval>();
  * and type is the right default. Override the count via ApprovalOptions.tokenLength,
  * or the whole scheme via ApprovalOptions.tokenGenerator.
  */
-function generateToken(digits = 4): string {
+function generateToken(digits = DEFAULT_TOKEN_DIGITS): string {
   const min = 10 ** (digits - 1);
   const max = 10 ** digits;
   const num = crypto.randomInt(min, max); // e.g. digits=4 -> 1000-9999
@@ -181,25 +183,82 @@ export interface ApprovalRequestResult {
   notifyError?: string;
 }
 
+/** The settings that are pure defaulting: how long the approval lives, and where its file goes. */
+function settledApprovalOptions(options: ApprovalOptions): {
+  timeoutMs: number;
+  approvalDir: string;
+} {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, approvalDir = DEFAULT_APPROVAL_DIR } = options;
+  return { timeoutMs, approvalDir };
+}
+
+/**
+ * The token for this request. `tokenLength` is only a knob on the default
+ * generator: a caller supplying its own generator settles the shape entirely.
+ */
+function mintToken(options: ApprovalOptions): string {
+  const {
+    tokenLength = DEFAULT_TOKEN_DIGITS,
+    tokenGenerator = () => defaultToken(tokenLength),
+  } = options;
+  return tokenGenerator();
+}
+
+/**
+ * Whether the fallback file is written at all.
+ *
+ * Suppressed under a test run, where a real file would be left in a developer's
+ * tmpdir by every test that reaches this far.
+ */
+function shouldWriteFallbackFile(options: ApprovalOptions): boolean {
+  const { skipFile = false } = options;
+  return !(skipFile || isTestEnvironment());
+}
+
+/**
+ * Whether the notification carrying the token is attempted.
+ *
+ * Suppressed under a test run: it is a desktop popup, and the token it carries
+ * is already available to a test through `ApprovalOptions.tokenGenerator`.
+ */
+function shouldNotify(options: ApprovalOptions): boolean {
+  const { notify = true } = options;
+  return notify && !isTestEnvironment();
+}
+
+/** Set only for content-bound approvals; a request with no `what` has nothing to bind to. */
+function approvedContentHash(request: ApprovalRequest): string | undefined {
+  if (request.what === undefined) return undefined;
+  return contentHash(request.what);
+}
+
+/**
+ * Hand the token to the only channel that carries it.
+ *
+ * "skipped" is not "failed": no attempt was made, which is not something to
+ * warn the caller about.
+ */
+async function deliverToken(params: {
+  request: ApprovalRequest;
+  token: string;
+  notify: boolean;
+}): Promise<{ delivery: NotificationDelivery; error?: string }> {
+  const { request, token, notify } = params;
+  if (!notify) return { delivery: "skipped", error: undefined };
+  return sendApprovalNotification({
+    title: `MCP Approval: ${request.operation}`,
+    message: `Token: ${token}\n${request.description}`,
+  });
+}
+
 export async function requestApproval(params: {
   request: ApprovalRequest;
   options?: ApprovalOptions;
 }): Promise<ApprovalRequestResult> {
   const { request, options = {} } = params;
-  const {
-    timeoutMs = 5 * 60 * 1000, // 5 minutes
-    approvalDir = DEFAULT_APPROVAL_DIR,
-    notify = true,
-    skipFile = false,
-    tokenLength = 4,
-    tokenGenerator = () => defaultToken(tokenLength),
-  } = options;
+  const { timeoutMs, approvalDir } = settledApprovalOptions(options);
 
-  const isTestEnv = isTestEnvironment();
-  const shouldSkipFile = skipFile || isTestEnv;
-  const shouldNotify = notify && !isTestEnv;
-
-  const token = tokenGenerator();
+  const token = mintToken(options);
   const now = Date.now();
   const expiresAt = now + timeoutMs;
 
@@ -213,30 +272,22 @@ export async function requestApproval(params: {
     createdAt: now,
     expiresAt,
     fallbackPath,
-    contentHash: request.what === undefined ? undefined : contentHash(request.what),
+    contentHash: approvedContentHash(request),
   };
   pendingApprovals.set(request.id, pending);
 
-  // Write file (skip in test environment).
   // SECURITY: the token is NEVER written to disk. The fallback file is readable
   // by any process with filesystem access (including an AI agent's shell), so
   // persisting the token here would let the caller self-approve. The token is
   // delivered only through the desktop notification (an out-of-band human
   // channel). The file just records that an approval is pending.
-  if (!shouldSkipFile) {
+  if (shouldWriteFallbackFile(options)) {
     await fs.mkdir(approvalDir, { recursive: true });
     const content = buildFallbackFileContent({ request, expiresAt });
     await fs.writeFile(fallbackPath, content, "utf-8");
   }
 
-  // Send desktop notification (skip in test environment).
-  // This is the only channel that carries the token.
-  const delivery = shouldNotify
-    ? await sendApprovalNotification({
-        title: `MCP Approval: ${request.operation}`,
-        message: `Token: ${token}\n${request.description}`,
-      })
-    : { delivery: "skipped" as const, error: undefined };
+  const delivery = await deliverToken({ request, token, notify: shouldNotify(options) });
 
   return { token, fallbackPath, delivery: delivery.delivery, notifyError: delivery.error };
 }
@@ -281,6 +332,82 @@ async function sendApprovalNotification(params: {
   });
 }
 
+type LivePendingApproval =
+  | { found: true; pending: PendingApproval }
+  | { found: false; reason: "not_found" | "expired" };
+
+/**
+ * The approval still standing for this id, or why there is none.
+ *
+ * Expiry is swept on the way past, so an approval that timed out is not left in
+ * the map for a later caller to find.
+ */
+function livePendingApproval(requestId: string): LivePendingApproval {
+  const pending = pendingApprovals.get(requestId);
+  if (!pending) {
+    return { found: false, reason: "not_found" };
+  }
+  if (Date.now() > pending.expiresAt) {
+    pendingApprovals.delete(requestId);
+    return { found: false, reason: "expired" };
+  }
+  return { found: true, pending };
+}
+
+/**
+ * Content-bound approvals: the change executed must be byte-identical to the
+ * one that was approved. A missing or divergent `currentWhat` is a mismatch.
+ */
+function contentMatches(params: {
+  pending: PendingApproval;
+  currentWhat: string | undefined;
+}): boolean {
+  const { pending, currentWhat } = params;
+  if (pending.contentHash === undefined) return true;
+  if (currentWhat === undefined) return false;
+  return contentHash(currentWhat) === pending.contentHash;
+}
+
+/** Why the proof offered does not match the approval on file, if it does not. */
+function proofMismatch(params: {
+  pending: PendingApproval;
+  providedToken: string;
+  currentWhat: string | undefined;
+}): ApprovalResult["reason"] {
+  const { pending, providedToken, currentWhat } = params;
+  if (pending.token !== providedToken.trim()) {
+    return "invalid_token";
+  }
+  if (!contentMatches({ pending, currentWhat })) {
+    return "content_mismatch";
+  }
+  return undefined;
+}
+
+/**
+ * Why this validation fails, or `undefined` to let it through.
+ *
+ * Split from `validateApproval` so that consuming the approval — the one thing
+ * here with a side effect — is not tangled with the five ways of refusing it.
+ */
+function validationFailure(params: {
+  requestId: string;
+  providedToken: string | undefined;
+  currentWhat: string | undefined;
+}): ApprovalResult["reason"] {
+  const { requestId, providedToken, currentWhat } = params;
+  if (!providedToken) {
+    return "missing_token";
+  }
+
+  const live = livePendingApproval(requestId);
+  if (!live.found) {
+    return live.reason;
+  }
+
+  return proofMismatch({ pending: live.pending, providedToken, currentWhat });
+}
+
 /**
  * Validate an approval token.
  */
@@ -295,36 +422,17 @@ export function validateApproval(params: {
    */
   currentWhat?: string;
 }): ApprovalResult {
-  const { requestId, providedToken, currentWhat } = params;
-  if (!providedToken) {
-    return { valid: false, reason: "missing_token" };
-  }
-
-  const pending = pendingApprovals.get(requestId);
-  if (!pending) {
-    return { valid: false, reason: "not_found" };
-  }
-
-  const now = Date.now();
-  if (now > pending.expiresAt) {
-    pendingApprovals.delete(requestId);
-    return { valid: false, reason: "expired" };
-  }
-
-  if (pending.token !== providedToken.trim()) {
-    return { valid: false, reason: "invalid_token" };
-  }
-
-  // Content-bound approvals: the change executed must be byte-identical to the
-  // one that was approved. A missing or divergent `currentWhat` is a mismatch.
-  if (pending.contentHash !== undefined) {
-    if (currentWhat === undefined || contentHash(currentWhat) !== pending.contentHash) {
-      return { valid: false, reason: "content_mismatch" };
-    }
+  const reason = validationFailure({
+    requestId: params.requestId,
+    providedToken: params.providedToken,
+    currentWhat: params.currentWhat,
+  });
+  if (reason !== undefined) {
+    return { valid: false, reason };
   }
 
   // Valid! Remove from pending
-  pendingApprovals.delete(requestId);
+  pendingApprovals.delete(params.requestId);
   return { valid: true };
 }
 
@@ -339,16 +447,11 @@ export function clearApproval(requestId: string): void {
  * Resend notification for a pending approval
  */
 export function resendApprovalNotification(requestId: string): boolean {
-  const pending = pendingApprovals.get(requestId);
-  if (!pending) {
+  const live = livePendingApproval(requestId);
+  if (!live.found) {
     return false;
   }
-
-  const now = Date.now();
-  if (now > pending.expiresAt) {
-    pendingApprovals.delete(requestId);
-    return false;
-  }
+  const { pending } = live;
 
   // Skip notification in test environment.
   // Re-deliver the token via the desktop notification only (never the file).
@@ -374,6 +477,20 @@ export function getApprovalRejectionMessage(): string {
 This action requires user approval. Please provide the approval token.`;
 }
 
+/** The "nobody can read the token" warning, for a delivery that actually failed. */
+function notificationFailedMessage(notifyError?: string): string {
+  const cause = notifyError ? `: ${notifyError}` : "";
+  return `# Approval Could Not Be Requested
+
+The desktop notification failed to send${cause}.
+
+The token is delivered ONLY through that notification, so nobody can read it and
+this operation cannot be approved. Do NOT try to recover the token by other
+means. Tell the user that desktop notifications are not working in this
+environment — a headless or SSH session, or a missing notifier — so they can fix
+it or approve the change by hand.`;
+}
+
 /**
  * Get a message indicating approval was requested
  */
@@ -385,15 +502,7 @@ export function getApprovalRequestedMessage(params?: {
   // attempted -- a test run, or a caller that turned them off -- which is not
   // something to tell the caller approval is impossible over.
   if (params?.delivery === "failed") {
-    return `# Approval Could Not Be Requested
-
-The desktop notification failed to send${params.notifyError ? `: ${params.notifyError}` : ""}.
-
-The token is delivered ONLY through that notification, so nobody can read it and
-this operation cannot be approved. Do NOT try to recover the token by other
-means. Tell the user that desktop notifications are not working in this
-environment — a headless or SSH session, or a missing notifier — so they can fix
-it or approve the change by hand.`;
+    return notificationFailedMessage(params.notifyError);
   }
 
   return `# Approval Requested

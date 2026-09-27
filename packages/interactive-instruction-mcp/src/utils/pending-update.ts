@@ -110,24 +110,44 @@ export async function deletePendingUpdate(params: {
   }
 }
 
+/**
+ * One staged update, or nothing at all. Expired, unparseable and half-written
+ * entries are deliberately the same answer: none of them is a reason to fail
+ * the listing that asked for them.
+ */
+async function readPendingFile(params: { dir: string; file: string }): Promise<PendingUpdate | null> {
+  const { dir, file } = params;
+  try {
+    const data = await fs.readFile(path.join(dir, file), "utf-8");
+    const parsed = JSON.parse(data) as PendingUpdate;
+    if (Date.now() - parsed.timestamp > PENDING_TTL_MS) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function readPendingFiles(params: { dir: string; files: string[] }): Promise<PendingUpdate[]> {
+  const { dir, files } = params;
+  const updates: PendingUpdate[] = [];
+
+  for (const file of files.filter((name) => name.endsWith(".json"))) {
+    const parsed = await readPendingFile({ dir, file });
+    if (parsed !== null) {
+      updates.push(parsed);
+    }
+  }
+
+  return updates;
+}
+
 export async function listPendingUpdates(params: { docsDir: string }): Promise<PendingUpdate[]> {
   const dir = storeDir(params.docsDir);
   try {
     const files = await fs.readdir(dir);
-    const updates: PendingUpdate[] = [];
-
-    for (const file of files) {
-      if (!file.endsWith(".json")) continue;
-      try {
-        const data = await fs.readFile(path.join(dir, file), "utf-8");
-        const parsed = JSON.parse(data) as PendingUpdate;
-        if (Date.now() - parsed.timestamp > PENDING_TTL_MS) continue;
-        updates.push(parsed);
-      } catch {
-        // A file this module did not write, or one caught half-written. Skip it
-        // rather than failing the whole listing.
-      }
-    }
+    const updates = await readPendingFiles({ dir, files });
 
     return updates.sort((a, b) => b.timestamp - a.timestamp);
   } catch {

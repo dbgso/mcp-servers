@@ -6,7 +6,7 @@ import { ApplyHandler } from "../tools/instruction/handlers/apply.js";
 import { CancelHandler } from "../tools/instruction/handlers/cancel.js";
 import { UpdateHandler } from "../tools/instruction/handlers/update.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
-import { savePendingUpdate, getPendingUpdate, deletePendingUpdate } from "../utils/pending-update.js";
+import { savePendingUpdate, getPendingUpdate } from "../utils/pending-update.js";
 
 describe("ApplyHandler", () => {
   let tempDir: string;

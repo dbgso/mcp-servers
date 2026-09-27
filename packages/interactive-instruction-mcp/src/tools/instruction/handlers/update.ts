@@ -4,10 +4,16 @@ import type { InstructionContext } from "../types.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
 import type { DocumentFrontmatter } from "../../../types/index.js";
-import { updateFrontmatter, parseFrontmatter, stripFrontmatter } from "../../../utils/frontmatter-parser.js";
+import { updateFrontmatter, parseFrontmatter, stripFrontmatter, assignIfDefined } from "../../../utils/frontmatter-parser.js";
 import { generateDiff, removeDiffFile, writeDiffToFile } from "../../../utils/diff-utils.js";
 import { getPendingUpdate, savePendingUpdate } from "../../../utils/pending-update.js";
-import { checkDocument, formatWriteLint, isReasonGiven } from "../../../services/document-lint.js";
+import { checkDocument, formatWriteLint } from "../../../services/document-lint.js";
+import {
+  readSizeExemption,
+  refuseSizeExemption,
+  type SizeExemptionIntent,
+} from "./size-exemption.js";
+import { resolveVersions, refuseAmbiguousId } from "./document-versions.js";
 
 // "At least one field to change" is checked in `doExecute`, not by a `.refine`
 // on this schema. Not because a refinement cannot be used -- `buildInputSchema`
@@ -51,49 +57,111 @@ const schema = z.object({
 
 type Args = z.infer<typeof schema>;
 
+/** One update, threaded through the routing below without re-listing its fields. */
+type UpdateRun = { args: Args; reader: InstructionContext["reader"] };
+
 
 /**
- * What `sizeExemption` was given, as one of three intents.
+ * The fields a call can actually change.
  *
- * `null` means remove, and a client that renders tool arguments as strings
- * cannot send it: what arrives is `"null"`, which 2.0.1 stored as the reason. So
- * the call `stale-size-exemption` recommends did nothing and the finding came
- * back unchanged. An empty string is accepted as remove for that reason -- it is
- * the one "no value" a stringifying client can express -- and the placeholders
- * are refused rather than stored, because a document whose reason reads "null"
- * is one the next reader cannot make sense of.
+ * Every one is optional in the schema, so nothing there stops `update(id)` on
+ * its own -- which would rewrite the document with exactly what it already
+ * said, and on a promoted document stage an empty diff for someone to approve.
+ * A list rather than a conjunction, so a field added to the schema is a line
+ * here rather than a condition nobody remembers to extend.
  */
-function readSizeExemption(value: string | null | undefined):
-  | { kind: "unchanged" }
-  | { kind: "remove" }
-  | { kind: "set"; reason: string }
-  | { kind: "refused"; given: string } {
-  if (value === undefined) return { kind: "unchanged" };
-  if (value === null) return { kind: "remove" };
+const CHANGEABLE_FIELDS = ["content", "description", "whenToUse", "relatedDocs", "sizeExemption"] as const;
 
-  const trimmed = value.trim();
-  if (trimmed === "") return { kind: "remove" };
-  if (!isReasonGiven(trimmed)) return { kind: "refused", given: trimmed };
-  return { kind: "set", reason: value };
+function nothingToUpdate(args: Args): boolean {
+  return CHANGEABLE_FIELDS.every((field) => args[field] === undefined);
 }
 
-/** The refusal, naming both ways to remove it and what a reason is for. */
-function refuseSizeExemption(params: { id: string; given: string }): ToolResponse {
-  const { id, given } = params;
+function refuseEmptyUpdate(id: string): ToolResponse {
   return errorResponse(
-    `\`sizeExemption: "${given}"\` is not a reason for keeping the document whole, and storing it would leave the next reader unable to tell a decision from a warning nobody got to.` +
-    formatNextActions([
-      {
-        action: "update",
-        description: "Remove the exemption",
-        example: `instruction(action: "update", id: "${id}", sizeExemption: "")`,
-      },
-      {
-        action: "update",
-        description: "Say why the document stays whole",
-        example: `instruction(action: "update", id: "${id}", sizeExemption: "<why>")`,
-      },
-    ]));
+    `Nothing to update for "${id}". Pass \`content\` to change the body, or \`description\` / \`whenToUse\` / \`relatedDocs\` / \`sizeExemption\` to change the metadata.` +
+    formatNextActions([{
+      action: "read_meta",
+      description: "See what the metadata should say",
+      example: `instruction(action: "read_meta", id: "${id}")`,
+    }]));
+}
+
+function refuseMissingDocument(id: string): ToolResponse {
+  return errorResponse(`Error: Document "${id}" does not exist (neither as draft nor promoted).
+
+Use \`instruction(action: "add", ...)\` to create a new document.`);
+}
+
+/**
+ * The two ways a call is refused before anything is read: a `sizeExemption`
+ * that is not a reason, and a call that would change nothing.
+ */
+function refuseUnusableArgs(args: Args): ToolResponse | null {
+  const exemption = readSizeExemption(args.sizeExemption);
+  if (exemption.kind === "refused") {
+    return refuseSizeExemption({ id: args.id, given: exemption.given });
+  }
+  if (nothingToUpdate(args)) return refuseEmptyUpdate(args.id);
+  return null;
+}
+
+/**
+ * No `content` means a metadata-only change, so the body carries over
+ * untouched. Asking callers to resend a document they are not editing was the
+ * reason metadata updates were avoided.
+ */
+function bodyToWrite(params: { content: string | undefined; existing: string | null }): string {
+  return params.content ?? params.existing ?? "";
+}
+
+/**
+ * Record a field only when the caller passed one.
+ *
+ * `undefined` means "not passed", which has to leave the existing value alone:
+ * assigning it would clear the fields a metadata-only update left out. Same
+ * shape, and for the same reason, as `parseFrontmatter`'s own `assignIfDefined`.
+ */
+function applyExemption(params: { merged: DocumentFrontmatter; exemption: SizeExemptionIntent }): void {
+  const { merged, exemption } = params;
+  // `delete` rather than assigning null: `updateFrontmatter` removes a key
+  // whose value is undefined, which is how the field goes away.
+  if (exemption.kind === "remove") delete merged.sizeExemption;
+  if (exemption.kind === "set") merged.sizeExemption = exemption.reason;
+}
+
+/** No metadata at all means the body is returned without a frontmatter block. */
+function hasAnyField(frontmatter: DocumentFrontmatter): boolean {
+  return Object.values(frontmatter).some((v) => {
+    return Array.isArray(v) ? v.length > 0 : v !== undefined && v !== "";
+  });
+}
+
+/** A blank line, a heading or a fence closes the run of prose under the title. */
+function endsRun(trimmed: string): boolean {
+  return trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("```");
+}
+
+/**
+ * The lines below the `# ` title, or nothing when the document has no title.
+ *
+ * A document with no title has no description to infer: whatever prose comes
+ * first is as likely to be a note to the reader as a summary.
+ */
+function linesAfterTitle(lines: string[]): string[] {
+  const titleIndex = lines.findIndex((line) => line.trim().startsWith("# "));
+  if (titleIndex === -1) return [];
+  return lines.slice(titleIndex + 1);
+}
+
+/** The first run of non-blank lines, trimmed. */
+function firstParagraph(lines: string[]): string[] {
+  const trimmed = lines.map((line) => line.trim());
+  const start = trimmed.findIndex((line) => line !== "");
+  if (start === -1) return [];
+
+  const rest = trimmed.slice(start);
+  const end = rest.findIndex(endsRun);
+  return end === -1 ? rest : rest.slice(0, end);
 }
 
 export class UpdateHandler extends BaseActionHandler<Args, InstructionContext> {
@@ -114,99 +182,50 @@ Usage:
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, content, description, whenToUse, relatedDocs, sizeExemption } = params.args;
-    const { reader } = params.context;
+    const refusal = refuseUnusableArgs(params.args);
+    if (refusal !== null) return refusal;
 
-    const exemption = readSizeExemption(sizeExemption);
-    if (exemption.kind === "refused") {
-      return refuseSizeExemption({ id, given: exemption.given });
-    }
+    return this.updateResolved({ args: params.args, reader: params.context.reader });
+  }
 
-    // Every field but the id is optional, so nothing in the schema stops
-    // `update(id)` on its own -- which would rewrite the document with exactly
-    // what it already said, and on a promoted document stage an empty diff for
-    // someone to approve.
-    if (
-      content === undefined &&
-      description === undefined &&
-      whenToUse === undefined &&
-      relatedDocs === undefined &&
-      sizeExemption === undefined
-    ) {
-      return errorResponse(
-        `Nothing to update for "${id}". Pass \`content\` to change the body, or \`description\` / \`whenToUse\` / \`relatedDocs\` / \`sizeExemption\` to change the metadata.` +
-        formatNextActions([{
-          action: "read_meta",
-          description: "See what the metadata should say",
-          example: `instruction(action: "read_meta", id: "${id}")`,
-        }]));
-    }
+  /** Which document the id refers to, once the arguments are known to be usable. */
+  private async updateResolved(run: UpdateRun): Promise<ToolResponse> {
+    const { args, reader } = run;
 
-    // P1: draft/promoted同名存在ガード
-    const draftId = DRAFT_PREFIX + id;
-    const draftExists = await reader.documentExists(draftId);
-    const promotedExists = await reader.documentExists(id);
-    if (draftExists && promotedExists) {
-      return errorResponse(`Both draft and promoted versions of "${id}" exist. Delete or promote the draft first, then retry.`);
-    }
+    const versions = await resolveVersions({ reader, id: args.id });
+    if (versions === "ambiguous") return refuseAmbiguousId(args.id);
+    if (versions === "draft") return this.handleDraftUpdate(run);
+    // `missing` joins the promoted path rather than refusing here: the refusal is
+    // the same either way, and reading the content is what tells a document that
+    // is absent from one that is empty.
+    return this.updatePromoted(run);
+  }
 
-    // Check if draft exists first
-    if (draftExists) {
-      return this.handleDraftUpdate({ id, draftId, content, description, whenToUse, relatedDocs, sizeExemption, reader });
-    }
+  private async updatePromoted(run: UpdateRun): Promise<ToolResponse> {
+    const { args, reader } = run;
 
-    // Check if promoted document exists
-    const originalContent = await reader.getDocumentContent(id);
-    const originalPath = reader.getFilePath(id);
+    const originalContent = await reader.getDocumentContent(args.id);
+    const originalPath = reader.getFilePath(args.id);
+    if (!originalContent) return refuseMissingDocument(args.id);
 
-    if (!originalContent) {
-      return errorResponse(`Error: Document "${id}" does not exist (neither as draft nor promoted).
-
-Use \`instruction(action: "add", ...)\` to create a new document.`);
-    }
-
-    // Use pending flow for promoted document updates
-    return this.handleExistingDocUpdate({
-      id,
-      content,
-      description,
-      whenToUse,
-      relatedDocs,
-      sizeExemption,
-      originalContent,
-      originalPath,
-      reader,
-    });
+    return this.handleExistingDocUpdate({ args, originalContent, originalPath, reader });
   }
 
   /**
    * Handle update for draft document (direct overwrite).
    */
-  private async handleDraftUpdate(params: {
-    id: string;
-    draftId: string;
-    content?: string;
-    description?: string;
-    whenToUse?: string[];
-    relatedDocs?: string[];
-    sizeExemption?: string | null;
-    reader: InstructionContext["reader"];
-  }): Promise<ToolResponse> {
-    const { id, draftId, content, description, whenToUse, relatedDocs, sizeExemption, reader } = params;
+  private async handleDraftUpdate(run: UpdateRun): Promise<ToolResponse> {
+    const { args, reader } = run;
+    const { id } = args;
+    const draftId = DRAFT_PREFIX + id;
 
     // Get existing draft to preserve frontmatter
     const existingContent = await reader.getDocumentContent(draftId);
     const existingFrontmatter = existingContent ? parseFrontmatter(existingContent) : {};
 
     const finalContent = this.generateContentWithFrontmatter({
-      // No `content` means a metadata-only change, so the body carries over
-      // untouched. Asking callers to resend a document they are not editing was
-      // the reason metadata updates were avoided.
-      content: content ?? existingContent ?? "",
-      description,
-      whenToUse,
-      relatedDocs,
-      sizeExemption,
+      args,
+      content: bodyToWrite({ content: args.content, existing: existingContent }),
       existingFrontmatter,
     });
 
@@ -243,30 +262,23 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
    * Creates diff and pending update, no draft file.
    */
   private async handleExistingDocUpdate(params: {
-    id: string;
-    content?: string;
-    description?: string;
-    whenToUse?: string[];
-    relatedDocs?: string[];
-    sizeExemption?: string | null;
+    args: Args;
     originalContent: string;
     originalPath: string;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, content, description, whenToUse, relatedDocs, sizeExemption, originalContent, originalPath, reader } = params;
+    const { args, originalContent, originalPath, reader } = params;
+    const { id } = args;
 
     // Preserve existing frontmatter if not overridden
     const existingFrontmatter = parseFrontmatter(originalContent);
 
     const finalContent = this.generateContentWithFrontmatter({
+      args,
       // A metadata-only change keeps the body. The diff below then shows only
       // the frontmatter lines that moved, which is the whole point of allowing
       // the call without it.
-      content: content ?? originalContent,
-      description,
-      whenToUse,
-      relatedDocs,
-      sizeExemption,
+      content: bodyToWrite({ content: args.content, existing: originalContent }),
       existingFrontmatter,
     });
 
@@ -326,54 +338,29 @@ ${diff}\`\`\`` +
    * Generate content with frontmatter, preserving existing if not overridden.
    */
   private generateContentWithFrontmatter(params: {
+    args: Args;
     content: string;
-    description?: string;
-    whenToUse?: string[];
-    relatedDocs?: string[];
-    sizeExemption?: string | null;
     existingFrontmatter: DocumentFrontmatter;
   }): string {
-    const { content, description, whenToUse, relatedDocs, sizeExemption, existingFrontmatter } = params;
+    const { args, content, existingFrontmatter } = params;
+    const { description, whenToUse, relatedDocs, sizeExemption } = args;
 
-    // Check if new content already has frontmatter
-    const newFrontmatter = parseFrontmatter(content);
     const bodyContent = stripFrontmatter(content);
 
     // Merge order (later wins): existing < new content frontmatter < explicit params.
     // This preserves fields the caller did not touch (relatedDocs, status, etc.).
     const merged: DocumentFrontmatter = {
       ...existingFrontmatter,
-      ...newFrontmatter,
+      ...parseFrontmatter(content),
     };
 
-    if (description !== undefined) {
-      merged.description = description;
-    }
-    if (whenToUse !== undefined) {
-      merged.whenToUse = whenToUse;
-    }
-    if (relatedDocs !== undefined) {
-      merged.relatedDocs = relatedDocs;
-    }
-    // `delete` rather than assigning null: `updateFrontmatter` removes a key
-    // whose value is undefined, which is how the field goes away.
-    const exemption = readSizeExemption(sizeExemption);
-    if (exemption.kind === "remove") delete merged.sizeExemption;
-    else if (exemption.kind === "set") merged.sizeExemption = exemption.reason;
+    assignIfDefined({ target: merged, key: "description", value: description });
+    assignIfDefined({ target: merged, key: "whenToUse", value: whenToUse });
+    assignIfDefined({ target: merged, key: "relatedDocs", value: relatedDocs });
+    applyExemption({ merged, exemption: readSizeExemption(sizeExemption) });
+    this.applyInferredDescription({ merged, body: bodyContent });
 
-    // Only infer description as a last-resort default when nothing is set.
-    if (merged.description === undefined) {
-      const inferred = this.inferDescription(bodyContent);
-      if (inferred !== undefined) {
-        merged.description = inferred;
-      }
-    }
-
-    // If no metadata at all, return body without a frontmatter block.
-    const hasAnyField = Object.values(merged).some((v) => {
-      return Array.isArray(v) ? v.length > 0 : v !== undefined && v !== "";
-    });
-    if (!hasAnyField) {
+    if (!hasAnyField(merged)) {
       return content;
     }
 
@@ -384,28 +371,29 @@ ${diff}\`\`\`` +
   }
 
   /**
+   * A last-resort default: an explicit description always wins, and a body whose
+   * first paragraph is unusable keeps no description rather than a bad one.
+   */
+  private applyInferredDescription(params: { merged: DocumentFrontmatter; body: string }): void {
+    const { merged, body } = params;
+    if (merged.description !== undefined) return;
+
+    const inferred = this.inferDescription(body);
+    if (inferred === undefined) return;
+    merged.description = inferred;
+  }
+
+  /**
    * Infer description from first paragraph after title.
+   *
+   * Split into "where the body starts" and "where the paragraph ends" because
+   * the single pass this replaced carried a `foundTitle` flag through five
+   * conditions, and which of them applied to which line was the part nobody
+   * could check.
    */
   private inferDescription(content: string): string | undefined {
-    const lines = content.split("\n");
-    let foundTitle = false;
-    const paragraphLines: string[] = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!foundTitle && trimmed === "") continue;
-      if (!foundTitle && trimmed.startsWith("# ")) {
-        foundTitle = true;
-        continue;
-      }
-      if (foundTitle && trimmed === "" && paragraphLines.length === 0) continue;
-      if (foundTitle && trimmed !== "") {
-        if (trimmed.startsWith("#") || trimmed.startsWith("```")) break;
-        paragraphLines.push(trimmed);
-      }
-      if (foundTitle && trimmed === "" && paragraphLines.length > 0) break;
-    }
-
-    return paragraphLines.length > 0 ? paragraphLines.join(" ") : undefined;
+    const paragraph = firstParagraph(linesAfterTitle(content.split("\n")));
+    if (paragraph.length === 0) return undefined;
+    return paragraph.join(" ");
   }
 }

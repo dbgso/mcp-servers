@@ -62,12 +62,13 @@ export function defineWorkflow<TState extends string, TContext, TParams>(
     );
   }
 
-  for (const transition of definition.transitions) {
-    for (const state of transition.from) {
-      if (!definition.states.includes(state)) {
-        throw new Error(`Transition 'from' state "${state}" is not in states list`);
-      }
-    }
+  // Flattened rather than nested: the transitions are only visited to find the
+  // first `from` that was never declared, and `find` says that in one place.
+  const undeclaredFrom = definition.transitions
+    .flatMap((transition) => transition.from)
+    .find((state) => !definition.states.includes(state));
+  if (undeclaredFrom !== undefined) {
+    throw new Error(`Transition 'from' state "${undeclaredFrom}" is not in states list`);
   }
 
   return definition;

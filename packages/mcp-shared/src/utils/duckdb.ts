@@ -29,6 +29,15 @@ function escapeSqlValue(v: unknown): string {
 }
 
 /**
+ * The sample the table's column types are inferred from. An empty set of records
+ * still has to produce a table, so "no sample" has to mean "no columns" rather
+ * than an error.
+ */
+function firstRecordOf(records: Record<string, unknown>[]): Record<string, unknown> {
+  return records[0] ?? {};
+}
+
+/**
  * Create a DuckDB in-memory connection, populate an "entries" table from records,
  * and return the connection. Caller is responsible for cleanup.
  */
@@ -37,11 +46,11 @@ async function createAndPopulate(params: {
   columns?: string[];
 }): Promise<{ connection: DuckDBConnection; columns: string[] }> {
   const { records } = params;
-  const columns = params.columns ?? Object.keys(records[0] ?? {});
+  const firstRecord = firstRecordOf(records);
+  const columns = params.columns ?? Object.keys(firstRecord);
   const instance = await DuckDBInstance.create(":memory:");
   const connection = await instance.connect();
 
-  const firstRecord = records[0] ?? {};
   const colDefs = columns.map((c) => `"${c}" ${inferColumnType(firstRecord[c])}`).join(", ");
   await connection.run(`CREATE TABLE entries (${colDefs})`);
 
@@ -163,16 +172,29 @@ export interface ColumnInfo {
   type: string;
 }
 
-function buildReadExpr(params: { filePath: string; options?: ReadOptions }): string {
+/** `encoding` is the only read option callers can set; absent means DuckDB's default. */
+function readOptionsFor(encoding: string | undefined): ReadOptions | undefined {
+  if (!encoding) return undefined;
+  return { encoding };
+}
+
+function readOptionParts(options: ReadOptions | undefined): string[] {
+  if (!options?.encoding) return [];
+  return [`encoding='${options.encoding}'`];
+}
+
+function buildReadExpr(params: { filePath: string; options?: ReadOptions | undefined }): string {
   const { filePath, options } = params;
   const readFn = getReadFunction(filePath);
   const escaped = filePath.replace(/'/g, "''");
-  const opts: string[] = [];
-  if (options?.encoding) {
-    opts.push(`encoding='${options.encoding}'`);
-  }
+  const opts = readOptionParts(options);
   const optStr = opts.length > 0 ? `, ${opts.join(", ")}` : "";
   return `${readFn}('${escaped}'${optStr})`;
+}
+
+/** DuckDB returns COUNT(*) as a single row; an empty reader means nothing matched. */
+function countOf(rows: Record<string, unknown>[]): number {
+  return Number(rows[0]?.cnt ?? 0);
 }
 
 function buildCopyOptions(outputPath: string): string {
@@ -191,56 +213,84 @@ function buildCopyOptions(outputPath: string): string {
   }
 }
 
-export async function queryFile(params: {
-  filePath?: string;
-  files?: FileAlias[];
-  sql: string;
-  limit?: number;
-  encoding?: string;
-  outputPath?: string;
-}): Promise<{ rows: Record<string, unknown>[]; rowCount: number; outputPath?: string }> {
-  const { filePath, files, sql, limit = 100, encoding, outputPath } = params;
-  const opts: ReadOptions | undefined = encoding ? { encoding } : undefined;
-
-  if (!filePath && (!files || files.length === 0)) {
+/** A query needs something to read: a single path, or at least one aliased file. */
+function requireSource(params: { filePath: string | undefined; files: FileAlias[] }): void {
+  const { filePath, files } = params;
+  if (!filePath && files.length === 0) {
     throw new Error("Either filePath or files must be provided");
   }
+}
 
-  const instance = await DuckDBInstance.create(":memory:");
-  const connection = await instance.connect();
-
-  if (files && files.length > 0) {
-    for (const file of files) {
-      const fileOpts: ReadOptions | undefined = file.encoding ? { encoding: file.encoding } : opts;
-      const expr = buildReadExpr({
-        filePath: file.path,
-        ...(fileOpts && { options: fileOpts }),
-      });
-      await connection.run(`CREATE VIEW "${file.alias}" AS SELECT * FROM ${expr}`);
-    }
-  } else if (filePath) {
-    const expr = buildReadExpr({
-      filePath,
-      ...(opts && { options: opts }),
-    });
-    await connection.run(`CREATE VIEW data AS SELECT * FROM ${expr}`);
+async function registerFileViews(params: {
+  connection: DuckDBConnection;
+  files: FileAlias[];
+  fallback: ReadOptions | undefined;
+}): Promise<void> {
+  const { connection, files, fallback } = params;
+  for (const file of files) {
+    // A per-file encoding wins over the query-wide one.
+    const options = readOptionsFor(file.encoding) ?? fallback;
+    const expr = buildReadExpr({ filePath: file.path, options });
+    await connection.run(`CREATE VIEW "${file.alias}" AS SELECT * FROM ${expr}`);
   }
+}
 
-  if (outputPath) {
-    const escaped = outputPath.replace(/'/g, "''");
-    const copyOpts = buildCopyOptions(outputPath);
-    const copySQL = `COPY (SELECT * FROM (${sql}) AS _q) TO '${escaped}' ${copyOpts}`;
-    await connection.run(copySQL);
+async function registerSingleView(params: {
+  connection: DuckDBConnection;
+  filePath: string | undefined;
+  options: ReadOptions | undefined;
+}): Promise<void> {
+  const { connection, filePath, options } = params;
+  // `requireSource` has already established there is one; this satisfies the type.
+  if (!filePath) return;
+  const expr = buildReadExpr({ filePath, options });
+  await connection.run(`CREATE VIEW data AS SELECT * FROM ${expr}`);
+}
 
-    const countReader = await connection.runAndReadAll(
-      `SELECT COUNT(*) AS cnt FROM (${sql}) AS _q`,
-    );
-    const countRows = countReader.getRowObjectsJson() as Record<string, unknown>[];
-    const rowCount = Number(countRows[0]?.cnt ?? 0);
-
-    return { rows: [], rowCount, outputPath };
+/**
+ * A `files` list wins over `filePath`: the aliases are what the SQL refers to,
+ * so registering `data` as well would be dead weight.
+ */
+async function registerViews(params: {
+  connection: DuckDBConnection;
+  filePath: string | undefined;
+  files: FileAlias[];
+  options: ReadOptions | undefined;
+}): Promise<void> {
+  const { connection, filePath, files, options } = params;
+  if (files.length > 0) {
+    await registerFileViews({ connection, files, fallback: options });
+    return;
   }
+  await registerSingleView({ connection, filePath, options });
+}
 
+/**
+ * Writes the result to a file instead of returning it. COPY does not report how
+ * many rows it wrote, so the count is a second query over the same SQL.
+ */
+async function copyQueryToFile(params: {
+  connection: DuckDBConnection;
+  sql: string;
+  outputPath: string;
+}): Promise<{ rows: Record<string, unknown>[]; rowCount: number; outputPath: string }> {
+  const { connection, sql, outputPath } = params;
+  const escaped = outputPath.replace(/'/g, "''");
+  const copyOpts = buildCopyOptions(outputPath);
+  await connection.run(`COPY (SELECT * FROM (${sql}) AS _q) TO '${escaped}' ${copyOpts}`);
+
+  const countReader = await connection.runAndReadAll(`SELECT COUNT(*) AS cnt FROM (${sql}) AS _q`);
+  const countRows = countReader.getRowObjectsJson() as Record<string, unknown>[];
+
+  return { rows: [], rowCount: countOf(countRows), outputPath };
+}
+
+async function selectRows(params: {
+  connection: DuckDBConnection;
+  sql: string;
+  limit?: number;
+}): Promise<{ rows: Record<string, unknown>[]; rowCount: number }> {
+  const { connection, sql, limit = 100 } = params;
   const reader = await connection.runAndReadAll(
     `SELECT * FROM (${sql}) AS _q LIMIT ${Number(limit)}`,
   );
@@ -249,17 +299,43 @@ export async function queryFile(params: {
   return { rows, rowCount: rows.length };
 }
 
+export async function queryFile(params: {
+  filePath?: string;
+  files?: FileAlias[];
+  sql: string;
+  limit?: number;
+  encoding?: string;
+  outputPath?: string;
+}): Promise<{ rows: Record<string, unknown>[]; rowCount: number; outputPath?: string }> {
+  const { filePath, sql, limit, encoding, outputPath } = params;
+  const files = params.files ?? [];
+  requireSource({ filePath, files });
+
+  const instance = await DuckDBInstance.create(":memory:");
+  const connection = await instance.connect();
+  await registerViews({ connection, filePath, files, options: readOptionsFor(encoding) });
+
+  if (outputPath) {
+    return copyQueryToFile({ connection, sql, outputPath });
+  }
+  return selectRows({ connection, sql, limit });
+}
+
+const FORMAT_BY_EXTENSION: Record<string, string> = {
+  ".csv": "csv",
+  ".tsv": "tsv",
+  ".json": "json",
+  ".jsonl": "jsonl",
+  ".parquet": "parquet",
+};
+
 export async function describeFile(params: { filePath: string; encoding?: string }): Promise<{
   columns: ColumnInfo[];
   rowCount: number;
   format: string;
 }> {
   const { filePath, encoding } = params;
-  const opts: ReadOptions | undefined = encoding ? { encoding } : undefined;
-  const expr = buildReadExpr({
-    filePath,
-    ...(opts && { options: opts }),
-  });
+  const expr = buildReadExpr({ filePath, options: readOptionsFor(encoding) });
   const instance = await DuckDBInstance.create(":memory:");
   const connection = await instance.connect();
 
@@ -272,16 +348,7 @@ export async function describeFile(params: { filePath: string; encoding?: string
 
   const countReader = await connection.runAndReadAll(`SELECT COUNT(*) AS cnt FROM ${expr}`);
   const countRows = countReader.getRowObjectsJson() as Record<string, unknown>[];
-  const rowCount = Number(countRows[0]?.cnt ?? 0);
 
   const ext = path.extname(filePath).toLowerCase();
-  const formatMap: Record<string, string> = {
-    ".csv": "csv",
-    ".tsv": "tsv",
-    ".json": "json",
-    ".jsonl": "jsonl",
-    ".parquet": "parquet",
-  };
-
-  return { columns, rowCount, format: formatMap[ext] ?? ext };
+  return { columns, rowCount: countOf(countRows), format: FORMAT_BY_EXTENSION[ext] ?? ext };
 }

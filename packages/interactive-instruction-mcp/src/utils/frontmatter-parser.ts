@@ -20,7 +20,7 @@
  * gets written back.
  */
 
-import { isMap, isSeq, parseDocument, Scalar, type Document } from "yaml";
+import { isMap, isSeq, parseDocument, Scalar, type Document, type YAMLSeq } from "yaml";
 import type { DocumentFrontmatter } from "../types/index.js";
 
 // Standard frontmatter at file start
@@ -88,6 +88,12 @@ function readString(params: { doc: Document.Parsed; key: string }): string | und
  * stringified: `relatedDocs: [1, 2]` is a malformed link list, and inventing
  * `"1"` from it would name a document that cannot exist.
  */
+function stringItemsOf(node: YAMLSeq): string[] | undefined {
+  const items: unknown = node.toJSON();
+  if (!Array.isArray(items)) return undefined;
+  return items.filter((item): item is string => typeof item === "string");
+}
+
 function readStringArray(params: { doc: Document.Parsed; key: string }): string[] | undefined {
   const { doc, key } = params;
   // `get` hands back the node, not a plain array -- the whole point of the
@@ -96,9 +102,7 @@ function readStringArray(params: { doc: Document.Parsed; key: string }): string[
   const node = doc.get(key);
 
   if (isSeq(node)) {
-    const items: unknown = node.toJSON();
-    if (!Array.isArray(items)) return undefined;
-    return items.filter((item): item is string => typeof item === "string");
+    return stringItemsOf(node);
   }
 
   // A bare scalar reads as a one-item list. Documents written by hand carry
@@ -108,37 +112,47 @@ function readStringArray(params: { doc: Document.Parsed; key: string }): string[
   return typeof value === "string" ? [value] : undefined;
 }
 
+/** A `status` this server knows, or nothing: an unrecognised one reads as absent. */
+function readStatus(doc: Document.Parsed): DocumentFrontmatter["status"] | undefined {
+  const status = readString({ doc, key: STATUS_KEY });
+  if (status === undefined || !(VALID_STATUSES as readonly string[]).includes(status)) {
+    return undefined;
+  }
+  return status as DocumentFrontmatter["status"];
+}
+
+/**
+ * Record a field only when the document carries one.
+ *
+ * The distinction between an absent key and a key set to `undefined` is load
+ * bearing on the way back out: `applyField` reads `undefined` as "delete this",
+ * so a reader that filled in the blanks would make every write a deletion.
+ */
+export function assignIfDefined<K extends keyof DocumentFrontmatter>(params: {
+  target: DocumentFrontmatter;
+  key: K;
+  value: DocumentFrontmatter[K] | undefined;
+}): void {
+  const { target, key, value } = params;
+  if (value !== undefined) {
+    target[key] = value;
+  }
+}
+
 export function parseFrontmatter(content: string): DocumentFrontmatter {
   const doc = parseFrontmatterDocument(content);
   if (doc === null || !isMap(doc.contents)) return {};
 
   const result: DocumentFrontmatter = {};
 
-  const description = readString({ doc, key: "description" });
-  if (description !== undefined) result.description = description;
-
-  const whenToUse = readStringArray({ doc, key: WHEN_TO_USE_KEY });
-  if (whenToUse !== undefined) result.whenToUse = whenToUse;
-
-  const relatedDocs = readStringArray({ doc, key: RELATED_DOCS_KEY });
-  if (relatedDocs !== undefined) result.relatedDocs = relatedDocs;
-
-  const status = readString({ doc, key: STATUS_KEY });
-  if (status !== undefined && (VALID_STATUSES as readonly string[]).includes(status)) {
-    result.status = status as DocumentFrontmatter["status"];
-  }
-
-  const selfReviewNotes = readString({ doc, key: SELF_REVIEW_NOTES_KEY });
-  if (selfReviewNotes !== undefined) result.selfReviewNotes = selfReviewNotes;
-
-  const sizeExemption = readString({ doc, key: SIZE_EXEMPTION_KEY });
-  if (sizeExemption !== undefined) result.sizeExemption = sizeExemption;
-
-  const confirmedAt = readString({ doc, key: CONFIRMED_AT_KEY });
-  if (confirmedAt !== undefined) result.confirmedAt = confirmedAt;
-
-  const approvedAt = readString({ doc, key: APPROVED_AT_KEY });
-  if (approvedAt !== undefined) result.approvedAt = approvedAt;
+  assignIfDefined({ target: result, key: "description", value: readString({ doc, key: "description" }) });
+  assignIfDefined({ target: result, key: "whenToUse", value: readStringArray({ doc, key: WHEN_TO_USE_KEY }) });
+  assignIfDefined({ target: result, key: "relatedDocs", value: readStringArray({ doc, key: RELATED_DOCS_KEY }) });
+  assignIfDefined({ target: result, key: "status", value: readStatus(doc) });
+  assignIfDefined({ target: result, key: "selfReviewNotes", value: readString({ doc, key: SELF_REVIEW_NOTES_KEY }) });
+  assignIfDefined({ target: result, key: "sizeExemption", value: readString({ doc, key: SIZE_EXEMPTION_KEY }) });
+  assignIfDefined({ target: result, key: "confirmedAt", value: readString({ doc, key: CONFIRMED_AT_KEY }) });
+  assignIfDefined({ target: result, key: "approvedAt", value: readString({ doc, key: APPROVED_AT_KEY }) });
 
   return result;
 }
@@ -164,8 +178,7 @@ export function updateFrontmatter(params: {
   const { content, frontmatter } = params;
   const body = stripFrontmatter(content);
 
-  const parsed = parseFrontmatterForWrite(content);
-  const doc = parsed !== null && isMap(parsed.contents) ? parsed : emptyDocument();
+  const doc = documentToWrite(content);
 
   applyField({ doc, key: "description", value: frontmatter.description });
   applyField({ doc, key: WHEN_TO_USE_KEY, value: nonEmpty(frontmatter.whenToUse) });
@@ -176,13 +189,30 @@ export function updateFrontmatter(params: {
   applyField({ doc, key: CONFIRMED_AT_KEY, value: frontmatter.confirmedAt });
   applyField({ doc, key: APPROVED_AT_KEY, value: frontmatter.approvedAt });
 
+  return `---\n${frontmatterYaml(doc)}---\n\n${body}`;
+}
+
+/** The parsed block when it is sound enough to edit, otherwise a fresh one. */
+function documentToWrite(content: string): Document.Parsed | Document {
+  const parsed = parseFrontmatterForWrite(content);
+  if (parsed !== null && isMap(parsed.contents)) {
+    return parsed;
+  }
+  return emptyDocument();
+}
+
+function frontmatterYaml(doc: Document.Parsed | Document): string {
   // An empty mapping stringifies as `{}`, which is valid YAML but reads as
   // noise in a document that simply has no metadata. Emit an empty block, as
   // the previous serialiser did.
-  const yaml = isMap(doc.contents) && doc.contents.items.length === 0
-    ? "\n"
-    : doc.toString({ lineWidth: 0 });
-  return `---\n${yaml.endsWith("\n") ? yaml : `${yaml}\n`}---\n\n${body}`;
+  if (isMap(doc.contents) && doc.contents.items.length === 0) {
+    return "\n";
+  }
+  return terminated(doc.toString({ lineWidth: 0 }));
+}
+
+function terminated(yaml: string): string {
+  return yaml.endsWith("\n") ? yaml : `${yaml}\n`;
 }
 
 /**
@@ -230,12 +260,15 @@ function applyField(params: {
   // which is the whole class of damage this module exists to stop.
   if (matchesExisting({ doc, key, value })) return;
 
-  if (Array.isArray(value)) {
-    doc.set(key, value);
-    return;
-  }
+  doc.set(key, nodeFor(value));
+}
 
-  doc.set(key, scalarFor(value));
+/** A list goes in as plain values; a string needs its quoting style decided. */
+function nodeFor(value: string | string[]): string[] | Scalar {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  return scalarFor(value);
 }
 
 function matchesExisting(params: {
@@ -247,12 +280,17 @@ function matchesExisting(params: {
   const node = doc.get(key);
 
   if (Array.isArray(value)) {
-    if (!isSeq(node)) return false;
-    const items: unknown = node.toJSON();
-    return Array.isArray(items) && JSON.stringify(items) === JSON.stringify(value);
+    return seqMatches({ node, value });
   }
 
   return node === value;
+}
+
+function seqMatches(params: { node: unknown; value: string[] }): boolean {
+  const { node, value } = params;
+  if (!isSeq(node)) return false;
+  const items: unknown = node.toJSON();
+  return Array.isArray(items) && JSON.stringify(items) === JSON.stringify(value);
 }
 
 /**

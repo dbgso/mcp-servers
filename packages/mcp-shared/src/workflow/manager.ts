@@ -193,36 +193,63 @@ export class WorkflowManager<TState extends string, TContext, TParams> {
    */
   async listAll(): Promise<WorkflowStatus<TState, TContext>[]> {
     const results: WorkflowStatus<TState, TContext>[] = [];
-
     try {
-      const files = await fs.readdir(this.persistDir);
-      for (const file of files) {
-        if (!file.endsWith(".json")) continue;
-
-        const filePath = path.join(this.persistDir, file);
-        const loadResult = await loadWorkflowInstance({
-          definition: this.definition,
-          filePath,
-          options: { persistDir: this.persistDir },
-        });
-
-        if (loadResult.ok) {
-          const id = instanceIdFromStateFileName(file);
-          if (id === null) continue;
-          this.instances.set(id, loadResult.instance);
-          results.push({
-            id,
-            state: loadResult.instance.state,
-            visitedStates: loadResult.instance.visitedStates,
-            context: loadResult.instance.context,
-          });
-        }
-      }
+      await this.collectPersistedStatuses(results);
     } catch {
-      // Directory doesn't exist or read error - return empty
+      // Directory doesn't exist or read error - keep whatever was read
+    }
+    return results;
+  }
+
+  /**
+   * Appends instead of returning, so that a throw part-way through still leaves
+   * `listAll` holding the entries it did manage to read. A listing that comes
+   * back short is much easier to make sense of than one that comes back empty.
+   */
+  private async collectPersistedStatuses(
+    into: WorkflowStatus<TState, TContext>[]
+  ): Promise<void> {
+    for (const file of await fs.readdir(this.persistDir)) {
+      const status = await this.statusFromStateFile({ file });
+      if (status !== null) {
+        into.push(status);
+      }
+    }
+  }
+
+  /**
+   * Cache one persisted state file and describe it, or null when the file is not
+   * one this manager wrote or no longer loads as this workflow's state.
+   *
+   * `instanceIdFromStateFileName` is the whole admission check: it already
+   * rejects anything that is not a `.json` name this module could have written,
+   * so asking it first is also what keeps a stray file from being read at all.
+   */
+  private async statusFromStateFile(params: {
+    file: string;
+  }): Promise<WorkflowStatus<TState, TContext> | null> {
+    const { file } = params;
+    const id = instanceIdFromStateFileName(file);
+    if (id === null) {
+      return null;
     }
 
-    return results;
+    const loadResult = await loadWorkflowInstance({
+      definition: this.definition,
+      filePath: path.join(this.persistDir, file),
+      options: { persistDir: this.persistDir },
+    });
+    if (!loadResult.ok) {
+      return null;
+    }
+
+    this.instances.set(id, loadResult.instance);
+    return {
+      id,
+      state: loadResult.instance.state,
+      visitedStates: loadResult.instance.visitedStates,
+      context: loadResult.instance.context,
+    };
   }
 
   /**

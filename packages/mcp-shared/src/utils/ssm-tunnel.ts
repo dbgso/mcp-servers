@@ -20,13 +20,15 @@
  * and SSM tunnels share a single signal handler and a single registry of
  * live tunnels.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
 import {
+  awaitTunnelReadyOrKill,
+  ChildTunnelHandle,
   findFreePort,
   registerTunnel,
-  unregisterTunnel,
+  spawnTunnelProcess,
+  SpawnedTunnel,
   waitForPort,
-  type TunnelHandle,
 } from "./tunnel-common.js";
 
 /**
@@ -43,17 +45,27 @@ import {
  */
 function buildAwsArgs(params: {
   args: readonly string[];
-  options?: { profile?: string; region?: string };
+  options: AwsCliOptions;
 }): string[] {
+  return [...awsGlobalFlags(params.options), ...params.args];
+}
+
+/** Profile / region as the aws CLI wants them: global flags, before the subcommand. */
+function awsGlobalFlags(options: AwsCliOptions): string[] {
   const out: string[] = [];
-  if (params.options?.profile) {
-    out.push("--profile", params.options.profile);
+  if (options.profile) {
+    out.push("--profile", options.profile);
   }
-  if (params.options?.region) {
-    out.push("--region", params.options.region);
+  if (options.region) {
+    out.push("--region", options.region);
   }
-  out.push(...params.args);
   return out;
+}
+
+/** The two aws CLI globals this module ever sets. */
+interface AwsCliOptions {
+  profile?: string;
+  region?: string;
 }
 
 /** ms to wait between SIGINT and SIGKILL fallback during graceful shutdown. */
@@ -146,21 +158,36 @@ export function buildSsmTunnelArgs(params: {
   region?: string;
 }): string[] {
   return buildAwsArgs({
-    args: [
-      "ssm",
-      "start-session",
-      "--target",
-      params.target,
-      "--document-name",
-      params.documentName ?? DEFAULT_SSM_DOCUMENT_NAME,
-      "--parameters",
-      `host=${params.remoteHost},portNumber=${params.remotePort},localPortNumber=${params.localPort}`,
-    ],
+    args: ssmSessionArgs(params),
     options: {
       ...(params.profile && { profile: params.profile }),
       ...(params.region && { region: params.region }),
     },
   });
+}
+
+/**
+ * The `start-session` invocation itself. `--parameters` is the document's own
+ * encoding rather than a CLI convention, which is why it is built here and not
+ * alongside the global flags.
+ */
+function ssmSessionArgs(params: {
+  target: string;
+  remoteHost: string;
+  remotePort: number;
+  localPort: number;
+  documentName?: string;
+}): string[] {
+  return [
+    "ssm",
+    "start-session",
+    "--target",
+    params.target,
+    "--document-name",
+    params.documentName ?? DEFAULT_SSM_DOCUMENT_NAME,
+    "--parameters",
+    `host=${params.remoteHost},portNumber=${params.remotePort},localPortNumber=${params.localPort}`,
+  ];
 }
 
 /**
@@ -173,82 +200,91 @@ export function buildSsmTunnelArgs(params: {
 export async function createSsmTunnel(config: SsmTunnelConfig): Promise<SsmTunnel> {
   const localBindHost = config.localBindHost ?? "127.0.0.1";
   const localPort = config.localPort ?? (await findFreePort(localBindHost));
-  const args = buildSsmTunnelArgs({
+
+  const child = spawnTunnelProcess({
+    command: "aws",
+    args: ssmArgsFor({ config, localPort }),
+    label: "ssm-tunnel",
+    spawnFn: config.spawnFn,
+  });
+
+  const handle = new ChildTunnelHandle(child);
+  registerTunnel(handle);
+  const tunnel = new SsmProcessTunnel({ child, handle, localPort, localBindHost });
+
+  await awaitTunnelReadyOrKill({
+    child,
+    handle,
+    wait: () => awaitSsmReady({ config, child, localBindHost, localPort }),
+  });
+
+  return tunnel;
+}
+
+class SsmProcessTunnel extends SpawnedTunnel implements SsmTunnel {
+  /**
+   * SIGINT lets the aws CLI tell AWS to terminate the session and clean up
+   * session-manager-plugin, so it isn't orphaned on the AWS side; SIGTERM
+   * doesn't trigger that path. Escalate to SIGKILL after 5s so we never block
+   * forever on a stuck plugin.
+   */
+  protected async shutdown(): Promise<void> {
+    this.child.kill("SIGINT");
+    await new Promise<void>((resolve) => {
+      if (this.child.exitCode !== null) return resolve();
+      const escalate = setTimeout(() => {
+        this.child.kill("SIGKILL");
+      }, GRACEFUL_KILL_TIMEOUT_MS);
+      // Give the SIGKILL a brief grace too, then resolve regardless so we
+      // don't leak a hung promise.
+      const finalTimeout = setTimeout(() => resolve(), GRACEFUL_KILL_TIMEOUT_MS + 1_000);
+      this.child.once("exit", () => {
+        clearTimeout(escalate);
+        clearTimeout(finalTimeout);
+        resolve();
+      });
+    });
+  }
+}
+
+function ssmArgsFor(params: {
+  config: SsmTunnelConfig;
+  localPort: number;
+}): string[] {
+  const { config } = params;
+  return buildSsmTunnelArgs({
     target: config.target,
     remoteHost: config.remoteHost,
     remotePort: config.remotePort,
-    localPort,
+    localPort: params.localPort,
     ...(config.documentName && { documentName: config.documentName }),
+    ...awsCliOverrides(config),
+  });
+}
+
+/** Absent settings stay absent so the aws CLI falls back to its own config. */
+function awsCliOverrides(config: AwsCliOptions): AwsCliOptions {
+  return {
     ...(config.profile && { profile: config.profile }),
     ...(config.region && { region: config.region }),
-  });
-
-  const spawnFn = config.spawnFn ?? spawn;
-  const child = spawnFn("aws", args);
-  child.unref?.();
-
-  // Surface aws CLI stderr to the parent. The CLI emits its own friendly
-  // message when session-manager-plugin is missing, including a doc URL —
-  // passing it through is enough; we don't pre-detect.
-  child.stderr?.on("data", (chunk: Buffer) => {
-    process.stderr.write(`[ssm-tunnel] ${chunk}`);
-  });
-
-  let active = true;
-  const handle: TunnelHandle = { kill: () => child.kill() };
-  registerTunnel(handle);
-
-  child.once("exit", () => {
-    active = false;
-    unregisterTunnel(handle);
-  });
-
-  try {
-    await waitForPort({
-      host: localBindHost,
-      port: localPort,
-      timeoutMs: config.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS,
-      intervalMs: config.probeIntervalMs ?? 200,
-      child,
-      childLabel: "aws ssm start-session",
-    });
-  } catch (err) {
-    child.kill();
-    unregisterTunnel(handle);
-    throw err;
-  }
-
-  return {
-    localPort,
-    localBindHost,
-    get active() {
-      return active;
-    },
-    async close() {
-      if (!active) return;
-      active = false;
-      unregisterTunnel(handle);
-      // Graceful shutdown: SIGINT lets aws CLI tell AWS to terminate the
-      // session and clean up session-manager-plugin (so it isn't orphaned
-      // on the AWS side). SIGTERM doesn't trigger that path. After 5s,
-      // escalate to SIGKILL so we never block forever on a stuck plugin.
-      child.kill("SIGINT");
-      await new Promise<void>((resolve) => {
-        if (child.exitCode !== null) return resolve();
-        const escalate = setTimeout(() => {
-          child.kill("SIGKILL");
-        }, GRACEFUL_KILL_TIMEOUT_MS);
-        // Give the SIGKILL a brief grace too, then resolve regardless so we
-        // don't leak a hung promise.
-        const finalTimeout = setTimeout(() => resolve(), GRACEFUL_KILL_TIMEOUT_MS + 1_000);
-        child.once("exit", () => {
-          clearTimeout(escalate);
-          clearTimeout(finalTimeout);
-          resolve();
-        });
-      });
-    },
   };
+}
+
+/** Timeouts are defaulted here so `createSsmTunnel` reads as lifecycle only. */
+async function awaitSsmReady(params: {
+  config: SsmTunnelConfig;
+  child: ChildProcess;
+  localBindHost: string;
+  localPort: number;
+}): Promise<void> {
+  await waitForPort({
+    host: params.localBindHost,
+    port: params.localPort,
+    timeoutMs: params.config.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS,
+    intervalMs: params.config.probeIntervalMs ?? 200,
+    child: params.child,
+    childLabel: "aws ssm start-session",
+  });
 }
 
 /**
@@ -282,22 +318,63 @@ export async function withSsmTunnel<T>(params: {
  * environment that already exports those don't need to duplicate them.
  */
 export function ssmConfigFromEnv(prefix: string): SsmTunnelEnvConfig | null {
-  const env = process.env;
-  const target = env[`${prefix}_SSM_TARGET`];
+  const target = process.env[`${prefix}_SSM_TARGET`];
   if (!target) return null;
-  const config: SsmTunnelEnvConfig = { target };
-  const region = env[`${prefix}_SSM_REGION`] ?? env.AWS_REGION;
-  if (region) config.region = region;
-  const profile = env[`${prefix}_SSM_PROFILE`] ?? env.AWS_PROFILE;
-  if (profile) config.profile = profile;
-  const documentName = env[`${prefix}_SSM_DOCUMENT_NAME`];
-  if (documentName) config.documentName = documentName;
-  const readyTimeoutRaw = env[`${prefix}_SSM_READY_TIMEOUT_MS`];
-  if (readyTimeoutRaw) {
-    const parsed = Number(readyTimeoutRaw);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      config.readyTimeoutMs = Math.round(parsed);
-    }
-  }
-  return config;
+  return {
+    target,
+    ...ssmCredentialsFromEnv(prefix),
+    ...ssmSessionSettingsFromEnv(prefix),
+  };
+}
+
+/** Who opens the session. */
+function ssmCredentialsFromEnv(
+  prefix: string,
+): Pick<SsmTunnelEnvConfig, "region" | "profile"> {
+  const settings: Pick<SsmTunnelEnvConfig, "region" | "profile"> = {};
+  const region = awsRegionFromEnv(prefix);
+  if (region) settings.region = region;
+  const profile = awsProfileFromEnv(prefix);
+  if (profile) settings.profile = profile;
+  return settings;
+}
+
+/**
+ * The prefixed name wins, then the standard AWS one: a caller in an environment
+ * that already exports `AWS_REGION` shouldn't have to duplicate it.
+ */
+function awsRegionFromEnv(prefix: string): string | undefined {
+  return process.env[`${prefix}_SSM_REGION`] ?? process.env.AWS_REGION;
+}
+
+/** Same fallback as {@link awsRegionFromEnv}, for `AWS_PROFILE`. */
+function awsProfileFromEnv(prefix: string): string | undefined {
+  return process.env[`${prefix}_SSM_PROFILE`] ?? process.env.AWS_PROFILE;
+}
+
+/** How the session behaves, as opposed to who opens it. */
+function ssmSessionSettingsFromEnv(
+  prefix: string,
+): Pick<SsmTunnelEnvConfig, "documentName" | "readyTimeoutMs"> {
+  const settings: Pick<
+    SsmTunnelEnvConfig,
+    "documentName" | "readyTimeoutMs"
+  > = {};
+  const documentName = process.env[`${prefix}_SSM_DOCUMENT_NAME`];
+  if (documentName) settings.documentName = documentName;
+  const readyTimeoutMs = readyTimeoutFromEnv(prefix);
+  if (readyTimeoutMs) settings.readyTimeoutMs = readyTimeoutMs;
+  return settings;
+}
+
+function readyTimeoutFromEnv(prefix: string): number | undefined {
+  const raw = process.env[`${prefix}_SSM_READY_TIMEOUT_MS`];
+  if (!raw) return undefined;
+  return positiveMillis(Number(raw));
+}
+
+/** A garbage or non-positive timeout is ignored rather than applied as-is. */
+function positiveMillis(value: number): number | undefined {
+  if (Number.isFinite(value) && value > 0) return Math.round(value);
+  return undefined;
 }
