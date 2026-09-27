@@ -18,6 +18,12 @@
 # found by mutating the batch explanation guard and seeing which mutations the
 # generated set did and did not catch.
 #
+# `force` was a factor here until it was removed from the action. Its column was
+# deleted from the generated cases rather than regenerated: dropping a factor from
+# a pairwise set leaves a pairwise set over the ones that remain, so the guarantee
+# in the paragraph above still holds. Duplicate rows the deletion created were
+# removed. The next change to this model should regenerate properly.
+#
 # PICT is Microsoft's pairwise generator (github.com/microsoft/pict, `make`).
 # It is deliberately not a dependency: its npm wrapper clones and compiles the
 # tool on every install. The generated cases are committed instead, so CI needs
@@ -36,7 +42,6 @@ notes: given, omitted
 explanation: given, omitted
 
 # Skips the consecutive-approval warning.
-force: on, off
 
 # One draft, or a batch under a single explanation.
 mode: single, batch
@@ -52,9 +57,17 @@ target: same, other_free, other_occupied
 # deliberation gate requires before it lets a write through.
 attempts: once, repeated
 
-# `notes` and `force` are single-draft arguments; the batch path takes neither.
-# Nor does it take a `targetId`: a batch promotes each draft to its own id.
-IF [mode] = "batch" THEN [notes] = "omitted" AND [force] = "off" AND [target] = "same";
+# `notes` and `targetId` are single-promotion arguments, and this exclusion is
+# how the suite came to miss that. The comment here used to read "the batch path
+# takes neither", stated as though something enforced it -- and nothing did: the
+# handler destructured both and passed neither on, so a batch carrying one was
+# answered as though it had been applied. The one model whose purpose is the
+# combinations nobody thought of was configured never to generate them.
+#
+# They are legal inputs with defined behaviour now (refused, before anything is
+# promoted), so this constraint should go and the set be regenerated. Until PICT
+# is at hand, `handler-guards.test.ts` covers the three refusals directly.
+IF [mode] = "batch" THEN [notes] = "omitted" AND [target] = "same";
 
 # A missing workflow entry and a present state are the same situation for a
 # draft that is not on disk: there is nothing to promote either way. Keep the

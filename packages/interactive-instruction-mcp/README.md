@@ -94,7 +94,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `rename` — Rename a draft (instant) or promoted document (approval required)
 
 **Approval Workflow**
-- `approve` — Progress through: notes → `explanation` (repeated) (optional: `targetId`, `force`, `ids` for batch)
+- `approve` — Progress through: notes → `explanation` (repeated) (optional: `targetId`, `ids` for batch)
 
 **Pending Updates** (for promoted document updates via `update`)
 - `apply` — Apply a pending update (`explanation` required; the first call is refused by design)
@@ -345,10 +345,13 @@ The same flow as calls:
    → promoted
 ```
 
-Batch several drafts under one explanation with `ids: "a,b,c"`. Promote to a different
-location with `targetId`, and skip the consecutive-approval warning with `force: true` --
-both of those are single-promotion arguments, along with `notes`, and a batch carrying
-one is refused rather than promoting without it.
+Batch several drafts under one explanation with `ids: "a,b,c"`, or promote to a different
+location with `targetId`. `targetId` and `notes` are single-promotion arguments, and a
+batch carrying either is refused rather than promoting without it.
+
+Promoting a draft while another is still waiting adds a note to the answer naming the
+batch call that would cover both. It is a note, not a refusal: what it protects is the
+account the user gets, and the deliberation gate holds the write either way.
 
 ### Promoted Document Operations
 

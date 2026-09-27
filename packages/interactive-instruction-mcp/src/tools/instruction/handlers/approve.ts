@@ -30,10 +30,33 @@ const schema = z.object({
     .describe(
       "What this document says and why it should be promoted, in your own words, as you told the user. Required to promote, and identical across every attempt."
     ),
-  force: z.boolean().optional(),
 });
 
 type Args = z.infer<typeof schema>;
+
+/**
+ * Add an advisory to a response without changing what the response was.
+ *
+ * Appended to the first text block rather than pushed as a new one, so a caller
+ * reading `content[0].text` -- which is every caller -- sees it. An empty advice
+ * returns the response untouched, so the caller of this does not have to branch.
+ */
+function withAdvice(params: { response: ToolResponse; advice: string }): ToolResponse {
+  const { response, advice } = params;
+  if (advice === "") return response;
+
+  const first = response.content.findIndex((part) => part.type === "text");
+  if (first === -1) {
+    return { ...response, content: [...response.content, { type: "text" as const, text: advice }] };
+  }
+
+  return {
+    ...response,
+    content: response.content.map((part, index) =>
+      index === first && part.type === "text" ? { ...part, text: part.text + advice } : part
+    ),
+  };
+}
 
 /** How many ids a batch names, for a message that says the count back. */
 function countIds(ids: string): number {
@@ -43,20 +66,16 @@ function countIds(ids: string): number {
 /**
  * The arguments the batch path has never been able to use.
  *
- * All three were destructured in `doExecute` and then not passed on, so a batch
- * carrying any of them was accepted and answered as though it had been applied.
- * Each is single-promotion only for its own reason, and none of the three is a
- * missing feature:
+ * Both were destructured in `doExecute` and then not passed on, so a batch
+ * carrying either was accepted and answered as though it had been applied.
+ * Each is single-promotion only for its own reason, and neither is a missing
+ * feature:
  *
  * - `targetId` is the id one draft is promoted under, and a batch has one draft
  *   per id, so a single name cannot apply to all of them.
  * - `notes` is one draft's self-review. The batch path already requires each
  *   draft to have had its own recorded -- its refusal says so -- and one note
  *   covering several drafts is the review not having happened.
- * - `force` suppresses exactly one check, the consecutive-approval warning, and
- *   what that warning recommends instead is this batch call. There is no such
- *   check on this path for `force` to skip, because taking it is the answer.
- *
  * Refused rather than ignored, and refused before anything is promoted:
  * promotion cannot be undone from here, so "it did something else" is the one
  * outcome that cannot be walked back.
@@ -64,9 +83,8 @@ function countIds(ids: string): number {
 function batchWouldIgnore(params: {
   targetId?: string;
   notes?: string;
-  force?: boolean;
 }): { reason: (count: number) => string; singleDescription: string; singleArgs: string } | null {
-  const { targetId, notes, force } = params;
+  const { targetId, notes } = params;
 
   if (targetId !== undefined) {
     return {
@@ -84,16 +102,6 @@ function batchWouldIgnore(params: {
         "Record each draft's own notes first; the batch then promotes them under one explanation.",
       singleDescription: "Record one draft's self-review",
       singleArgs: 'notes: "<self-review>"',
-    };
-  }
-
-  if (force === true) {
-    return {
-      reason: () =>
-        "`force` skips the consecutive-approval warning, and what that warning recommends " +
-        "is this batch call -- so there is nothing here for it to skip.",
-      singleDescription: "Promote one draft on its own anyway",
-      singleArgs: "force: true",
     };
   }
 
@@ -154,7 +162,7 @@ promote. \`ids\` promotes several drafts under one explanation.`;
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, ids, targetId, notes, explanation, force } = params.args;
+    const { id, ids, targetId, notes, explanation } = params.args;
     const { reader } = params.context;
 
     // Batch approval mode
@@ -163,7 +171,7 @@ promote. \`ids\` promotes several drafts under one explanation.`;
       // draft per id -- so a single name cannot apply to all of them. It used
       // to be dropped without a word, and every draft landed under its own id
       // while the caller had asked for a different one.
-      const singleOnly = batchWouldIgnore({ targetId, notes, force });
+      const singleOnly = batchWouldIgnore({ targetId, notes });
       if (singleOnly !== null) {
         return errorResponse(
           singleOnly.reason(countIds(ids)) +
@@ -190,7 +198,7 @@ promote. \`ids\` promotes several drafts under one explanation.`;
     const status = await draftWorkflowManager.getStatus({ id });
     const currentState: DraftState = status?.state ?? "editing";
 
-    return this.handleApprovalRequest({ id, targetId, notes, explanation, force, currentState, reader });
+    return this.handleApprovalRequest({ id, targetId, notes, explanation, currentState, reader });
   }
 
   private async handleApprovalRequest(params: {
@@ -198,11 +206,10 @@ promote. \`ids\` promotes several drafts under one explanation.`;
     targetId?: string;
     notes?: string;
     explanation?: string;
-    force?: boolean;
     currentState: DraftState;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, targetId, notes, explanation, force, reader } = params;
+    const { id, targetId, notes, explanation, reader } = params;
     let { currentState } = params;
 
     // editing: submit the draft's current content and carry on into
@@ -309,31 +316,19 @@ ${stateDescriptions.user_reviewing}` +
         );
       }
 
-      // Check consecutive approvals
-      if (!force) {
-        const recentlyConfirmed = await this.getRecentlyConfirmedDrafts({ currentId: id, withinMs: 10_000, reader });
-        if (recentlyConfirmed.length > 0) {
-          const allIds = [id, ...recentlyConfirmed];
-          return errorResponse(
-            `# Warning: Consecutive approval requests detected
-
-You just confirmed "${recentlyConfirmed.join(", ")}" within the last 10 seconds.
-Now you're trying to confirm "${id}" separately.` +
-            formatNextActions([
-              {
-                action: "approve",
-                description: "Promote them together under one explanation (recommended)",
-                example: `instruction(action: "approve", ids: "${allIds.join(",")}", explanation: "<what these say and why>")`,
-              },
-              {
-                action: "approve",
-                description: `Proceed with just "${id}"`,
-                example: `instruction(action: "approve", id: "${id}", explanation: "${explanation}", force: true)`,
-              },
-            ]),
-          );
-        }
-      }
+      // Advisory rather than a gate, and computed before the confirm so it
+      // describes the state the caller was in when they made the call.
+      //
+      // What it protects is the quality of the account the user gets -- one
+      // explanation covering related drafts instead of one vague one per
+      // document -- and not the safety of the write, which the deliberation
+      // gate holds either way. It used to refuse, which is why `force` existed;
+      // the escape hatch outlived its reason, and its heaviest user had become
+      // this package's own test suite, silencing a warning the tests provoked by
+      // running fast. This package already has the shape for a report that is
+      // not a veto: write-time lint says the document was saved and leaves the
+      // decision with the author.
+      const advice = await this.batchingAdvice({ id, reader });
 
       // Into pending_approval before the gate runs. The gate refuses the first
       // attempt, so the state has to be the one the repeat call lands in --
@@ -354,7 +349,10 @@ Now you're trying to confirm "${id}" separately.` +
         reader,
       });
 
-      return this.promote({ id, targetId, explanation, reader });
+      return withAdvice({
+        response: await this.promote({ id, targetId, explanation, reader }),
+        advice,
+      });
     }
 
     // pending_approval: the state a refused attempt leaves behind, so this is
@@ -686,6 +684,42 @@ ${headerSection}`;
       }]);
 
     return failed.length === 0 ? textResponse(body) : errorResponse(body);
+  }
+
+  /**
+   * What to say when related drafts are being promoted one at a time.
+   *
+   * Empty when there is nothing to say, which is the common case, so the caller
+   * can hand the result straight to `withAdvice`.
+   *
+   * The 10-second window is a heuristic and always was: what it is reaching for
+   * is "these were written as one change", which nothing in the corpus records.
+   * As a refusal that made it a guess with a veto; as a note it is a guess with
+   * a suggestion, which is the most it was ever entitled to.
+   */
+  private async batchingAdvice(params: {
+    id: string;
+    reader: InstructionContext["reader"];
+  }): Promise<string> {
+    const { id, reader } = params;
+
+    const recentlyConfirmed = await this.getRecentlyConfirmedDrafts({
+      currentId: id,
+      withinMs: 10_000,
+      reader,
+    });
+    if (recentlyConfirmed.length === 0) return "";
+
+    const together = [...recentlyConfirmed, id].join(",");
+    return `
+
+---
+
+**These may belong together.** "${recentlyConfirmed.join('", "')}" ${recentlyConfirmed.length === 1 ? "was" : "were"} confirmed less than ten seconds ago and ${recentlyConfirmed.length === 1 ? "is" : "are"} still waiting to be promoted. One explanation covering the change reads better to the user than one account per document:
+
+\`instruction(action: "approve", ids: "${together}", explanation: "<what these say and why>")\`
+
+This call is going ahead as made; the batch form is still open afterwards.`;
   }
 
   /**

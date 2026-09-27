@@ -105,7 +105,6 @@ This tool explains how to use the instruction tool.
 - \`instruction(action: "approve", id: "<id>", explanation: "<what you told the user>")\` - Promote (repeat the identical call to go through)
 - \`instruction(action: "approve", id: "<id>", targetId: "<target>", explanation: "...")\` - Promote onto a different ID
 - \`instruction(action: "approve", ids: "id1,id2,id3", explanation: "...")\` - Promote several under one explanation
-- \`instruction(action: "approve", id: "<id>", explanation: "...", force: true)\` - Skip consecutive approval warning
 
 ### Pending Update Operations
 - \`instruction(action: "apply", id: "<doc-id>", explanation: "<what you told the user>")\` - Apply pending update (repeat the identical call to go through)

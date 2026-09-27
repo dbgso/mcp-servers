@@ -12,8 +12,8 @@
 {"call": "instruction", "label": "set_status only accepts editing", "args": {"action": "set_status", "id": "keeper", "status": "editing"}, "expect": ["keeper"]}
 
 {"call": "instruction", "label": "promotion does not publish the workflow's own fields", "args": {"action": "approve", "id": "keeper", "notes": "reviewed: the changeset claims these are stripped"}, "expect": ["self_review"]}
-{"call": "instruction", "label": "  promote, attempt 1", "args": {"action": "approve", "id": "keeper", "explanation": "Checking what promotion publishes.", "force": true}, "expect": ["Not Yet"]}
-{"call": "instruction", "label": "  promote, attempt 2", "args": {"action": "approve", "id": "keeper", "explanation": "Checking what promotion publishes.", "force": true}, "expect": ["promoted"]}
+{"call": "instruction", "label": "  promote, attempt 1", "args": {"action": "approve", "id": "keeper", "explanation": "Checking what promotion publishes."}, "expect": ["Not Yet"]}
+{"call": "instruction", "label": "  promote, attempt 2", "args": {"action": "approve", "id": "keeper", "explanation": "Checking what promotion publishes."}, "expect": ["promoted"]}
 {"call": "instruction", "label": "  read_meta shows approvedAt and not the review notes", "args": {"action": "read_meta", "id": "keeper"}, "expect": ["approvedAt"], "expectNot": ["selfReviewNotes", "reviewed: the changeset"]}
 
 {"call": "instruction", "label": "apply refuses when nothing is staged", "args": {"action": "apply", "id": "keeper", "explanation": "Nothing to apply."}, "expect": ["No pending update"]}

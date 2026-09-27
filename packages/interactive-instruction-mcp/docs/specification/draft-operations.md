@@ -72,9 +72,13 @@ to have had its self-review recorded first.
 | `lint` | Quality checks. See `specification__file-structure` for which ones reach a draft |
 | `backlinks` | Which promoted documents reference one document, in one hop, with their descriptions. `id` is required |
 
-`approve`'s `targetId`, `notes` and `force` are single-promotion arguments. The batch
-form (`ids`) refuses a call carrying any of them: `targetId` names one document, `notes`
-is one draft's self-review and the batch already requires each draft to have its own,
-and `force` suppresses the consecutive-approval warning whose recommended alternative is
-the batch call itself. All three used to be accepted and dropped.
+`approve`'s `targetId` and `notes` are single-promotion arguments. The batch form
+(`ids`) refuses a call carrying either: `targetId` names one document, and `notes` is one
+draft's self-review while the batch already requires each draft to have its own. Both used
+to be accepted and dropped.
+
+There was a third, `force`, which suppressed the consecutive-approval warning. That
+warning is a note appended to the answer now rather than a refusal -- what it protects is
+the account the user gets, not the safety of the write, which the deliberation gate holds
+either way -- so there is nothing left to suppress and the argument is gone.
 | `graph` | The `relatedDocs` graph of the promoted corpus, as a page or as text. `depth` walks further than one hop. `format: "text"` refuses `layout`, `direction`, `spacing` and `edgeStyle`, which only reach the drawing; `outputPath` writes the text there |

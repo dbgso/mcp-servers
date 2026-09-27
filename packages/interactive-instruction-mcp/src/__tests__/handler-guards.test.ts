@@ -436,7 +436,6 @@ describe("approve(ids) with a single-promotion argument", () => {
   it.each([
     { name: "targetId", arg: { targetId: "renamed" }, says: "cannot apply to a batch of 2" },
     { name: "notes", arg: { notes: "Reviewed both, ready" }, says: "cannot stand for a batch of 2" },
-    { name: "force", arg: { force: true }, says: "nothing here for it to skip" },
   ])("refuses $name rather than dropping it", async ({ arg, says }) => {
     await write({ id: "one", draft: true });
     await write({ id: "two", draft: true });

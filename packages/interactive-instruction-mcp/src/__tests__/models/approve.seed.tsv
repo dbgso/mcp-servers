@@ -1,5 +1,5 @@
-state	draft	notes	explanation	force	mode	attempts	target
-user_reviewing	present	omitted	given	off	single	once	same
-pending_approval	present	omitted	given	off	single	once	same
-user_reviewing	present	omitted	given	off	single	repeated	other_occupied
-pending_approval	present	omitted	given	off	single	once	other_occupied
+state	draft	notes	explanation	mode	attempts	target
+user_reviewing	present	omitted	given	single	once	same
+pending_approval	present	omitted	given	single	once	same
+user_reviewing	present	omitted	given	single	repeated	other_occupied
+pending_approval	present	omitted	given	single	once	other_occupied
