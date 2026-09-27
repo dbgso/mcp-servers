@@ -430,29 +430,46 @@ describe("read", () => {
  * without an `id`, is not guarded here -- it became its own action, where `id`
  * is required and the case cannot be constructed. See `backlinks-handler.test.ts`.
  */
-describe("approve(ids) with a targetId", () => {
-  it("refuses, rather than dropping the rename", async () => {
-    // `targetId` is the id a draft is promoted under. The batch path never
-    // received it, so the drafts landed under their own ids while the caller
-    // had asked for another -- with a success message over the top.
+describe("approve(ids) with a single-promotion argument", () => {
+  // All three were destructured and then not passed to the batch path, so a
+  // batch carrying one was answered as though it had been applied.
+  it.each([
+    { name: "targetId", arg: { targetId: "renamed" }, says: "cannot apply to a batch of 2" },
+    { name: "notes", arg: { notes: "Reviewed both, ready" }, says: "cannot stand for a batch of 2" },
+    { name: "force", arg: { force: true }, says: "nothing here for it to skip" },
+  ])("refuses $name rather than dropping it", async ({ arg, says }) => {
     await write({ id: "one", draft: true });
     await write({ id: "two", draft: true });
 
     const result = await new ApproveHandler().execute({
-      rawParams: {
-        action: "approve",
-        ids: "one,two",
-        targetId: "renamed",
-        explanation: WHY,
-      },
+      rawParams: { action: "approve", ids: "one,two", explanation: WHY, ...arg },
       context,
     });
 
     expect(result.isError).toBe(true);
-    expect(text(result)).toContain("cannot apply to a batch of 2");
-    // And nothing was promoted on the way to saying so.
-    expect(await reader.documentExists("renamed")).toBe(false);
+    expect(text(result)).toContain(says);
+    // And nothing was promoted on the way to saying so. Promotion cannot be
+    // undone from here, so "it did something else" is the outcome that cannot
+    // be walked back.
     expect(await reader.documentExists("one")).toBe(false);
+    expect(await reader.documentExists("two")).toBe(false);
+  });
+
+  it("refuses the rename before the readiness check, not after", async () => {
+    // Unreviewed drafts would fail the readiness check too, so the order
+    // matters: the caller has to be told about the argument that cannot work
+    // rather than sent to record notes and refused again afterwards.
+    await write({ id: "one", draft: true });
+    await write({ id: "two", draft: true });
+
+    const result = await new ApproveHandler().execute({
+      rawParams: { action: "approve", ids: "one,two", targetId: "renamed", explanation: WHY },
+      context,
+    });
+
+    expect(text(result)).toContain("cannot apply to a batch of 2");
+    expect(text(result)).not.toContain("have not been reviewed yet");
+    expect(await reader.documentExists("renamed")).toBe(false);
   });
 
   it("leaves the single promotion path alone", async () => {
@@ -465,5 +482,54 @@ describe("approve(ids) with a targetId", () => {
 
     // Still the gate's answer, not the batch refusal.
     expect(text(result)).not.toContain("cannot apply to a batch");
+  });
+});
+
+describe("graph(format: \"text\")", () => {
+  it("refuses the options that only reach the renderer", async () => {
+    // These used to be accepted and dropped: a call naming a layout and an edge
+    // style got the text back with nothing to say they had been discarded.
+    await write({ id: "a", frontmatter: "description: a\nrelatedDocs:\n  - b" });
+    await write({ id: "b" });
+
+    const result = await new GraphHandler().execute({
+      rawParams: { action: "graph", format: "text", layout: "dagre", edgeStyle: "taxi" },
+      context,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("layout, edgeStyle");
+    expect(text(result)).toContain("does not draw it");
+    expect(text(result)).not.toContain("a -> b");
+  });
+
+  it("writes to outputPath instead of dropping it", async () => {
+    await write({ id: "a", frontmatter: "description: a\nrelatedDocs:\n  - b" });
+    await write({ id: "b" });
+    const target = path.join(tempDir, "out", "graph.txt");
+
+    const result = await new GraphHandler().execute({
+      rawParams: { action: "graph", format: "text", outputPath: target },
+      context,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(await fs.readFile(target, "utf-8")).toContain("a -> b");
+  });
+
+  it("keeps the text in the response when no path is named", async () => {
+    // And writes nothing: a file nobody asked for is how a documents directory
+    // fills up with artefacts.
+    await write({ id: "a", frontmatter: "description: a\nrelatedDocs:\n  - b" });
+    await write({ id: "b" });
+
+    const result = await new GraphHandler().execute({
+      rawParams: { action: "graph", format: "text" },
+      context,
+    });
+
+    expect(text(result)).toContain("a -> b");
+    expect(text(result)).not.toContain("Wrote the relation graph");
+    expect(await fs.readdir(tempDir)).not.toContain("out");
   });
 });

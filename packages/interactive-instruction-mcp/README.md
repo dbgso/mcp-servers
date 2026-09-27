@@ -345,9 +345,10 @@ The same flow as calls:
    → promoted
 ```
 
-Batch several drafts under one explanation with `ids: "a,b,c"`, and skip the
-consecutive-approval warning with `force: true`. Promote to a different location with
-`targetId`.
+Batch several drafts under one explanation with `ids: "a,b,c"`. Promote to a different
+location with `targetId`, and skip the consecutive-approval warning with `force: true` --
+both of those are single-promotion arguments, along with `notes`, and a batch carrying
+one is refused rather than promoting without it.
 
 ### Promoted Document Operations
 

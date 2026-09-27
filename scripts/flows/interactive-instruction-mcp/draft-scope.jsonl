@@ -25,3 +25,5 @@
 # received it, so it was dropped in silence and the drafts landed under their own
 # ids while the caller had asked for another.
 {"call": "instruction", "label": "a batch cannot take a single targetId", "args": {"action": "approve", "ids": "one,two", "targetId": "renamed", "explanation": "Promoting both under one name, which is the thing that cannot work."}, "expect": ["cannot apply to a batch of 2"], "expectNot": ["Not Yet"]}
+{"call": "instruction", "label": "nor a single notes", "args": {"action": "approve", "ids": "one,two", "notes": "Reviewed both, which is the review not having happened."}, "expect": ["cannot stand for a batch of 2"], "expectNot": ["Not Yet"]}
+{"call": "instruction", "label": "nor force, whose alternative is this call", "args": {"action": "approve", "ids": "one,two", "force": true, "explanation": "Both drafts for the audit."}, "expect": ["nothing here for it to skip"], "expectNot": ["Not Yet"]}

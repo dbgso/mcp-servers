@@ -35,6 +35,71 @@ const schema = z.object({
 
 type Args = z.infer<typeof schema>;
 
+/** How many ids a batch names, for a message that says the count back. */
+function countIds(ids: string): number {
+  return ids.split(",").filter((each) => each.trim().length > 0).length;
+}
+
+/**
+ * The arguments the batch path has never been able to use.
+ *
+ * All three were destructured in `doExecute` and then not passed on, so a batch
+ * carrying any of them was accepted and answered as though it had been applied.
+ * Each is single-promotion only for its own reason, and none of the three is a
+ * missing feature:
+ *
+ * - `targetId` is the id one draft is promoted under, and a batch has one draft
+ *   per id, so a single name cannot apply to all of them.
+ * - `notes` is one draft's self-review. The batch path already requires each
+ *   draft to have had its own recorded -- its refusal says so -- and one note
+ *   covering several drafts is the review not having happened.
+ * - `force` suppresses exactly one check, the consecutive-approval warning, and
+ *   what that warning recommends instead is this batch call. There is no such
+ *   check on this path for `force` to skip, because taking it is the answer.
+ *
+ * Refused rather than ignored, and refused before anything is promoted:
+ * promotion cannot be undone from here, so "it did something else" is the one
+ * outcome that cannot be walked back.
+ */
+function batchWouldIgnore(params: {
+  targetId?: string;
+  notes?: string;
+  force?: boolean;
+}): { reason: (count: number) => string; singleDescription: string; singleArgs: string } | null {
+  const { targetId, notes, force } = params;
+
+  if (targetId !== undefined) {
+    return {
+      reason: (count) =>
+        `\`targetId\` renames the one document being promoted, so it cannot apply to a batch of ${count}.`,
+      singleDescription: "Promote one draft under a different id",
+      singleArgs: 'targetId: "<new-id>"',
+    };
+  }
+
+  if (notes !== undefined) {
+    return {
+      reason: (count) =>
+        `\`notes\` is one draft's self-review, so it cannot stand for a batch of ${count}. ` +
+        "Record each draft's own notes first; the batch then promotes them under one explanation.",
+      singleDescription: "Record one draft's self-review",
+      singleArgs: 'notes: "<self-review>"',
+    };
+  }
+
+  if (force === true) {
+    return {
+      reason: () =>
+        "`force` skips the consecutive-approval warning, and what that warning recommends " +
+        "is this batch call -- so there is nothing here for it to skip.",
+      singleDescription: "Promote one draft on its own anyway",
+      singleArgs: "force: true",
+    };
+  }
+
+  return null;
+}
+
 /** Names one promotion to the gate; `what` below is what binds it to content. */
 function buildRequestId(parts: string[]): string {
   return `instruction::approve::${parts.join("::")}`;
@@ -98,18 +163,19 @@ promote. \`ids\` promotes several drafts under one explanation.`;
       // draft per id -- so a single name cannot apply to all of them. It used
       // to be dropped without a word, and every draft landed under its own id
       // while the caller had asked for a different one.
-      if (targetId !== undefined) {
+      const singleOnly = batchWouldIgnore({ targetId, notes, force });
+      if (singleOnly !== null) {
         return errorResponse(
-          `\`targetId\` renames the one document being promoted, so it cannot apply to a batch of ${ids.split(",").filter((each) => each.trim().length > 0).length}.` +
+          singleOnly.reason(countIds(ids)) +
           formatNextActions([
             {
               action: "approve",
-              description: "Promote one draft under a different id",
-              example: 'instruction(action: "approve", id: "<draft-id>", targetId: "<new-id>", explanation: "<what it says and why>")',
+              description: singleOnly.singleDescription,
+              example: `instruction(action: "approve", id: "<draft-id>", ${singleOnly.singleArgs}, explanation: "<what it says and why>")`,
             },
             {
               action: "approve",
-              description: "Promote the batch under their own ids",
+              description: "Promote the batch, which takes neither",
               example: `instruction(action: "approve", ids: "${ids}", explanation: "<what they say and why>")`,
             },
           ]));

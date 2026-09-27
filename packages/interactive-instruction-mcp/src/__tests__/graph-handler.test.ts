@@ -250,15 +250,28 @@ describe("GraphHandler", () => {
       expect(text).not.toMatch(/^gamma ->/m);
     });
 
-    it("returns the graph instead of writing a file", async () => {
+    it("returns the graph in the response when no path is named", async () => {
       await write("alpha", ["beta"]);
       await write("beta", []);
-      const outputPath = path.join(tempDir, "graph.html");
+
+      const text = await asText({});
+
+      expect(text).toContain("alpha -> beta");
+    });
+
+    it("writes the text to outputPath when one is named", async () => {
+      // This test used to pass `outputPath` and assert the text came back
+      // inline with no file written -- which is what the handler did, because
+      // the text branch returned before ever reading the argument. It recorded
+      // a dropped parameter as the intended behaviour.
+      await write("alpha", ["beta"]);
+      await write("beta", []);
+      const outputPath = path.join(tempDir, "graph.txt");
 
       const text = await asText({ outputPath });
 
-      expect(text).toContain("alpha -> beta");
-      await expect(fs.access(outputPath)).rejects.toThrow();
+      expect(text).toContain("Wrote the relation graph as text to");
+      expect(await fs.readFile(outputPath, "utf-8")).toContain("alpha -> beta");
     });
 
     it("answers both directions up front when focused", async () => {

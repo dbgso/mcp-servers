@@ -51,6 +51,8 @@
 {"call": "instruction", "label": "20. list: documents missing metadata", "args": {"action": "list", "missingMeta": "any"}}
 
 {"call": "instruction", "label": "21. graph: the relatedDocs graph", "args": {"action": "graph"}}
+{"call": "instruction", "label": "21b. graph: text refuses the drawing-only options", "args": {"action": "graph", "format": "text", "layout": "dagre", "edgeStyle": "taxi"}, "expect": ["layout, edgeStyle", "does not draw it"], "expectNot": ["alpha -> beta", "Wrote the relation graph"]}
+{"call": "instruction", "label": "21c. graph: text honours outputPath", "args": {"action": "graph", "format": "text", "outputPath": "{{TMPDIR}}/relations.txt"}, "expect": ["Wrote the relation graph as text to", "relations.txt"]}
 {"call": "instruction", "label": "22. graph: one document's neighbourhood", "args": {"action": "graph", "id": "alpha", "depth": 2}}
 
 {"call": "instruction", "label": "23. lint: the corpus", "args": {"action": "lint"}}
