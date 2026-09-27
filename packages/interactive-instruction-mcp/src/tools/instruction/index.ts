@@ -26,6 +26,34 @@ function toToolResult(response: ToolResponse): ToolResult {
  * so all handler fields must be declared here.
  * This auto-generates from registry - no manual sync needed.
  */
+/**
+ * The fields of a handler's schema, refinements and all.
+ *
+ * `.refine` returns a `ZodEffects` wrapping the object, and a `ZodEffects` has
+ * no `.shape` -- so reading `.shape` directly meant an action could not state a
+ * condition between two of its arguments without taking every other action's
+ * parameters off the tool with it. It kept the conditions in prose: `backlinks`
+ * needs `id`, `set_status` needs one of `id` or `ids`, `update` needs at least
+ * one field to change. Each was enforced by hand inside `doExecute`, or in one
+ * case not at all.
+ *
+ * The wrapper keeps what it wraps, so unwrapping recovers the shape while the
+ * refinement stays where it belongs: `BaseActionHandler` validates with the
+ * whole schema before dispatch.
+ */
+export function objectShape(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | null {
+  let current: z.ZodTypeAny = schema;
+
+  // `.refine` can be applied more than once, and each one wraps again.
+  while (current instanceof z.ZodEffects) {
+    current = current.innerType() as z.ZodTypeAny;
+  }
+
+  return current instanceof z.ZodObject
+    ? (current.shape as Record<string, z.ZodTypeAny>)
+    : null;
+}
+
 function buildInputSchema(): Record<string, z.ZodTypeAny> {
   const registry = getActionRegistry();
   const merged: Record<string, z.ZodTypeAny> = {
@@ -35,7 +63,8 @@ function buildInputSchema(): Record<string, z.ZodTypeAny> {
   for (const action of registry.getActions()) {
     const handler = registry.getHandler(action);
     if (!handler || !("schema" in handler)) continue;
-    const shape = (handler as { schema: z.ZodObject<Record<string, z.ZodTypeAny>> }).schema.shape;
+    const shape = objectShape((handler as { schema: z.ZodTypeAny }).schema);
+    if (shape === null) continue;
     for (const [key, value] of Object.entries(shape)) {
       if (key === "action") continue;
       if (!(key in merged)) {

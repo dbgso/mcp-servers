@@ -63,13 +63,39 @@ draft と promoted のどちらを対象にするか決めないまま通るこ�
 
 ## 積み残し
 
-**条件付き必須がスキーマに表現できない。** `list(backlinks)` は `id` を必要とするが、
-`.refine` はマージされる inputSchema を壊すため使えず、依存は `if (backlinks && id)` という
-コードと散文にしかない。今回は describe の記述を直して `id` 付きの形だけを示したが、
-**機械的な検査は無い**。同じ形の穴は他のアクションにも作れる。
+**条件付き必須が、コードと散文にしかない。** `list(backlinks)` は `id` を必要とするが、
+その依存は `if (backlinks && id)` と help の文面にあるだけで、**機械的な検査は無い**。
+同じ形の穴は他のアクションにも空いている:
 
-これを塞ぐには、条件付き必須を宣言として持ち、describe とランタイムの両方がそれを読む形が要る。
-単一ツールに全アクションを載せる構造そのものから来る制約なので、この PR の範囲を超える。
+| アクション | 条件付き要件 | 今どこにあるか |
+| --- | --- | --- |
+| `list` | `backlinks` は `id` を要する | `if (backlinks && id)`、describe の文面 |
+| `list` | `drafts` は他のフィルタと併用不可 | `doExecute` 冒頭の拒否 |
+| `set_status` | `id` か `ids` のどちらか | `doExecute` |
+| `approve` | `id` か `ids` のどちらか / batch では `targetId` が無視される | `doExecute`、無視は記述のみ |
+| `update` | 変更フィールドが最低1つ | `doExecute` |
+
+### 当初の記述の誤り
+
+ここには当初「`.refine` はマージされる inputSchema を壊すため使えない」と書いてあった。**これは誤り**で、
+`update.ts` の同趣旨のコメントも同じ誤りだった。`.refine` は `ZodEffects` を返し `.shape` を持たないが、
+ラッパは中身を保持しているので `buildInputSchema` が `innerType()` を辿れば shape は取り出せる。
+`BaseActionHandler` は `safeParse` で検証するため、refinement はディスパッチ時に実際に効く。
+`buildInputSchema` はそう直した。
+
+### それでも残る判断
+
+スキーマに移すこと自体には値がある。`describe-matches-schemas` テストは describe の例をスキーマに
+かけているので、条件付き必須がスキーマにあれば**例の側の齟齬が自動で落ちる** — 今回見つかった
+`list(backlinks: true)` の記述ミスは、これで二度と通らなくなる。
+
+ただし `execute` は検証失敗を `parsed.error.message` として返し、これは issue の JSON 配列になる。
+今ハンドラが返している「理由 + 次に取る行動」の文面は失われる。`drafts` の衝突拒否のように、
+**どのフィルタが衝突したかを名指しして代替を2つ示す**類の応答は refinement では出せない。
+
+したがって片方に寄せるのではなく、スキーマに制約を置いたうえで `execute` が issue の message を
+そのまま見せる形が要る。次アクションの提示まで含めるなら `ZodLikeSchema` 側に手が入るので、
+この PR の範囲を超える。
 
 ## レビューで落ちた点と、その修正
 
