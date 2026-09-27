@@ -121,8 +121,10 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `set_status` — Reset drafts to `editing`, discarding their workflow state (single `id` or batch `ids`)
 - `read_meta` — Read a document's metadata -- a draft's as well as a promoted one's -- alongside
   its neighbours in the `relatedDocs` graph, or same-category candidates when it has none, and
-  what better metadata would say. Writes nothing; it ends with the `update` call that would
-  apply it (`id` only)
+  what better metadata would say. When the frontmatter does not parse it shows the block as
+  written instead, since every other action reads it as absent and `read` hides it -- a refusal
+  that named a line the caller had no way to look at. Writes nothing; it ends with the `update`
+  call that would apply it (`id` only)
 
 **Seeing the corpus**
 - `graph` — Render the `relatedDocs` graph as an interactive page, or return it as text

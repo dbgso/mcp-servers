@@ -10,4 +10,6 @@ A description containing an unquoted `: ` is a mapping rather than a string, so 
 
 **And the write path no longer takes the metadata with it.** `updateFrontmatter` starts from an empty block when the existing one cannot be read, on the sound reasoning that rewriting a guess over the file is worse than losing what could not be parsed. That is right about not guessing and wrong about the silence: a caller who asked to change a description had `whenToUse` and `relatedDocs` deleted without being told, and on a draft there is no diff to notice it in. `add` and `update` refuse now, and say what is wrong with the file; after the repair, every other field survives the write as usual. `add` is refused for the same reason it is documented as keeping the metadata written in its `content`.
 
+`read_meta` shows the block as written when it cannot be parsed. Refusing the write is only half of it: `read` hides frontmatter by design and every other action reads an unparsed block as absent, so a caller told their YAML is wrong at line 1 column 14 had nowhere to go and look at line 1 -- `read_meta` printed all three fields as "(not set)" and advised writing a description, which is not the repair.
+
 Found by doing it by hand to this repository's own corpus, which is also why `workflow__edit-docs-through-the-tool` exists.

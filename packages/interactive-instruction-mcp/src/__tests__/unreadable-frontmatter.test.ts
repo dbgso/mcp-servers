@@ -24,6 +24,7 @@ import * as os from "node:os";
 import { AddHandler } from "../tools/instruction/handlers/add.js";
 import { UpdateHandler } from "../tools/instruction/handlers/update.js";
 import { LintHandler } from "../tools/instruction/handlers/lint.js";
+import { ReadMetaHandler } from "../tools/instruction/handlers/read-meta.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import { DRAFT_DIR } from "../constants.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";
@@ -160,6 +161,48 @@ describe("writing to a document whose frontmatter does not parse", () => {
 
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("not valid YAML");
+  });
+
+  /**
+   * The refusal has to leave the caller somewhere to go.
+   *
+   * `read` hides frontmatter by design and everything else reads the block as
+   * absent, so a caller told their YAML is wrong at line 1 column 14 had no way
+   * to look at line 1 -- and `read_meta` printed all three fields as "(not set)"
+   * and advised writing a description, which is the wrong repair. It is the one
+   * action whose subject is the metadata, so it is the one that can show it.
+   */
+  it("shows the block that could not be read, verbatim", async () => {
+    await fs.writeFile(path.join(docsDir, "broken.md"), BROKEN, "utf-8");
+    context.reader.invalidateCache();
+
+    const result = await call(new ReadMetaHandler(), { action: "read_meta", id: "broken" });
+    const output = text(result);
+
+    expect(result.isError).toBeFalsy();
+    expect(output).toContain("cannot be read");
+    expect(output).toContain("What a report has to contain: the colon breaks this");
+    expect(output).toContain("keep me");
+    expect(output).not.toContain("(not set)");
+  });
+
+  it("still reviews metadata normally when the block parses", async () => {
+    const sound = [
+      "---",
+      "description: A sound description.",
+      "whenToUse:",
+      "  - testing",
+      "---",
+      "",
+      "# Sound",
+    ].join("\n");
+    await fs.writeFile(path.join(docsDir, "sound.md"), sound, "utf-8");
+    context.reader.invalidateCache();
+
+    const output = text(await call(new ReadMetaHandler(), { action: "read_meta", id: "sound" }));
+
+    expect(output).toContain("A sound description.");
+    expect(output).not.toContain("cannot be read");
   });
 
   it("still writes when the block parses", async () => {

@@ -153,6 +153,11 @@ export function assignIfDefined<K extends keyof DocumentFrontmatter>(params: {
  *
  * So the errors are available to whoever wants to say what actually happened.
  */
+/** The frontmatter block as written, for showing a caller what has to be fixed. */
+export function rawFrontmatter(content: string): string {
+  return frontmatterText(content) ?? "(no frontmatter block)";
+}
+
 export function frontmatterErrors(content: string): string[] {
   const doc = parseFrontmatterDocument(content);
   if (doc === null) return [];
