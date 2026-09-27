@@ -1,5 +1,23 @@
 # mcp-interactive-instruction
 
+## 2.0.1
+
+### Patch Changes
+
+- 35eca19: Four things 2.0.0 shipped that using it turned up (#66, #67, #68, #70).
+
+  **The reminders named tools 2.0.0 had removed.** The block appended to every response told the caller to use the `help` tool and to re-read a document with `help(id: "…")`, neither of which exists in 2.0. It is the most-read text this server emits, so an agent following it called a missing tool on every turn. The release notes said anything naming the old tools had to be rewritten and this was the one place it was not. They now name `instruction(action: "list")` and `instruction(action: "read", id: …)`, and a test asserts the retired names stay absent rather than only that the new ones are present.
+
+  **`lint` asked for a `sizeExemption` that could not be set.** `document-too-large` said to set the field, and no action took it: `update` and `add` accepted `content`, `description`, `whenToUse` and `relatedDocs` and nothing else, while the mutation gate's refusal tells the caller not to reach for another tool or write the file directly. So the only documented answer to the finding was unreachable, and a decision not to split a document could not be recorded -- which is the whole reason the field exists. `update` and `add` take `sizeExemption` now, `update(id, sizeExemption: null)` removes it (`stale-size-exemption` asks for that, and would otherwise have been unactionable in the same way), and all three size findings name the call that answers them. Reported by a 47-document migration where 12 documents were over the line and 11 were judged not to want splitting.
+
+  **`duplicate-heading` fired on every specification.** The rule counted a heading as repeated by its text and level, ignoring what it sat under, so a document writing `### Endpoint` and `### Request body` once per feature was reported for each of them. In that same corpus it produced 11 findings of which none was a defect, and the one document that really had been appended to -- `## Security` twice under one title -- was nearly missed among them. A heading is now compared with its whole ancestry, so the same subsection under different parents is not a repeat while the same subsection under one parent still is, and the message names the parent. No exemption field was added: the rule was wrong, not the documents.
+
+  Also, a shared-parameter check. `sizeExemption` was written nullable on `update` and not on `add`, and because the tool merges every handler's fields and keeps the first declaration of each name, `update(id, sizeExemption: null)` was rejected at the tool boundary while every unit test passed -- a unit test validates against the handler's own schema. A test now compares, for each name more than one action declares, what each declaration accepts, and names the actions that disagree.
+
+  **Nothing said what shape `relatedDocs` should take.** It is the corpus's skeleton -- `graph`, `backlinks` and `orphaned-document` all read it and nothing else does -- and the finding said only "not referenced by any other document (consider adding relatedDocs)", which names no direction. So edges went whichever way silenced it. In the migration that reported this, `testing` ended up with three of its four parents among its own children: a correct DAG, no cycle, nothing reported, and unreadable. Separately, categories without an index document had their members hang off whatever seemed reasonable at the time, so `list(id: "coding")` showed four documents while `graph` scattered them across two places.
+
+  The direction was never a free choice. `orphaned-document` counts inbound edges, so parent to child leaves only the corpus's entry points unreferenced -- which is worth being told -- while child to parent leaves every leaf unreferenced, and silencing that is what produced the reversed edges. `instruction_describe` now has a section answering the five questions this left open (direction and why, whether two parents are allowed, when a category wants an index, and how the directory hierarchy relates), and the finding names the direction: "Add it to the `relatedDocs` of the document it belongs under -- edges run parent to child." Directories stay a separate axis and are not repeated in `relatedDocs`: ids carry the hierarchy and `graph` already draws it as node colour, which is why duplicating it was both work and a way for the two to disagree.
+
 ## 2.0.0
 
 ### Major Changes
