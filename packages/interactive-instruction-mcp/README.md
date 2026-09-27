@@ -128,7 +128,14 @@ instruction(action: "read", id: "doc-id") → Read a document
 ### Looking at the relations
 
 `relatedDocs` lives in frontmatter, which means the relations between documents are data rather
-than prose — so they can be drawn:
+than prose — so they can be drawn.
+
+**Edges run parent to child**: a document lists the documents that sit under it. That is not a
+free choice — `orphaned-document` reports a document nothing links to, so parent to child leaves
+only the corpus's entry points unreferenced while child to parent leaves every leaf unreferenced.
+Two parents are allowed; cycles are reported. Directories are the other axis and are not repeated
+here: ids carry the hierarchy and `graph` draws it as node colour. `instruction_describe()` has
+the whole of it.
 
 ```
 instruction(action: "graph")                      → the whole corpus

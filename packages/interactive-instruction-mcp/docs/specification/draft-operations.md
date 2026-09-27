@@ -72,6 +72,14 @@ to have had its self-review recorded first.
 | `lint` | Quality checks. See `specification__file-structure` for which ones reach a draft. `document-too-large` is answered with `update(id, sizeExemption: "<why>")` and `sizeExemption: null` removes it; `duplicate-heading` counts a heading as repeated only under the same ancestry |
 | `backlinks` | Which promoted documents reference one document, in one hop, with their descriptions. `id` is required |
 
+`relatedDocs` edges run **parent to child**: a document lists the documents under it.
+`orphaned-document` counts inbound edges, so this direction leaves only the corpus's entry
+points unreferenced, while child to parent leaves every leaf unreferenced -- and silencing
+that is how a corpus ends up with a document's parents among its own children. Two parents
+are allowed and suggest the document belongs one level up; cycles are reported. The directory
+hierarchy is a separate axis, carried by the id and drawn as node colour, and is not repeated
+in `relatedDocs`. `instruction_describe` states all of this to the caller.
+
 `approve`'s `targetId` and `notes` are single-promotion arguments. The batch form
 (`ids`) refuses a call carrying either: `targetId` names one document, and `notes` is one
 draft's self-review while the batch already requires each draft to have its own. Both used

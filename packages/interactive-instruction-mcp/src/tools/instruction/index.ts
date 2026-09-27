@@ -125,6 +125,28 @@ This tool explains how to use the instruction tool.
 - \`instruction(action: "graph", format: "text")\` - The same graph as an adjacency list, which is the form to read here
 - \`instruction(action: "graph", layout: "fcose", direction: "LR", spacing: 1.5, edgeStyle: "taxi", includeUnlinked: true, outputPath: "<file>")\` - How the page is drawn and where it goes
 
+### The shape to aim for
+
+\`relatedDocs\` is the corpus's skeleton: \`graph\`, \`backlinks\` and
+\`orphaned-document\` all read it, and nothing else does.
+
+- **Edges run parent to child.** A document lists the documents that sit under
+  it, not the one it sits under.
+- **Why that direction.** \`orphaned-document\` reports a document nothing links
+  to. Parent to child leaves only the corpus's entry points unreferenced, which
+  is worth being told; child to parent leaves every leaf unreferenced, and
+  silencing that is how a corpus ends up with a document's parents among its own
+  children.
+- **A DAG, not a tree.** Two parents are allowed, and are a sign the document may
+  belong one level up instead. Cycles are reported.
+- **A category with two or more documents wants an index.** Without one, which
+  document a new sibling hangs off is decided afresh every time.
+- **Directories are the other axis, and are not repeated here.** Ids carry the
+  hierarchy (\`__\` separates levels) and \`graph\` draws it as node colour. Use
+  \`relatedDocs\` for what to read next, not for where a document lives.
+
+\`instruction(action: "link_add", id: "<parent>", relatedDocs: ["<child>"], explanation: "<what the link means>")\`
+
 ## Reminder
 
 Information from this MCP is only valid for ${config.infoValidSeconds} seconds.
