@@ -67,5 +67,5 @@ as missing.
 
 `--include` and `--exclude` say which ids in the directory this server manages,
 for a directory it shares with another tool. A document out of scope is invisible
-to every action: it does not appear in `list`, `lint`, backlinks or the graph,
+to every action: it does not appear in `list`, `lint`, `backlinks` or the graph,
 and it cannot be written.

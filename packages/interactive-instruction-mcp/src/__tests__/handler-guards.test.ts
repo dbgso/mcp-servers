@@ -22,7 +22,6 @@ import { UpdateHandler } from "../tools/instruction/handlers/update.js";
 import { GraphHandler } from "../tools/instruction/handlers/graph.js";
 import { LintHandler } from "../tools/instruction/handlers/lint.js";
 import { ReadHandler } from "../tools/instruction/handlers/read.js";
-import { ListHandler } from "../tools/instruction/handlers/list.js";
 import { ApproveHandler } from "../tools/instruction/handlers/approve.js";
 import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
 import { isRefusal, throughGate } from "./helpers/gate.js";
@@ -423,48 +422,14 @@ describe("read", () => {
 });
 
 /**
- * Two arguments whose condition on another argument was enforced nowhere.
+ * An argument whose condition on another argument was enforced nowhere.
  *
- * Both were found by driving the server rather than by reading it, and both
- * failed the same way: the call was accepted and answered, so nothing in the
- * response said that what came back was not what had been asked for.
+ * Found by driving the server rather than by reading it: the call was accepted
+ * and answered, so nothing in the response said that what came back was not
+ * what had been asked for. The other one found the same way, `list(backlinks:)`
+ * without an `id`, is not guarded here -- it became its own action, where `id`
+ * is required and the case cannot be constructed. See `backlinks-handler.test.ts`.
  */
-describe("list(backlinks) without an id", () => {
-  it("refuses, rather than answering with the whole corpus", async () => {
-    // What it used to do: `backlinks` was read only inside `if (backlinks && id)`,
-    // so without an id the call fell through every mode to the root listing and
-    // returned "Available documents: ..." -- byte-identical to `list()`. An agent
-    // asking what references a document was told "alpha and beta" by a listing
-    // that had not looked at a single relation.
-    await write({ id: "alpha" });
-    await write({ id: "beta" });
-
-    const result = await new ListHandler().execute({
-      rawParams: { action: "list", backlinks: true },
-      context,
-    });
-
-    expect(result.isError).toBe(true);
-    expect(text(result)).toContain("needs `id`");
-    expect(text(result)).not.toContain("Available documents");
-    // The refusal has to carry the call that works, or it just moves the guess.
-    expect(text(result)).toContain('backlinks: true, id: "<doc-id>"');
-  });
-
-  it("still answers when the id is there", async () => {
-    await write({ id: "alpha" });
-    await write({ id: "beta", frontmatter: "description: b\nrelatedDocs:\n  - alpha" });
-
-    const result = await new ListHandler().execute({
-      rawParams: { action: "list", backlinks: true, id: "alpha" },
-      context,
-    });
-
-    expect(result.isError).toBeFalsy();
-    expect(text(result)).toContain("beta");
-  });
-});
-
 describe("approve(ids) with a targetId", () => {
   it("refuses, rather than dropping the rename", async () => {
     // `targetId` is the id a draft is promoted under. The batch path never

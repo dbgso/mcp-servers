@@ -70,4 +70,5 @@ to have had its self-review recorded first.
 | `read_meta` | The metadata, its neighbours in the `relatedDocs` graph, and what better metadata would say. Writes nothing |
 | `list` | The promoted corpus. `drafts: true` lists drafts instead, by the plain id every other action takes |
 | `lint` | Quality checks. See `specification__file-structure` for which ones reach a draft |
-| `graph` | The `relatedDocs` graph of the promoted corpus, as a page or as text |
+| `backlinks` | Which promoted documents reference one document, in one hop, with their descriptions. `id` is required |
+| `graph` | The `relatedDocs` graph of the promoted corpus, as a page or as text. `depth` walks further than one hop |

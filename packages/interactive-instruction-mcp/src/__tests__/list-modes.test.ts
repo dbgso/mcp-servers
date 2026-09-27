@@ -1,10 +1,11 @@
 /**
- * `list`'s four modes, which were the least-covered code in the package at
- * 51% of branches.
+ * `list`'s modes, which were the least-covered code in the package at 51% of
+ * branches. `backlinks` used to be one of them; it is its own action now, and
+ * `backlinks-handler.test.ts` covers it.
  *
  * It is also the most-called action -- every session starts with it -- and each
- * mode answers a different question: what is there, what mentions this, what
- * matches this word, and what is unfinished. Getting one wrong looks like an
+ * mode answers a different question: what is there, what matches this word,
+ * and what is unfinished. Getting one wrong looks like an
  * empty corpus rather than an error.
  */
 
@@ -70,52 +71,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await fs.rm(tempDir, { recursive: true, force: true });
-});
-
-describe("backlinks", () => {
-  it("finds what points at a document", async () => {
-    await write({ id: "hub", description: "the hub" });
-    await write({ id: "detail", description: "a detail", relatedDocs: ["hub"] });
-
-    const { text } = await run({ id: "hub", backlinks: true });
-
-    expect(text).toContain("Documents referencing \"hub\"");
-    expect(text).toContain("detail");
-  });
-
-  it("says so plainly when nothing does", async () => {
-    // An empty listing here reads as "no links", which is the answer, not an
-    // error -- someone is checking before a rename or a delete.
-    await write({ id: "lonely", description: "nothing points here" });
-
-    const { text, isError } = await run({ id: "lonely", backlinks: true });
-
-    expect(isError).toBeUndefined();
-    expect(text).toContain("No documents reference");
-  });
-
-  it("does not count a draft as a reference", async () => {
-    await write({ id: "hub", description: "the hub" });
-    await fs.writeFile(
-      path.join(docsDir, DRAFT_DIR, "drafted.md"),
-      "---\ndescription: a draft\nrelatedDocs:\n  - hub\n---\n\n# drafted\n",
-      "utf-8"
-    );
-    context.reader.invalidateCache();
-
-    const { text } = await run({ id: "hub", backlinks: true });
-
-    expect(text).toContain("No documents reference");
-  });
-
-  it("needs an id, and lists normally without one", async () => {
-    await write({ id: "a", description: "a doc" });
-
-    const { text } = await run({ backlinks: true });
-
-    expect(text).toContain("a");
-    expect(text).not.toContain("referencing");
-  });
 });
 
 describe("query", () => {

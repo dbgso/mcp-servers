@@ -224,7 +224,6 @@ describe("list", () => {
     { name: "a category", args: { id: "cat" } },
     { name: "a search", args: { query: "anything" } },
     { name: "a metadata filter", args: { missingMeta: "any" } },
-    { name: "backlinks", args: { id: "x", backlinks: true } },
   ])("refuses to combine the draft listing with $name", async ({ args }) => {
     // These used to reshape the other branches on the way past them:
     // `list(drafts: true, id: "cat")` answered "no documents" about a category

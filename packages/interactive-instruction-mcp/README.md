@@ -79,9 +79,11 @@ instruction(action: "read", id: "doc-id") → Read a document
 ### Available Actions
 
 **Reading**
-- `list` — List documents (optional: `id`, `recursive`, `query`, `missingMeta`, `drafts`;
-  `backlinks` needs `id` and is ignored without it). `drafts: true` lists drafts by the plain id
-  every other action takes, which is where the `ids` for a batch `approve` comes from
+- `list` — List documents (optional: `id`, `recursive`, `query`, `missingMeta`, `drafts`).
+  `drafts: true` lists drafts by the plain id every other action takes, which is where the
+  `ids` for a batch `approve` comes from
+- `backlinks` — Which documents reference one document (`id` required). `graph` walks further
+  out and names both directions; this is the one hop, with the descriptions
 - `read` — Read a document's prose by ID. Metadata is not included: `read_meta` is where it is read
 
 **Draft Operations**

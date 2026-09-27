@@ -3,9 +3,13 @@
  *
  * `buildInputSchema` merges every handler's fields into the one `instruction`
  * tool. It used to read `.shape` directly, so a handler that wanted `.refine`
- * -- "`backlinks` needs `id`" -- would have contributed no fields at all, and
- * the design note recorded that as "cannot be expressed in the schema". It can:
- * the wrapper keeps what it wraps.
+ * -- "`set_status` needs one of `id` or `ids`" -- would have contributed no
+ * fields at all, and the design note recorded that as "cannot be expressed in
+ * the schema". It can: the wrapper keeps what it wraps.
+ *
+ * The schemas below are illustrations, not a handler's own: the one this was
+ * written about, `list(backlinks:)`, turned out not to want a refinement at all
+ * -- it wanted to be its own action, where `id` is plainly required.
  */
 
 import { describe, expect, it } from "vitest";

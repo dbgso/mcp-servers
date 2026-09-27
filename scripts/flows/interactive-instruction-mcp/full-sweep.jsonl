@@ -38,12 +38,15 @@
 
 {"call": "instruction", "label": "16. link_add: refused once", "args": {"action": "link_add", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expect": ["Not Yet -- Tell the User First"]}
 {"call": "instruction", "label": "17. link_add: the repeat writes the link", "args": {"action": "link_add", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expectNot": ["Not Yet"]}
-{"call": "instruction", "label": "18. list: backlinks, with the id it needs", "args": {"action": "list", "backlinks": true, "id": "beta"}, "expect": ["referencing \"beta\"", "alpha"], "expectNot": ["needs `id`"]}
-# This step used to be `list(backlinks: true)` with no id, expecting alpha and beta.
-# It passed -- because that call fell through to the root listing, which names
-# both. The expectation could not fail, and the label claimed a check that was
-# never made. The refusal is pinned below so the fall-through cannot come back.
-{"call": "instruction", "label": "18b. list: backlinks without an id is refused", "args": {"action": "list", "backlinks": true}, "expect": ["needs `id`"], "expectNot": ["Available documents"]}
+{"call": "instruction", "label": "18. backlinks: its own action now", "args": {"action": "backlinks", "id": "beta"}, "expect": ["referencing \"beta\": 1 found", "alpha"], "expectNot": ["No documents reference"]}
+# This step used to be `list(backlinks: true)` with no id at all, expecting alpha
+# and beta. It passed -- because that call fell through to the root listing, which
+# names both. The expectation could not fail and the label claimed a check that
+# was never made. `id` is required by the schema now, so there is no such call to
+# make; 18b pins what the tool says when it is left out.
+{"call": "instruction", "label": "18b. backlinks without an id is rejected by the schema", "args": {"action": "backlinks"}, "expect": ["[backlinks]"], "expectNot": ["Available documents", "referencing"]}
+{"call": "instruction", "label": "18c. backlinks on an id that is not there", "args": {"action": "backlinks", "id": "no-such-doc"}, "expect": ["No document \"no-such-doc\""], "expectNot": ["No documents reference"]}
+
 {"call": "instruction", "label": "19. list: search", "args": {"action": "list", "query": "second"}, "expect": ["beta"]}
 {"call": "instruction", "label": "20. list: documents missing metadata", "args": {"action": "list", "missingMeta": "any"}}
 

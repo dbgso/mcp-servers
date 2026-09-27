@@ -88,7 +88,7 @@ This tool explains how to use the instruction tool.
 - \`instruction(action: "list", recursive: true)\` - List all including nested
 - \`instruction(action: "list", query: "<keyword>")\` - Search documents
 - \`instruction(action: "list", missingMeta: "any")\` - Find docs with missing metadata
-- \`instruction(action: "list", id: "<id>", backlinks: true)\` - Which documents reference this one (needs \`id\`)
+- \`instruction(action: "backlinks", id: "<id>")\` - Which documents reference this one
 - \`instruction(action: "list", drafts: true)\` - List drafts, by the plain id every other action takes
 - \`instruction(action: "read", id: "<id>")\` - Read a document
 

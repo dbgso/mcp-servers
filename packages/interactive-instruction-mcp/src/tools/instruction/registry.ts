@@ -18,6 +18,7 @@ import {
   SetStatusHandler,
   ReadMetaHandler,
   GraphHandler,
+  BacklinksHandler,
 } from "./handlers/index.js";
 
 export { ActionRegistry };
@@ -47,6 +48,7 @@ export const HANDLERS = [
   new SetStatusHandler(),
   new ReadMetaHandler(),
   new GraphHandler(),
+  new BacklinksHandler(),
 ] as const;
 
 /** The action names, read off the handlers rather than restated. */
