@@ -4,6 +4,7 @@ import type { InstructionContext } from "../types.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
 import { gateMutation } from "../../../services/mutation-gate.js";
+import { refuseAmbiguousId, resolveVersions } from "./document-versions.js";
 
 const schema = z.object({
   action: z.literal("delete"),
@@ -18,6 +19,15 @@ const schema = z.object({
 });
 
 type Args = z.infer<typeof schema>;
+
+/** Empty when nothing linked here, so the report can splice it unconditionally. */
+function danglingLinkNote(params: { id: string; backlinkCount: number }): string {
+  const { id, backlinkCount } = params;
+  if (backlinkCount === 0) {
+    return "";
+  }
+  return `\n\n${backlinkCount} document(s) still link to "${id}". \`graph\` draws links to documents that no longer exist, so they can be found and fixed.`;
+}
 
 /**
  * Binds a delete to the document as it stood when the run started. If the
@@ -53,18 +63,36 @@ Usage:
     const { id, explanation } = params.args;
     const { reader } = params.context;
 
-    // P1: draft/promoted同名存在ガード
-    const draftExists = await reader.documentExists(DRAFT_PREFIX + id);
-    const promotedExists = await reader.documentExists(id);
-    if (draftExists && promotedExists) {
-      return errorResponse(`Both draft and promoted versions of "${id}" exist. Delete or promote the draft first, then retry.`);
+    const versions = await resolveVersions({ reader, id });
+    if (versions === "ambiguous") {
+      return refuseAmbiguousId(id);
     }
 
     // A draft is work nobody has accepted yet, and deleting one is what the
     // author does to their own scratch file. Nothing gates it.
-    if (draftExists) {
+    if (versions === "draft") {
       return this.deleteDraft({ reader, id });
     }
+
+    return this.deleteWhenPromoted({
+      reader,
+      id,
+      explanation,
+      promotedExists: versions === "promoted",
+    });
+  }
+
+  /**
+   * Nothing is a draft under this id, so there is either a promoted document --
+   * which the gate holds -- or nothing at all.
+   */
+  private async deleteWhenPromoted(params: {
+    reader: InstructionContext["reader"];
+    id: string;
+    explanation: string | undefined;
+    promotedExists: boolean;
+  }): Promise<ToolResponse> {
+    const { reader, id, explanation, promotedExists } = params;
 
     if (!promotedExists) {
       return errorResponse(`Error: Document "${id}" not found (neither as draft nor promoted).`);
@@ -160,10 +188,7 @@ Usage:
       return errorResponse(`Error: ${result.error ?? "Unknown error"}`);
     }
 
-    const dangling =
-      backlinkCount > 0
-        ? `\n\n${backlinkCount} document(s) still link to "${id}". \`graph\` draws links to documents that no longer exist, so they can be found and fixed.`
-        : "";
+    const dangling = danglingLinkNote({ id, backlinkCount });
 
     return textResponse(
       `Document "${id}" deleted.

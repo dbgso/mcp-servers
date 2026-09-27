@@ -105,26 +105,47 @@ export interface SerializedWorkflowState<TState extends string, TContext> {
   updatedAt: string;
 }
 
+function isString(value: unknown): boolean {
+  return typeof value === "string";
+}
+
+function isObject(value: unknown): boolean {
+  return typeof value === "object" && value !== null;
+}
+
+function isStringArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every(isString);
+}
+
+/**
+ * What each field of a serialized state has to look like.
+ *
+ * A table rather than a conjunction because the interface above is the thing
+ * being checked: a field added there and forgotten here is easier to spot as a
+ * missing row than as a missing `&&`.
+ */
+const SERIALIZED_STATE_FIELDS: Record<string, (value: unknown) => boolean> = {
+  workflowId: isString,
+  instanceId: isString,
+  currentState: isString,
+  context: isObject,
+  visitedStates: isStringArray,
+  createdAt: isString,
+  updatedAt: isString,
+};
+
 /**
  * Type guard to validate serialized workflow state structure
  */
 export function isSerializedWorkflowState(
   value: unknown
 ): value is SerializedWorkflowState<string, unknown> {
-  if (typeof value !== "object" || value === null) {
+  if (!isObject(value)) {
     return false;
   }
   const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.workflowId === "string" &&
-    typeof obj.instanceId === "string" &&
-    typeof obj.currentState === "string" &&
-    typeof obj.context === "object" &&
-    obj.context !== null &&
-    Array.isArray(obj.visitedStates) &&
-    obj.visitedStates.every((s) => typeof s === "string") &&
-    typeof obj.createdAt === "string" &&
-    typeof obj.updatedAt === "string"
+  return Object.entries(SERIALIZED_STATE_FIELDS).every(([field, matches]) =>
+    matches(obj[field])
   );
 }
 

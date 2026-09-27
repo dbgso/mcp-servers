@@ -43,6 +43,131 @@ function bareId(id: string): string {
 
 type Args = z.infer<typeof schema>;
 
+/** One document's body, already reduced to the lines worth comparing. */
+type ComparableBody = { id: string; lines: string[] };
+
+/** Every id that some document points at, so an orphan is one nobody points at. */
+function referencedIds(documents: MarkdownSummary[]): Set<string> {
+  return new Set(documents.flatMap((doc) => doc.relatedDocs ?? []));
+}
+
+/**
+ * The direction is the whole of the advice. Saying only "not referenced" leaves
+ * the caller to guess, and guessing wrong is what puts a document's parents
+ * among its own children: `relatedDocs` edges run parent to child, so what has
+ * to change is the parent's list, not this document's.
+ */
+function orphanIssue(docId: string): LintIssue {
+  return {
+    severity: "info",
+    docId,
+    rule: "orphaned-document",
+    message:
+      "Not referenced by any other document. Add it to the `relatedDocs` " +
+      "of the document it belongs under -- edges run parent to child.",
+  };
+}
+
+/** Nothing to find in a document shorter than the threshold. */
+function tooShortToCompare(params: {
+  first: ComparableBody;
+  second: ComparableBody;
+  minLines: number;
+}): boolean {
+  const { first, second, minLines } = params;
+  return first.lines.length < minLines || second.lines.length < minLines;
+}
+
+/** The finding for one pair, or nothing when they share too little to matter. */
+function copiedIssue(params: {
+  first: ComparableBody;
+  second: ComparableBody;
+  minLines: number;
+}): LintIssue[] {
+  const { first, second, minLines } = params;
+  if (tooShortToCompare({ first, second, minLines })) return [];
+
+  const { lines, at } = longestSharedRun({ a: first.lines, b: second.lines });
+  if (lines < minLines) return [];
+
+  return [{
+    severity: "warning",
+    docId: displayId(first.id),
+    rule: "copied-content",
+    message:
+      `${lines} lines are identical to "${displayId(second.id)}", starting at line ${at}. ` +
+      "Two copies of a passage are maintained separately whether anyone means them to be: " +
+      "keep it in one of them and link, or say in both why the repetition is deliberate.",
+  }];
+}
+
+function joinedWhenToUse(doc: MarkdownSummary): string {
+  return (doc.whenToUse || []).join(" ").toLowerCase();
+}
+
+function eitherIsEmpty(params: { str1: string; str2: string }): boolean {
+  return !params.str1 || !params.str2;
+}
+
+/** Words too short to carry meaning are noise in an overlap count. */
+function significantWords(text: string): Set<string> {
+  return new Set(text.toLowerCase().split(/\s+/).filter((w) => w.length > 2));
+}
+
+/** Two texts with no significant words between them share nothing measurable. */
+function jaccardOverlap(params: { words1: Set<string>; words2: Set<string> }): number {
+  const { words1, words2 } = params;
+  if (words1.size === 0 || words2.size === 0) return 0;
+
+  const intersection = new Set([...words1].filter((w) => words2.has(w)));
+  const union = new Set([...words1, ...words2]);
+
+  return intersection.size / union.size;
+}
+
+/** A severity with nothing under it gets no line, rather than a zero. */
+function severityCountLine(params: {
+  issues: LintIssue[];
+  severity: LintIssue["severity"];
+  label: string;
+}): string[] {
+  const { issues, severity, label } = params;
+  const count = issues.filter((i) => i.severity === severity).length;
+  if (count === 0) return [];
+  return [`- ${label}: ${count}`];
+}
+
+function severityCounts(issues: LintIssue[]): string[] {
+  return [
+    ...severityCountLine({ issues, severity: "error", label: "Errors" }),
+    ...severityCountLine({ issues, severity: "warning", label: "Warnings" }),
+    ...severityCountLine({ issues, severity: "info", label: "Info" }),
+  ];
+}
+
+/** The findings, worst first, so the report opens on what needs doing. */
+function formatReport(issues: LintIssue[]): string {
+  const severityOrder = { error: 0, warning: 1, info: 2 };
+  const sorted = [...issues].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+
+  const lines = [
+    "# Document Lint Results",
+    "",
+    `Found ${sorted.length} issue(s):`,
+    "",
+    ...severityCounts(sorted),
+    "",
+  ];
+
+  for (const issue of sorted) {
+    lines.push(`[${severityIcon(issue.severity)}] **${issue.docId}**: ${issue.message}`);
+    lines.push(`   Rule: ${issue.rule}`);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
 export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "lint";
   readonly help =
@@ -89,22 +214,14 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     const documents = result.documents;
     const corpus = documents.filter((d) => !isInternalDocument(d.id));
 
-    const issues: LintIssue[] = [];
-
-    // Per document, drafts included: the same rules `add` and `update` report
-    // at write time, so a document cannot be clean on the way in and dirty in
-    // the report.
-    for (const doc of documents) {
-      const content = await reader.getDocumentContent(doc.id);
-      if (content === null) continue;
-      issues.push(...checkDocument({ docId: displayId(doc.id), callId: bareId(doc.id), content }));
-    }
-
-    // Corpus-wide: properties of the set, which no single write can decide.
-    issues.push(...this.checkOrphanedDocs({ documents: corpus }));
-    issues.push(...this.checkSimilarDocs({ documents: corpus }));
-    issues.push(...(await this.checkCopiedContent({ reader, documents: corpus })));
-    issues.push(...this.checkCircularReferences({ documents: corpus }));
+    const issues: LintIssue[] = [
+      ...(await this.checkEachDocument({ reader, documents })),
+      // Corpus-wide: properties of the set, which no single write can decide.
+      ...this.checkOrphanedDocs({ documents: corpus }),
+      ...this.checkSimilarDocs({ documents: corpus }),
+      ...(await this.checkCopiedContent({ reader, documents: corpus })),
+      ...this.checkCircularReferences({ documents: corpus }),
+    ];
 
     if (issues.length === 0) {
       return textResponse(
@@ -117,30 +234,8 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
       );
     }
 
-    // Sort by severity
-    const severityOrder = { error: 0, warning: 1, info: 2 };
-    issues.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
-
-    // Format output
-    const lines = ["# Document Lint Results", "", `Found ${issues.length} issue(s):`, ""];
-
-    const errorCount = issues.filter((i) => i.severity === "error").length;
-    const warningCount = issues.filter((i) => i.severity === "warning").length;
-    const infoCount = issues.filter((i) => i.severity === "info").length;
-
-    if (errorCount > 0) lines.push(`- Errors: ${errorCount}`);
-    if (warningCount > 0) lines.push(`- Warnings: ${warningCount}`);
-    if (infoCount > 0) lines.push(`- Info: ${infoCount}`);
-    lines.push("");
-
-    for (const issue of issues) {
-      lines.push(`[${severityIcon(issue.severity)}] **${issue.docId}**: ${issue.message}`);
-      lines.push(`   Rule: ${issue.rule}`);
-      lines.push("");
-    }
-
     return textResponse(
-      lines.join("\n") +
+      formatReport(issues) +
       formatNextActions([
         { action: "read_meta", description: "Update metadata for a document", example: `instruction(action: "read_meta", id: "<doc-id>")` },
         { action: "link_add", description: "Add related documents", example: `instruction(action: "link_add", id: "<doc-id>", relatedDocs: ["other-doc"], explanation: "<what the link means>")` },
@@ -148,42 +243,36 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     );
   }
 
+  /**
+   * Per document, drafts included: the same rules `add` and `update` report at
+   * write time, so a document cannot be clean on the way in and dirty in the
+   * report.
+   */
+  private async checkEachDocument(params: {
+    reader: MarkdownReader;
+    documents: MarkdownSummary[];
+  }): Promise<LintIssue[]> {
+    const { reader, documents } = params;
+    const issues: LintIssue[] = [];
+
+    for (const doc of documents) {
+      const content = await reader.getDocumentContent(doc.id);
+      if (content === null) continue;
+      issues.push(...checkDocument({ docId: displayId(doc.id), callId: bareId(doc.id), content }));
+    }
+
+    return issues;
+  }
+
   private checkOrphanedDocs(params: {
     documents: MarkdownSummary[];
   }): LintIssue[] {
     const { documents } = params;
-    const issues: LintIssue[] = [];
+    const referenced = referencedIds(documents);
 
-    const referencedDocs = new Set<string>();
-    for (const doc of documents) {
-      if (doc.relatedDocs) {
-        for (const ref of doc.relatedDocs) {
-          referencedDocs.add(ref);
-        }
-      }
-    }
-
-    for (const doc of documents) {
-      if (doc.id.startsWith("_")) continue;
-
-      if (!referencedDocs.has(doc.id)) {
-        issues.push({
-          severity: "info",
-          docId: doc.id,
-          rule: "orphaned-document",
-          // The direction is the whole of the advice. Saying only "not
-          // referenced" leaves the caller to guess, and guessing wrong is what
-          // puts a document's parents among its own children: `relatedDocs`
-          // edges run parent to child, so what has to change is the parent's
-          // list, not this document's.
-          message:
-            "Not referenced by any other document. Add it to the `relatedDocs` " +
-            "of the document it belongs under -- edges run parent to child.",
-        });
-      }
-    }
-
-    return issues;
+    return documents
+      .filter((doc) => !doc.id.startsWith("_") && !referenced.has(doc.id))
+      .map((doc) => orphanIssue(doc.id));
   }
 
   /**
@@ -204,85 +293,128 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
   }): Promise<LintIssue[]> {
     const { reader, documents } = params;
     const minLines = configuredMinDuplicateLines();
+    const bodies = await this.comparableBodies({ reader, documents });
+
     const issues: LintIssue[] = [];
-
-    const bodies = new Map<string, string[]>();
-    for (const doc of documents) {
-      const content = await reader.getDocumentContent(doc.id);
-      if (content === null) continue;
-      bodies.set(doc.id, comparableBody(content));
-    }
-
-    const ids = [...bodies.keys()];
-    for (let i = 0; i < ids.length; i++) {
-      for (let j = i + 1; j < ids.length; j++) {
-        const a = bodies.get(ids[i]) ?? [];
-        const b = bodies.get(ids[j]) ?? [];
-        // Nothing to find in a document shorter than the threshold.
-        if (a.length < minLines || b.length < minLines) continue;
-
-        const { lines, at } = longestSharedRun({ a, b });
-        if (lines < minLines) continue;
-
-        issues.push({
-          severity: "warning",
-          docId: displayId(ids[i]),
-          rule: "copied-content",
-          message:
-            `${lines} lines are identical to "${displayId(ids[j])}", starting at line ${at}. ` +
-            "Two copies of a passage are maintained separately whether anyone means them to be: " +
-            "keep it in one of them and link, or say in both why the repetition is deliberate.",
-        });
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i + 1; j < bodies.length; j++) {
+        issues.push(...copiedIssue({ first: bodies[i], second: bodies[j], minLines }));
       }
     }
 
     return issues;
   }
 
+  /** Documents whose file could not be read drop out rather than compare as empty. */
+  private async comparableBodies(params: {
+    reader: MarkdownReader;
+    documents: MarkdownSummary[];
+  }): Promise<ComparableBody[]> {
+    const { reader, documents } = params;
+    const bodies: ComparableBody[] = [];
+
+    for (const doc of documents) {
+      const content = await reader.getDocumentContent(doc.id);
+      if (content === null) continue;
+      bodies.push({ id: doc.id, lines: comparableBody(content) });
+    }
+
+    return bodies;
+  }
+
   private checkSimilarDocs(params: {
     documents: MarkdownSummary[];
   }): LintIssue[] {
     const { documents } = params;
-    const issues: LintIssue[] = [];
-    const checked = new Set<string>();
     const threshold = configuredSimilarityThreshold();
+    const checked = new Set<string>();
 
-    for (let i = 0; i < documents.length; i++) {
-      for (let j = i + 1; j < documents.length; j++) {
-        const doc1 = documents[i];
-        const doc2 = documents[j];
-        const pairKey = `${doc1.id}:${doc2.id}`;
-
-        if (checked.has(pairKey)) continue;
-        checked.add(pairKey);
-
-        const title1 = this.extractTitle(doc1.id);
-        const title2 = this.extractTitle(doc2.id);
-        const titleSimilarity = this.calculateSimilarity({ str1: title1, str2: title2 });
-
-        const whenToUse1 = (doc1.whenToUse || []).join(" ").toLowerCase();
-        const whenToUse2 = (doc2.whenToUse || []).join(" ").toLowerCase();
-        const whenToUseSimilarity = this.calculateSimilarity({ str1: whenToUse1, str2: whenToUse2 });
-
-        if (titleSimilarity > threshold) {
-          issues.push({
-            severity: "info",
-            docId: doc1.id,
-            rule: "similar-documents",
-            message: `Similar to "${doc2.id}" (title similarity: ${Math.round(titleSimilarity * 100)}%). Consider merging or clarifying distinction.`,
-          });
-        } else if (whenToUseSimilarity > threshold && whenToUse1.length > 10) {
-          issues.push({
-            severity: "info",
-            docId: doc1.id,
-            rule: "similar-use-cases",
-            message: `Similar use cases to "${doc2.id}". Consider merging or adding relatedDocs.`,
-          });
-        }
-      }
+    const issues: LintIssue[] = [];
+    for (const [index, doc1] of documents.entries()) {
+      issues.push(
+        ...this.pairedWith({ doc1, rest: documents.slice(index + 1), threshold, checked }),
+      );
     }
 
     return issues;
+  }
+
+  /** Each document against the ones after it, so every pair is judged once. */
+  private pairedWith(params: {
+    doc1: MarkdownSummary;
+    rest: MarkdownSummary[];
+    threshold: number;
+    checked: Set<string>;
+  }): LintIssue[] {
+    const { doc1, rest, threshold, checked } = params;
+    const issues: LintIssue[] = [];
+
+    for (const doc2 of rest) {
+      const pairKey = `${doc1.id}:${doc2.id}`;
+      if (checked.has(pairKey)) continue;
+      checked.add(pairKey);
+
+      issues.push(...this.similarityIssue({ doc1, doc2, threshold }));
+    }
+
+    return issues;
+  }
+
+  /** A pair resembling each other by title is not also reported by use case. */
+  private similarityIssue(params: {
+    doc1: MarkdownSummary;
+    doc2: MarkdownSummary;
+    threshold: number;
+  }): LintIssue[] {
+    const byTitle = this.similarTitleIssue(params);
+    if (byTitle.length > 0) return byTitle;
+
+    return this.similarUseCaseIssue(params);
+  }
+
+  private similarTitleIssue(params: {
+    doc1: MarkdownSummary;
+    doc2: MarkdownSummary;
+    threshold: number;
+  }): LintIssue[] {
+    const { doc1, doc2, threshold } = params;
+    const titleSimilarity = this.calculateSimilarity({
+      str1: this.extractTitle(doc1.id),
+      str2: this.extractTitle(doc2.id),
+    });
+
+    if (titleSimilarity <= threshold) return [];
+
+    return [{
+      severity: "info",
+      docId: doc1.id,
+      rule: "similar-documents",
+      message: `Similar to "${doc2.id}" (title similarity: ${Math.round(titleSimilarity * 100)}%). Consider merging or clarifying distinction.`,
+    }];
+  }
+
+  private similarUseCaseIssue(params: {
+    doc1: MarkdownSummary;
+    doc2: MarkdownSummary;
+    threshold: number;
+  }): LintIssue[] {
+    const { doc1, doc2, threshold } = params;
+    const whenToUse1 = joinedWhenToUse(doc1);
+    const whenToUseSimilarity = this.calculateSimilarity({
+      str1: whenToUse1,
+      str2: joinedWhenToUse(doc2),
+    });
+
+    if (whenToUseSimilarity > threshold && whenToUse1.length > 10) {
+      return [{
+        severity: "info",
+        docId: doc1.id,
+        rule: "similar-use-cases",
+        message: `Similar use cases to "${doc2.id}". Consider merging or adding relatedDocs.`,
+      }];
+    }
+
+    return [];
   }
 
   private checkCircularReferences(params: {
@@ -291,47 +423,55 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     const { documents } = params;
     const issues: LintIssue[] = [];
 
-    const refs = new Map<string, string[]>();
-    for (const doc of documents) {
-      refs.set(doc.id, doc.relatedDocs || []);
-    }
+    const refs = new Map(documents.map((doc) => [doc.id, doc.relatedDocs || []]));
 
     const visited = new Set<string>();
     const inStack = new Set<string>();
     const reportedCycles = new Set<string>();
 
-    const dfs = (params: { docId: string; path: string[] }): void => {
-      const { docId, path } = params;
-      if (inStack.has(docId)) {
-        const cycleStart = path.indexOf(docId);
-        const cycle = path.slice(cycleStart);
-        const cycleKey = [...cycle].sort().join(",");
+    const related = (docId: string): string[] => refs.get(docId) || [];
 
-        if (!reportedCycles.has(cycleKey)) {
-          reportedCycles.add(cycleKey);
-          issues.push({
-            severity: "warning",
-            docId: cycle[0],
-            rule: "circular-reference",
-            message: `Circular reference detected: ${cycle.join(" -> ")} -> ${docId}`,
-          });
-        }
-        return;
-      }
+    /** One finding per cycle: the same loop entered from three of its members is one cycle. */
+    const reportCycle = (cycleParams: { docId: string; path: string[] }): void => {
+      const { docId, path } = cycleParams;
+      const cycleStart = path.indexOf(docId);
+      const cycle = path.slice(cycleStart);
+      const cycleKey = [...cycle].sort().join(",");
 
-      if (visited.has(docId)) return;
+      if (reportedCycles.has(cycleKey)) return;
 
+      reportedCycles.add(cycleKey);
+      issues.push({
+        severity: "warning",
+        docId: cycle[0],
+        rule: "circular-reference",
+        message: `Circular reference detected: ${cycle.join(" -> ")} -> ${docId}`,
+      });
+    };
+
+    const walk = (walkParams: { docId: string; path: string[] }): void => {
+      const { docId, path } = walkParams;
       visited.add(docId);
       inStack.add(docId);
 
-      const related = refs.get(docId) || [];
-      for (const ref of related) {
+      for (const ref of related(docId)) {
         if (refs.has(ref)) {
           dfs({ docId: ref, path: [...path, docId] });
         }
       }
 
       inStack.delete(docId);
+    };
+
+    const dfs = (dfsParams: { docId: string; path: string[] }): void => {
+      const { docId, path } = dfsParams;
+      if (inStack.has(docId)) {
+        reportCycle({ docId, path });
+        return;
+      }
+      if (visited.has(docId)) return;
+
+      walk({ docId, path });
     };
 
     for (const doc of documents) {
@@ -350,17 +490,12 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
 
   private calculateSimilarity(params: { str1: string; str2: string }): number {
     const { str1, str2 } = params;
-    if (!str1 || !str2) return 0;
+    if (eitherIsEmpty({ str1, str2 })) return 0;
     if (str1 === str2) return 1;
 
-    const words1 = new Set(str1.toLowerCase().split(/\s+/).filter((w) => w.length > 2));
-    const words2 = new Set(str2.toLowerCase().split(/\s+/).filter((w) => w.length > 2));
-
-    if (words1.size === 0 || words2.size === 0) return 0;
-
-    const intersection = new Set([...words1].filter((w) => words2.has(w)));
-    const union = new Set([...words1, ...words2]);
-
-    return intersection.size / union.size;
+    return jaccardOverlap({
+      words1: significantWords(str1),
+      words2: significantWords(str2),
+    });
   }
 }

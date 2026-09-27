@@ -63,16 +63,43 @@ export class ApplyHandler extends BaseActionHandler<Args, InstructionContext> {
         }]));
     }
 
-    // The document has to still be the one the diff was computed against.
-    //
-    // This used to write `pending.content` to `pending.originalPath` with no
-    // check at all -- no re-read, no existence test, no comparison. Three
-    // things followed. An edit made between `update` and `apply` was silently
-    // discarded, so the diff the human read was not the diff that got applied.
-    // A document deleted under an approval token came back, because
-    // `writeFile` recreates. And because the path came out of the stored record
-    // rather than from this reader, another server's file could be written
-    // instead of this one's.
+    const refusal = await this.refuseIfChanged({ id, pending, reader, docsDir });
+    if (refusal !== null) {
+      return refusal;
+    }
+
+    // Every check above has passed, so this is the point of no return -- and
+    // the last point at which refusing costs nothing. The gate is keyed on the
+    // change itself, so re-staging a different update starts a new run.
+    return gateMutation({
+      operation: "apply",
+      subject: `instruction::apply::${id}`,
+      what: `${pending.originalHash}\n${contentHash(pending.content)}`,
+      explanation,
+      work: () => this.applyPending({ id, pending, reader, docsDir }),
+    });
+  }
+
+  /**
+   * The document has to still be the one the diff was computed against.
+   *
+   * This used to write `pending.content` to `pending.originalPath` with no
+   * check at all -- no re-read, no existence test, no comparison. Three
+   * things followed. An edit made between `update` and `apply` was silently
+   * discarded, so the diff the human read was not the diff that got applied.
+   * A document deleted under an approval token came back, because
+   * `writeFile` recreates. And because the path came out of the stored record
+   * rather than from this reader, another server's file could be written
+   * instead of this one's.
+   */
+  private async refuseIfChanged(params: {
+    id: string;
+    pending: PendingUpdate;
+    reader: MarkdownReader;
+    docsDir: string;
+  }): Promise<ToolResponse | null> {
+    const { id, pending, reader, docsDir } = params;
+
     const current = await reader.getDocumentContent(id);
     if (current === null) {
       await deletePendingUpdate({ docsDir, id });
@@ -103,16 +130,7 @@ export class ApplyHandler extends BaseActionHandler<Args, InstructionContext> {
         ]));
     }
 
-    // Every check above has passed, so this is the point of no return -- and
-    // the last point at which refusing costs nothing. The gate is keyed on the
-    // change itself, so re-staging a different update starts a new run.
-    return gateMutation({
-      operation: "apply",
-      subject: `instruction::apply::${id}`,
-      what: `${pending.originalHash}\n${contentHash(pending.content)}`,
-      explanation,
-      work: () => this.applyPending({ id, pending, reader, docsDir }),
-    });
+    return null;
   }
 
   /**

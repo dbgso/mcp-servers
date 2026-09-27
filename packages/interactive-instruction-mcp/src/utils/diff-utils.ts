@@ -24,6 +24,12 @@ export interface DiffOptions {
   contextLines?: number;
 }
 
+const DIFF_DEFAULTS: Required<DiffOptions> = {
+  originalName: "original",
+  newName: "draft",
+  contextLines: 3,
+};
+
 /**
  * Generate unified diff between two strings.
  * Returns empty string if no differences.
@@ -33,12 +39,8 @@ export function generateDiff(params: {
   updated: string;
   options?: DiffOptions;
 }): string {
-  const { original, updated, options = {} } = params;
-  const {
-    originalName = "original",
-    newName = "draft",
-    contextLines = 3,
-  } = options;
+  const { original, updated, options } = params;
+  const { originalName, newName, contextLines } = { ...DIFF_DEFAULTS, ...options };
 
   // No diff if content is identical
   if (original === updated) {

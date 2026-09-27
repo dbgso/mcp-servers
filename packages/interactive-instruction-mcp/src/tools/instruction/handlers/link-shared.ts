@@ -1,7 +1,9 @@
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
-import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
+import type { DocumentFrontmatter } from "../../../types/index.js";
+import { parseFrontmatter, updateFrontmatter } from "../../../utils/frontmatter-parser.js";
 import type { ToolResponse } from "mcp-shared";
+import { errorResponse, formatNextActions, textResponse } from "../types.js";
 import { gateMutation } from "../../../services/mutation-gate.js";
 
 export { textResponse } from "../types.js";
@@ -33,6 +35,94 @@ export async function resolveStorageId(params: {
 
   if (await reader.documentExists(id)) return id;
   if (await reader.documentExists(DRAFT_PREFIX + id)) return DRAFT_PREFIX + id;
+  return null;
+}
+
+/**
+ * The document a link change is about: where it is stored, and what it says.
+ *
+ * Both halves fail the same way from the caller's side -- an id that resolves to
+ * nothing and a document whose content cannot be read are one refusal -- so they
+ * are read together rather than as two checks with the same message.
+ */
+export async function loadLinkTarget(params: {
+  reader: MarkdownReader;
+  id: string;
+}): Promise<{ storageId: string; content: string } | null> {
+  const { reader, id } = params;
+
+  // A draft is stored under a prefixed id, so the bare one has to be resolved
+  // before anything can be read or written.
+  const storageId = await resolveStorageId({ reader, id });
+  if (storageId === null) return null;
+
+  const content = await reader.getDocumentContent(storageId);
+  if (content === null) return null;
+
+  return { storageId, content };
+}
+
+export function refuseMissingDocument(id: string): ToolResponse {
+  return errorResponse(`Error: Document "${id}" not found.`);
+}
+
+/** An empty list reads as a mistake unless it says so. */
+export function formatRelatedDocs(docs: string[]): string {
+  return docs.length > 0 ? docs.join(", ") : "(none)";
+}
+
+/** Nothing to do is reported as success, with the read that shows why. */
+export function reportNoChange(params: { id: string; message: string }): ToolResponse {
+  const { id, message } = params;
+  return textResponse(
+    message +
+    formatNextActions([{
+      action: "read",
+      description: "Read the document",
+      example: `instruction(action: "read", id: "${id}")`,
+    }]),
+  );
+}
+
+/** An empty list removes the key: `updateFrontmatter` drops undefined values. */
+function withRelatedDocs(params: { frontmatter: DocumentFrontmatter; newRelated: string[] }): DocumentFrontmatter {
+  const { frontmatter, newRelated } = params;
+  return {
+    ...frontmatter,
+    relatedDocs: newRelated.length > 0 ? newRelated : undefined,
+  };
+}
+
+/**
+ * The write itself, once the gate has let it through. Returns the failure rather
+ * than throwing, which is what `deliberateLinkChange` reads to decide whether
+ * the run is over: an exception would mean something unforeseen, and would leave
+ * the run standing rather than consuming it.
+ *
+ * Written through the reader, which is the only write path that normalises the
+ * trailing newline, invalidates the list cache and checks that the document is
+ * one this server manages. Writing with `fs.writeFile` and a path from
+ * `getFilePath` skipped all three -- and the missing newline in #51 was reported
+ * for exactly this route alongside the others.
+ */
+export async function writeRelatedDocs(params: {
+  reader: MarkdownReader;
+  storageId: string;
+  content: string;
+  frontmatter: DocumentFrontmatter;
+  newRelated: string[];
+}): Promise<{ error: string } | null> {
+  const { reader, storageId, content, frontmatter, newRelated } = params;
+
+  const newContent = updateFrontmatter({
+    content,
+    frontmatter: withRelatedDocs({ frontmatter, newRelated }),
+  });
+
+  const written = await reader.updateDocument({ id: storageId, content: newContent });
+  if (!written.success) {
+    return { error: written.error ?? "Unknown error" };
+  }
   return null;
 }
 
@@ -71,18 +161,28 @@ export async function detectCircularReferences(params: {
   const warnings: string[] = [];
 
   for (const targetId of relatedDocs) {
-    if (targetId === id) {
-      warnings.push(`Self-reference: ${id} -> ${id}`);
-      continue;
-    }
-
-    const cyclePath = await findCyclePath({ reader, startId: targetId, targetId: id, visited: new Set() });
-    if (cyclePath) {
-      warnings.push(`${id} -> ${cyclePath.join(" -> ")} -> ${id}`);
+    const warning = await circularWarning({ reader, id, targetId });
+    if (warning !== null) {
+      warnings.push(warning);
     }
   }
 
   return warnings;
+}
+
+/** A self-reference is named directly: the walk below would never look for it. */
+async function circularWarning(params: {
+  reader: MarkdownReader;
+  id: string;
+  targetId: string;
+}): Promise<string | null> {
+  const { reader, id, targetId } = params;
+
+  if (targetId === id) return `Self-reference: ${id} -> ${id}`;
+
+  const cyclePath = await findCyclePath({ reader, startId: targetId, targetId: id, visited: new Set() });
+  if (cyclePath === null) return null;
+  return `${id} -> ${cyclePath.join(" -> ")} -> ${id}`;
 }
 
 /**
@@ -100,18 +200,42 @@ async function findCyclePath(params: {
   if (visited.has(startId)) return null;
   visited.add(startId);
 
-  const storageId = await resolveStorageId({ reader, id: startId });
-  if (storageId === null) return null;
-
-  const content = await reader.getDocumentContent(storageId);
-  if (content === null) return null;
-
-  const frontmatter = parseFrontmatter(content);
-  const related = frontmatter.relatedDocs || [];
-
+  const related = await outgoingLinks({ reader, id: startId });
   if (related.includes(targetId)) {
     return [startId];
   }
+
+  return walkOn({ reader, related, targetId, visited, startId });
+}
+
+/**
+ * The links out of a document. Not a document, or one that cannot be read, both
+ * lead nowhere -- and so does one with no `relatedDocs` -- so the walk treats
+ * them alike rather than distinguishing three dead ends.
+ */
+async function outgoingLinks(params: { reader: MarkdownReader; id: string }): Promise<string[]> {
+  const { reader, id } = params;
+
+  const storageId = await resolveStorageId({ reader, id });
+  if (storageId === null) return [];
+
+  return relatedDocsOf(await reader.getDocumentContent(storageId));
+}
+
+function relatedDocsOf(content: string | null): string[] {
+  if (content === null) return [];
+  return parseFrontmatter(content).relatedDocs || [];
+}
+
+/** The depth-first step, so the path is assembled in one place. */
+async function walkOn(params: {
+  reader: MarkdownReader;
+  related: string[];
+  targetId: string;
+  visited: Set<string>;
+  startId: string;
+}): Promise<string[] | null> {
+  const { reader, related, targetId, visited, startId } = params;
 
   for (const nextId of related) {
     const subPath = await findCyclePath({ reader, startId: nextId, targetId, visited });
@@ -123,6 +247,8 @@ async function findCyclePath(params: {
   return null;
 }
 
+type RelatedDocsChange = { noChange: boolean; message: string; newRelated: string[] };
+
 /**
  * Calculate the new relatedDocs array after adding or removing entries.
  */
@@ -130,26 +256,34 @@ export function calculateNewRelatedDocs(params: {
   isAdd: boolean;
   currentRelated: string[];
   relatedDocs: string[];
-}): { noChange: boolean; message: string; newRelated: string[] } {
+}): RelatedDocsChange {
   const { isAdd, currentRelated, relatedDocs } = params;
 
-  if (isAdd) {
-    const toAdd = relatedDocs.filter((d) => !currentRelated.includes(d));
-    if (toAdd.length === 0) {
-      return {
-        noChange: true,
-        message: "All specified documents are already in relatedDocs.",
-        newRelated: currentRelated,
-      };
-    }
+  if (isAdd) return addRelatedDocs({ currentRelated, relatedDocs });
+  return removeRelatedDocs({ currentRelated, relatedDocs });
+}
+
+function addRelatedDocs(params: { currentRelated: string[]; relatedDocs: string[] }): RelatedDocsChange {
+  const { currentRelated, relatedDocs } = params;
+
+  const toAdd = relatedDocs.filter((d) => !currentRelated.includes(d));
+  if (toAdd.length === 0) {
     return {
-      noChange: false,
-      message: "",
-      newRelated: [...currentRelated, ...toAdd],
+      noChange: true,
+      message: "All specified documents are already in relatedDocs.",
+      newRelated: currentRelated,
     };
   }
+  return {
+    noChange: false,
+    message: "",
+    newRelated: [...currentRelated, ...toAdd],
+  };
+}
 
-  // Remove
+function removeRelatedDocs(params: { currentRelated: string[]; relatedDocs: string[] }): RelatedDocsChange {
+  const { currentRelated, relatedDocs } = params;
+
   const toRemove = relatedDocs.filter((d) => currentRelated.includes(d));
   if (toRemove.length === 0) {
     return {

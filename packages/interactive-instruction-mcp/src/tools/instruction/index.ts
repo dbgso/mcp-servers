@@ -140,6 +140,18 @@ Information from this MCP is only valid for ${config.infoValidSeconds} seconds.
 Always re-read before each task to get the latest rules.`;
 }
 
+type Registry = ReturnType<typeof getActionRegistry>;
+
+/** The action name, or nothing -- which is the caller asking for the help text. */
+function requestedAction(action: unknown): string | undefined {
+  return typeof action === "string" ? action : undefined;
+}
+
+function unknownActionText(params: { action: string; registry: Registry }): string {
+  const { action, registry } = params;
+  return `Unknown action: "${action}"\n\nAvailable actions: ${registry.getActions().join(", ")}\n\nUse \`describe()\` for help.`;
+}
+
 function buildHelpText(): string {
   const registry = getActionRegistry();
   const actions = registry.getActions();
@@ -196,14 +208,12 @@ export function registerInstructionTools(params: {
       inputSchema: buildInputSchema(),
     },
     async (rawParams) => {
-      const action = typeof rawParams.action === "string" ? rawParams.action : undefined;
+      const action = requestedAction(rawParams.action);
 
       // No action specified - show help
       if (!action) {
         return wrapResponse({
-          result: {
-            content: [{ type: "text" as const, text: buildHelpText() }],
-          },
+          result: { content: [{ type: "text" as const, text: buildHelpText() }] },
           config,
         });
       }
@@ -213,12 +223,7 @@ export function registerInstructionTools(params: {
       if (!handler) {
         return wrapResponse({
           result: {
-            content: [
-              {
-                type: "text" as const,
-                text: `Unknown action: "${action}"\n\nAvailable actions: ${registry.getActions().join(", ")}\n\nUse \`describe()\` for help.`,
-              },
-            ],
+            content: [{ type: "text" as const, text: unknownActionText({ action, registry }) }],
             isError: true,
           },
           config,

@@ -19,35 +19,62 @@ function buildEveryTaskReminder(params: { docId: string; seconds: number }): str
   return `[Reminder] Information from this MCP is only valid for ${seconds} seconds. After that, it may have been updated. Re-read '${docId}' using \`instruction(action: "read", id: "${docId}")\` to get the latest rules.`;
 }
 
-export function buildReminderBlock(params: {
-  config: ReminderConfig;
-}): string | null {
-  const { config } = params;
-  const hasReminders =
-    config.remindMcp ||
-    config.remindOrganize ||
-    config.customReminders.length > 0 ||
-    config.topicForEveryTask !== null;
+function anyToggleOn(config: ReminderConfig): boolean {
+  return config.remindMcp || config.remindOrganize;
+}
 
-  if (!hasReminders) {
-    return null;
-  }
+function anyTopicConfigured(config: ReminderConfig): boolean {
+  return config.customReminders.length > 0 || config.topicForEveryTask !== null;
+}
 
+/**
+ * Whether the block is shown at all. Deliberately asked of the config rather
+ * than of the assembled list: `topicForEveryTask: ""` counts as configured even
+ * though it contributes no line, and that is the behaviour callers have.
+ */
+function hasReminders(config: ReminderConfig): boolean {
+  return anyToggleOn(config) || anyTopicConfigured(config);
+}
+
+/** Leads the block, so the document a task must read first is named first. */
+function topicReminders(config: ReminderConfig): string[] {
+  if (!config.topicForEveryTask) return [];
+  return [
+    buildEveryTaskReminder({
+      docId: config.topicForEveryTask,
+      seconds: config.infoValidSeconds,
+    }),
+  ];
+}
+
+function toggleReminders(config: ReminderConfig): string[] {
   const reminders: string[] = [];
-  if (config.topicForEveryTask) {
-    reminders.push(buildEveryTaskReminder({ docId: config.topicForEveryTask, seconds: config.infoValidSeconds }));
-  }
   if (config.remindMcp) {
     reminders.push(MCP_REMINDER);
   }
   if (config.remindOrganize) {
     reminders.push(ORGANIZE_REMINDER);
   }
-  for (const customReminder of config.customReminders) {
-    reminders.push(`[Reminder] ${customReminder}`);
+  return reminders;
+}
+
+function remindersFor(config: ReminderConfig): string[] {
+  return [
+    ...topicReminders(config),
+    ...toggleReminders(config),
+    ...config.customReminders.map((customReminder) => `[Reminder] ${customReminder}`),
+  ];
+}
+
+export function buildReminderBlock(params: {
+  config: ReminderConfig;
+}): string | null {
+  const { config } = params;
+  if (!hasReminders(config)) {
+    return null;
   }
 
-  return `\n\n---\n\n${reminders.join("\n\n")}`;
+  return `\n\n---\n\n${remindersFor(config).join("\n\n")}`;
 }
 
 export function wrapResponse(params: {

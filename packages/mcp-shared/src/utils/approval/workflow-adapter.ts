@@ -11,18 +11,35 @@
  * ```
  */
 
-import { requestApproval, validateApproval } from "./core.js";
+import {
+  requestApproval,
+  validateApproval,
+  type ApprovalOptions,
+  type ApprovalRequest,
+  type ApprovalResult,
+} from "./core.js";
 import type { WorkflowApproval } from "../../types/workflow.js";
 
-export const tokenWorkflowApproval: WorkflowApproval = {
-  async request(params) {
+class TokenWorkflowApproval implements WorkflowApproval {
+  async request(params: {
+    request: ApprovalRequest;
+    options?: ApprovalOptions;
+  }): Promise<{ fallbackPath: string }> {
     const { fallbackPath } = await requestApproval({
       request: params.request,
       ...(params.options === undefined ? {} : { options: params.options }),
     });
     return { fallbackPath };
-  },
-  validate(params) {
+  }
+
+  validate(params: { requestId: string; providedToken: string }): ApprovalResult {
     return validateApproval(params);
-  },
-};
+  }
+}
+
+/**
+ * There is nothing to configure, so one instance serves every workflow. It stays
+ * a value rather than asking each caller to construct it: the wiring above is
+ * the whole point, and `new` at every call site would be noise.
+ */
+export const tokenWorkflowApproval: WorkflowApproval = new TokenWorkflowApproval();

@@ -5,57 +5,122 @@ import { configureDraftWorkflowPersistence } from "./workflows/draft-workflow.js
 import type { ReminderConfig } from "./types/index.js";
 import type { DocumentScope } from "./services/document-scope.js";
 
+interface CliOptions {
+  /** `--reminder "message"`, which may appear more than once. */
+  customReminders: string[];
+  /**
+   * Which documents this server manages. A documents directory is not always
+   * all one tool's -- see services/document-scope.ts.
+   */
+  include: string[];
+  exclude: string[];
+  topicForEveryTask: string | null;
+  infoValidSeconds: number;
+}
+
+type ValueFlagHandler = (params: { options: CliOptions; value: string }) => void;
+
+const addReminder: ValueFlagHandler = ({ options, value }) => {
+  options.customReminders.push(value);
+};
+
+const addInclude: ValueFlagHandler = ({ options, value }) => {
+  options.include.push(value);
+};
+
+const addExclude: ValueFlagHandler = ({ options, value }) => {
+  options.exclude.push(value);
+};
+
+const setTopicForEveryTask: ValueFlagHandler = ({ options, value }) => {
+  options.topicForEveryTask = value;
+};
+
+const setInfoValidSeconds: ValueFlagHandler = ({ options, value }) => {
+  // An unparseable value falls back to the default rather than becoming NaN.
+  options.infoValidSeconds = parseInt(value, 10) || 60;
+};
+
+/**
+ * The flags that carry a value, and what each one does with it.
+ *
+ * A table rather than an if-chain because the scanner needs the same knowledge
+ * in order to skip a flag's value -- otherwise `--include docs` would also read
+ * `docs` as the documents directory. This used to be two loops with their own
+ * copy of the list, so a flag added to only the first one silently turned its
+ * value into a positional argument.
+ */
+const VALUE_FLAGS: Record<string, ValueFlagHandler> = {
+  "--reminder": addReminder,
+  "--include": addInclude,
+  "--exclude": addExclude,
+  "--topic-for-every-task": setTopicForEveryTask,
+  "--info-expires": setInfoValidSeconds,
+};
+
+function defaultOptions(): CliOptions {
+  return {
+    customReminders: [],
+    include: [],
+    exclude: [],
+    topicForEveryTask: null,
+    infoValidSeconds: 60,
+  };
+}
+
+/** A trailing flag with nothing after it is ignored, as it always was. */
+function applyValueFlag(params: {
+  handler: ValueFlagHandler;
+  options: CliOptions;
+  value: string | undefined;
+}): number {
+  const { handler, options, value } = params;
+  if (value !== undefined) {
+    handler({ options, value });
+  }
+  return 2;
+}
+
+/** How many arguments `args[index]` used up: two for a flag and its value. */
+function takeArg(params: {
+  args: string[];
+  index: number;
+  options: CliOptions;
+  positional: string[];
+}): number {
+  const { args, index, options, positional } = params;
+  const arg = args[index];
+
+  const handler = VALUE_FLAGS[arg];
+  if (handler !== undefined) {
+    return applyValueFlag({ handler, options, value: args[index + 1] });
+  }
+
+  if (!arg.startsWith("--")) {
+    positional.push(arg);
+  }
+  return 1;
+}
+
+function scanArgs(args: string[]): { options: CliOptions; positional: string[] } {
+  const options = defaultOptions();
+  const positional: string[] = [];
+
+  let index = 0;
+  while (index < args.length) {
+    index += takeArg({ args, index, options, positional });
+  }
+
+  return { options, positional };
+}
+
 function parseArgs(params: { args: string[] }): {
   markdownDir: string;
   config: ReminderConfig;
   scope: DocumentScope;
 } {
   const { args } = params;
-  const remindMcp = args.includes("--remind-mcp");
-  const remindOrganize = args.includes("--remind-organize");
-
-  // Parse --reminder "message" flags (can appear multiple times)
-  const customReminders: string[] = [];
-  // Which documents this server manages. A documents directory is not always
-  // all one tool's -- see services/document-scope.ts.
-  const include: string[] = [];
-  const exclude: string[] = [];
-  let topicForEveryTask: string | null = null;
-  let infoValidSeconds = 60; // Default: 60 seconds
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--reminder" && i + 1 < args.length) {
-      customReminders.push(args[i + 1]);
-      i++; // Skip the next arg (the message)
-    } else if (args[i] === "--topic-for-every-task" && i + 1 < args.length) {
-      topicForEveryTask = args[i + 1];
-      i++; // Skip the next arg (the document id)
-    } else if (args[i] === "--include" && i + 1 < args.length) {
-      include.push(args[i + 1]);
-      i++;
-    } else if (args[i] === "--exclude" && i + 1 < args.length) {
-      exclude.push(args[i + 1]);
-      i++;
-    } else if (args[i] === "--info-expires" && i + 1 < args.length) {
-      infoValidSeconds = parseInt(args[i + 1], 10) || 60;
-      i++; // Skip the next arg (the seconds)
-    }
-  }
-
-  // Filter out flags and their values to get positional args
-  const positional: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    if (
-      args[i] === "--reminder" ||
-      args[i] === "--topic-for-every-task" ||
-      args[i] === "--info-expires" ||
-      args[i] === "--include" ||
-      args[i] === "--exclude"
-    ) {
-      i++; // Skip the value
-    } else if (!args[i].startsWith("--")) {
-      positional.push(args[i]);
-    }
-  }
+  const { options, positional } = scanArgs(args);
 
   if (positional.length === 0) {
     console.error(
@@ -66,8 +131,14 @@ function parseArgs(params: { args: string[] }): {
 
   return {
     markdownDir: positional[0],
-    config: { remindMcp, remindOrganize, customReminders, topicForEveryTask, infoValidSeconds },
-    scope: { include, exclude },
+    config: {
+      remindMcp: args.includes("--remind-mcp"),
+      remindOrganize: args.includes("--remind-organize"),
+      customReminders: options.customReminders,
+      topicForEveryTask: options.topicForEveryTask,
+      infoValidSeconds: options.infoValidSeconds,
+    },
+    scope: { include: options.include, exclude: options.exclude },
   };
 }
 

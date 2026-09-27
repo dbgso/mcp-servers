@@ -50,8 +50,13 @@ export function isManaged(params: { id: string; scope: DocumentScope }): boolean
  * count that silently left documents out is worse than no count.
  */
 export function describeScope(scope: DocumentScope): string {
+  const clauses = scopeClauses(scope);
+  return clauses.length === 0 ? "" : `Scope: ${clauses.join("; ")}.`;
+}
+
+function scopeClauses(scope: DocumentScope): string[] {
   const parts: string[] = [];
   if (scope.include.length > 0) parts.push(`only ${scope.include.join(", ")}`);
   if (scope.exclude.length > 0) parts.push(`excluding ${scope.exclude.join(", ")}`);
-  return parts.length === 0 ? "" : `Scope: ${parts.join("; ")}.`;
+  return parts;
 }

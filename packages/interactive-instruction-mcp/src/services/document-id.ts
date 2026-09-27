@@ -36,42 +36,61 @@ export type DocumentIdCheck = { ok: true } | { ok: false; error: string };
  * allowed is anything that changes the meaning of a path segment.
  */
 export function checkDocumentId(id: string): DocumentIdCheck {
-  if (id === "" || id.trim() === "") {
-    return { ok: false, error: "Document ID cannot be empty." };
-  }
+  const error = idError(id);
+  if (error !== undefined) return { ok: false, error };
+  return { ok: true };
+}
 
-  if (id.includes("\0")) {
-    return { ok: false, error: "Document ID cannot contain a null byte." };
-  }
+/**
+ * The first rule `id` breaks, in the order the caller hears about them, or
+ * undefined when it breaks none.
+ *
+ * The rules are named functions rather than a chain of early returns out of
+ * `checkDocumentId` so that the denylist can be read as a list of what is not
+ * allowed -- which is the only thing standing between a caller and the rest of
+ * the filesystem, and so worth being able to take in at a glance.
+ */
+function idError(id: string): string | undefined {
+  if (isBlank(id)) return "Document ID cannot be empty.";
+  return forbiddenCharacterError(id) ?? segmentError(id);
+}
 
-  // Both separators: on Windows `\` is one too, and this server's documents are
-  // shared across machines.
-  if (id.includes("/") || id.includes("\\")) {
-    return {
-      ok: false,
-      error: `Invalid document ID "${id}". Use '__' for hierarchy, not a path separator.`,
-    };
-  }
+function isBlank(id: string): boolean {
+  return id === "" || id.trim() === "";
+}
 
+/** Characters that change what a path means rather than naming part of one. */
+function forbiddenCharacterError(id: string): string | undefined {
+  if (id.includes("\0")) return "Document ID cannot contain a null byte.";
+  if (hasPathSeparator(id)) {
+    return `Invalid document ID "${id}". Use '__' for hierarchy, not a path separator.`;
+  }
+  return undefined;
+}
+
+/**
+ * Both separators: on Windows `\` is one too, and this server's documents are
+ * shared across machines.
+ */
+function hasPathSeparator(id: string): boolean {
+  return id.includes("/") || id.includes("\\");
+}
+
+/** A segment that would not survive the trip through `path.join`. */
+function segmentError(id: string): string | undefined {
   const segments = id.split(ID_SEPARATOR);
   if (segments.some((segment) => segment === "." || segment === "..")) {
-    return {
-      ok: false,
-      error: `Invalid document ID "${id}". A path segment cannot be "." or "..".`,
-    };
+    return `Invalid document ID "${id}". A path segment cannot be "." or "..".`;
   }
 
   // A segment that is empty (a leading, trailing or tripled separator) has no
   // meaning as a directory name and `path.join` would silently drop it,
   // mapping two different ids onto one file.
   if (segments.some((segment) => segment === "")) {
-    return {
-      ok: false,
-      error: `Invalid document ID "${id}". It has an empty path segment.`,
-    };
+    return `Invalid document ID "${id}". It has an empty path segment.`;
   }
 
-  return { ok: true };
+  return undefined;
 }
 
 /**
@@ -94,8 +113,7 @@ export function resolveDocumentPath(params: {
   const root = path.resolve(directory);
   const resolved = path.resolve(root, ...id.split(ID_SEPARATOR)) + ".md";
 
-  const relative = path.relative(root, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (escapesRoot({ root, resolved })) {
     return {
       ok: false,
       error: `Invalid document ID "${id}". It resolves outside the documents directory.`,
@@ -103,6 +121,16 @@ export function resolveDocumentPath(params: {
   }
 
   return { ok: true, path: resolved };
+}
+
+/**
+ * Asked of what the path layer actually produced, not of the id we inspected:
+ * that is the property that matters, and `path.relative` is the only thing that
+ * knows it.
+ */
+function escapesRoot(params: { root: string; resolved: string }): boolean {
+  const relative = path.relative(params.root, params.resolved);
+  return relative.startsWith("..") || path.isAbsolute(relative);
 }
 
 /**
