@@ -7,7 +7,8 @@
  * action that is about the workflow exists only in the state that has one.
  *
  * It was not decided before. Drafts shared one "internal" predicate with the
- * trash directory -- a grouping argued for on the trash's behalf -- so `lint`
+ * trash directory it no longer has -- a grouping argued for on the trash's
+ * behalf -- so `lint`
  * skipped them silently, `graph` called them missing, and nothing listed them
  * at all while `approve` and `set_status` both took a batch of ids.
  */
@@ -132,11 +133,6 @@ describe("lint", () => {
     expect(report).toContain("orphaned-document");
   });
 
-  it("says nothing about the trash, which is not a document any more", async () => {
-    await write({ id: "_mcp_trash__discarded", body: longBody, frontmatter: "description: ''" });
-
-    expect(await text(lint, { action: "lint" })).toContain("No issues found");
-  });
 });
 
 describe("list", () => {

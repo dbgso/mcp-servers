@@ -13,7 +13,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { MarkdownReader } from "../services/markdown-reader.js";
-import { DRAFT_DIR, DRAFT_PREFIX, TRASH_DIR } from "../constants.js";
+import { DRAFT_DIR, DRAFT_PREFIX } from "../constants.js";
 import { LinkAddHandler } from "../tools/instruction/handlers/link-add.js";
 import { LinkRemoveHandler } from "../tools/instruction/handlers/link-remove.js";
 import { DeleteHandler } from "../tools/instruction/handlers/delete.js";
@@ -173,8 +173,8 @@ describe("delete", () => {
       })
     );
 
-    expect(text(response)).toContain(TRASH_DIR);
-    expect(text(response)).toContain("doomed--");
+    expect(text(response)).toContain("deleted");
+    expect(text(response)).toContain("version control");
   });
 
   it("gates on the content it can read, and still refuses when it cannot", async () => {

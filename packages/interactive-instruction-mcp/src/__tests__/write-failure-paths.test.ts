@@ -205,7 +205,7 @@ describe("the write fails", () => {
 
   it("a promoted delete reports it, and the document stays", async () => {
     await promoted("doomed");
-    vi.spyOn(reader, "trashDocument").mockResolvedValue({
+    vi.spyOn(reader, "deleteDocument").mockResolvedValue({
       success: false,
       error: "simulated rename failure",
     });

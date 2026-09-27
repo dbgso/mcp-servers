@@ -69,6 +69,61 @@ function draftNextActions(params: { ready: string[]; unreviewed: string[] }): Ne
   return suggestions;
 }
 
+/**
+ * Split the drafts by what `approve` will actually accept.
+ *
+ * A batch promotion refuses unless every draft in it has had its self-review
+ * recorded, so offering `ids: "<all of them>"` straight after `add` -- the
+ * commonest case, and the one this listing exists for -- hands back a call the
+ * server rejects.
+ */
+async function splitByReadiness(ids: string[]): Promise<{ ready: string[]; unreviewed: string[] }> {
+  const ready: string[] = [];
+  const unreviewed: string[] = [];
+
+  for (const id of ids) {
+    const state = (await draftWorkflowManager.getStatus({ id }))?.state ?? "editing";
+    if (state === "user_reviewing" || state === "pending_approval") ready.push(id);
+    else unreviewed.push(id);
+  }
+
+  return { ready, unreviewed };
+}
+
+/** The body of a draft listing: how many, which, and what is still owed. */
+function draftListingText(params: {
+  documents: MarkdownSummary[];
+  unreviewed: string[];
+  reader: InstructionContext["reader"];
+}): string {
+  const { documents, unreviewed, reader } = params;
+  if (documents.length === 0) return "No drafts.";
+
+  const listed = `${documents.length} draft(s):\n\n${reader.formatDocumentList({ documents, categories: [] })}`;
+  if (unreviewed.length === 0) return listed;
+
+  return `${listed}\nAwaiting self-review: ${unreviewed.join(", ")}`;
+}
+
+async function draftListing(params: {
+  documents: MarkdownSummary[];
+  reader: InstructionContext["reader"];
+}): Promise<ToolResponse> {
+  const { documents, reader } = params;
+  const { ready, unreviewed } = await splitByReadiness(documents.map((doc) => doc.id));
+
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text:
+          draftListingText({ documents, unreviewed, reader }) +
+          formatNextActions(draftNextActions({ ready, unreviewed })),
+      },
+    ],
+  };
+}
+
 export class ListHandler extends BaseActionHandler<ListArgs, InstructionContext> {
   readonly action = "list";
   readonly help = `List documents.
@@ -303,40 +358,7 @@ Usage:
     const { documents, categories } = filterDrafts(result);
 
     if (drafts === true) {
-      const ids = documents.map((doc) => doc.id);
-
-      // What `approve` will actually accept.
-      //
-      // A batch promotion refuses unless every draft in it has had its
-      // self-review recorded, so offering `ids: "<all of them>"` after `add`
-      // -- the commonest case, and the one this listing exists for -- hands
-      // back a call the server rejects. Suggesting a call that does not work
-      // is the defect this listing was added to help with, not a smaller
-      // version of it.
-      const ready: string[] = [];
-      const unreviewed: string[] = [];
-      for (const id of ids) {
-        const state = (await draftWorkflowManager.getStatus({ id }))?.state ?? "editing";
-        if (state === "user_reviewing" || state === "pending_approval") ready.push(id);
-        else unreviewed.push(id);
-      }
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text:
-              (ids.length === 0
-                ? "No drafts."
-                : `${ids.length} draft(s):\n\n` +
-                  reader.formatDocumentList({ documents, categories: [] }) +
-                  (unreviewed.length === 0
-                    ? ""
-                    : `\nAwaiting self-review: ${unreviewed.join(", ")}`)) +
-              formatNextActions(draftNextActions({ ready, unreviewed })),
-          },
-        ],
-      };
+      return draftListing({ documents, reader });
     }
 
     const nextActions = formatNextActions([

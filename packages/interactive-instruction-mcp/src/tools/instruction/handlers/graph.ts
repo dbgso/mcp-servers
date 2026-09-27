@@ -120,6 +120,47 @@ const schema = z.object({
 
 type Args = z.infer<typeof schema>;
 
+/**
+ * Why an id is not in the graph.
+ *
+ * Out of scope and absent are different facts, and reporting the first as the
+ * second sends the caller off to check an id that was right. A draft is not
+ * missing; the graph is drawn over the promoted corpus, which it has not
+ * joined yet.
+ */
+function notInTheGraph(params: { id: string; all: MarkdownSummary[] }): ToolResponse {
+  const { id, all } = params;
+
+  // Either form: the plain id every action takes, and the prefixed one the
+  // report used to print, which is a plausible thing to paste back.
+  const bare = id.startsWith(DRAFT_PREFIX) ? id.slice(DRAFT_PREFIX.length) : id;
+
+  if (!all.some((doc) => doc.id === DRAFT_PREFIX + bare)) {
+    return errorResponse(
+      `Error: Document "${id}" not found.` +
+      formatNextActions([{
+        action: "list",
+        description: "See what exists",
+        example: `instruction(action: "list", recursive: true)`,
+      }]));
+  }
+
+  return errorResponse(
+    `"${bare}" is a draft, and the relation graph is drawn over the promoted corpus. Its links are readable now, and it joins the graph when it is promoted.` +
+    formatNextActions([
+      {
+        action: "read_meta",
+        description: "Read the draft's links",
+        example: `instruction(action: "read_meta", id: "${bare}")`,
+      },
+      {
+        action: "graph",
+        description: "Draw the corpus it will join",
+        example: `instruction(action: "graph")`,
+      },
+    ]));
+}
+
 export class GraphHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "graph";
   readonly help = `Render the relatedDocs graph of the promoted corpus as an interactive page. Drafts are not in it.
@@ -158,39 +199,7 @@ Writes an HTML file and returns its path. Open it in a browser.`;
     const documents = listed.documents.filter((doc) => !isInternalDocument(doc.id));
 
     if (id !== undefined && !documents.some((doc) => doc.id === id)) {
-      // Being out of scope and being absent are different facts, and reporting
-      // the first as the second sends the caller off to check the id it just
-      // used. A draft is not in the relation graph because the graph is of the
-      // corpus -- it is not missing.
-      // Either form: the plain id every action takes, and the prefixed one the
-      // report used to print, which is a plausible thing to paste back.
-      const bare = id.startsWith(DRAFT_PREFIX) ? id.slice(DRAFT_PREFIX.length) : id;
-      const isDraft = listed.documents.some((doc) => doc.id === DRAFT_PREFIX + bare);
-
-      return errorResponse(
-        (isDraft
-          ? `"${bare}" is a draft, and the relation graph is drawn over the promoted corpus. Its links are readable now, and it joins the graph when it is promoted.`
-          : `Error: Document "${id}" not found.`) +
-        formatNextActions(
-          isDraft
-            ? [
-                {
-                  action: "read_meta",
-                  description: "Read the draft's links",
-                  example: `instruction(action: "read_meta", id: "${bare}")`,
-                },
-                {
-                  action: "graph",
-                  description: "Draw the corpus it will join",
-                  example: `instruction(action: "graph")`,
-                },
-              ]
-            : [{
-                action: "list",
-                description: "See what exists",
-                example: `instruction(action: "list", recursive: true)`,
-              }]
-        ));
+      return notInTheGraph({ id, all: listed.documents });
     }
 
     const { nodes, edges } = buildGraph({ documents, focusId: id, depth, includeUnlinked });

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions, textResponse } from "../types.js";
-import { DRAFT_PREFIX, isInternalDocument, isTrashedDocument } from "../../../constants.js";
+import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import {
   checkDocument,
   configuredSimilarityThreshold,
@@ -71,7 +71,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     // one, so a reference to a draft never resolves. It is excluded for
     // consistency, and there is nothing to assert about it -- a test would
     // pass with the exclusion removed.
-    const documents = result.documents.filter((d) => !isTrashedDocument(d.id));
+    const documents = result.documents;
     const corpus = documents.filter((d) => !isInternalDocument(d.id));
 
     const issues: LintIssue[] = [];

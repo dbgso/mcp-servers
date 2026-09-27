@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
-import { DRAFT_PREFIX, TRASH_DIR } from "../../../constants.js";
+import { DRAFT_PREFIX } from "../../../constants.js";
 import { gateMutation } from "../../../services/mutation-gate.js";
 
 const schema = z.object({
@@ -41,7 +41,8 @@ Usage:
 - \`instruction(action: "delete", id: "doc-id")\` - Delete a draft (immediate)
 - \`instruction(action: "delete", id: "doc-id", explanation: "...")\` - Delete a promoted
   document. The first attempts are refused with the backlinks it would break;
-  repeat the identical call to go through. The file is moved to \`${TRASH_DIR}/\`, not erased.`;
+  repeat the identical call to go through. The file is removed; recover it from your
+  corpus's version control.`;
 
   readonly schema = schema;
 
@@ -133,7 +134,7 @@ Usage:
             .join("\n")}`
         : "Nothing links to it.",
       "",
-      `The file moves to \`${TRASH_DIR}/\` rather than being erased.`,
+      "The file is removed. If this corpus is in version control, that is what puts it back.",
     ].join("\n");
 
     return gateMutation({
@@ -142,18 +143,19 @@ Usage:
       what: await buildDeleteWhat({ reader, id }),
       explanation,
       preview,
-      work: () => this.trashPromoted({ reader, id, backlinkCount: backlinks.length }),
+      work: () => this.removePromotedNow({ reader, id, backlinkCount: backlinks.length }),
     });
   }
 
-  private async trashPromoted(params: {
+  /** The write itself, once the gate has let it through. */
+  private async removePromotedNow(params: {
     reader: InstructionContext["reader"];
     id: string;
     backlinkCount: number;
   }): Promise<ToolResponse> {
     const { reader, id, backlinkCount } = params;
 
-    const result = await reader.trashDocument(id);
+    const result = await reader.deleteDocument(id);
     if (!result.success) {
       return errorResponse(`Error: ${result.error ?? "Unknown error"}`);
     }
@@ -166,9 +168,7 @@ Usage:
     return textResponse(
       `Document "${id}" deleted.
 
-Moved to: ${result.trashPath ?? `${TRASH_DIR}/`}
-
-Nothing reads that directory, so the document is gone from every listing; move the file back to restore it.${dangling}` +
+The file is removed. If this corpus is in version control, that is what puts it back.${dangling}` +
         formatNextActions([
           {
             action: "list",

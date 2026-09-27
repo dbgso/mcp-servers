@@ -18,7 +18,7 @@
 
 {"call": "instruction", "label": "apply refuses when nothing is staged", "args": {"action": "apply", "id": "keeper", "explanation": "Nothing to apply."}, "expect": ["No pending update"]}
 
-{"call": "instruction", "label": "delete a promoted document, attempt 1 of 3", "args": {"action": "delete", "id": "keeper", "explanation": "Checking that a delete is recoverable."}, "expect": ["Not Yet"]}
-{"call": "instruction", "label": "  attempt 2 of 3", "args": {"action": "delete", "id": "keeper", "explanation": "Checking that a delete is recoverable."}, "expect": ["Not Yet"]}
-{"call": "instruction", "label": "  attempt 3 moves it to the trash rather than unlinking it", "args": {"action": "delete", "id": "keeper", "explanation": "Checking that a delete is recoverable."}, "expect": ["trash"]}
+{"call": "instruction", "label": "delete a promoted document, attempt 1 of 3", "args": {"action": "delete", "id": "keeper", "explanation": "Checking what a delete leaves behind."}, "expect": ["Not Yet"]}
+{"call": "instruction", "label": "  attempt 2 of 3", "args": {"action": "delete", "id": "keeper", "explanation": "Checking what a delete leaves behind."}, "expect": ["Not Yet"]}
+{"call": "instruction", "label": "  attempt 3 removes it, and says where it can be recovered from", "args": {"action": "delete", "id": "keeper", "explanation": "Checking what a delete leaves behind."}, "expect": ["deleted", "version control"]}
 {"call": "instruction", "label": "  and it is gone from every listing", "args": {"action": "list", "recursive": true}, "expectNot": ["keeper"]}

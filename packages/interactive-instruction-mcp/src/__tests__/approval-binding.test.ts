@@ -308,7 +308,6 @@ describe("deletion is bound to the content it was previewed against", () => {
 
     // Deliberation proves disclosure, not consent, so the safety of a delete
     // rests on the file still being there.
-    const trashed = await fs.readdir(path.join(docsDir, "_mcp_trash"));
-    expect(trashed.some((name) => name.startsWith(docId))).toBe(true);
+    expect(await fs.access(path.join(docsDir, `${docId}.md`)).then(() => true, () => false)).toBe(false);
   });
 });

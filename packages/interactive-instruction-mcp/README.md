@@ -6,7 +6,7 @@ MCP server for interactive instruction documents. AI agents discover usage throu
 
 - **Learn by doing**: AI calls `instruction_describe()` to learn available actions, then uses `instruction()` with guided responses
 - **Single source of truth**: Each handler defines its own schema — no manual sync needed
-- **Human oversight**: Draft edits are free. Every change to a promoted document is gated: the agent has to state what it is doing and why, in its own words, and repeat that identical call before anything is written. Nothing can be changed silently, and a deleted document is moved to the trash rather than erased
+- **Human oversight**: Draft edits are free. Every change to a promoted document is gated: the agent has to state what it is doing and why, in its own words, and repeat that identical call before anything is written. Nothing can be changed silently, and a delete names the links it would break before it happens
 
 ## Compared to skill files
 
@@ -198,7 +198,7 @@ own lines rather than left to be inferred.
 |---|---|---|
 | `add` | Free | Create a draft, then `approve` it |
 | `update` | Direct overwrite | Pending diff → `apply` (deliberation gate) / `cancel` |
-| `delete` | Immediate | Preview + refusal → repeat → moved to `_mcp_trash/` |
+| `delete` | Immediate | Preview + refusal → repeat → removed |
 | `rename` | Immediate | Preview + refusal → repeat |
 | `link_add` / `link_remove` | Preview + refusal → repeat | Preview + refusal → repeat |
 | Promotion | `approve` (notes → `explanation`, repeated) | — |
@@ -277,11 +277,10 @@ delivered only through a desktop notification, which an agent with a shell could
 That made a swapped target impossible rather than merely visible. With the token gone, an
 agent that is determined and has been refused can open a new run for the swapped change and
 push that through — it costs it one more disclosure round. What carries the risk instead is
-reversibility: `delete` moves the file into `_mcp_trash/` rather than unlinking it, `rename`
-moves every backlink with it in one operation that can be run backwards, and `apply` refuses
-if the document changed after the diff was computed. If your corpus contains something where
-an uncooperative agent getting through would be genuinely damaging, this is the wrong gate
-for it, and `mcp-shared`'s token strategy is still there to install.
+reversibility where it can be: `rename` keeps its backlink rewrite inside one operation that can
+be run backwards, and `apply` refuses a diff whose document has moved under it. A delete cannot be
+undone by asking for the opposite, so what stands behind it is the refusal -- twice, with the
+backlinks it would break named -- and the corpus's own version control.
 
 Why it was made this way: the notification cost a human round trip on every maintenance
 operation, and in a headless or SSH session it could not be delivered at all — the failure
@@ -406,110 +405,10 @@ Also worth knowing before you upgrade:
   SSH session. Every gated operation now takes an `explanation` and a repeated call instead;
   `approvalToken` and `confirmed` are no longer accepted anywhere. Read
   [the gate](#the-gate) for what that gains and what it gives up.
-- **A deleted promoted document is moved, not erased.** It goes to `_mcp_trash/` inside the
-  documents directory, which nothing reads back. Add it to `.gitignore` if you would rather
-  not commit deletions.
-
-The command line is unchanged, so `.mcp.json` needs no edit. Documents written by 1.x are
-read as they are: frontmatter is optional, and a document without it still gets a
-description from its opening lines. `instruction(action: "list", missingMeta: "any")` finds
-the ones worth filling in.
-
-## Installation
-
-```bash
-npm install -g mcp-interactive-instruction
-```
-
-## Configuration
-
-### Claude Code
-
-`.mcp.json` in project root:
-
-```json
-{
-  "mcpServers": {
-    "docs": {
-      "command": "npx",
-      "args": ["-y", "mcp-interactive-instruction", "./docs"]
-    }
-  }
-}
-```
-
-### Reminder Flags (Optional)
-
-Optionally add flags to help AI remember to use the MCP tools:
-
-```json
-{
-  "mcpServers": {
-    "docs": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-interactive-instruction",
-        "./docs",
-        "--remind-mcp",
-        "--remind-organize",
-        "--reminder", "Always check tests before committing"
-      ]
-    }
-  }
-}
-```
-
-| Flag | Effect |
-|------|--------|
-| `--remind-mcp` | Reminds AI to check docs before starting tasks |
-| `--remind-organize` | Reminds AI to keep docs organized (1 topic per file) |
-| `--reminder <message>` | Add custom reminder message (can be used multiple times) |
-| `--topic-for-every-task <id>` | Specify a document AI must re-read before every task |
-| `--info-expires <seconds>` | How long MCP info stays valid (default: 60). Works with `--topic-for-every-task` |
-| `--include <id-prefix>` | Manage only documents under this prefix. Repeatable |
-| `--exclude <id-prefix>` | Do not manage documents under this prefix. Repeatable, applied after `--include` |
-
-### Sharing a directory with another tool
-
-A documents directory is not always all one tool's. This repository's own `./docs` also holds
-`chain/`, which belongs to a different MCP server — those files have their own frontmatter and
-their own relation field, so every check made here reports them as broken. Before excluding
-them, `lint` returned 223 issues; after `--exclude chain`, 38, and the error count went from 60
-to 1.
-
-```
-mcp-interactive-instruction ./docs --exclude chain
-```
-
-Unmanaged documents are invisible: they do not appear in `list`, `lint`, backlinks or the
-graph, `read` finds nothing, and a write that would touch one is refused with a reason rather
-than quietly doing nothing. Prefixes are matched by whole id segments, so `--exclude chain`
-takes `chain__adr__…` and leaves `chainsaw` alone.
-
-### Topic for Every Task
-
-Force AI to re-read a specific document before every task. Useful for critical rules that should never be forgotten:
-
-```json
-{
-  "args": [
-    "-y",
-    "mcp-interactive-instruction",
-    "./docs",
-    "--topic-for-every-task", "every-task",
-    "--info-expires", "60"
-  ]
-}
-```
-
-**Best Practice:** Keep the topic-for-every-task document as a **redirect hub** rather than a detailed rule list:
-
-```markdown
-# Every Task
-
-Read these documents before starting any task:
-
+- **A delete is refused twice, and names what it would break.** The refusal lists the documents
+  whose links would dangle. The file is then removed: an earlier draft of 2.0.0 moved it to a
+  `_mcp_trash/` directory instead, but nothing read that directory and no action restored from it,
+  so it was a worse copy of `git checkout` that grew without bound.
 - `coding-rules` - Essential coding conventions
 - `workflow` - Required workflow steps
 ```

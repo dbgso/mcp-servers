@@ -3,7 +3,7 @@
  *
  * The gate in front of it is deliberation, which proves disclosure and not
  * consent: nothing verifies a human agreed. So the file has to survive. These
- * tests are as much about the trash directory as about the gate.
+ * tests are as much about what the deletion leaves behind as about the gate.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -14,7 +14,7 @@ import { DeleteHandler } from "../tools/instruction/handlers/delete.js";
 import { ListHandler } from "../tools/instruction/handlers/list.js";
 import { LintHandler } from "../tools/instruction/handlers/lint.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
-import { DRAFT_DIR, TRASH_DIR } from "../constants.js";
+import { DRAFT_DIR } from "../constants.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";
 import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
 import { isRefusal, throughGate } from "./helpers/gate.js";
@@ -107,69 +107,43 @@ describe("DeleteHandler", () => {
       expect(text).toContain("dangle");
     });
 
-    it("moves the file to the trash rather than erasing it", async () => {
+    it("removes the file", async () => {
+      // 2.0.0 moved it to a `_mcp_trash/` directory instead, so that a delete
+      // could be undone. Nothing ever read that directory and no action
+      // restored from it, and the corpora this runs against keep their history
+      // in version control -- so it was a worse copy of `git checkout` that
+      // grew without bound. The gate is what makes a delete deliberate; the
+      // corpus's own history is what makes it recoverable.
+      await write("policy");
+
+      await throughGate(() => del({ id: "policy", explanation: EXPLANATION }));
+
+      expect(await fs.access(path.join(docsDir, "policy.md")).then(() => true, () => false)).toBe(false);
+      expect(await fs.readdir(docsDir)).not.toContain("_mcp_trash");
+    });
+
+    it("says where the document can be recovered from", async () => {
       await write("policy");
 
       const { response } = await throughGate(() => del({ id: "policy", explanation: EXPLANATION }));
 
-      expect(response.isError).toBeFalsy();
-      expect(await reader.getDocumentContent("policy")).toBeNull();
-
-      const trashed = await fs.readdir(path.join(docsDir, TRASH_DIR));
-      expect(trashed).toHaveLength(1);
-      expect(trashed[0]).toMatch(/^policy--/);
-      expect(await fs.readFile(path.join(docsDir, TRASH_DIR, trashed[0]), "utf-8")).toContain(
-        "Body of policy"
-      );
+      expect(response.content[0].text).toContain("version control");
     });
 
-    it("keeps both copies when the same id is deleted twice", async () => {
+    it("leaves nothing behind for the listings to show", async () => {
+      // The deleted document used to survive as `policy--<timestamp>.md` in a
+      // directory every listing then had to be taught to ignore.
       await write("policy");
       await throughGate(() => del({ id: "policy", explanation: EXPLANATION }));
 
-      await write("policy");
-      resetMutationGatesForTesting();
-      await throughGate(() => del({ id: "policy", explanation: "And again, for the same reason." }));
-
-      // Without the timestamp the second delete would overwrite the first, and
-      // the recovery this whole directory exists for would be gone.
-      expect(await fs.readdir(path.join(docsDir, TRASH_DIR))).toHaveLength(2);
-    });
-
-    it("says where the file went", async () => {
-      await write("policy");
-
-      const { response } = await throughGate(() => del({ id: "policy", explanation: EXPLANATION }));
-
-      // A caller that cannot tell the user where the document went cannot help
-      // them get it back.
-      expect(response.content[0].text).toContain(TRASH_DIR);
-    });
-  });
-
-  describe("the trash directory is not part of the corpus", () => {
-    beforeEach(async () => {
-      await write("policy");
-      await throughGate(() => del({ id: "policy", explanation: EXPLANATION }));
-    });
-
-    it("is left out of list", async () => {
-      const result = await new ListHandler().execute({
+      const listed = await new ListHandler().execute({
         rawParams: { action: "list", recursive: true },
         context,
       });
+      const linted = await new LintHandler().execute({ rawParams: { action: "lint" }, context });
 
-      expect(result.content[0].text).not.toContain(TRASH_DIR);
-      expect(result.content[0].text).not.toContain("policy--");
-    });
-
-    it("is left out of lint", async () => {
-      // Otherwise every deleted document comes back as a complaint about its
-      // metadata.
-      const result = await new LintHandler().execute({ rawParams: { action: "lint" }, context });
-
-      expect(result.content[0].text).not.toContain(TRASH_DIR);
-      expect(result.content[0].text).not.toContain("policy--");
+      expect(listed.content[0].text).not.toContain("policy");
+      expect(linted.content[0].text).not.toContain("policy");
     });
   });
 });
