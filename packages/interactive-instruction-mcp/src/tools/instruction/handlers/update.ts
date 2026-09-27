@@ -5,6 +5,7 @@ import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
 import type { DocumentFrontmatter } from "../../../types/index.js";
 import { updateFrontmatter, parseFrontmatter, stripFrontmatter, assignIfDefined } from "../../../utils/frontmatter-parser.js";
+import { refuseUnreadableFrontmatter } from "./frontmatter-guard.js";
 import { generateDiff, removeDiffFile, writeDiffToFile } from "../../../utils/diff-utils.js";
 import { getPendingUpdate, savePendingUpdate } from "../../../utils/pending-update.js";
 import { checkDocument, formatWriteLint } from "../../../services/document-lint.js";
@@ -208,6 +209,9 @@ Usage:
     const originalPath = reader.getFilePath(args.id);
     if (!originalContent) return refuseMissingDocument(args.id);
 
+    const unreadable = refuseUnreadableFrontmatter({ id: args.id, content: originalContent });
+    if (unreadable !== null) return unreadable;
+
     return this.handleExistingDocUpdate({ args, originalContent, originalPath, reader });
   }
 
@@ -221,6 +225,10 @@ Usage:
 
     // Get existing draft to preserve frontmatter
     const existingContent = await reader.getDocumentContent(draftId);
+    if (existingContent !== null) {
+      const unreadable = refuseUnreadableFrontmatter({ id, content: existingContent });
+      if (unreadable !== null) return unreadable;
+    }
     const existingFrontmatter = existingContent ? parseFrontmatter(existingContent) : {};
 
     const finalContent = this.generateContentWithFrontmatter({

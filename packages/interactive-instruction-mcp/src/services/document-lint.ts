@@ -15,7 +15,7 @@
  */
 
 import type { DocumentFrontmatter } from "../types/index.js";
-import { parseFrontmatter, stripFrontmatter } from "../utils/frontmatter-parser.js";
+import { frontmatterErrors, parseFrontmatter, stripFrontmatter } from "../utils/frontmatter-parser.js";
 import { isDescriptionMissing, isWhenToUseMissing } from "./metadata-completeness.js";
 
 export interface LintIssue {
@@ -317,11 +317,52 @@ export function checkDocument(params: {
   const frontmatter = parseFrontmatter(content);
   const body = stripFrontmatter(content);
 
+  // A block that did not parse has no metadata as far as everything below is
+  // concerned, so reporting those rules as well would name three consequences and
+  // no cause -- and the fix for all of them is the same one line of YAML.
+  const unreadable = checkFrontmatterReadable({ docId, callId, content });
+  if (unreadable.length > 0) {
+    return [...unreadable, ...checkDuplicateHeadings({ docId, body })];
+  }
+
   return [
     ...checkMissingMetadata({ docId, frontmatter }),
     ...checkDocumentSize({ docId, callId, body, frontmatter }),
     ...checkDuplicateHeadings({ docId, body }),
   ];
+}
+
+/**
+ * The frontmatter could not be read, which is a different fact from having none.
+ *
+ * Reported as an error rather than a warning because everything downstream is
+ * wrong while it holds: the document's own metadata reads as absent, and a
+ * `relatedDocs` entry that is plainly in the file is invisible, so the document it
+ * names is reported as orphaned. One unquoted colon produced four findings, three
+ * of which named the wrong cause and one of which was simply false.
+ */
+function checkFrontmatterReadable(params: {
+  docId: string;
+  callId: string;
+  content: string;
+}): LintIssue[] {
+  const { docId, callId, content } = params;
+  const errors = frontmatterErrors(content);
+  if (errors.length === 0) return [];
+
+  return [{
+    severity: "error",
+    docId,
+    rule: "frontmatter-unreadable",
+    message:
+      `The frontmatter is not valid YAML, so none of this document's metadata is ` +
+      `being read and any \`relatedDocs\` in it are invisible: ${errors[0]}. ` +
+      "A value containing `: ` has to be quoted, which is the usual cause and is " +
+      "what writing the block by hand gets wrong. " +
+      `\`instruction(action: "update", id: "${callId}", description: "<text>")\` ` +
+      "quotes it correctly, but the block has to parse before a write can keep the " +
+      "rest of it -- repair the file first.",
+  }];
 }
 
 function checkMissingMetadata(params: {

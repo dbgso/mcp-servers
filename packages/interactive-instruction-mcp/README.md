@@ -102,8 +102,10 @@ instruction(action: "read", id: "doc-id") → Read a document
 
 **Metadata & Quality**
 - `link_add` / `link_remove` — Manage related document links, on a draft or a promoted document (deliberation gate, drafts included). `relatedDocs` names documents by their plain id either way
-- `lint` — Check document quality: missing metadata, orphans, size, similarity, copied passages,
-  circular references, and repeated headings. A draft is held to the rules it can answer on its own; the
+- `lint` — Check document quality: unreadable frontmatter, missing metadata, orphans, size,
+  similarity, copied passages, circular references, and repeated headings. Frontmatter that is not
+  valid YAML is reported as itself rather than as the missing metadata it causes, and `add` and
+  `update` refuse to write onto it instead of dropping the fields they cannot read. A draft is held to the rules it can answer on its own; the
   corpus-wide ones wait until it is promoted. A document that is deliberately long says so with
   `update(id, sizeExemption: "<why>")`, and `sizeExemption: null` -- or `""`, for a client that
   renders arguments as strings and so cannot send null -- takes it off again once the document is
