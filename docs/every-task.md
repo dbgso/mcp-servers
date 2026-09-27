@@ -6,9 +6,7 @@ whenToUse:
   - Finding project coding rules and documentation references
 relatedDocs:
   - policy
-  - workflow__measure-dont-assume
-  - workflow__constraint-ladder
-  - workflow__skill-as-trigger
+  - workflow
 ---
 
 # Every Task Checklist
@@ -17,13 +15,9 @@ Essential information to check before starting any task.
 
 ## Required Tools
 
-- **Plan Tool**: All implementation work must use the `plan` tool. See `workflow__plan-tool-required` for details.
+- **Plan Tool**: All implementation work must use the `plan` tool.
   - Check current plan: `plan(action: "show")`
   - Start task: `plan(action: "status", id: "...", status: "in_progress")`
-
-## Reporting
-
-- **Verification Reporting**: See `workflow__verification-reporting`
 
 ## Policy
 
@@ -34,13 +28,12 @@ each of them carries the list of what currently does not conform.
 Read it before adding a tool, choosing a gate for a mutation, or introducing a
 rule.
 
-## Principles
+## How the work is done
 
-- **DRY**: See `workflow__dry-principle`
-- **AST Tool Evolution**: See `workflow__ast-tool-evolution` - When you discover useful tools during development, add them to ast-*-mcp
-- **Measure rather than reason**: See `workflow__measure-dont-assume` - where a claim can be checked by running something, run it
-- **Constraint ladder**: See `workflow__constraint-ladder` - a mistake worth preventing gets the highest rung that can express it: type, lint, custom lint, test, then an iimcp rule
-- **Skills trigger, iimcp remembers**: See `workflow__skill-as-trigger` - a skill's body is one line pointing at the document that holds the procedure
+`workflow` is the index of the working rules -- plans, reporting, how to constrain
+a mistake, when to measure rather than reason, what a skill is for. Read it rather
+than a list repeated here: this file naming each rule is how the list and the
+directory come to disagree about what exists.
 
 ## Coding Rules
 
