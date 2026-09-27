@@ -49,11 +49,11 @@ scope is invisible to every action and cannot be written:
 
 ## Tools
 
-Two tools. `instruction_describe()` explains the second one and is the right
+Two tools. `describe()` explains the second one and is the right
 first call; everything else is an action on `instruction`.
 
 ```
-instruction_describe()
+describe()
 
 instruction(action: "list")                      the promoted corpus
 instruction(action: "list", drafts: true)        the drafts

@@ -66,7 +66,7 @@ draft のみを列挙できることとする。既定の `list` の出力は変
 
 ## 文書化
 
-この表は README に載せる。`instruction_describe` は、各アクションが draft と promoted の
+この表は README に載せる。`describe` は、各アクションが draft と promoted の
 どちらを対象にするかが読み取れること。
 
 ## 削除された文書

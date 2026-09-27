@@ -21,7 +21,7 @@
 # #70 The shape relatedDocs should take, and the direction an edge runs.
 # The finding used to say only "not referenced by any other document", so edges
 # went in whichever direction silenced it.
-{"call": "instruction_describe", "label": "#70 describe answers the five questions", "args": {}, "expect": ["Edges run parent to child", "Two parents are allowed", "wants an index", "the other axis"]}
+{"call": "describe", "label": "#70 describe answers the five questions", "args": {}, "expect": ["Edges run parent to child", "Two parents are allowed", "wants an index", "the other axis"]}
 # `orphaned-document` is a corpus-wide rule, so a draft is not in it: the
 # document has to be promoted before the finding can appear at all.
 {"call": "instruction", "args": {"action": "approve", "id": "api", "notes": "Reviewed: one topic, ready"}}

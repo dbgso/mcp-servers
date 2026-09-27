@@ -4,7 +4,7 @@ MCP server for interactive instruction documents. AI agents discover usage throu
 
 ## Design Philosophy
 
-- **Learn by doing**: AI calls `instruction_describe()` to learn available actions, then uses `instruction()` with guided responses
+- **Learn by doing**: AI calls `describe()` to learn available actions, then uses `instruction()` with guided responses
 - **Single source of truth**: Each handler defines its own schema — no manual sync needed
 - **Human oversight**: Draft edits are free. Every change to a promoted document is gated: the agent has to state what it is doing and why, in its own words, and repeat that identical call before anything is written. Nothing can be changed silently, and a delete names the links it would break before it happens
 
@@ -64,13 +64,13 @@ Only 2 tools. AI discovers everything through responses.
 
 | Tool | Purpose |
 |------|---------|
-| `instruction_describe` | Show usage instructions and available actions |
+| `describe` | Show usage instructions and available actions |
 | `instruction` | Execute actions (list, read, add, update, delete, etc.) |
 
 ### Quick Start
 
 ```
-instruction_describe()     → Learn all available actions
+describe()     → Learn all available actions
 instruction()              → Show available action list
 instruction(action: "list") → List all documents
 instruction(action: "read", id: "doc-id") → Read a document
@@ -136,7 +136,7 @@ than prose — so they can be drawn.
 free choice — `orphaned-document` reports a document nothing links to, so parent to child leaves
 only the corpus's entry points unreferenced while child to parent leaves every leaf unreferenced.
 Two parents are allowed; cycles are reported. Directories are the other axis and are not repeated
-here: ids carry the hierarchy and `graph` draws it as node colour. `instruction_describe()` has
+here: ids carry the hierarchy and `graph` draws it as node colour. `describe()` has
 the whole of it.
 
 ```
@@ -393,13 +393,13 @@ re-reads the document first, so a change made in between is never silently overw
 ## Upgrading from 1.x
 
 Every tool name changed. 1.x exposed `description`, `help`, `draft` and `apply`; 2.0 exposes
-`instruction_describe` and `instruction`, and everything else is an action on `instruction`.
+`describe` and `instruction`, and everything else is an action on `instruction`.
 Anything naming the old tools — MCP client allow-lists, prompts, project instructions —
 needs rewriting.
 
 | 1.x | 2.0 |
 |---|---|
-| `description()` | `instruction_describe()` |
+| `description()` | `describe()` |
 | `help()` / `help(recursive: true)` | `instruction(action: "list")` / `… recursive: true` |
 | `help(id: "<id>")` | `instruction(action: "read", id: "<id>")` |
 | `draft(action: "list" \| "read" \| "add" \| "update" \| "delete" \| "rename")` | `instruction(action: <same>)` |

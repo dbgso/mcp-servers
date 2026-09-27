@@ -21,65 +21,52 @@ function toToolResult(response: ToolResponse): ToolResult {
 }
 
 /**
- * Build tool inputSchema from all handler schemas.
- * MCP SDK forces additionalProperties: false via objectFromShape(),
- * so all handler fields must be declared here.
- * This auto-generates from registry - no manual sync needed.
- */
-/**
- * The fields of a handler's schema, refinements and all.
+ * The `instruction` tool's input schema, which deliberately says nothing.
  *
- * `.refine` returns a `ZodEffects` wrapping the object, and a `ZodEffects` has
- * no `.shape` -- so reading `.shape` directly meant an action could not state a
- * condition between two of its arguments without taking every other action's
- * parameters off the tool with it. It kept the conditions in prose: `backlinks`
- * needs `id`, `set_status` needs one of `id` or `ids`, `update` needs at least
- * one field to change. Each was enforced by hand inside `doExecute`, or in one
- * case not at all.
+ * One tool serves sixteen actions, and MCP publishes one schema per tool. Every
+ * way of squeezing sixteen contracts into one is a lie of some kind, and this
+ * package tried two of them:
  *
- * The wrapper keeps what it wraps, so unwrapping recovers the shape while the
- * refinement stays where it belongs: `BaseActionHandler` validates with the
- * whole schema before dispatch.
+ * - Merging the actions' fields and keeping the first declaration of each name.
+ *   `id` is the document to act on for fifteen actions and the category to list
+ *   inside for `list`, and because `list` is registered first the tool advertised
+ *   "Parent ID to list documents under" as its meaning for all of them. Worse,
+ *   `sizeExemption` was nullable on `update` and not on `add`, so
+ *   `update(id, sizeExemption: null)` -- the documented way to remove the field --
+ *   was rejected at the tool boundary while the handler that would have accepted
+ *   it never ran.
+ * - A discriminated union on `action`, which expresses it exactly and cannot be
+ *   published: measured against SDK 1.26.0, `registerTool` validates one
+ *   correctly and then emits `{"type":"object","properties":{}}`, because the
+ *   conversion to JSON Schema does not handle unions and returns nothing rather
+ *   than failing.
+ *
+ * So the schema carries no argument information at all, and `describe`
+ * carries all of it. That is not a fallback: a schema that says nothing cannot be
+ * wrong about anything, and the per-action detail is better in a document fetched
+ * when it is needed than in a tool list read on every session -- the merged
+ * version of it was 4,647 characters, about 1,150 tokens, of which the accurate
+ * part was the field names.
+ *
+ * `passthrough` rather than an empty shape, and the difference matters: an empty
+ * shape publishes `properties: {}` and the SDK then *discards every argument*
+ * before the handler sees it, silently. `passthrough` publishes
+ * `additionalProperties: true`, which says "this takes arbitrary arguments", and
+ * hands them all over. Validation happens where the contract is: `BaseActionHandler`
+ * parses against the handler's own schema before dispatch, and each action's
+ * `help` and `describe` say what that schema wants.
  */
-export function objectShape(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | null {
-  let current: z.ZodTypeAny = schema;
-
-  // `.refine` can be applied more than once, and each one wraps again.
-  while (current instanceof z.ZodEffects) {
-    current = current.innerType() as z.ZodTypeAny;
-  }
-
-  return current instanceof z.ZodObject
-    ? (current.shape as Record<string, z.ZodTypeAny>)
-    : null;
-}
-
-function buildInputSchema(): Record<string, z.ZodTypeAny> {
-  const registry = getActionRegistry();
-  const merged: Record<string, z.ZodTypeAny> = {
-    action: z.string().optional(),
-  };
-
-  for (const action of registry.getActions()) {
-    const handler = registry.getHandler(action);
-    if (!handler || !("schema" in handler)) continue;
-    const shape = objectShape((handler as { schema: z.ZodTypeAny }).schema);
-    if (shape === null) continue;
-    for (const [key, value] of Object.entries(shape)) {
-      if (key === "action") continue;
-      if (!(key in merged)) {
-        merged[key] = (value as z.ZodTypeAny).optional();
-      }
-    }
-  }
-
-  return merged;
+function buildInputSchema(): z.ZodTypeAny {
+  return z.object({}).passthrough();
 }
 
 export function buildDescribeText(config: ReminderConfig): string {
-  return `# instruction_describe
+  return `# instruction
 
-This tool explains how to use the instruction tool.
+This is the whole of what \`instruction\` takes. Its own input schema names no
+argument on purpose -- one tool serves every action below, so a single schema
+would be wrong about most of them -- which makes this document the only place
+the arguments are written down.
 
 ## Available Actions
 
@@ -160,14 +147,14 @@ function buildHelpText(): string {
   if (actions.length === 0) {
     return `# instruction
 
-No actions available yet. Use \`instruction_describe()\` to see usage.`;
+No actions available yet. Use \`describe()\` to see usage.`;
   }
 
   return `# instruction
 
 Available actions: ${actions.join(", ")}
 
-Use \`instruction_describe()\` for detailed usage of each action.`;
+Use \`describe()\` for detailed usage of each action.`;
 }
 
 export function registerInstructionTools(params: {
@@ -179,11 +166,16 @@ export function registerInstructionTools(params: {
   const context: InstructionContext = { reader, config };
   const registry = getActionRegistry();
 
-  // Register instruction_describe tool
-  server.tool(
-    "instruction_describe",
-    "Show detailed usage instructions for the instruction tool. Call this first to understand how to use this MCP.",
-    {},
+  // `registerTool` rather than `tool`, which the SDK deprecates. It also
+  // publishes `required`, which the deprecated overload's all-optional shape
+  // could not express -- see `buildInputSchema` for why the merged schema keeps
+  // every field optional anyway, and where the requirement is stated instead.
+  server.registerTool(
+    "describe",
+    {
+      description:
+        "Show detailed usage instructions for the instruction tool. Call this first to understand how to use this MCP.",
+    },
     async () => {
       return wrapResponse({
         result: {
@@ -194,11 +186,15 @@ export function registerInstructionTools(params: {
     }
   );
 
-  // Register instruction tool
-  server.tool(
+  server.registerTool(
     "instruction",
-    "Manage documentation. Call without action to see available actions.",
-    buildInputSchema(),
+    {
+      description:
+        "Manage documentation. This tool's arguments are not described here -- call " +
+        "`describe()` for the actions and what each one takes. Calling " +
+        "`instruction` with no action lists them too.",
+      inputSchema: buildInputSchema(),
+    },
     async (rawParams) => {
       const action = typeof rawParams.action === "string" ? rawParams.action : undefined;
 
@@ -220,7 +216,7 @@ export function registerInstructionTools(params: {
             content: [
               {
                 type: "text" as const,
-                text: `Unknown action: "${action}"\n\nAvailable actions: ${registry.getActions().join(", ")}\n\nUse \`instruction_describe()\` for help.`,
+                text: `Unknown action: "${action}"\n\nAvailable actions: ${registry.getActions().join(", ")}\n\nUse \`describe()\` for help.`,
               },
             ],
             isError: true,

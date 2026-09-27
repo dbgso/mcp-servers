@@ -14,7 +14,7 @@ relatedDocs:
 
 What each action does, and which state it applies to.
 
-Every action is a call on the one `instruction` tool. `instruction_describe()`
+Every action is a call on the one `instruction` tool. `describe()`
 lists them with their arguments; this document is about the behaviour behind
 them.
 
@@ -78,7 +78,7 @@ points unreferenced, while child to parent leaves every leaf unreferenced -- and
 that is how a corpus ends up with a document's parents among its own children. Two parents
 are allowed and suggest the document belongs one level up; cycles are reported. The directory
 hierarchy is a separate axis, carried by the id and drawn as node colour, and is not repeated
-in `relatedDocs`. `instruction_describe` states all of this to the caller.
+in `relatedDocs`. `describe` states all of this to the caller.
 
 `approve`'s `targetId` and `notes` are single-promotion arguments. The batch form
 (`ids`) refuses a call carrying either: `targetId` names one document, and `notes` is one

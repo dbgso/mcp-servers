@@ -93,21 +93,35 @@ describe("over stdio", () => {
   it("offers the two tools, and no third", async () => {
     const { tools } = await client.listTools();
 
-    expect(tools.map((tool) => tool.name).sort()).toEqual(["instruction", "instruction_describe"]);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(["describe", "instruction"]);
   });
 
-  it("serialises one merged input schema for every action", async () => {
-    // The tool's inputSchema is assembled by merging every handler's `.shape`.
-    // A refinement on any one of them wraps the object in a type that has no
-    // shape, which takes out the parameters of every other action -- and the
-    // only place that is visible is the schema a client receives.
+  it("serialises a schema that names no argument, and takes them all", async () => {
+    // This asserted the opposite until the merged schema was given up. One tool
+    // serves sixteen actions and MCP publishes one schema per tool, so a merged
+    // one is wrong about something: it advertised `list`'s meaning of `id` for
+    // the fifteen actions that mean the document, and rejected
+    // `update(id, sizeExemption: null)` because `add` declared that field without
+    // `null`. `describe` carries the per-action detail instead.
+    //
+    // Over stdio specifically, because `additionalProperties` and the absence of
+    // `properties` are properties of what is serialised -- an in-process check
+    // reads the schema from the object it was built from.
     const { tools } = await client.listTools();
     const instruction = tools.find((tool) => tool.name === "instruction");
-    const properties = Object.keys(instruction?.inputSchema.properties ?? {});
 
-    expect(properties).toEqual(
-      expect.arrayContaining(["action", "id", "content", "description", "whenToUse", "relatedDocs", "notes", "explanation"])
-    );
+    expect(instruction?.inputSchema.properties).toEqual({});
+    expect(instruction?.inputSchema.additionalProperties).toBe(true);
+    expect(instruction?.inputSchema.required).toBeUndefined();
+  });
+
+  it("delivers an argument the schema never mentioned", async () => {
+    // The whole of what `passthrough` buys, across a real process boundary: an
+    // empty shape publishes the same empty `properties` and then discards every
+    // argument before the handler runs, silently.
+    const response = await call({ action: "read", id: "no-such-document" });
+
+    expect(response).toContain("no-such-document");
   });
 
   it("reads a threshold from the environment of its own process", async () => {
