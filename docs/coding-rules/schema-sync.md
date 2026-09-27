@@ -12,6 +12,14 @@ relatedDocs:
 
 # Schema Synchronization Rules
 
+> **Superseded by `policy__mcp-tool-surface` for any server that follows it.**
+> This document takes two schemas as given and prescribes how to keep them in
+> step. The policy removes the second one: a tool publishes no argument
+> information at all, so there is nothing to synchronise and nothing for a
+> consistency test to compare. What follows describes servers that have not moved
+> yet, and `interactive-pdca-mcp`'s `input-schema-fields.ts` and
+> `schema-consistency.test.ts` are the machinery it asks for.
+
 When using the handler pattern (ActionRegistry), ensure handler schemas and tool inputSchema remain synchronized.
 
 ## The Problem
