@@ -7,6 +7,8 @@ whenToUse:
 relatedDocs:
   - policy
   - workflow__measure-dont-assume
+  - workflow__constraint-ladder
+  - workflow__skill-as-trigger
 ---
 
 # Every Task Checklist
@@ -37,6 +39,8 @@ rule.
 - **DRY**: See `workflow__dry-principle`
 - **AST Tool Evolution**: See `workflow__ast-tool-evolution` - When you discover useful tools during development, add them to ast-*-mcp
 - **Measure rather than reason**: See `workflow__measure-dont-assume` - where a claim can be checked by running something, run it
+- **Constraint ladder**: See `workflow__constraint-ladder` - a mistake worth preventing gets the highest rung that can express it: type, lint, custom lint, test, then an iimcp rule
+- **Skills trigger, iimcp remembers**: See `workflow__skill-as-trigger` - a skill's body is one line pointing at the document that holds the procedure
 
 ## Coding Rules
 
