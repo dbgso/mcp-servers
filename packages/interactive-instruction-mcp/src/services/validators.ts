@@ -1,4 +1,5 @@
 import type { AddResult } from "./markdown-reader.js";
+import { checkDocumentId } from "./document-id.js";
 
 export interface Validator {
   validate(): AddResult;
@@ -73,6 +74,15 @@ export class ExistsValidator implements Validator {
   }
 }
 
+/**
+ * Rejects an id that cannot safely become a path.
+ *
+ * The rule itself lives in `document-id.ts`, which is also what
+ * `MarkdownReader.idToPath` enforces. Stating it twice is how this validator
+ * came to be dead code that disagreed with what the reader actually did.
+ * This exists so a caller gets the reason as a normal result rather than as a
+ * thrown error from deep inside a write.
+ */
 export class ValidIdValidator implements Validator {
   private readonly id: string;
 
@@ -81,23 +91,8 @@ export class ValidIdValidator implements Validator {
   }
 
   validate(): AddResult {
-    // ID must be non-empty and contain only valid characters
-    if (!this.id || this.id.trim() === "") {
-      return {
-        success: false,
-        error: "Document ID cannot be empty.",
-      };
-    }
-
-    // ID should only contain alphanumeric, hyphens, underscores, and double underscores for hierarchy
-    const validIdPattern = /^[a-zA-Z0-9_-]+(__[a-zA-Z0-9_-]+)*$/;
-    if (!validIdPattern.test(this.id)) {
-      return {
-        success: false,
-        error: `Invalid document ID "${this.id}". Use only letters, numbers, hyphens, and underscores. Use '__' for hierarchy.`,
-      };
-    }
-
-    return { success: true };
+    const check = checkDocumentId(this.id);
+    if (check.ok) return { success: true };
+    return { success: false, error: check.error };
   }
 }

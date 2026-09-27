@@ -37,7 +37,7 @@ describe("template-setup", () => {
 
   describe("setupSelfReviewTemplates", () => {
     it("copies templates when plan directory does not exist", async () => {
-      const result = await setupSelfReviewTemplates(testDir);
+      const result = await setupSelfReviewTemplates({ markdownDir: testDir });
 
       expect(result.action).toBe("copied_templates");
       expect(result.path).toContain("self-review");
@@ -53,7 +53,7 @@ describe("template-setup", () => {
       const planDir = path.join(testDir, "_mcp-interactive-instruction/plan");
       await fs.mkdir(planDir, { recursive: true });
 
-      const result = await setupSelfReviewTemplates(testDir);
+      const result = await setupSelfReviewTemplates({ markdownDir: testDir });
 
       expect(result.action).toBe("copied_templates");
       expect(result.path).toContain("self-review");
@@ -67,6 +67,24 @@ describe("template-setup", () => {
       expect(files).toContain("act.md");
     });
 
+    it("creates the directory empty when the package has no templates", async () => {
+      // What a broken or trimmed install sees. Creating the directory anyway
+      // is what stops the server asking again on every start; failing here
+      // would make the tool unusable over a missing default.
+      const emptyTemplates = await fs.mkdtemp(path.join(os.tmpdir(), "no-templates-"));
+
+      const result = await setupSelfReviewTemplates({
+        markdownDir: testDir,
+        templatesDir: emptyTemplates,
+      });
+
+      expect(result.action).toBe("created_empty");
+      expect(result.path).toContain("plan");
+      const stat = await fs.stat(result.path);
+      expect(stat.isDirectory()).toBe(true);
+      await fs.rm(emptyTemplates, { recursive: true, force: true });
+    });
+
     it("returns already_exists when self-review templates exist", async () => {
       // Create plan directory and self-review with a file
       const selfReviewDir = path.join(
@@ -76,7 +94,7 @@ describe("template-setup", () => {
       await fs.mkdir(selfReviewDir, { recursive: true });
       await fs.writeFile(path.join(selfReviewDir, "plan.md"), "# Test");
 
-      const result = await setupSelfReviewTemplates(testDir);
+      const result = await setupSelfReviewTemplates({ markdownDir: testDir });
 
       expect(result.action).toBe("already_exists");
     });
@@ -89,7 +107,7 @@ describe("template-setup", () => {
       );
       await fs.mkdir(selfReviewDir, { recursive: true });
 
-      const result = await setupSelfReviewTemplates(testDir);
+      const result = await setupSelfReviewTemplates({ markdownDir: testDir });
 
       expect(result.action).toBe("copied_templates");
     });
@@ -99,7 +117,7 @@ describe("template-setup", () => {
       const planDir = path.join(testDir, "_mcp-interactive-instruction/plan");
       await fs.mkdir(planDir, { recursive: true });
 
-      await setupSelfReviewTemplates(testDir);
+      await setupSelfReviewTemplates({ markdownDir: testDir });
 
       // Check plan.md content
       const planContent = await fs.readFile(
@@ -140,7 +158,7 @@ describe("template-setup", () => {
       const planDir = path.join(testDir, "_mcp-interactive-instruction/plan");
       await fs.mkdir(planDir, { recursive: true });
 
-      await setupSelfReviewTemplates(testDir);
+      await setupSelfReviewTemplates({ markdownDir: testDir });
 
       // Check that examples subdirectory was copied
       const examplesDir = path.join(planDir, "self-review/examples");

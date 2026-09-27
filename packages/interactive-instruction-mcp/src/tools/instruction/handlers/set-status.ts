@@ -9,14 +9,37 @@ import {
   stripFrontmatter,
 } from "../../../utils/frontmatter-parser.js";
 import type { DraftStatus } from "../../../types/index.js";
+import { draftWorkflowManager } from "../../../workflows/draft-workflow.js";
 
-const VALID_STATUSES: DraftStatus[] = ["editing", "self_review", "user_reviewing", "pending_approval"];
+/**
+ * Only `editing` can be set.
+ *
+ * This action used to accept every state and write it into the frontmatter --
+ * where nothing read it. The approve handler reads the workflow manager, so
+ * setting `pending_approval` here changed nothing except making the document
+ * disagree with the state machine, and a draft stuck mid-flow stayed stuck.
+ *
+ * Resetting to `editing` is the one thing a caller legitimately needs and the
+ * one direction that cannot skip a step: it discards the workflow entry so the
+ * draft starts the review over from the beginning. Moving forward is the state
+ * machine's business, through `approve`.
+ *
+ * The restriction lives in the zod schema rather than in a runtime check,
+ * because the schema is what the agent is shown. Advertising four states and
+ * refusing three of them at call time would keep offering an option that can
+ * never work.
+ */
+const RESETTABLE_STATUS = "editing";
 
 const schema = z.object({
   action: z.literal("set_status"),
   id: z.string().optional().describe("Single draft ID"),
   ids: z.string().optional().describe("Comma-separated draft IDs for batch"),
-  status: z.enum(["editing", "self_review", "user_reviewing", "pending_approval"]).describe("Target status"),
+  status: z
+    .literal(RESETTABLE_STATUS)
+    .describe(
+      `Target status. Only "${RESETTABLE_STATUS}" is accepted: the later states belong to the approval workflow and are reached through \`approve\`. Writing one here would change the frontmatter and nothing else, since the workflow reads its own state.`
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -24,13 +47,14 @@ type Args = z.infer<typeof schema>;
 
 export class SetStatusHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "set_status";
-  readonly help = `Set the workflow status of one or more drafts.
+  readonly help = `Reset one or more drafts to the start of the review workflow.
 
 Usage:
 - Single: \`instruction(action: "set_status", id: "doc-id", status: "editing")\`
 - Batch:  \`instruction(action: "set_status", ids: "id1,id2", status: "editing")\`
 
-Valid statuses: ${VALID_STATUSES.join(", ")}`;
+Only "${RESETTABLE_STATUS}" can be set. The later states are reached by going
+through \`approve\`, not by declaring them.`;
 
   readonly schema = schema;
 
@@ -65,7 +89,15 @@ Valid statuses: ${VALID_STATUSES.join(", ")}`;
       const content = await reader.getDocumentContent(draftId);
 
       if (content === null) {
-        results.push(`- ${targetId}: not found`);
+        // Out of scope and absent are different facts. A promoted document
+        // exists; it simply has no workflow state to reset, and reporting that
+        // as "not found" sends the caller off to re-check an id that was right.
+        const promoted = await reader.documentExists(targetId);
+        results.push(
+          promoted
+            ? `- ${targetId}: promoted, so it has no workflow state to reset`
+            : `- ${targetId}: not found`
+        );
         errorCount++;
         continue;
       }
@@ -93,6 +125,9 @@ Valid statuses: ${VALID_STATUSES.join(", ")}`;
       });
 
       if (updateResult.success) {
+        // The frontmatter is a mirror; this is the state that actually governs
+        // what `approve` will allow next.
+        await draftWorkflowManager.delete({ id: targetId });
         results.push(`- ${targetId}: ${oldStatus} -> ${status}`);
         successCount++;
       } else {
@@ -101,22 +136,43 @@ Valid statuses: ${VALID_STATUSES.join(", ")}`;
       }
     }
 
+    // Chosen by what happened, not by how many were asked for. Picking on the
+    // count alone printed `Status updated for "x".` above a detail line saying
+    // `x: not found`, with no `isError` anywhere.
     const summary =
-      targetIds.length === 1
-        ? `Status updated for "${targetIds[0]}".`
-        : `Batch status update: ${successCount} succeeded, ${errorCount} failed.`;
+      errorCount === 0
+        ? targetIds.length === 1
+          ? `Status updated for "${targetIds[0]}".`
+          : `Batch status update: ${successCount} succeeded.`
+        : successCount === 0
+          ? targetIds.length === 1
+            ? `Could not set the status of "${targetIds[0]}".`
+            : `Batch status update: none of ${errorCount} succeeded.`
+          : `Batch status update: ${successCount} succeeded, ${errorCount} failed.`;
 
-    return textResponse(
+    const respond = errorCount === 0 ? textResponse : errorResponse;
+
+    return respond(
       `# Set Status Result
 
 ${summary}
 
 ## Details
 ${results.join("\n")}` +
-      formatNextActions([
-        { action: "list", description: "View all documents", example: `instruction(action: "list")` },
-        { action: "read", description: "Read a draft", example: `instruction(action: "read", id: "${targetIds[0]}")` },
-      ]),
+      // Suggesting `read` on the id that just failed sends the caller back to
+      // the thing that did not work. Offer the listing that would have shown
+      // which ids are drafts in the first place.
+      formatNextActions(
+        errorCount === 0
+          ? [
+              { action: "read", description: "Read the draft", example: `instruction(action: "read", id: "${targetIds[0]}")` },
+              { action: "list", description: "List the drafts", example: 'instruction(action: "list", drafts: true)' },
+            ]
+          : [
+              { action: "list", description: "See which ids are drafts", example: 'instruction(action: "list", drafts: true)' },
+              { action: "list", description: "See the promoted documents", example: 'instruction(action: "list", recursive: true)' },
+            ]
+      ),
     );
   }
 }

@@ -9,7 +9,14 @@ import { writeFileSync, unlinkSync, existsSync } from "node:fs";
 // child process — cannot read it. Pin it deterministically via
 // MCP_APPROVAL_TEST_TOKEN and use that value to simulate the human relaying the
 // notified token.
+//
+// NODE_ENV has to go with it. The override is only honored under a test run,
+// because the variable is readable by anything sharing a process's environment
+// — including the agent whose request is being gated — so a copy left over in a
+// shell from a run like this one must not quietly fix the token of a real
+// server started from that same shell.
 const APPROVAL_TOKEN = "4242";
+const APPROVAL_TEST_ENV = { MCP_APPROVAL_TEST_TOKEN: APPROVAL_TOKEN, NODE_ENV: "test" };
 
 const DIST_DIR = join(import.meta.dirname, "../../dist");
 const FIXTURES_DIR = join(import.meta.dirname, "fixtures");
@@ -71,7 +78,7 @@ describe("mcp-firewall Integration Tests", () => {
         "--rules-file",
         rulesFilePath,
       ],
-      env: { ...getDefaultEnvironment(), MCP_APPROVAL_TEST_TOKEN: APPROVAL_TOKEN },
+      env: { ...getDefaultEnvironment(), ...APPROVAL_TEST_ENV },
       stderr: "pipe",
     });
 
@@ -431,7 +438,7 @@ describe("mcp-firewall Ask Action", () => {
         "--rules-file",
         rulesFilePath,
       ],
-      env: { ...getDefaultEnvironment(), MCP_APPROVAL_TEST_TOKEN: APPROVAL_TOKEN },
+      env: { ...getDefaultEnvironment(), ...APPROVAL_TEST_ENV },
       stderr: "pipe",
     });
 

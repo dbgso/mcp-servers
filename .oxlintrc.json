@@ -1,7 +1,13 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc"],
-  "jsPlugins": ["./eslint-rules/index.js"],
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc"
+  ],
+  "jsPlugins": [
+    "./eslint-rules/index.js"
+  ],
   "ignorePatterns": [
     "node_modules/**",
     "**/node_modules/**",
@@ -17,7 +23,12 @@
     "builtin": true
   },
   "rules": {
-    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_"
+      }
+    ],
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "prefer-const": "error",
@@ -26,21 +37,41 @@
       {
         "maxParams": 1,
         "ignoreConstructors": true,
-        "ignoreMethods": ["execute", "action", "check"]
+        "ignoreMethods": [
+          "execute",
+          "action",
+          "check"
+        ]
       }
     ],
     "custom/implement-interface-with-class": "warn",
     "no-useless-escape": "off",
     "typescript/no-this-alias": "off",
-    "unicorn/prefer-string-starts-ends-with": "off"
+    "unicorn/prefer-string-starts-ends-with": "off",
+    "custom/no-branching-literal": [
+      "warn",
+      {
+        "maxLines": 3
+      }
+    ],
+    "complexity": [
+      "warn",
+      3
+    ]
   },
   "overrides": [
     {
-      "files": ["packages/**/__tests__/**/*.ts", "packages/**/*.test.ts"],
+      "files": [
+        "packages/**/__tests__/**",
+        "packages/**/*.test.ts",
+        "packages/**/*.test.mjs"
+      ],
       "rules": {
         "custom/single-params-object": "off",
         "custom/implement-interface-with-class": "off",
-        "typescript/no-non-null-assertion": "off"
+        "typescript/no-non-null-assertion": "off",
+        "complexity": "off",
+        "custom/no-branching-literal": "off"
       }
     }
   ]

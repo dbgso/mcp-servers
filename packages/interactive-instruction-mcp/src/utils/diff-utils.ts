@@ -1,11 +1,19 @@
 import { createTwoFilesPatch } from "diff";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import * as os from "node:os";
+import * as crypto from "node:crypto";
+import { scopedStateDir } from "../services/instance-scope.js";
 
 // Overridable via env so parallel test workers can each get an isolated store.
-const DIFF_DIR =
-  process.env.MCP_INSTRUCTION_DIFF_DIR ?? path.join(os.tmpdir(), "mcp-instruction-diffs");
+const DIFF_BASE = "mcp-instruction-diffs";
+
+function diffDir(docsDir: string): string {
+  return scopedStateDir({
+    base: DIFF_BASE,
+    docsDir,
+    override: process.env.MCP_INSTRUCTION_DIFF_DIR,
+  });
+}
 
 export interface DiffOptions {
   /** Original file name for header */
@@ -69,18 +77,34 @@ export function formatDiffForDisplay(diff: string): string {
 export async function writeDiffToFile(params: {
   diff: string;
   id: string;
+  docsDir: string;
 }): Promise<string> {
-  const { diff, id } = params;
+  const { diff, id, docsDir } = params;
 
-  await fs.mkdir(DIFF_DIR, { recursive: true });
+  const dir = diffDir(docsDir);
+  await fs.mkdir(dir, { recursive: true });
 
-  // Sanitize id for filename
-  const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const timestamp = Date.now();
-  const filename = `${safeId}_${timestamp}.diff`;
-  const filePath = path.join(DIFF_DIR, filename);
+  // Percent-encoded rather than character-replaced, so two ids cannot share a
+  // name, plus a random suffix: the name used to be `${safeId}_${Date.now()}`,
+  // and two updates within the same millisecond overwrote each other's diff.
+  const suffix = crypto.randomBytes(4).toString("hex");
+  const filename = `${encodeURIComponent(id)}_${Date.now()}_${suffix}.diff`;
+  const filePath = path.join(dir, filename);
 
   await fs.writeFile(filePath, diff, "utf-8");
 
   return filePath;
+}
+
+/**
+ * Remove a diff file, if it is still there. Cleanup is best-effort by design:
+ * a missing diff is not a reason to fail the operation that owns it.
+ */
+export async function removeDiffFile(filePath: string | undefined): Promise<void> {
+  if (!filePath) return;
+  try {
+    await fs.unlink(filePath);
+  } catch {
+    // Already gone.
+  }
 }

@@ -5,11 +5,9 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import {
-  requestApproval,
-  validateApproval,
-  type ApprovalRequest,
-} from "../utils/approval/core.js";
+// Type-only: importing these as values is what dragged `node-notifier` into
+// every bundle that touched the workflow engine.
+import type { ApprovalRequest } from "../utils/approval/core.js";
 import {
   isSerializedWorkflowState,
   type WorkflowDefinition,
@@ -20,10 +18,40 @@ import {
   type SerializedWorkflowState,
   type LoadWorkflowResult,
   type ContextWithVisitedStates,
+  type WorkflowApproval,
 } from "../types/workflow.js";
 import { getErrorMessage } from "../utils/error.js";
 
 const DEFAULT_PERSIST_DIR = path.join(os.tmpdir(), "mcp-workflow");
+
+/**
+ * Filename a workflow instance's state is persisted under.
+ *
+ * Percent-encoding is what makes this safe to reverse: it is injective, so two
+ * ids can never land on the same file, and `instanceIdFromStateFileName` can
+ * recover the id exactly. An earlier version collapsed `__` to `_` on the way
+ * in and doubled every `_` on the way out, which meant state was written under
+ * one name and looked for under another, and ids came back mangled.
+ *
+ * Ids made only of unreserved characters (the common case) encode to
+ * themselves, so this keeps reading the files the old save path wrote.
+ */
+export function workflowStateFileName(instanceId: string): string {
+  return `${encodeURIComponent(instanceId)}.json`;
+}
+
+/**
+ * Inverse of `workflowStateFileName`. Returns null for a name that this module
+ * did not write, rather than guessing at an id.
+ */
+export function instanceIdFromStateFileName(fileName: string): string | null {
+  if (!fileName.endsWith(".json")) return null;
+  try {
+    return decodeURIComponent(fileName.slice(0, -".json".length));
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Create a workflow instance
@@ -34,6 +62,7 @@ const DEFAULT_PERSIST_DIR = path.join(os.tmpdir(), "mcp-workflow");
  * @param params.options.instanceId - Custom instance ID (default: auto-generated)
  * @param params.options.persistDir - Directory for saving state (default: system temp)
  * @param params.options.approvalOptions - Options for approval requests
+ * @param params.options.approval - Approval flow for `requiresApproval` transitions
  * @returns A workflow instance with trigger, canTrigger, serialize, and save methods
  */
 export function createWorkflowInstance<
@@ -50,6 +79,7 @@ export function createWorkflowInstance<
     instanceId = `${definition.id}-${Date.now()}`,
     persistDir = DEFAULT_PERSIST_DIR,
     approvalOptions,
+    approval,
     restoredState,
     restoredVisitedStates,
     restoredCreatedAt,
@@ -121,8 +151,23 @@ export function createWorkflowInstance<
   async function handleApproval(args: {
     approvalToken: string | undefined;
     approvalRequestId: string;
+    approval: WorkflowApproval | undefined;
   }): Promise<TransitionResult<TState> | null> {
-    const { approvalToken, approvalRequestId } = args;
+    const { approvalToken, approvalRequestId, approval } = args;
+
+    // A transition that wants approval, in a workflow given no way to obtain
+    // it, must not proceed. Saying so beats the alternatives: importing a
+    // default flow here is what coupled every consumer to the notifier, and
+    // treating the absence as "approved" would turn a misconfiguration into an
+    // ungated write.
+    if (approval === undefined) {
+      return {
+        ok: false,
+        error:
+          "This transition requires approval, but the workflow was created without an `approval` flow. Pass one in `WorkflowInstanceOptions.approval` -- `tokenWorkflowApproval` from `mcp-shared/approval` is the token-and-notification implementation.",
+        errorType: "approval_invalid",
+      };
+    }
 
     if (!approvalToken) {
       // Request approval
@@ -132,7 +177,7 @@ export function createWorkflowInstance<
         description: `Transition from "${currentState}"`,
       };
 
-      const { fallbackPath } = await requestApproval({
+      const { fallbackPath } = await approval.request({
         request: approvalRequest,
         options: approvalOptions,
       });
@@ -147,7 +192,7 @@ export function createWorkflowInstance<
     }
 
     // Validate approval token
-    const approvalResult = validateApproval({
+    const approvalResult = approval.validate({
       requestId: approvalRequestId,
       providedToken: approvalToken,
     });
@@ -174,7 +219,14 @@ export function createWorkflowInstance<
       return currentState;
     },
     get context() {
-      return { ...context };
+      // Deep, not `{ ...context }`. The getter exists so a caller cannot edit
+      // the workflow's state without a transition, and a shallow copy only
+      // achieves that for primitive fields -- an array or object in the
+      // context stayed shared, so `instance.context.items.push(...)` reached
+      // straight through. Anything a context may hold is already required to
+      // survive `JSON.stringify` in `save()`, so cloning it structurally
+      // cannot reject a context this engine otherwise supports.
+      return structuredClone(context);
     },
     get visitedStates() {
       return [...visitedStates];
@@ -232,7 +284,7 @@ export function createWorkflowInstance<
       const needsApproval = isApprovalRequired({ transition, triggerParams });
       if (needsApproval) {
         const approvalRequestId = `${instanceId}-${currentState}`;
-        const approvalResult = await handleApproval({ approvalToken, approvalRequestId });
+        const approvalResult = await handleApproval({ approvalToken, approvalRequestId, approval });
         if (approvalResult) {
           return approvalResult;
         }
@@ -288,7 +340,7 @@ export function createWorkflowInstance<
 
     async save(filePath?: string): Promise<string> {
       const targetPath =
-        filePath ?? path.join(persistDir, `${instanceId}.json`);
+        filePath ?? path.join(persistDir, workflowStateFileName(instanceId));
 
       await fs.mkdir(path.dirname(targetPath), { recursive: true });
       const serialized = instance.serialize();

@@ -16,19 +16,20 @@ export default defineConfig({
         "**/*.d.ts",
         "**/node_modules/**",
       ],
+      // The project standard, per `coding-rules__test-coverage`. This package
+      // carried 85/70/95/85 instead, with a comment calling that "realistic
+      // for code with I/O error handling" -- but the gap was not error
+      // handling. It was the AsciiDoc block converter and serialiser, whose
+      // arms the integration suite never reached, and where two of them were
+      // silently dropping content on write.
+      //
+      // The per-file rule for `src/tools/handlers/*.ts` (90/85/90/90) is gone:
+      // a rule below the global one only ever restates it.
       thresholds: {
-        // Global thresholds - realistic for code with I/O error handling
-        statements: 85,
-        branches: 70,
+        statements: 95,
+        branches: 95,
         functions: 95,
-        lines: 85,
-        // Per-file thresholds for tool handlers
-        "src/tools/handlers/*.ts": {
-          statements: 90,
-          branches: 85,
-          functions: 90,
-          lines: 90,
-        },
+        lines: 95,
       },
     },
   },

@@ -78,6 +78,9 @@ export function buildLayoutSpec(params: {
     fit: true,
     padding: FIT_PADDING,
     spacingFactor: spacing,
+    // Set here rather than in each `buildSpec`, so a layout added to the cose
+    // family declares one flag and cannot be the one that forgot the line.
+    ...(resolved.sizesNodesByLabel ? { nodeDimensionsIncludeLabels: true } : {}),
     ...resolved.buildSpec({ options: layout, spacing, positions, clusters }),
   };
 }

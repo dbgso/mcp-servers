@@ -1,0 +1,22 @@
+# Promoting drafts one at a time while another is still waiting.
+#
+# This sequence was impossible without `force` until now: the consecutive-approval
+# warning refused the second draft outright, and the only way past it was an
+# argument with no `.describe()` whose heaviest user had become this package's own
+# test suite, silencing a warning the tests provoked by running fast.
+#
+# It is a note appended to the answer now. What it protects is the account the user
+# gets -- one explanation covering related drafts rather than one per document --
+# and not the safety of the write, which the deliberation gate holds either way.
+{"server": {"args": ["{{TMPDIR}}"]}}
+
+{"call": "instruction", "args": {"action": "add", "id": "one", "content": "# One", "description": "the first half", "whenToUse": ["the first half"]}}
+{"call": "instruction", "args": {"action": "add", "id": "two", "content": "# Two", "description": "the second half", "whenToUse": ["the second half"]}}
+{"call": "instruction", "args": {"action": "approve", "id": "one", "notes": "Reviewed: one topic, ready"}}
+{"call": "instruction", "args": {"action": "approve", "id": "two", "notes": "Reviewed: one topic, ready"}}
+
+{"call": "instruction", "label": "nothing else waiting: no note", "args": {"action": "approve", "id": "one", "explanation": "One records the first half."}, "expect": ["Not Yet"], "expectNot": ["may belong together"]}
+{"call": "instruction", "label": "one is waiting: the note rides along with the gate's answer", "args": {"action": "approve", "id": "two", "explanation": "Two records the second half."}, "expect": ["Not Yet -- Tell the User First", "may belong together", "ids: \"one,two\""]}
+{"call": "instruction", "label": "and the batch it names is still open", "args": {"action": "approve", "ids": "one,two", "explanation": "Both halves, promoted together."}, "expect": ["Not Yet"], "expectNot": ["cannot", "have not been reviewed"]}
+{"call": "instruction", "label": "which promotes on the repeat", "args": {"action": "approve", "ids": "one,two", "explanation": "Both halves, promoted together."}, "expect": ["promoted"]}
+{"call": "instruction", "label": "both are in the corpus", "args": {"action": "list"}, "expect": ["one", "two"], "expectNot": ["No markdown documents"]}

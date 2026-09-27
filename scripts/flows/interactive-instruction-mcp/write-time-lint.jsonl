@@ -1,0 +1,20 @@
+# What `add` and `update` say about the document they just wrote.
+#
+#   node scripts/mcp-session.mjs interactive-instruction-mcp \
+#     scripts/flows/interactive-instruction-mcp/write-time-lint.jsonl
+#
+# The threshold is declared below rather than passed on the command line, so the
+# flow carries the invocation it was written against -- and running it proves
+# the environment reaches the server process at all.
+
+{"server": {"args": ["{{TMPDIR}}"], "env": {"IIMCP_LINT_MAX_LINES": "20"}}}
+
+{"call": "instruction", "label": "add: 30 lines, limit 20", "args": {"action": "add", "id": "too-long", "content": "L1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\nL10\nL11\nL12\nL13\nL14\nL15\nL16\nL17\nL18\nL19\nL20\nL21\nL22\nL23\nL24\nL25\nL26\nL27\nL28\nL29\nL30", "description": "Over the configured limit on the day it is written", "whenToUse": ["exercising write-time lint"]}, "expect": ["created successfully", "document-too-large", "max recommended: 20"]}
+
+{"call": "instruction", "label": "read: the document was saved anyway", "args": {"action": "read", "id": "too-long"}, "expect": ["L30"]}
+
+{"call": "instruction", "label": "update: split it down to one topic", "args": {"action": "update", "id": "too-long", "content": "# Short\n\nOne topic."}, "expect": ["updated successfully"], "expectNot": ["## Lint"]}
+
+{"call": "instruction", "label": "update: long again, and a heading that comes back", "args": {"action": "update", "id": "too-long", "content": "## Related\n\nOne.\n\n## Related\n\nTwo.\n\nL1\nL2\nL3\nL4\nL5\nL6\nL7\nL8\nL9\nL10\nL11\nL12\nL13\nL14\nL15\nL16\nL17\nL18\nL19\nL20\nL21\nL22\nL23\nL24\nL25"}, "expect": ["document-too-large", "duplicate-heading"]}
+
+{"call": "instruction", "label": "add: a document within the limit says nothing", "args": {"action": "add", "id": "short", "content": "# Short\n\nOne topic, said once.", "description": "Within the limit", "whenToUse": ["the quiet path"]}, "expectNot": ["## Lint"]}

@@ -8,7 +8,11 @@ import { errorResponse } from "mcp-shared";
 import { getToolRegistry } from "./tools/index.js";
 import { VERSION } from "./version.js";
 
-const server = new Server(
+/**
+ * Exported so the tool routing can be driven over an in-memory transport.
+ * `startServer` is the only other way in, and it binds this process's stdin.
+ */
+export const server = new Server(
   {
     name: "ast-typescript-mcp",
     version: VERSION,
