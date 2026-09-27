@@ -124,6 +124,38 @@ describe("lint", () => {
     expect(await text(lint, { action: "lint" })).toContain("orphaned-document");
   });
 
+  it("reports a passage two documents share word for word", async () => {
+    // `similar-documents` compares the id and `whenToUse` only, so two
+    // documents can share a hundred lines of body and neither the title nor the
+    // metadata says so.
+    const shared = Array.from({ length: 10 }, (_, i) => `Step ${i + 1}.`).join("\n");
+    await write({ id: "procedure", body: `# Procedure\n\n${shared}` });
+    await write({ id: "guide", body: `# Guide\n\nSomething else.\n\n${shared}\n\nAnd more.` });
+
+    const report = await text(lint, { action: "lint" });
+
+    expect(report).toContain("copied-content");
+    expect(report).toContain("10 lines are identical");
+  });
+
+  it("says nothing about a passage shorter than the threshold", async () => {
+    // A shared heading and a two-line preamble are what writing about the same
+    // thing looks like, not a copy.
+    await write({ id: "one", body: "# One\n\nShared line.\nAnother shared line." });
+    await write({ id: "two", body: "# Two\n\nShared line.\nAnother shared line." });
+
+    expect(await text(lint, { action: "lint" })).not.toContain("copied-content");
+  });
+
+  it("does not compare a draft against the corpus for copies", async () => {
+    // A draft is usually a copy of what it will replace; that is the point.
+    const shared = Array.from({ length: 10 }, (_, i) => `Step ${i + 1}.`).join("\n");
+    await write({ id: "procedure", body: `# Procedure\n\n${shared}` });
+    await write({ id: `${DRAFT_DIR}__procedure`, body: `# Procedure\n\n${shared}` });
+
+    expect(await text(lint, { action: "lint" })).not.toContain("copied-content");
+  });
+
   it("still holds a promoted document to both", async () => {
     await write({ id: "promoted", body: longBody });
 

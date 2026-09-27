@@ -5,11 +5,15 @@ import { formatNextActions, textResponse } from "../types.js";
 import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import {
   checkDocument,
+  comparableBody,
+  configuredMinDuplicateLines,
   configuredSimilarityThreshold,
+  longestSharedRun,
   severityIcon,
   type LintIssue,
 } from "../../../services/document-lint.js";
 import type { MarkdownSummary } from "../../../types/index.js";
+import type { MarkdownReader } from "../../../services/markdown-reader.js";
 
 const schema = z.object({
   action: z.literal("lint"),
@@ -88,6 +92,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
     // Corpus-wide: properties of the set, which no single write can decide.
     issues.push(...this.checkOrphanedDocs({ documents: corpus }));
     issues.push(...this.checkSimilarDocs({ documents: corpus }));
+    issues.push(...(await this.checkCopiedContent({ reader, documents: corpus })));
     issues.push(...this.checkCircularReferences({ documents: corpus }));
 
     if (issues.length === 0) {
@@ -156,6 +161,59 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
           docId: doc.id,
           rule: "orphaned-document",
           message: "Not referenced by any other document (consider adding relatedDocs)",
+        });
+      }
+    }
+
+    return issues;
+  }
+
+  /**
+   * Passages one document has in common with another, word for word.
+   *
+   * `similar-documents` compares the id and `whenToUse`, so two documents can
+   * share a hundred lines of body and neither the title nor the metadata says
+   * so. That is how the same procedure ends up maintained in two places: the
+   * copy is found when one of them is edited and the other is not, which is
+   * exactly when finding it is too late.
+   *
+   * Reported as one issue per pair, naming where the run starts in the first of
+   * them, because the fix is a single decision about the pair.
+   */
+  private async checkCopiedContent(params: {
+    reader: MarkdownReader;
+    documents: MarkdownSummary[];
+  }): Promise<LintIssue[]> {
+    const { reader, documents } = params;
+    const minLines = configuredMinDuplicateLines();
+    const issues: LintIssue[] = [];
+
+    const bodies = new Map<string, string[]>();
+    for (const doc of documents) {
+      const content = await reader.getDocumentContent(doc.id);
+      if (content === null) continue;
+      bodies.set(doc.id, comparableBody(content));
+    }
+
+    const ids = [...bodies.keys()];
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = bodies.get(ids[i]) ?? [];
+        const b = bodies.get(ids[j]) ?? [];
+        // Nothing to find in a document shorter than the threshold.
+        if (a.length < minLines || b.length < minLines) continue;
+
+        const { lines, at } = longestSharedRun({ a, b });
+        if (lines < minLines) continue;
+
+        issues.push({
+          severity: "warning",
+          docId: displayId(ids[i]),
+          rule: "copied-content",
+          message:
+            `${lines} lines are identical to "${displayId(ids[j])}", starting at line ${at}. ` +
+            "Two copies of a passage are maintained separately whether anyone means them to be: " +
+            "keep it in one of them and link, or say in both why the repetition is deliberate.",
         });
       }
     }

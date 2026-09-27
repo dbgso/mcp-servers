@@ -100,14 +100,14 @@ instruction(action: "read", id: "doc-id") → Read a document
 
 **Metadata & Quality**
 - `link_add` / `link_remove` — Manage related document links, on a draft or a promoted document (deliberation gate, drafts included). `relatedDocs` names documents by their plain id either way
-- `lint` — Check document quality: missing metadata, orphans, size, similarity, circular
-  references, and repeated headings. A draft is held to the rules it can answer on its own; the
+- `lint` — Check document quality: missing metadata, orphans, size, similarity, copied passages,
+  circular references, and repeated headings. A draft is held to the rules it can answer on its own; the
   corpus-wide ones wait until it is promoted. A document that is deliberately long declares
   `sizeExemption: <why>` in its frontmatter. The rules a single document can answer on its own
   — size, repeated headings, missing metadata — are also reported by `add` and `update` as they
   write, so the author hears them while they still remember why the document has the shape it
-  has. The write succeeds either way. Thresholds: `IIMCP_LINT_MAX_LINES` (default 150) and
-  `IIMCP_LINT_SIMILARITY` (default 0.6); an unreadable or out-of-range value falls back to the
+  has. The write succeeds either way. Thresholds: `IIMCP_LINT_MAX_LINES` (default 150),
+  `IIMCP_LINT_SIMILARITY` (default 0.6) and `IIMCP_LINT_MIN_DUPLICATE_LINES` (default 8); an unreadable or out-of-range value falls back to the
   default rather than stopping the server
 - `set_status` — Reset drafts to `editing`, discarding their workflow state (single `id` or batch `ids`)
 - `read_meta` — Read a document's metadata -- a draft's as well as a promoted one's -- alongside

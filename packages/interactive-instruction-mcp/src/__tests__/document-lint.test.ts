@@ -9,6 +9,9 @@
 import { describe, it, expect, afterEach } from "vitest";
 import {
   checkDocument,
+  comparableBody,
+  configuredMinDuplicateLines,
+  longestSharedRun,
   configuredMaxLines,
   configuredSimilarityThreshold,
   formatWriteLint,
@@ -263,3 +266,67 @@ describe("formatWriteLint", () => {
     expect(section).toContain("The document was saved.");
   });
 });
+
+describe("configuredMinDuplicateLines", () => {
+  const original = process.env.IIMCP_LINT_MIN_DUPLICATE_LINES;
+
+  afterEach(() => {
+    if (original === undefined) delete process.env.IIMCP_LINT_MIN_DUPLICATE_LINES;
+    else process.env.IIMCP_LINT_MIN_DUPLICATE_LINES = original;
+  });
+
+  it("defaults to 8", () => {
+    delete process.env.IIMCP_LINT_MIN_DUPLICATE_LINES;
+    expect(configuredMinDuplicateLines()).toBe(8);
+  });
+
+  it.each(["2", "20"])("takes %o from the environment", (value) => {
+    process.env.IIMCP_LINT_MIN_DUPLICATE_LINES = value;
+    expect(configuredMinDuplicateLines()).toBe(Number(value));
+  });
+
+  it.each(["1", "0", "-3", "eight", "", "8.5"])("ignores %o and keeps the default", (value) => {
+    // Below two there is no run to speak of, and a typo must not stop the
+    // server.
+    process.env.IIMCP_LINT_MIN_DUPLICATE_LINES = value;
+    expect(configuredMinDuplicateLines()).toBe(8);
+  });
+});
+
+describe("comparableBody", () => {
+  it("drops the frontmatter, the blanks and the indentation", () => {
+    // Two documents are the same passage whatever an editor did to the
+    // whitespace between them.
+    const body = comparableBody("---\ndescription: d\n---\n\n# Title\n\n  indented\n\n\nlast\n");
+
+    expect(body).toEqual(["# Title", "indented", "last"]);
+  });
+});
+
+describe("longestSharedRun", () => {
+  it("finds the run and where it starts", () => {
+    const a = ["intro", "one", "two", "three", "outro"];
+    const b = ["different", "one", "two", "three", "also different"];
+
+    expect(longestSharedRun({ a, b })).toEqual({ lines: 3, at: 2 });
+  });
+
+  it("finds the longest of several runs, not the first", () => {
+    const a = ["x", "y", "gap", "p", "q", "r"];
+    const b = ["x", "y", "other", "p", "q", "r"];
+
+    expect(longestSharedRun({ a, b })).toEqual({ lines: 3, at: 4 });
+  });
+
+  it.each([
+    { name: "nothing in common", a: ["a"], b: ["b"], lines: 0 },
+    { name: "an empty side", a: [], b: ["a", "b"], lines: 0 },
+  ])("reports no run for $name", ({ a, b, lines }) => {
+    expect(longestSharedRun({ a, b }).lines).toBe(lines);
+  });
+
+  it("counts a run that is the whole of both", () => {
+    expect(longestSharedRun({ a: ["a", "b"], b: ["a", "b"] })).toEqual({ lines: 2, at: 1 });
+  });
+});
+
