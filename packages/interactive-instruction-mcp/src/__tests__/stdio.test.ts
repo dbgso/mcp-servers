@@ -93,7 +93,7 @@ describe("over stdio", () => {
   it("offers the two tools, and no third", async () => {
     const { tools } = await client.listTools();
 
-    expect(tools.map((tool) => tool.name).sort()).toEqual(["instruction", "instruction_describe"]);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(["describe", "instruction"]);
   });
 
   it("serialises a schema that names no argument, and takes them all", async () => {
@@ -102,7 +102,7 @@ describe("over stdio", () => {
     // one is wrong about something: it advertised `list`'s meaning of `id` for
     // the fifteen actions that mean the document, and rejected
     // `update(id, sizeExemption: null)` because `add` declared that field without
-    // `null`. `instruction_describe` carries the per-action detail instead.
+    // `null`. `describe` carries the per-action detail instead.
     //
     // Over stdio specifically, because `additionalProperties` and the absence of
     // `properties` are properties of what is serialised -- an in-process check

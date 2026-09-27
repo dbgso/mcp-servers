@@ -28,7 +28,7 @@ const config: ReminderConfig = {
 
 const describeText = buildDescribeText(config);
 
-describe("instruction_describe answers what shape the corpus should take", () => {
+describe("describe answers what shape the corpus should take", () => {
   it.each([
     { question: "which direction an edge runs", expected: "Edges run parent to child" },
     { question: "why that direction", expected: "orphaned-document" },

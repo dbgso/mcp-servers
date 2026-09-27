@@ -12,7 +12,7 @@
 {"server": {"args": ["{{TMPDIR}}"]}}
 
 {"tools": true, "label": "0. the tools on offer"}
-{"call": "instruction_describe", "label": "0b. describe", "args": {}, "expect": ["Available Actions", "read_meta"]}
+{"call": "describe", "label": "0b. describe", "args": {}, "expect": ["Available Actions", "read_meta"]}
 
 {"call": "instruction", "label": "1. list: an empty corpus", "args": {"action": "list"}, "expect": ["No markdown documents found"]}
 

@@ -1,5 +1,5 @@
 /**
- * What `instruction_describe` promises, against what the schemas accept.
+ * What `describe` promises, against what the schemas accept.
  *
  * The describe text is the only thing an agent reads before its first call,
  * and it is hand-written prose next to machine-checked schemas -- so it can
@@ -52,7 +52,7 @@ function mentions(params: { action: string; param: string; help: string }): bool
   );
 }
 
-describe("instruction_describe", () => {
+describe("describe", () => {
   it.each(HANDLERS.map((handler) => ({ action: handler.action })))(
     "shows at least one example of $action",
     ({ action }) => {

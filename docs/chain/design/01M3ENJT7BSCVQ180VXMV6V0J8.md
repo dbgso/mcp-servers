@@ -50,7 +50,7 @@ const corpus = documents.filter((d) => !isInternalDocument(d.id));          // �
 ### 4.1 パラメータは必ずどこかに書かれている
 
 `describe-matches-schemas.test.ts` を、必須パラメータの照合から**全パラメータ**の照合に広げた。
-各アクションのスキーマに存在する引数は、`instruction_describe` の例か、そのハンドラの `help`
+各アクションのスキーマに存在する引数は、`describe` の例か、そのハンドラの `help`
 のどちらかに現れなければならない。`help` を認めるのは、それが検証失敗時に返る文面だからである。
 
 これで `add(relatedDocs)` と `graph(format)` のような「動くが誰も知らない引数」が出る。

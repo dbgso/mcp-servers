@@ -9,7 +9,7 @@
  * because `add` declared the field without `null`; and a discriminated union,
  * which the SDK validates correctly and then publishes as an empty object.
  *
- * So the schema says nothing and `instruction_describe` says everything. What
+ * So the schema says nothing and `describe` says everything. What
  * keeps that honest is `describe-matches-schemas.test.ts`, which holds every
  * documented example to the handler schema it would be validated against. This
  * file holds the other half: that the tool boundary hands the handler what it was
@@ -63,7 +63,7 @@ afterEach(async () => {
 
 describe("the tools this server registers", () => {
   it("is the pair, and nothing else", () => {
-    expect(tools.map((t) => t.name).sort()).toEqual(["instruction", "instruction_describe"]);
+    expect(tools.map((t) => t.name).sort()).toEqual(["describe", "instruction"]);
   });
 });
 
@@ -86,10 +86,10 @@ describe("the instruction tool's schema", () => {
     expect(instruction().inputSchema.required).toBeUndefined();
   });
 
-  it("sends the caller to instruction_describe for what the arguments are", () => {
+  it("sends the caller to describe for what the arguments are", () => {
     // With nothing in the schema, the description is the only thing pointing at
     // where the arguments are documented.
-    expect(instruction().description).toContain("instruction_describe()");
+    expect(instruction().description).toContain("describe()");
   });
 
   it("hands every argument to the handler, including ones no action declares", async () => {

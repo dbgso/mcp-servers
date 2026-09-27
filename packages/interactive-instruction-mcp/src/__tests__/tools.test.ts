@@ -35,7 +35,7 @@ describe("registerInstructionTools", () => {
     }
   });
 
-  it("should register instruction_describe and instruction tools", () => {
+  it("should register describe and instruction tools", () => {
     const server = createServer({
       markdownDir: tempBase,
       config: defaultConfig,

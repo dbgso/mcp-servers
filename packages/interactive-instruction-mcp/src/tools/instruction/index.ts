@@ -41,7 +41,7 @@ function toToolResult(response: ToolResponse): ToolResult {
  *   conversion to JSON Schema does not handle unions and returns nothing rather
  *   than failing.
  *
- * So the schema carries no argument information at all, and `instruction_describe`
+ * So the schema carries no argument information at all, and `describe`
  * carries all of it. That is not a fallback: a schema that says nothing cannot be
  * wrong about anything, and the per-action detail is better in a document fetched
  * when it is needed than in a tool list read on every session -- the merged
@@ -54,16 +54,19 @@ function toToolResult(response: ToolResponse): ToolResult {
  * `additionalProperties: true`, which says "this takes arbitrary arguments", and
  * hands them all over. Validation happens where the contract is: `BaseActionHandler`
  * parses against the handler's own schema before dispatch, and each action's
- * `help` and `instruction_describe` say what that schema wants.
+ * `help` and `describe` say what that schema wants.
  */
 function buildInputSchema(): z.ZodTypeAny {
   return z.object({}).passthrough();
 }
 
 export function buildDescribeText(config: ReminderConfig): string {
-  return `# instruction_describe
+  return `# instruction
 
-This tool explains how to use the instruction tool.
+This is the whole of what \`instruction\` takes. Its own input schema names no
+argument on purpose -- one tool serves every action below, so a single schema
+would be wrong about most of them -- which makes this document the only place
+the arguments are written down.
 
 ## Available Actions
 
@@ -144,14 +147,14 @@ function buildHelpText(): string {
   if (actions.length === 0) {
     return `# instruction
 
-No actions available yet. Use \`instruction_describe()\` to see usage.`;
+No actions available yet. Use \`describe()\` to see usage.`;
   }
 
   return `# instruction
 
 Available actions: ${actions.join(", ")}
 
-Use \`instruction_describe()\` for detailed usage of each action.`;
+Use \`describe()\` for detailed usage of each action.`;
 }
 
 export function registerInstructionTools(params: {
@@ -168,7 +171,7 @@ export function registerInstructionTools(params: {
   // could not express -- see `buildInputSchema` for why the merged schema keeps
   // every field optional anyway, and where the requirement is stated instead.
   server.registerTool(
-    "instruction_describe",
+    "describe",
     {
       description:
         "Show detailed usage instructions for the instruction tool. Call this first to understand how to use this MCP.",
@@ -188,7 +191,7 @@ export function registerInstructionTools(params: {
     {
       description:
         "Manage documentation. This tool's arguments are not described here -- call " +
-        "`instruction_describe()` for the actions and what each one takes. Calling " +
+        "`describe()` for the actions and what each one takes. Calling " +
         "`instruction` with no action lists them too.",
       inputSchema: buildInputSchema(),
     },
@@ -213,7 +216,7 @@ export function registerInstructionTools(params: {
             content: [
               {
                 type: "text" as const,
-                text: `Unknown action: "${action}"\n\nAvailable actions: ${registry.getActions().join(", ")}\n\nUse \`instruction_describe()\` for help.`,
+                text: `Unknown action: "${action}"\n\nAvailable actions: ${registry.getActions().join(", ")}\n\nUse \`describe()\` for help.`,
               },
             ],
             isError: true,
