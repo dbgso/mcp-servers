@@ -4,6 +4,8 @@ whenToUse:
   - locating a draft or a state file on disk
   - deciding whether an action should reach a draft
   - sharing a documents directory with another tool
+relatedDocs:
+  - specification__draft-id-format
 ---
 
 # File Structure Specification

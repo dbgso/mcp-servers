@@ -1,3 +1,16 @@
+---
+description: "How the server is put together: tools, handlers, the reader and the workflow"
+whenToUse:
+  - finding where a behaviour lives
+  - adding an action
+  - reviewing a change that crosses layers
+relatedDocs:
+  - specification__file-structure
+  - coding__service-layer
+  - design__approval-flow
+  - design__frontmatter-metadata
+---
+
 # Architecture
 
 This MCP server provides interactive access to markdown documentation.

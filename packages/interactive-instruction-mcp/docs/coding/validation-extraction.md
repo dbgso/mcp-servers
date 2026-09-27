@@ -1,3 +1,10 @@
+---
+description: Validation goes into its own validator, taking only what it checks
+whenToUse:
+  - adding validation to an action
+  - testing a validation rule on its own
+---
+
 # Validation Extraction
 
 Extract validation logic into independent validator classes. Each validator receives only the arguments it needs.

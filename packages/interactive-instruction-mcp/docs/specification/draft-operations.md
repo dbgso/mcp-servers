@@ -4,6 +4,10 @@ whenToUse:
   - deciding which action to call
   - checking whether an action covers drafts
   - changing a handler's behaviour
+relatedDocs:
+  - specification__draft-workflow
+  - specification__file-structure
+  - specification__frontmatter-format
 ---
 
 # Document Operations Specification
