@@ -113,12 +113,14 @@ instruction(action: "read", id: "doc-id") → Read a document
   The rules a single document can answer on its own
   — size, repeated headings, missing metadata — are also reported by `add` and `update` as they
   write, so the author hears them while they still remember why the document has the shape it
-  has. The write succeeds either way. Two rules read the id hierarchy rather than one document:
+  has. The write succeeds either way. Three rules read the id hierarchy rather than one document:
   `prefer-hub-reference` reports a document that names several children of the same family instead
   of the document that indexes them -- and says to write that hub when none exists, because a
-  scattered list is then the only index of the family anywhere -- and `stale-hub-index` reports a
-  hub whose own list no longer matches what sits under it, in either direction. The hub is what
-  everything else is sent to read, so nothing else would notice. Thresholds:
+  scattered list is then the only index of the family anywhere; `stale-hub-index` reports a
+  hub whose own list no longer matches what sits under it, in either direction, since the hub is
+  what everything else is sent to read and nothing else would notice; and `misplaced-hub` reports
+  an `overview`, `index` or `readme` sitting inside a family that has no hub, which at that id is
+  a sibling of its own subject matter and so goes unchecked by the other two. Thresholds:
   `IIMCP_LINT_MAX_LINES` (default 150),
   `IIMCP_LINT_SIMILARITY` (default 0.6), `IIMCP_LINT_MIN_DUPLICATE_LINES` (default 8) and
   `IIMCP_LINT_HUB_CHILDREN` (default 2, the children from one family a document may name before

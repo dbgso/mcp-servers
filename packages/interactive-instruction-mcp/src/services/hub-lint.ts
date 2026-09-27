@@ -22,6 +22,16 @@ import type { LintIssue } from "./document-lint.js";
 const ID_SEPARATOR = "__";
 
 /**
+ * The names a hub gets called when it is put in the wrong place.
+ *
+ * A file named `overview.md` inside the family's directory reads as the index of
+ * it, and is one in every way except the one that counts: the id hierarchy makes
+ * `coding-rules__overview` a sibling of what it indexes, so nothing can tell it
+ * apart from its own subject matter.
+ */
+const HUB_ALIASES = new Set(["overview", "index", "readme"]);
+
+/**
  * One reference to a child is a cross-reference; two is an index.
  *
  * A document that cites a single rule is pointing at that rule, and sending it
@@ -34,6 +44,9 @@ const ID_SEPARATOR = "__";
  * corpus, not something to argue about -- so it is a number a corpus can set.
  */
 const DEFAULT_MIN_CHILDREN = 2;
+
+/** Below two documents there is no family to index and nothing to go stale. */
+const MIN_SIBLINGS_FOR_HUB = 2;
 
 /**
  * `IIMCP_LINT_HUB_CHILDREN`, the number of children from one family a document
@@ -64,6 +77,13 @@ export function parentIdOf(id: string): string | null {
   const at = id.lastIndexOf(ID_SEPARATOR);
   if (at < 1) return null;
   return id.slice(0, at);
+}
+
+/** The part of an id after its parent, or the whole id when it has no parent. */
+function lastSegment(id: string): string {
+  const parent = parentIdOf(id);
+  if (parent === null) return id;
+  return id.slice(parent.length + ID_SEPARATOR.length);
 }
 
 /**
@@ -225,6 +245,69 @@ export function checkHubIndex(params: {
     ...(missing.length > 0 ? [missingChildrenIssue({ docId: hub.id, missing })] : []),
     ...(unknown.length > 0 ? [unknownChildrenIssue({ docId: hub.id, unknown })] : []),
   ];
+}
+
+function misplacedHubIssue(params: { docId: string; parent: string; siblings: number }): LintIssue {
+  const { docId, parent, siblings } = params;
+  return {
+    severity: "warning",
+    docId,
+    rule: "misplaced-hub",
+    message:
+      `One of the ${siblings} documents under "${parent}", and named as their index. ` +
+      `The hub is the document at "${parent}": at this id it is a sibling of its own ` +
+      "subject matter, so a reference to it does not count as a reference to the family, " +
+      "nothing checks its list against the directory, and the family still has no hub. " +
+      `Rename it to "${parent}".`,
+  };
+}
+
+function siblingCount(params: { parent: string; families: Map<string, string[]> }): number {
+  return (params.families.get(params.parent) ?? []).length;
+}
+
+function familyNeedsHub(params: {
+  parent: string;
+  hubs: Set<string>;
+  families: Map<string, string[]>;
+}): boolean {
+  return !params.hubs.has(params.parent) && siblingCount(params) >= MIN_SIBLINGS_FOR_HUB;
+}
+
+function isMisplacedHub(params: {
+  id: string;
+  parent: string;
+  hubs: Set<string>;
+  families: Map<string, string[]>;
+}): boolean {
+  return HUB_ALIASES.has(lastSegment(params.id).toLowerCase()) && familyNeedsHub(params);
+}
+
+/**
+ * An index that lives inside what it indexes.
+ *
+ * Neither of the other two rules reaches this. `stale-hub-index` needs a document
+ * at the family's id to check, and there is none -- that is the defect -- so the
+ * list goes unchecked however wrong it gets. This repository's own
+ * `coding-rules__overview` named 14 of 18 documents and one that does not exist,
+ * and nothing said so.
+ *
+ * Found by writing down what a hub is, which is the order that was skipped the
+ * first time: the detection was built before the criterion, and it could only
+ * detect the cases the criterion had not yet been written to cover.
+ */
+export function checkMisplacedHub(params: {
+  doc: HubDocument;
+  hubs: Set<string>;
+  families: Map<string, string[]>;
+}): LintIssue[] {
+  const { doc, hubs, families } = params;
+  const parent = parentIdOf(doc.id);
+  if (parent === null) return [];
+
+  return isMisplacedHub({ id: doc.id, parent, hubs, families })
+    ? [misplacedHubIssue({ docId: doc.id, parent, siblings: siblingCount({ parent, families }) })]
+    : [];
 }
 
 /** The children of each id that has any, so a hub is an id this map contains. */

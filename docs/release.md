@@ -5,6 +5,10 @@ whenToUse:
   - Creating changesets for version bumps
   - Adding a new package to npm registry
   - Understanding monorepo release strategy
+relatedDocs:
+  - release__npm-oidc
+  - release__npm-bootstrap
+  - release__docker-package
 ---
 
 # Release Configuration

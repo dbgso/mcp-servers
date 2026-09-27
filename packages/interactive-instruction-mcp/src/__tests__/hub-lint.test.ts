@@ -8,6 +8,7 @@ import type { InstructionContext } from "../tools/instruction/types.js";
 import type { ReminderConfig } from "../types/index.js";
 import {
   checkHubIndex,
+  checkMisplacedHub,
   checkPrefersHub,
   childCandidates,
   childrenByParent,
@@ -40,7 +41,11 @@ function findings(docs: HubDocument[]) {
     const index = hubs.has(d.id)
       ? checkHubIndex({ hub: d, children: families.get(d.id) ?? [], referenced })
       : [];
-    return [...checkPrefersHub({ doc: d, referenced, hubs }), ...index];
+    return [
+      ...checkPrefersHub({ doc: d, referenced, hubs }),
+      ...checkMisplacedHub({ doc: d, hubs, families }),
+      ...index,
+    ];
   });
 }
 
@@ -236,6 +241,69 @@ describe("stale-hub-index", () => {
     const corpus = [doc({ id: "release__a" }), doc({ id: "release__b" })];
 
     expect(findings(corpus).map((i) => i.rule)).not.toContain("stale-hub-index");
+  });
+});
+
+describe("misplaced-hub", () => {
+  /**
+   * The case the first two rules could not reach, and the reason it was missed.
+   *
+   * `stale-hub-index` needs a document at the family's id to check against the
+   * directory, and the whole defect is that there is none -- so this repository's
+   * `coding-rules__overview` named 14 of its 18 siblings, and one that does not
+   * exist, with nothing saying so. It surfaced from writing down what a hub is,
+   * after the detection had already been built.
+   */
+  it("reports an index living inside what it indexes", () => {
+    const corpus = [
+      doc({ id: "coding-rules__overview", relatedDocs: ["coding-rules__style"] }),
+      doc({ id: "coding-rules__style" }),
+      doc({ id: "coding-rules__typescript" }),
+    ];
+
+    const issues = findings(corpus).filter((i) => i.rule === "misplaced-hub");
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].docId).toBe("coding-rules__overview");
+    expect(issues[0].message).toContain('Rename it to "coding-rules"');
+  });
+
+  it.each(["overview", "index", "readme", "README", "Overview"])(
+    "recognises %s as a hub put in the wrong place",
+    (name) => {
+      const corpus = [
+        doc({ id: `family__${name}` }),
+        doc({ id: "family__a" }),
+        doc({ id: "family__b" }),
+      ];
+
+      expect(findings(corpus).map((i) => i.rule)).toContain("misplaced-hub");
+    },
+  );
+
+  it.each([
+    {
+      name: "the family already has its hub",
+      docs: () => [
+        doc({ id: "family" }),
+        doc({ id: "family__overview" }),
+        doc({ id: "family__a" }),
+      ],
+    },
+    {
+      name: "there is no family to index",
+      docs: () => [doc({ id: "family__overview" })],
+    },
+    {
+      name: "an ordinary document under a family with no hub",
+      docs: () => [doc({ id: "family__a" }), doc({ id: "family__b" })],
+    },
+    {
+      name: "a top-level document called overview",
+      docs: () => [doc({ id: "overview" }), doc({ id: "family__a" }), doc({ id: "family__b" })],
+    },
+  ])("does not report: $name", ({ docs }) => {
+    expect(findings(docs()).map((i) => i.rule)).not.toContain("misplaced-hub");
   });
 });
 

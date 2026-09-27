@@ -2,7 +2,7 @@
 "mcp-interactive-instruction": minor
 ---
 
-Two lint rules for the hub and the documents under it.
+Three lint rules for the hub and the documents under it.
 
 A corpus built out of hubs stakes everything on the hub being right, and nothing was looking. `every-task` named five `workflow__*` rules one by one while no `workflow` document existed; it was found by reading it and fixed by hand, with the cause written into the document being edited -- "this file naming each rule is how the list and the directory come to disagree about what exists" -- and nothing left behind that would catch the next one.
 
@@ -10,4 +10,6 @@ A corpus built out of hubs stakes everything on the hub being right, and nothing
 
 `stale-hub-index` reports a hub whose list no longer matches the directory, in both directions: children that sit under it and go unnamed, and names with no document behind them. On this repository's own corpus it finds `release`, which does not reference three of its own children.
 
-Both read `relatedDocs` and the prose alike, since the list that started this was written as `See \`workflow__dry-principle\`` in the body. Only ids carrying the `__` separator are searched for: a hub is named for what it is about, and looking for the bare word `policy` in prose would report a sentence as a reference. The threshold is `IIMCP_LINT_HUB_CHILDREN` (default 2) -- where a corpus draws the line between citing two documents and indexing them is a property of the corpus.
+`misplaced-hub` reports an `overview`, `index` or `readme` sitting inside a family that has no hub. At that id it is a sibling of the documents it means to index, so a reference to it is not a reference to the family and neither of the other two rules reaches it -- `stale-hub-index` needs a document at the family's id to check, and not having one is the defect. This repository's `coding-rules__overview` named 14 of its 18 siblings plus one document that does not exist, and nothing said so. It came out of writing down what a hub is, which is the order that was skipped: the detection was built first, and could only find the cases the criterion had not yet been written to cover.
+
+The first two read `relatedDocs` and the prose alike, since the list that started this was written as `See \`workflow__dry-principle\`` in the body. Only ids carrying the `__` separator are searched for: a hub is named for what it is about, and looking for the bare word `policy` in prose would report a sentence as a reference. The threshold is `IIMCP_LINT_HUB_CHILDREN` (default 2) -- where a corpus draws the line between citing two documents and indexing them is a property of the corpus.

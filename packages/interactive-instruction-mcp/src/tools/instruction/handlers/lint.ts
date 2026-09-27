@@ -16,6 +16,7 @@ import type { MarkdownSummary } from "../../../types/index.js";
 import type { MarkdownReader } from "../../../services/markdown-reader.js";
 import {
   checkHubIndex,
+  checkMisplacedHub,
   checkPrefersHub,
   childCandidates,
   childrenByParent,
@@ -316,6 +317,7 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
       const referenced = referencesOf({ doc, candidates });
       return [
         ...checkPrefersHub({ doc, referenced, hubs }),
+        ...checkMisplacedHub({ doc, hubs, families }),
         ...this.hubIndexIssues({ doc, referenced, hubs, families }),
       ];
     });
