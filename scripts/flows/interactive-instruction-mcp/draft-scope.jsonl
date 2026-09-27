@@ -20,3 +20,8 @@
 {"call": "instruction", "label": "set_status on a promoted document says why, not that it is missing", "args": {"action": "set_status", "id": "one", "status": "editing"}, "expect": ["no workflow state to reset"], "expectNot": ["not found"]}
 {"call": "instruction", "label": "approve on a promoted document says the same", "args": {"action": "approve", "id": "one", "notes": "reviewed again"}, "expect": ["already promoted"], "expectNot": ["not found"]}
 {"call": "instruction", "label": "and so does the batch form", "args": {"action": "approve", "ids": "one", "explanation": "Both."}, "expect": ["already promoted"]}
+
+# `targetId` renames the document a draft is promoted as. The batch path never
+# received it, so it was dropped in silence and the drafts landed under their own
+# ids while the caller had asked for another.
+{"call": "instruction", "label": "a batch cannot take a single targetId", "args": {"action": "approve", "ids": "one,two", "targetId": "renamed", "explanation": "Promoting both under one name, which is the thing that cannot work."}, "expect": ["cannot apply to a batch of 2"], "expectNot": ["Not Yet"]}

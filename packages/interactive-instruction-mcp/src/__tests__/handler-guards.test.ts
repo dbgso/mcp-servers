@@ -22,6 +22,8 @@ import { UpdateHandler } from "../tools/instruction/handlers/update.js";
 import { GraphHandler } from "../tools/instruction/handlers/graph.js";
 import { LintHandler } from "../tools/instruction/handlers/lint.js";
 import { ReadHandler } from "../tools/instruction/handlers/read.js";
+import { ListHandler } from "../tools/instruction/handlers/list.js";
+import { ApproveHandler } from "../tools/instruction/handlers/approve.js";
 import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
 import { isRefusal, throughGate } from "./helpers/gate.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";
@@ -417,5 +419,86 @@ describe("read", () => {
 
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("not found");
+  });
+});
+
+/**
+ * Two arguments whose condition on another argument was enforced nowhere.
+ *
+ * Both were found by driving the server rather than by reading it, and both
+ * failed the same way: the call was accepted and answered, so nothing in the
+ * response said that what came back was not what had been asked for.
+ */
+describe("list(backlinks) without an id", () => {
+  it("refuses, rather than answering with the whole corpus", async () => {
+    // What it used to do: `backlinks` was read only inside `if (backlinks && id)`,
+    // so without an id the call fell through every mode to the root listing and
+    // returned "Available documents: ..." -- byte-identical to `list()`. An agent
+    // asking what references a document was told "alpha and beta" by a listing
+    // that had not looked at a single relation.
+    await write({ id: "alpha" });
+    await write({ id: "beta" });
+
+    const result = await new ListHandler().execute({
+      rawParams: { action: "list", backlinks: true },
+      context,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("needs `id`");
+    expect(text(result)).not.toContain("Available documents");
+    // The refusal has to carry the call that works, or it just moves the guess.
+    expect(text(result)).toContain('backlinks: true, id: "<doc-id>"');
+  });
+
+  it("still answers when the id is there", async () => {
+    await write({ id: "alpha" });
+    await write({ id: "beta", frontmatter: "description: b\nrelatedDocs:\n  - alpha" });
+
+    const result = await new ListHandler().execute({
+      rawParams: { action: "list", backlinks: true, id: "alpha" },
+      context,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(text(result)).toContain("beta");
+  });
+});
+
+describe("approve(ids) with a targetId", () => {
+  it("refuses, rather than dropping the rename", async () => {
+    // `targetId` is the id a draft is promoted under. The batch path never
+    // received it, so the drafts landed under their own ids while the caller
+    // had asked for another -- with a success message over the top.
+    await write({ id: "one", draft: true });
+    await write({ id: "two", draft: true });
+
+    const result = await new ApproveHandler().execute({
+      rawParams: {
+        action: "approve",
+        ids: "one,two",
+        targetId: "renamed",
+        explanation: WHY,
+      },
+      context,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("cannot apply to a batch of 2");
+    // And nothing was promoted on the way to saying so.
+    expect(await reader.documentExists("renamed")).toBe(false);
+    expect(await reader.documentExists("one")).toBe(false);
+  });
+
+  it("leaves the single promotion path alone", async () => {
+    await write({ id: "one", draft: true });
+
+    const result = await new ApproveHandler().execute({
+      rawParams: { action: "approve", id: "one", targetId: "renamed", explanation: WHY },
+      context,
+    });
+
+    // Still the gate's answer, not the batch refusal.
+    expect(text(result)).not.toContain("cannot apply to a batch");
   });
 });

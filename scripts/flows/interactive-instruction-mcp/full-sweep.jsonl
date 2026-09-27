@@ -38,7 +38,12 @@
 
 {"call": "instruction", "label": "16. link_add: refused once", "args": {"action": "link_add", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expect": ["Not Yet -- Tell the User First"]}
 {"call": "instruction", "label": "17. link_add: the repeat writes the link", "args": {"action": "link_add", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expectNot": ["Not Yet"]}
-{"call": "instruction", "label": "18. list: backlinks now have something to show", "args": {"action": "list", "backlinks": true}, "expect": ["alpha", "beta"]}
+{"call": "instruction", "label": "18. list: backlinks, with the id it needs", "args": {"action": "list", "backlinks": true, "id": "beta"}, "expect": ["referencing \"beta\"", "alpha"], "expectNot": ["needs `id`"]}
+# This step used to be `list(backlinks: true)` with no id, expecting alpha and beta.
+# It passed -- because that call fell through to the root listing, which names
+# both. The expectation could not fail, and the label claimed a check that was
+# never made. The refusal is pinned below so the fall-through cannot come back.
+{"call": "instruction", "label": "18b. list: backlinks without an id is refused", "args": {"action": "list", "backlinks": true}, "expect": ["needs `id`"], "expectNot": ["Available documents"]}
 {"call": "instruction", "label": "19. list: search", "args": {"action": "list", "query": "second"}, "expect": ["beta"]}
 {"call": "instruction", "label": "20. list: documents missing metadata", "args": {"action": "list", "missingMeta": "any"}}
 

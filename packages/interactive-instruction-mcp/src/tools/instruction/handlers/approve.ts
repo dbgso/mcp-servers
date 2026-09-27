@@ -16,7 +16,12 @@ const schema = z.object({
   action: z.literal("approve"),
   id: z.string().optional(),
   ids: z.string().optional(),
-  targetId: z.string().optional(),
+  targetId: z
+    .string()
+    .optional()
+    .describe(
+      "Promote the draft under this id instead of its own. Single promotion only -- a batch has one id per draft, so `ids` refuses it."
+    ),
   notes: z.string().optional(),
   explanation: z
     .string()
@@ -89,6 +94,26 @@ promote. \`ids\` promotes several drafts under one explanation.`;
 
     // Batch approval mode
     if (ids) {
+      // `targetId` is the name a draft is promoted under, and a batch has one
+      // draft per id -- so a single name cannot apply to all of them. It used
+      // to be dropped without a word, and every draft landed under its own id
+      // while the caller had asked for a different one.
+      if (targetId !== undefined) {
+        return errorResponse(
+          `\`targetId\` renames the one document being promoted, so it cannot apply to a batch of ${ids.split(",").filter((each) => each.trim().length > 0).length}.` +
+          formatNextActions([
+            {
+              action: "approve",
+              description: "Promote one draft under a different id",
+              example: 'instruction(action: "approve", id: "<draft-id>", targetId: "<new-id>", explanation: "<what it says and why>")',
+            },
+            {
+              action: "approve",
+              description: "Promote the batch under their own ids",
+              example: `instruction(action: "approve", ids: "${ids}", explanation: "<what they say and why>")`,
+            },
+          ]));
+      }
       return this.handleBatchApproval({ ids, explanation, reader });
     }
 

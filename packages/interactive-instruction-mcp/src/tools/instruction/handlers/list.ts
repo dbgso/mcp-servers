@@ -135,7 +135,7 @@ Usage:
 - \`instruction(action: "list", query: "search term")\` - Search documents
 - \`instruction(action: "list", missingMeta: "any")\` - Find docs with missing metadata
 - \`instruction(action: "list", id: "doc-id", backlinks: true)\` - Find documents referencing this doc
-  (\`backlinks\` needs \`id\`; on its own it is ignored)
+  (\`backlinks\` needs \`id\`; on its own the call is refused)
 - \`instruction(action: "list", drafts: true)\` - List drafts, by the plain id every other action takes`;
 
   readonly schema = listSchema;
@@ -240,7 +240,30 @@ Usage:
       }
     };
 
-    // Backlinks mode
+    // `backlinks` asks which documents reference `id`, so without one there is
+    // nothing to look for. Falling through was the bug: the call reached the
+    // root listing and returned the whole corpus under "Available documents",
+    // which reads as an answer -- "these reference it" -- to a question that was
+    // never asked. A wrong answer is worse than a refused one.
+    if (backlinks === true && id === undefined) {
+      return errorResponse(
+        "`backlinks: true` looks for the documents that reference one document, so it needs `id`." +
+        formatNextActions([
+          {
+            action: "list",
+            description: "Find what references a document",
+            example: 'instruction(action: "list", backlinks: true, id: "<doc-id>")',
+          },
+          {
+            action: "list",
+            description: "List the corpus instead",
+            example: 'instruction(action: "list")',
+          },
+        ]));
+    }
+
+    // Backlinks mode. The `id` test is what narrows the type; the guard above is
+    // what makes reaching here without one impossible.
     if (backlinks && id) {
       const result = await reader.listDocuments({ recursive: true });
       const { documents } = filterDrafts(result);
