@@ -199,6 +199,12 @@ Not referenced by anyone.`;
       const text = result.content[0].type === "text" ? result.content[0].text : "";
       expect(text).toContain("orphaned-document");
       expect(text).toContain("orphan-doc");
+      // The direction is the whole of the advice. "Consider adding relatedDocs"
+      // left the caller to guess, and guessing wrong is how a corpus ends up
+      // with a document's parents among its own children -- reported after a
+      // 47-document migration did exactly that.
+      expect(text).toContain("the document it belongs under");
+      expect(text).toContain("parent to child");
     });
 
     it("ignores system docs (starting with _)", async () => {

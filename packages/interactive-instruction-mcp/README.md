@@ -104,8 +104,11 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `link_add` / `link_remove` — Manage related document links, on a draft or a promoted document (deliberation gate, drafts included). `relatedDocs` names documents by their plain id either way
 - `lint` — Check document quality: missing metadata, orphans, size, similarity, copied passages,
   circular references, and repeated headings. A draft is held to the rules it can answer on its own; the
-  corpus-wide ones wait until it is promoted. A document that is deliberately long declares
-  `sizeExemption: <why>` in its frontmatter. The rules a single document can answer on its own
+  corpus-wide ones wait until it is promoted. A document that is deliberately long says so with
+  `update(id, sizeExemption: "<why>")`, and `sizeExemption: null` takes it off again once the
+  document is back within the limit. A repeated heading counts as repeated only under the same
+  parent, so a specification that writes `### Endpoint` once per feature is not reported for it.
+  The rules a single document can answer on its own
   — size, repeated headings, missing metadata — are also reported by `add` and `update` as they
   write, so the author hears them while they still remember why the document has the shape it
   has. The write succeeds either way. Thresholds: `IIMCP_LINT_MAX_LINES` (default 150),
@@ -125,7 +128,14 @@ instruction(action: "read", id: "doc-id") → Read a document
 ### Looking at the relations
 
 `relatedDocs` lives in frontmatter, which means the relations between documents are data rather
-than prose — so they can be drawn:
+than prose — so they can be drawn.
+
+**Edges run parent to child**: a document lists the documents that sit under it. That is not a
+free choice — `orphaned-document` reports a document nothing links to, so parent to child leaves
+only the corpus's entry points unreferenced while child to parent leaves every leaf unreferenced.
+Two parents are allowed; cycles are reported. Directories are the other axis and are not repeated
+here: ids carry the hierarchy and `graph` draws it as node colour. `instruction_describe()` has
+the whole of it.
 
 ```
 instruction(action: "graph")                      → the whole corpus

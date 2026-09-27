@@ -35,6 +35,18 @@ const schema = z.object({
     .describe(
       "Replaces the document's relatedDocs. Pass the whole list, not an addition -- `link_add` / `link_remove` are the incremental pair."
     ),
+  // Nullable, because three states have to be expressible and `optional` alone
+  // gives two. `lint` asks for this field to be set *and* asks for it to be
+  // removed once the document is back within the limit, so a write that could
+  // only ever set it would leave the second instruction unactionable -- the
+  // shape of the bug this field was added to fix.
+  sizeExemption: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "Why this document stays whole although it is over the line limit -- a reference table is worth more in one piece, and a runbook read out of order is not a runbook. `lint` reports the reason instead of the warning, so the next reader can tell a decision from an unaddressed finding. Pass null to remove it."
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -48,6 +60,8 @@ Usage:
 - \`instruction(action: "update", id: "doc-id", content: "...")\` - Update the body
 - \`instruction(action: "update", id: "doc-id", description: "...", whenToUse: ["..."], relatedDocs: ["..."])\`
   - Update the metadata alone; omitting \`content\` keeps the body as it is
+- \`instruction(action: "update", id: "doc-id", sizeExemption: "<why it stays whole>")\`
+  - Answer \`lint\`'s \`document-too-large\` with a reason instead of splitting; \`null\` removes it
 - Draft: direct overwrite. Promoted: pending flow with diff preview.`;
 
   readonly schema = schema;
@@ -56,7 +70,7 @@ Usage:
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, content, description, whenToUse, relatedDocs } = params.args;
+    const { id, content, description, whenToUse, relatedDocs, sizeExemption } = params.args;
     const { reader } = params.context;
 
     // Every field but the id is optional, so nothing in the schema stops
@@ -67,10 +81,11 @@ Usage:
       content === undefined &&
       description === undefined &&
       whenToUse === undefined &&
-      relatedDocs === undefined
+      relatedDocs === undefined &&
+      sizeExemption === undefined
     ) {
       return errorResponse(
-        `Nothing to update for "${id}". Pass \`content\` to change the body, or \`description\` / \`whenToUse\` / \`relatedDocs\` to change the metadata.` +
+        `Nothing to update for "${id}". Pass \`content\` to change the body, or \`description\` / \`whenToUse\` / \`relatedDocs\` / \`sizeExemption\` to change the metadata.` +
         formatNextActions([{
           action: "read_meta",
           description: "See what the metadata should say",
@@ -88,7 +103,7 @@ Usage:
 
     // Check if draft exists first
     if (draftExists) {
-      return this.handleDraftUpdate({ id, draftId, content, description, whenToUse, relatedDocs, reader });
+      return this.handleDraftUpdate({ id, draftId, content, description, whenToUse, relatedDocs, sizeExemption, reader });
     }
 
     // Check if promoted document exists
@@ -108,6 +123,7 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
       description,
       whenToUse,
       relatedDocs,
+      sizeExemption,
       originalContent,
       originalPath,
       reader,
@@ -124,9 +140,10 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
     description?: string;
     whenToUse?: string[];
     relatedDocs?: string[];
+    sizeExemption?: string | null;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, draftId, content, description, whenToUse, relatedDocs, reader } = params;
+    const { id, draftId, content, description, whenToUse, relatedDocs, sizeExemption, reader } = params;
 
     // Get existing draft to preserve frontmatter
     const existingContent = await reader.getDocumentContent(draftId);
@@ -140,6 +157,7 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
       description,
       whenToUse,
       relatedDocs,
+      sizeExemption,
       existingFrontmatter,
     });
 
@@ -181,11 +199,12 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
     description?: string;
     whenToUse?: string[];
     relatedDocs?: string[];
+    sizeExemption?: string | null;
     originalContent: string;
     originalPath: string;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, content, description, whenToUse, relatedDocs, originalContent, originalPath, reader } = params;
+    const { id, content, description, whenToUse, relatedDocs, sizeExemption, originalContent, originalPath, reader } = params;
 
     // Preserve existing frontmatter if not overridden
     const existingFrontmatter = parseFrontmatter(originalContent);
@@ -198,6 +217,7 @@ Use \`instruction(action: "add", ...)\` to create a new document.`);
       description,
       whenToUse,
       relatedDocs,
+      sizeExemption,
       existingFrontmatter,
     });
 
@@ -261,9 +281,10 @@ ${diff}\`\`\`` +
     description?: string;
     whenToUse?: string[];
     relatedDocs?: string[];
+    sizeExemption?: string | null;
     existingFrontmatter: DocumentFrontmatter;
   }): string {
-    const { content, description, whenToUse, relatedDocs, existingFrontmatter } = params;
+    const { content, description, whenToUse, relatedDocs, sizeExemption, existingFrontmatter } = params;
 
     // Check if new content already has frontmatter
     const newFrontmatter = parseFrontmatter(content);
@@ -284,6 +305,12 @@ ${diff}\`\`\`` +
     }
     if (relatedDocs !== undefined) {
       merged.relatedDocs = relatedDocs;
+    }
+    if (sizeExemption !== undefined) {
+      // `delete` rather than assigning null: `updateFrontmatter` removes a key
+      // whose value is undefined, which is how the field goes away.
+      if (sizeExemption === null) delete merged.sizeExemption;
+      else merged.sizeExemption = sizeExemption;
     }
 
     // Only infer description as a last-resort default when nothing is set.

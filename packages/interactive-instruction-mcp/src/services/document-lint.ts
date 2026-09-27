@@ -261,7 +261,8 @@ function checkDocumentSize(params: {
       message:
         "`sizeExemption` needs a reason for keeping the document whole. " +
         "Without one it is a mute button, and the next reader cannot tell " +
-        "a decision from an unaddressed warning.",
+        "a decision from an unaddressed warning: " +
+        `\`instruction(action: "update", id: "${docId}", sizeExemption: "<why>")\`.`,
     });
   }
 
@@ -272,7 +273,8 @@ function checkDocumentSize(params: {
       rule: "document-too-large",
       message:
         `Document body has ${lineCount} lines (max recommended: ${maxLines}). ` +
-        "Consider splitting, or set `sizeExemption` to say why it stays whole.",
+        "Consider splitting, or say why it stays whole: " +
+        `\`instruction(action: "update", id: "${docId}", sizeExemption: "<why>")\`.`,
     });
   }
 
@@ -285,7 +287,8 @@ function checkDocumentSize(params: {
       rule: "stale-size-exemption",
       message:
         `Document body is ${lineCount} lines, within the limit, but still carries ` +
-        "`sizeExemption`. Remove it, or the exemption outlives the reason for it.",
+        "`sizeExemption`, and an exemption outlives the reason for it: " +
+        `\`instruction(action: "update", id: "${docId}", sizeExemption: null)\`.`,
     });
   }
 
@@ -293,13 +296,51 @@ function checkDocumentSize(params: {
 }
 
 /**
- * The same heading twice in one document.
+ * The chain of headings a heading sits under, as a comparable key.
  *
- * A more specific signal than length, and a different one: it is what
- * appending to a document looks like. A `## Related` in the middle and another
- * at the end means a section was added after the one that was already there
- * rather than into it -- and in the case this came from, the appended part
- * turned out to be a separable topic.
+ * `## Feature A` / `### Endpoint` and `## Feature B` / `### Endpoint` differ
+ * here, while two `### Endpoint` under one `## Feature A` do not -- which is the
+ * whole distinction the rule below needs.
+ *
+ * The full chain rather than the nearest parent, so it keeps working below the
+ * third level: two `#### Request` under different `### Endpoint`s of the same
+ * `## Feature` are as intended as the endpoints are.
+ *
+ * A heading deeper than its predecessor by more than one level leaves a gap in
+ * the chain; the shallower entries stay as they are, which is what an author
+ * skipping `###` to reach `####` means by it.
+ */
+function ancestryOf(headings: { level: number; text: string }[]): string[] {
+  const keys: string[] = [];
+  const chain: string[] = [];
+
+  for (const heading of headings) {
+    chain.length = heading.level - 1;
+    keys.push(chain.map((text) => text ?? "").join(" > "));
+    chain[heading.level - 1] = heading.text.toLowerCase();
+  }
+
+  return keys;
+}
+
+/**
+ * The same heading twice under the same parent.
+ *
+ * A more specific signal than length, and a different one: it is what appending
+ * to a document looks like. A `## Related` in the middle and another at the end
+ * means a section was added after the one that was already there rather than
+ * into it -- and in the case this came from, the appended part turned out to be
+ * a separable topic.
+ *
+ * The parent is load-bearing, and leaving it out is what made this rule unusable
+ * on the documents it was most likely to be run against. A specification that
+ * writes `### Endpoint` / `### Request body` once per feature repeats those by
+ * design, and counting by text and level alone reported every one of them: one
+ * corpus of 47 documents produced eleven such findings, and the one document
+ * that really had been appended to -- `## Security` twice at the top level --
+ * was nearly missed among them. Comparing the ancestry keeps that one and drops
+ * the other eleven, without asking anybody to write a reason for a structure
+ * that was never wrong.
  *
  * Reported whatever the document's size says, including when it is exempt:
  * being deliberately long says nothing about the structure being sound.
@@ -308,26 +349,32 @@ function checkDuplicateHeadings(params: { docId: string; body: string }): LintIs
   const { docId, body } = params;
   const issues: LintIssue[] = [];
 
-  const counts = new Map<string, { level: number; text: string; times: number }>();
-  for (const heading of headingsOf(body)) {
-    // Keyed by level as well as text: `# Setup` with a `## Setup` under it is
-    // nesting, not a section that came back.
-    const key = `${heading.level}:${heading.text.toLowerCase()}`;
+  const headings = headingsOf(body);
+  const ancestry = ancestryOf(headings);
+
+  const counts = new Map<string, { level: number; text: string; under: string; times: number }>();
+  for (const [index, heading] of headings.entries()) {
+    // Level as well as text, so `# Setup` with a `## Setup` under it is nesting
+    // rather than a section that came back; and ancestry, so the same subsection
+    // under two different sections is the shape of a reference table.
+    const under = ancestry[index];
+    const key = `${under}\u0000${heading.level}:${heading.text.toLowerCase()}`;
     const seen = counts.get(key);
-    counts.set(key, { ...heading, times: (seen?.times ?? 0) + 1 });
+    counts.set(key, { ...heading, under, times: (seen?.times ?? 0) + 1 });
   }
 
-  for (const { level, text, times } of counts.values()) {
+  for (const { level, text, under, times } of counts.values()) {
     if (times < 2) continue;
     issues.push({
       severity: "warning",
       docId,
       rule: "duplicate-heading",
       message:
-        `"${"#".repeat(level)} ${text}" appears ${times} times. ` +
-        "A section that comes back usually means something was appended to the " +
-        "end of the document rather than into it; the later part is often a " +
-        "topic of its own.",
+        `"${"#".repeat(level)} ${text}" appears ${times} times under ` +
+        `${under === "" ? "the top level" : `"${under}"`}. ` +
+        "A section that comes back under the same parent usually means something " +
+        "was appended to the end of the document rather than into it; the later " +
+        "part is often a topic of its own.",
     });
   }
 

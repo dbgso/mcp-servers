@@ -18,6 +18,20 @@ const schema = z.object({
   description: z.string().describe("Short description of the document"),
   whenToUse: z.array(z.string()).describe("Usage scenarios for this document"),
   relatedDocs: z.array(z.string()).optional().describe("Related document IDs"),
+  // Nullable to match `update`'s declaration of the same name. The tool merges
+  // every handler's fields into one schema and the first declaration of a name
+  // wins, so a stricter one here would have been what callers were validated
+  // against -- and `update(sizeExemption: null)`, the documented way to remove
+  // the field, was rejected at the tool boundary while passing every unit test
+  // that called the handler directly. `null` means nothing on a new draft; it is
+  // accepted and ignored, which is cheaper than two names for one field.
+  sizeExemption: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "Why this document stays whole although it is over the line limit -- a reference table is worth more in one piece, and a runbook read out of order is not a runbook. `lint` reports the reason instead of the warning, so the next reader can tell a decision from an unaddressed finding. Pass null to remove it."
+    ),
 });
 
 type Args = z.infer<typeof schema>;
@@ -28,7 +42,8 @@ export class AddHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly help = `Create a new draft document with frontmatter metadata.
 
 Usage:
-- \`instruction(action: "add", id: "doc-id", content: "...", description: "...", whenToUse: [...])\``;
+- \`instruction(action: "add", id: "doc-id", content: "...", description: "...", whenToUse: [...])\`
+- Add \`sizeExemption: "<why it stays whole>"\` for a document that is deliberately over the line limit`;
 
   readonly schema = schema;
 
@@ -36,7 +51,7 @@ Usage:
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, content, description, whenToUse, relatedDocs } = params.args;
+    const { id, content, description, whenToUse, relatedDocs, sizeExemption } = params.args;
     const { reader } = params.context;
 
     // Generate content with frontmatter
@@ -45,6 +60,7 @@ Usage:
       description,
       whenToUse,
       relatedDocs,
+      sizeExemption,
     });
 
     const draftId = DRAFT_PREFIX + id;
@@ -106,8 +122,9 @@ Path: ${result.path}${workflowStatus}` +
     description: string;
     whenToUse: string[];
     relatedDocs?: string[];
+    sizeExemption?: string | null;
   }): string {
-    const { content, description, whenToUse, relatedDocs } = params;
+    const { content, description, whenToUse, relatedDocs, sizeExemption } = params;
 
     const fromContent = parseFrontmatter(content);
     const bodyContent = stripFrontmatter(content);
@@ -119,6 +136,7 @@ Path: ${result.path}${workflowStatus}` +
         description,
         whenToUse,
         relatedDocs: relatedDocs ?? fromContent.relatedDocs,
+        sizeExemption: sizeExemption ?? fromContent.sizeExemption ?? undefined,
         // The draft is entering the workflow, whatever the content claimed.
         status: "editing",
       },

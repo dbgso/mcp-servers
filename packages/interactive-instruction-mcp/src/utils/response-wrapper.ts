@@ -1,12 +1,22 @@
 import type { ReminderConfig, ToolResult } from "mcp-shared";
 
-const MCP_REMINDER = `[Reminder] Always refer to this MCP to check for relevant documentation before starting any task. Use the 'help' tool to list available documents.`;
+/**
+ * The reminders name the tools this server actually has.
+ *
+ * They named `help` and `help(id:)` until 2.0.1 -- tools 2.0.0 removed. The
+ * release notes said that anything naming the old tools had to be rewritten and
+ * this was the one place it was not, which made it the worst place: the block is
+ * appended to every response, so it is the most-read text the server emits, and
+ * an agent following it calls a tool that does not exist. A name appearing here
+ * has to exist, so both are written as calls the registry can answer.
+ */
+const MCP_REMINDER = `[Reminder] Always refer to this MCP to check for relevant documentation before starting any task. Use \`instruction(action: "list")\` to list available documents.`;
 
 const ORGANIZE_REMINDER = `[Reminder] Review document organization: Use directory hierarchy for related topics. Each file should cover ONE topic only - don't write detailed blocks, instead link to separate topic documents.`;
 
 function buildEveryTaskReminder(params: { docId: string; seconds: number }): string {
   const { docId, seconds } = params;
-  return `[Reminder] Information from this MCP is only valid for ${seconds} seconds. After that, it may have been updated. Re-read '${docId}' using help(id: "${docId}") to get the latest rules.`;
+  return `[Reminder] Information from this MCP is only valid for ${seconds} seconds. After that, it may have been updated. Re-read '${docId}' using \`instruction(action: "read", id: "${docId}")\` to get the latest rules.`;
 }
 
 export function buildReminderBlock(params: {

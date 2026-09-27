@@ -160,7 +160,14 @@ export class LintHandler extends BaseActionHandler<Args, InstructionContext> {
           severity: "info",
           docId: doc.id,
           rule: "orphaned-document",
-          message: "Not referenced by any other document (consider adding relatedDocs)",
+          // The direction is the whole of the advice. Saying only "not
+          // referenced" leaves the caller to guess, and guessing wrong is what
+          // puts a document's parents among its own children: `relatedDocs`
+          // edges run parent to child, so what has to change is the parent's
+          // list, not this document's.
+          message:
+            "Not referenced by any other document. Add it to the `relatedDocs` " +
+            "of the document it belongs under -- edges run parent to child.",
         });
       }
     }
