@@ -1,5 +1,11 @@
 ---
-description: Rationale for using YAML frontmatter for document metadata.
+description: Why the metadata lives in frontmatter rather than in the body or a side file
+whenToUse:
+  - questioning where metadata belongs
+  - adding a metadata key
+relatedDocs:
+  - specification__frontmatter-format
+approvedAt: 2026-09-27T03:05:34.816Z
 ---
 
 # Frontmatter Metadata Design

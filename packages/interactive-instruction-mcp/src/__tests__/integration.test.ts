@@ -117,7 +117,8 @@ describe("Integration Tests", () => {
           context: context,
         });
 
-        // ListHandler filters out drafts from public listing by design.
+        // The ordinary listing leaves drafts out; `list(drafts: true)` is how they
+        // are enumerated. See docs/chain/spec/01M3ENJT7B4DJ90YDN1EK6454S.md.
         // Verify drafts exist by reading them directly.
         const read1 = await readHandler.execute({
           rawParams: { action: "read", id: "draft1" },
@@ -305,7 +306,8 @@ describe("Integration Tests", () => {
           context: context,
         });
 
-        // ListHandler filters out drafts from public listing by design.
+        // The ordinary listing leaves drafts out; `list(drafts: true)` is how they
+        // are enumerated. See docs/chain/spec/01M3ENJT7B4DJ90YDN1EK6454S.md.
         // Verify drafts exist by reading them directly.
         const read1 = await readHandler.execute({
           rawParams: { action: "read", id: "ready1" },

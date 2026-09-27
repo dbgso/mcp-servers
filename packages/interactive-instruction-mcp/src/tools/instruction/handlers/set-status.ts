@@ -89,7 +89,15 @@ through \`approve\`, not by declaring them.`;
       const content = await reader.getDocumentContent(draftId);
 
       if (content === null) {
-        results.push(`- ${targetId}: not found`);
+        // Out of scope and absent are different facts. A promoted document
+        // exists; it simply has no workflow state to reset, and reporting that
+        // as "not found" sends the caller off to re-check an id that was right.
+        const promoted = await reader.documentExists(targetId);
+        results.push(
+          promoted
+            ? `- ${targetId}: promoted, so it has no workflow state to reset`
+            : `- ${targetId}: not found`
+        );
         errorCount++;
         continue;
       }
@@ -128,22 +136,43 @@ through \`approve\`, not by declaring them.`;
       }
     }
 
+    // Chosen by what happened, not by how many were asked for. Picking on the
+    // count alone printed `Status updated for "x".` above a detail line saying
+    // `x: not found`, with no `isError` anywhere.
     const summary =
-      targetIds.length === 1
-        ? `Status updated for "${targetIds[0]}".`
-        : `Batch status update: ${successCount} succeeded, ${errorCount} failed.`;
+      errorCount === 0
+        ? targetIds.length === 1
+          ? `Status updated for "${targetIds[0]}".`
+          : `Batch status update: ${successCount} succeeded.`
+        : successCount === 0
+          ? targetIds.length === 1
+            ? `Could not set the status of "${targetIds[0]}".`
+            : `Batch status update: none of ${errorCount} succeeded.`
+          : `Batch status update: ${successCount} succeeded, ${errorCount} failed.`;
 
-    return textResponse(
+    const respond = errorCount === 0 ? textResponse : errorResponse;
+
+    return respond(
       `# Set Status Result
 
 ${summary}
 
 ## Details
 ${results.join("\n")}` +
-      formatNextActions([
-        { action: "list", description: "View all documents", example: `instruction(action: "list")` },
-        { action: "read", description: "Read a draft", example: `instruction(action: "read", id: "${targetIds[0]}")` },
-      ]),
+      // Suggesting `read` on the id that just failed sends the caller back to
+      // the thing that did not work. Offer the listing that would have shown
+      // which ids are drafts in the first place.
+      formatNextActions(
+        errorCount === 0
+          ? [
+              { action: "read", description: "Read the draft", example: `instruction(action: "read", id: "${targetIds[0]}")` },
+              { action: "list", description: "List the drafts", example: 'instruction(action: "list", drafts: true)' },
+            ]
+          : [
+              { action: "list", description: "See which ids are drafts", example: 'instruction(action: "list", drafts: true)' },
+              { action: "list", description: "See the promoted documents", example: 'instruction(action: "list", recursive: true)' },
+            ]
+      ),
     );
   }
 }

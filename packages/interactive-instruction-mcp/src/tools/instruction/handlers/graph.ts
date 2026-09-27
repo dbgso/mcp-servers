@@ -14,7 +14,7 @@ import {
 } from "mcp-shared-graph-viz";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
-import { isInternalDocument } from "../../../constants.js";
+import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import { isDescriptionMissing } from "../../../services/metadata-completeness.js";
 import type { MarkdownSummary } from "../../../types/index.js";
 
@@ -120,9 +120,122 @@ const schema = z.object({
 
 type Args = z.infer<typeof schema>;
 
+/**
+ * Why an id is not in the graph.
+ *
+ * Out of scope and absent are different facts, and reporting the first as the
+ * second sends the caller off to check an id that was right. A draft is not
+ * missing; the graph is drawn over the promoted corpus, which it has not
+ * joined yet.
+ */
+function notInTheGraph(params: { id: string; all: MarkdownSummary[] }): ToolResponse {
+  const { id, all } = params;
+
+  // Either form: the plain id every action takes, and the prefixed one the
+  // report used to print, which is a plausible thing to paste back.
+  const bare = id.startsWith(DRAFT_PREFIX) ? id.slice(DRAFT_PREFIX.length) : id;
+
+  if (!all.some((doc) => doc.id === DRAFT_PREFIX + bare)) {
+    return errorResponse(
+      `Error: Document "${id}" not found.` +
+      formatNextActions([{
+        action: "list",
+        description: "See what exists",
+        example: `instruction(action: "list", recursive: true)`,
+      }]));
+  }
+
+  return errorResponse(
+    `"${bare}" is a draft, and the relation graph is drawn over the promoted corpus. Its links are readable now, and it joins the graph when it is promoted.` +
+    formatNextActions([
+      {
+        action: "read_meta",
+        description: "Read the draft's links",
+        example: `instruction(action: "read_meta", id: "${bare}")`,
+      },
+      {
+        action: "graph",
+        description: "Draw the corpus it will join",
+        example: `instruction(action: "graph")`,
+      },
+    ]));
+}
+
+/**
+ * The arguments that only reach the renderer, when there is no drawing.
+ *
+ * `format: "text"` used to accept all five and drop them: a call naming a
+ * layout, an edge style and an `outputPath` got the text back inline, wrote no
+ * file, and said nothing about either. `outputPath` is honoured instead --
+ * writing text to a named file is a thing this can do. The other four have no
+ * meaning without a drawing, so they are refused rather than discarded.
+ */
+function refuseDrawingOptions(params: {
+  format: "html" | "text";
+  id?: string;
+  layout?: LayoutName;
+  direction?: LayoutDirection;
+  spacing?: number;
+  edgeStyle?: string;
+}): ToolResponse | null {
+  const { format, id, layout, direction, spacing, edgeStyle } = params;
+  if (format !== "text") return null;
+
+  const given = [
+    ["layout", layout !== undefined],
+    ["direction", direction !== undefined],
+    ["spacing", spacing !== undefined],
+    ["edgeStyle", edgeStyle !== undefined],
+  ].filter(([, present]) => present).map(([name]) => name as string);
+
+  if (given.length === 0) return null;
+
+  const focus = id === undefined ? "" : `, id: "${id}"`;
+  return errorResponse(
+    `${given.join(", ")} ${given.length === 1 ? "describes" : "describe"} how the graph is drawn, and \`format: "text"\` does not draw it.` +
+    formatNextActions([
+      {
+        action: "graph",
+        description: "Draw it, with those options",
+        example: `instruction(action: "graph"${focus}, ${given.map((name) => `${name}: <value>`).join(", ")})`,
+      },
+      {
+        action: "graph",
+        description: "Keep the text, without them",
+        example: `instruction(action: "graph"${focus}, format: "text")`,
+      },
+    ]));
+}
+
+/**
+ * The text rendering, in the response or in a file.
+ *
+ * No `defaultOutputPath` fallback, unlike the drawing: text with nowhere named
+ * belongs in the response, and writing a file nobody asked for is how a
+ * documents directory fills up with artefacts.
+ */
+async function textGraph(params: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  focusId?: string;
+  depth: number;
+  outputPath?: string;
+}): Promise<ToolResponse> {
+  const { nodes, edges, focusId, depth, outputPath } = params;
+  const graphText = formatGraphAsText({ nodes, edges, focusId, depth });
+
+  if (outputPath === undefined) return textResponse(graphText);
+
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.writeFile(outputPath, graphText, "utf-8");
+
+  return textResponse(
+    `Wrote the relation graph as text to:\n\n${outputPath}\n\n${nodes.length} documents, ${edges.length} relations.`);
+}
+
 export class GraphHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "graph";
-  readonly help = `Render the relatedDocs graph as an interactive page.
+  readonly help = `Render the relatedDocs graph of the promoted corpus as an interactive page. Drafts are not in it.
 
 Usage:
 - \`instruction(action: "graph")\` - the whole corpus
@@ -154,16 +267,14 @@ Writes an HTML file and returns its path. Open it in a browser.`;
     } = params.args;
     const { reader } = params.context;
 
+    const misplaced = refuseDrawingOptions({ format, id, layout, direction, spacing, edgeStyle });
+    if (misplaced !== null) return misplaced;
+
     const listed = await reader.listDocuments({ recursive: true });
     const documents = listed.documents.filter((doc) => !isInternalDocument(doc.id));
 
     if (id !== undefined && !documents.some((doc) => doc.id === id)) {
-      return errorResponse(`Error: Document "${id}" not found.` +
-        formatNextActions([{
-          action: "list",
-          description: "See what exists",
-          example: `instruction(action: "list", recursive: true)`,
-        }]));
+      return notInTheGraph({ id, all: listed.documents });
     }
 
     const { nodes, edges } = buildGraph({ documents, focusId: id, depth, includeUnlinked });
@@ -174,12 +285,12 @@ Writes an HTML file and returns its path. Open it in a browser.`;
         formatNextActions([{
           action: "link_add",
           description: "Relate two documents",
-          example: `instruction(action: "link_add", id: "<id>", relatedDocs: ["<other-id>"])`,
+          example: `instruction(action: "link_add", id: "<id>", relatedDocs: ["<other-id>"], explanation: "<what the link means>")`,
         }]));
     }
 
     if (format === "text") {
-      return textResponse(formatGraphAsText({ nodes, edges, focusId: id, depth }));
+      return textGraph({ nodes, edges, focusId: id, depth, outputPath });
     }
 
     const html = renderGraphHtml({

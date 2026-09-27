@@ -26,6 +26,34 @@ function toToolResult(response: ToolResponse): ToolResult {
  * so all handler fields must be declared here.
  * This auto-generates from registry - no manual sync needed.
  */
+/**
+ * The fields of a handler's schema, refinements and all.
+ *
+ * `.refine` returns a `ZodEffects` wrapping the object, and a `ZodEffects` has
+ * no `.shape` -- so reading `.shape` directly meant an action could not state a
+ * condition between two of its arguments without taking every other action's
+ * parameters off the tool with it. It kept the conditions in prose: `backlinks`
+ * needs `id`, `set_status` needs one of `id` or `ids`, `update` needs at least
+ * one field to change. Each was enforced by hand inside `doExecute`, or in one
+ * case not at all.
+ *
+ * The wrapper keeps what it wraps, so unwrapping recovers the shape while the
+ * refinement stays where it belongs: `BaseActionHandler` validates with the
+ * whole schema before dispatch.
+ */
+export function objectShape(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | null {
+  let current: z.ZodTypeAny = schema;
+
+  // `.refine` can be applied more than once, and each one wraps again.
+  while (current instanceof z.ZodEffects) {
+    current = current.innerType() as z.ZodTypeAny;
+  }
+
+  return current instanceof z.ZodObject
+    ? (current.shape as Record<string, z.ZodTypeAny>)
+    : null;
+}
+
 function buildInputSchema(): Record<string, z.ZodTypeAny> {
   const registry = getActionRegistry();
   const merged: Record<string, z.ZodTypeAny> = {
@@ -35,7 +63,8 @@ function buildInputSchema(): Record<string, z.ZodTypeAny> {
   for (const action of registry.getActions()) {
     const handler = registry.getHandler(action);
     if (!handler || !("schema" in handler)) continue;
-    const shape = (handler as { schema: z.ZodObject<Record<string, z.ZodTypeAny>> }).schema.shape;
+    const shape = objectShape((handler as { schema: z.ZodTypeAny }).schema);
+    if (shape === null) continue;
     for (const [key, value] of Object.entries(shape)) {
       if (key === "action") continue;
       if (!(key in merged)) {
@@ -59,21 +88,23 @@ This tool explains how to use the instruction tool.
 - \`instruction(action: "list", recursive: true)\` - List all including nested
 - \`instruction(action: "list", query: "<keyword>")\` - Search documents
 - \`instruction(action: "list", missingMeta: "any")\` - Find docs with missing metadata
-- \`instruction(action: "list", backlinks: true)\` - Show backlinks
+- \`instruction(action: "backlinks", id: "<id>")\` - Which documents reference this one
+- \`instruction(action: "list", drafts: true)\` - List drafts, by the plain id every other action takes
 - \`instruction(action: "read", id: "<id>")\` - Read a document
 
 ### Draft Operations
-- \`instruction(action: "add", id: "<id>", content: "...", description: "...", whenToUse: [...])\` - Create draft
+- \`instruction(action: "add", id: "<id>", content: "...", description: "...", whenToUse: [...], relatedDocs: [...])\` - Create draft (\`relatedDocs\` optional)
 - \`instruction(action: "update", id: "<id>", content: "...")\` - Update draft (direct) or promoted doc (pending + apply/cancel)
-- \`instruction(action: "delete", id: "<id>")\` - Delete draft (immediate); promoted doc needs \`explanation\` and repeated calls
-- \`instruction(action: "rename", id: "<id>", newId: "<new-id>")\` - Rename draft (immediate); promoted doc needs \`explanation\` and repeated calls
+- \`instruction(action: "delete", id: "<id>")\` - Delete a draft (immediate)
+- \`instruction(action: "delete", id: "<id>", explanation: "<what you told the user>")\` - Delete a promoted document (repeat the identical call twice more)
+- \`instruction(action: "rename", id: "<id>", newId: "<new-id>")\` - Rename a draft (immediate)
+- \`instruction(action: "rename", id: "<id>", newId: "<new-id>", explanation: "<what you told the user>")\` - Rename a promoted document (repeat the identical call twice more)
 
 ### Approval Workflow
 - \`instruction(action: "approve", id: "<id>", notes: "<self-review>")\` - Complete self-review
 - \`instruction(action: "approve", id: "<id>", explanation: "<what you told the user>")\` - Promote (repeat the identical call to go through)
 - \`instruction(action: "approve", id: "<id>", targetId: "<target>", explanation: "...")\` - Promote onto a different ID
 - \`instruction(action: "approve", ids: "id1,id2,id3", explanation: "...")\` - Promote several under one explanation
-- \`instruction(action: "approve", id: "<id>", explanation: "...", force: true)\` - Skip consecutive approval warning
 
 ### Pending Update Operations
 - \`instruction(action: "apply", id: "<doc-id>", explanation: "<what you told the user>")\` - Apply pending update (repeat the identical call to go through)
@@ -82,14 +113,16 @@ This tool explains how to use the instruction tool.
 ### Metadata & Quality
 - \`instruction(action: "link_add", id: "<id>", relatedDocs: ["doc1", "doc2"], explanation: "<what you told the user>")\` - Add related docs (repeat the identical call to go through)
 - \`instruction(action: "link_remove", id: "<id>", relatedDocs: ["doc1"], explanation: "<what you told the user>")\` - Remove related docs (repeat the identical call to go through)
-- \`instruction(action: "lint")\` - Check document quality
-- \`instruction(action: "set_status", id: "<id>", status: "<status>")\` - Set draft status (single)
-- \`instruction(action: "set_status", ids: "id1,id2", status: "<status>")\` - Set draft status (batch)
+- \`instruction(action: "lint")\` - Check document quality. A draft is held to the rules it can answer on its own; orphans, similarity and cycles wait until it is promoted
+- \`instruction(action: "set_status", id: "<id>", status: "editing")\` - Reset a draft to \`editing\`, discarding its workflow state
+- \`instruction(action: "set_status", ids: "id1,id2", status: "editing")\` - The same for several drafts
 - \`instruction(action: "read_meta", id: "<id>")\` - Review a document's metadata against its neighbours
 
 ### Seeing the corpus
-- \`instruction(action: "graph")\` - Render the relatedDocs graph as an interactive page
+- \`instruction(action: "graph")\` - Render the relatedDocs graph of the promoted corpus as an interactive page (drafts are not in it)
 - \`instruction(action: "graph", id: "<id>", depth: 2)\` - Draw one document's neighbourhood
+- \`instruction(action: "graph", format: "text")\` - The same graph as an adjacency list, which is the form to read here
+- \`instruction(action: "graph", layout: "fcose", direction: "LR", spacing: 1.5, edgeStyle: "taxi", includeUnlinked: true, outputPath: "<file>")\` - How the page is drawn and where it goes
 
 ## Reminder
 

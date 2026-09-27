@@ -13,5 +13,6 @@ module.exports = {
   rules: {
     'single-params-object': require('./single-params-object'),
     'implement-interface-with-class': require('./implement-interface-with-class'),
+    'no-branching-literal': require('./no-branching-literal'),
   },
 };

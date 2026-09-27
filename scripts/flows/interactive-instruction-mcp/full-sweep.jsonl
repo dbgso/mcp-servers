@@ -33,16 +33,26 @@
 {"call": "instruction", "label": "12. approve: the identical repeat promotes", "args": {"action": "approve", "id": "alpha", "explanation": "Alpha records the first half of the sweep."}, "expect": ["promoted"], "expectNot": ["Not Yet"]}
 
 {"call": "instruction", "label": "13. approve beta: self-review", "args": {"action": "approve", "id": "beta", "notes": "reviewed: separate topic"}, "expect": ["beta"]}
-{"call": "instruction", "label": "14. approve beta: refused once", "args": {"action": "approve", "id": "beta", "explanation": "Beta records the second half.", "force": true}, "expect": ["Not Yet -- Tell the User First"]}
-{"call": "instruction", "label": "15. approve beta: promoted", "args": {"action": "approve", "id": "beta", "explanation": "Beta records the second half.", "force": true}, "expect": ["promoted"]}
+{"call": "instruction", "label": "14. approve beta: refused once", "args": {"action": "approve", "id": "beta", "explanation": "Beta records the second half."}, "expect": ["Not Yet -- Tell the User First"]}
+{"call": "instruction", "label": "15. approve beta: promoted", "args": {"action": "approve", "id": "beta", "explanation": "Beta records the second half."}, "expect": ["promoted"]}
 
 {"call": "instruction", "label": "16. link_add: refused once", "args": {"action": "link_add", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expect": ["Not Yet -- Tell the User First"]}
 {"call": "instruction", "label": "17. link_add: the repeat writes the link", "args": {"action": "link_add", "id": "alpha", "relatedDocs": ["beta"], "explanation": "Linking these two so the graph shows they belong together."}, "expectNot": ["Not Yet"]}
-{"call": "instruction", "label": "18. list: backlinks now have something to show", "args": {"action": "list", "backlinks": true}, "expect": ["alpha", "beta"]}
+{"call": "instruction", "label": "18. backlinks: its own action now", "args": {"action": "backlinks", "id": "beta"}, "expect": ["referencing \"beta\": 1 found", "alpha"], "expectNot": ["No documents reference"]}
+# This step used to be `list(backlinks: true)` with no id at all, expecting alpha
+# and beta. It passed -- because that call fell through to the root listing, which
+# names both. The expectation could not fail and the label claimed a check that
+# was never made. `id` is required by the schema now, so there is no such call to
+# make; 18b pins what the tool says when it is left out.
+{"call": "instruction", "label": "18b. backlinks without an id is rejected by the schema", "args": {"action": "backlinks"}, "expect": ["[backlinks]"], "expectNot": ["Available documents", "referencing"]}
+{"call": "instruction", "label": "18c. backlinks on an id that is not there", "args": {"action": "backlinks", "id": "no-such-doc"}, "expect": ["No document \"no-such-doc\""], "expectNot": ["No documents reference"]}
+
 {"call": "instruction", "label": "19. list: search", "args": {"action": "list", "query": "second"}, "expect": ["beta"]}
 {"call": "instruction", "label": "20. list: documents missing metadata", "args": {"action": "list", "missingMeta": "any"}}
 
 {"call": "instruction", "label": "21. graph: the relatedDocs graph", "args": {"action": "graph"}}
+{"call": "instruction", "label": "21b. graph: text refuses the drawing-only options", "args": {"action": "graph", "format": "text", "layout": "dagre", "edgeStyle": "taxi"}, "expect": ["layout, edgeStyle", "does not draw it"], "expectNot": ["alpha -> beta", "Wrote the relation graph"]}
+{"call": "instruction", "label": "21c. graph: text honours outputPath", "args": {"action": "graph", "format": "text", "outputPath": "{{TMPDIR}}/relations.txt"}, "expect": ["Wrote the relation graph as text to", "relations.txt"]}
 {"call": "instruction", "label": "22. graph: one document's neighbourhood", "args": {"action": "graph", "id": "alpha", "depth": 2}}
 
 {"call": "instruction", "label": "23. lint: the corpus", "args": {"action": "lint"}}

@@ -13,7 +13,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { MarkdownReader } from "../services/markdown-reader.js";
-import { DRAFT_DIR, TRASH_DIR, isInternalDocument } from "../constants.js";
+import { DRAFT_DIR, isInternalDocument } from "../constants.js";
 import {
   parseFrontmatter,
   stripFrontmatter,
@@ -90,14 +90,14 @@ describe("the trailing-newline rule", () => {
   });
 });
 
-describe("trashing a document", () => {
+describe("deleting a promoted document", () => {
   it("refuses a document another server owns", async () => {
     // `chain__*` is traceable-chain-mcp's. Deleting one because it happens to
     // share a directory is the one mistake the scope exists to prevent.
     const scoped = new MarkdownReader(docsDir, { include: [], exclude: ["chain"] });
     await write({ id: "chain__adr__01", content: "---\ndescription: d\n---\n\n# C\n" });
 
-    const result = await scoped.trashDocument("chain__adr__01");
+    const result = await scoped.deleteDocument("chain__adr__01");
 
     expect(result.success).toBe(false);
     // `documentExists` reports false for a document out of scope, so the check
@@ -105,24 +105,13 @@ describe("trashing a document", () => {
     expect(await reader.documentExists("chain__adr__01")).toBe(true);
   });
 
-  it("says so when there is nothing to trash", async () => {
-    const result = await reader.trashDocument("absent");
+  it("says so when there is nothing to delete", async () => {
+    const result = await reader.deleteDocument("absent");
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("not found");
   });
 
-  it("reports the failure rather than the move", async () => {
-    await write({ id: "doomed", content: "---\ndescription: d\n---\n\n# Doomed\n" });
-    // A plain file where the trash directory should go: mkdir cannot proceed.
-    await fs.writeFile(path.join(docsDir, TRASH_DIR), "not a directory", "utf-8");
-
-    const result = await reader.trashDocument("doomed");
-
-    expect(result.success).toBe(false);
-    // Reported as a failure, and the document is still where it was.
-    expect(await reader.documentExists("doomed")).toBe(true);
-  });
 });
 
 describe("renaming", () => {
@@ -244,7 +233,6 @@ describe("internal directories", () => {
 
   it.each([
     { id: `${DRAFT_DIR}__topic`, internal: true },
-    { id: `${TRASH_DIR}__gone--2026-01-01`, internal: true },
     { id: DRAFT_DIR, internal: true },
     // Segment-aware: an ordinary document that starts with the same letters.
     { id: `${DRAFT_DIR}y__topic`, internal: false },

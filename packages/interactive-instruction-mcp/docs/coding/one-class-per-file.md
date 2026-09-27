@@ -1,3 +1,10 @@
+---
+description: One class per file, and how files are named
+whenToUse:
+  - adding a class
+  - splitting a file that grew
+---
+
 # File Structure
 
 Basic principle: one file per class.

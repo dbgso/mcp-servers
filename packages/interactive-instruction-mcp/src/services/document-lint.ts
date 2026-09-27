@@ -38,6 +38,16 @@ const DEFAULT_MAX_LINES = 150;
 const DEFAULT_SIMILARITY_THRESHOLD = 0.6;
 
 /**
+ * How long a verbatim run has to be before it is a copy rather than a
+ * coincidence.
+ *
+ * Eight lines is past what two documents share by writing about the same thing:
+ * a shared heading, a two-line preamble and a code fence of the same command
+ * all fall under it, and a repeated procedure does not.
+ */
+const DEFAULT_MIN_DUPLICATE_LINES = 8;
+
+/**
  * `IIMCP_LINT_MAX_LINES`, the body-line count a document may reach before
  * `document-too-large` is reported.
  *
@@ -68,6 +78,69 @@ export function configuredSimilarityThreshold(): number {
     return DEFAULT_SIMILARITY_THRESHOLD;
   }
   return parsed;
+}
+
+/**
+ * `IIMCP_LINT_MIN_DUPLICATE_LINES`, the shortest run of identical lines that is
+ * reported as copied between two documents.
+ */
+export function configuredMinDuplicateLines(): number {
+  const raw = process.env.IIMCP_LINT_MIN_DUPLICATE_LINES;
+  if (raw === undefined) return DEFAULT_MIN_DUPLICATE_LINES;
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 2) return DEFAULT_MIN_DUPLICATE_LINES;
+  return parsed;
+}
+
+/**
+ * The lines of a body, as they are compared.
+ *
+ * Trimmed and emptied of blanks, because indentation and spacing are not what
+ * makes two passages the same passage, and a document reflowed by an editor
+ * would otherwise stop matching the one it was copied from.
+ */
+export function comparableBody(content: string): string[] {
+  return comparableLines(stripFrontmatter(content));
+}
+
+function comparableLines(body: string): string[] {
+  return body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+}
+
+/**
+ * The longest run of lines two documents share.
+ *
+ * A plain longest-common-substring over lines. The corpus is a few hundred
+ * documents of a few hundred lines, so the quadratic table is measured in
+ * milliseconds; anything cleverer would be harder to read than the rule is
+ * worth.
+ */
+export function longestSharedRun(params: { a: string[]; b: string[] }): { lines: number; at: number } {
+  const { a, b } = params;
+  let best = 0;
+  let endInA = 0;
+
+  // One row at a time: the table is only ever read one row back.
+  let previous = Array.from<number>({ length: b.length + 1 }).fill(0);
+
+  for (let i = 1; i <= a.length; i++) {
+    const current = Array.from<number>({ length: b.length + 1 }).fill(0);
+    for (let j = 1; j <= b.length; j++) {
+      if (a[i - 1] !== b[j - 1]) continue;
+      current[j] = previous[j - 1] + 1;
+      if (current[j] > best) {
+        best = current[j];
+        endInA = i;
+      }
+    }
+    previous = current;
+  }
+
+  return { lines: best, at: endInA - best + 1 };
 }
 
 /**

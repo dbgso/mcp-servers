@@ -1,3 +1,13 @@
+---
+description: How to develop, test and release this package
+whenToUse:
+  - setting up for development
+  - cutting a release
+  - looking up the verification steps before a PR
+relatedDocs:
+  - testing__verification
+---
+
 # Contributing
 
 Guidelines for contributing to mcp-interactive-instruction.
@@ -68,9 +78,11 @@ Releases are automated via semantic-release. No manual versioning needed.
 
 1. Create GitHub repository
 2. Add remote: `git remote add origin https://github.com/USER/mcp-interactive-instruction.git`
-3. Add NPM token to GitHub Secrets:
-   - Go to npmjs.com → Access Tokens → Generate (Automation)
-   - Go to GitHub → Settings → Secrets → Actions → Add `NPM_TOKEN`
+3. Configure npm as a Trusted Publisher (OIDC) for the package:
+   - npmjs.com → the package → Settings → Trusted Publishers → add this
+     repository and the `release.yml` workflow
+   - No secret is stored. The workflow requests a short-lived token at publish
+     time, which is also what attaches provenance to the release
 
 ### Release Flow
 

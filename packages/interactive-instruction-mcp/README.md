@@ -6,7 +6,7 @@ MCP server for interactive instruction documents. AI agents discover usage throu
 
 - **Learn by doing**: AI calls `instruction_describe()` to learn available actions, then uses `instruction()` with guided responses
 - **Single source of truth**: Each handler defines its own schema — no manual sync needed
-- **Human oversight**: Draft edits are free. Every change to a promoted document is gated: the agent has to state what it is doing and why, in its own words, and repeat that identical call before anything is written. Nothing can be changed silently, and a deleted document is moved to the trash rather than erased
+- **Human oversight**: Draft edits are free. Every change to a promoted document is gated: the agent has to state what it is doing and why, in its own words, and repeat that identical call before anything is written. Nothing can be changed silently, and a delete names the links it would break before it happens
 
 ## Compared to skill files
 
@@ -79,7 +79,11 @@ instruction(action: "read", id: "doc-id") → Read a document
 ### Available Actions
 
 **Reading**
-- `list` — List documents (optional: `id`, `recursive`, `query`, `missingMeta`, `backlinks`)
+- `list` — List documents (optional: `id`, `recursive`, `query`, `missingMeta`, `drafts`).
+  `drafts: true` lists drafts by the plain id every other action takes, which is where the
+  `ids` for a batch `approve` comes from
+- `backlinks` — Which documents reference one document (`id` required). `graph` walks further
+  out and names both directions; this is the one hop, with the descriptions
 - `read` — Read a document's prose by ID. Metadata is not included: `read_meta` is where it is read
 
 **Draft Operations**
@@ -90,7 +94,7 @@ instruction(action: "read", id: "doc-id") → Read a document
 - `rename` — Rename a draft (instant) or promoted document (approval required)
 
 **Approval Workflow**
-- `approve` — Progress through: notes → `explanation` (repeated) (optional: `targetId`, `force`, `ids` for batch)
+- `approve` — Progress through: notes → `explanation` (repeated) (optional: `targetId`, `ids` for batch)
 
 **Pending Updates** (for promoted document updates via `update`)
 - `apply` — Apply a pending update (`explanation` required; the first call is refused by design)
@@ -98,13 +102,14 @@ instruction(action: "read", id: "doc-id") → Read a document
 
 **Metadata & Quality**
 - `link_add` / `link_remove` — Manage related document links, on a draft or a promoted document (deliberation gate, drafts included). `relatedDocs` names documents by their plain id either way
-- `lint` — Check document quality: missing metadata, orphans, size, similarity, circular
-  references, and repeated headings. A document that is deliberately long declares
+- `lint` — Check document quality: missing metadata, orphans, size, similarity, copied passages,
+  circular references, and repeated headings. A draft is held to the rules it can answer on its own; the
+  corpus-wide ones wait until it is promoted. A document that is deliberately long declares
   `sizeExemption: <why>` in its frontmatter. The rules a single document can answer on its own
   — size, repeated headings, missing metadata — are also reported by `add` and `update` as they
   write, so the author hears them while they still remember why the document has the shape it
-  has. The write succeeds either way. Thresholds: `IIMCP_LINT_MAX_LINES` (default 150) and
-  `IIMCP_LINT_SIMILARITY` (default 0.6); an unreadable or out-of-range value falls back to the
+  has. The write succeeds either way. Thresholds: `IIMCP_LINT_MAX_LINES` (default 150),
+  `IIMCP_LINT_SIMILARITY` (default 0.6) and `IIMCP_LINT_MIN_DUPLICATE_LINES` (default 8); an unreadable or out-of-range value falls back to the
   default rather than stopping the server
 - `set_status` — Reset drafts to `editing`, discarding their workflow state (single `id` or batch `ids`)
 - `read_meta` — Read a document's metadata -- a draft's as well as a promoted one's -- alongside
@@ -195,10 +200,29 @@ own lines rather than left to be inferred.
 |---|---|---|
 | `add` | Free | Create a draft, then `approve` it |
 | `update` | Direct overwrite | Pending diff → `apply` (deliberation gate) / `cancel` |
-| `delete` | Immediate | Preview + refusal → repeat → moved to `_mcp_trash/` |
+| `delete` | Immediate | Preview + refusal → repeat → removed |
 | `rename` | Immediate | Preview + refusal → repeat |
 | `link_add` / `link_remove` | Preview + refusal → repeat | Preview + refusal → repeat |
 | Promotion | `approve` (notes → `explanation`, repeated) | — |
+| `set_status` | Reset to `editing` | Not applicable -- no workflow state |
+| `apply` / `cancel` | Not applicable -- nothing is staged | The staged update |
+| `lint`, document's own rules | Reported | Reported |
+| `lint`, corpus-wide rules | Not applied | Reported |
+| `list` | `drafts: true` | Listed by default |
+| `graph` | Not drawn | Drawn |
+
+**Which state an action is about is decided by the nature of the rule, not by where the file
+sits.** What a document answers on its own -- its size, a heading that comes back, missing
+metadata -- means the same thing before and after promotion, so `lint` reports it for a draft
+too. What only the set can answer -- orphans, similarity, cycles -- says nothing useful about a
+document still being written: a draft is usually a near-copy of the document it will replace,
+so it would be reported as `similar-documents` against the very document it is a draft of.
+(Similarity is the only one of the three whose answer the exclusion changes; the other two
+could never have reported a draft. They are excluded for consistency.) An action that is about the workflow exists only in the state
+that has one.
+
+An action that does not cover a state says so, and does not say the document is missing. A draft
+is not absent from the graph; it is not in the corpus yet.
 
 Link changes are the one operation that is gated for drafts too: they rewrite `relatedDocs`
 frontmatter on both sides of the link, so a draft edit can reach a promoted document.
@@ -255,11 +279,10 @@ delivered only through a desktop notification, which an agent with a shell could
 That made a swapped target impossible rather than merely visible. With the token gone, an
 agent that is determined and has been refused can open a new run for the swapped change and
 push that through — it costs it one more disclosure round. What carries the risk instead is
-reversibility: `delete` moves the file into `_mcp_trash/` rather than unlinking it, `rename`
-moves every backlink with it in one operation that can be run backwards, and `apply` refuses
-if the document changed after the diff was computed. If your corpus contains something where
-an uncooperative agent getting through would be genuinely damaging, this is the wrong gate
-for it, and `mcp-shared`'s token strategy is still there to install.
+reversibility where it can be: `rename` keeps its backlink rewrite inside one operation that can
+be run backwards, and `apply` refuses a diff whose document has moved under it. A delete cannot be
+undone by asking for the opposite, so what stands behind it is the refusal -- twice, with the
+backlinks it would break named -- and the corpus's own version control.
 
 Why it was made this way: the notification cost a human round trip on every maintenance
 operation, and in a headless or SSH session it could not be delivered at all — the failure
@@ -322,9 +345,13 @@ The same flow as calls:
    → promoted
 ```
 
-Batch several drafts under one explanation with `ids: "a,b,c"`, and skip the
-consecutive-approval warning with `force: true`. Promote to a different location with
-`targetId`.
+Batch several drafts under one explanation with `ids: "a,b,c"`, or promote to a different
+location with `targetId`. `targetId` and `notes` are single-promotion arguments, and a
+batch carrying either is refused rather than promoting without it.
+
+Promoting a draft while another is still waiting adds a note to the answer naming the
+batch call that would cover both. It is a note, not a refusal: what it protects is the
+account the user gets, and the deliberation gate holds the write either way.
 
 ### Promoted Document Operations
 
@@ -384,110 +411,10 @@ Also worth knowing before you upgrade:
   SSH session. Every gated operation now takes an `explanation` and a repeated call instead;
   `approvalToken` and `confirmed` are no longer accepted anywhere. Read
   [the gate](#the-gate) for what that gains and what it gives up.
-- **A deleted promoted document is moved, not erased.** It goes to `_mcp_trash/` inside the
-  documents directory, which nothing reads back. Add it to `.gitignore` if you would rather
-  not commit deletions.
-
-The command line is unchanged, so `.mcp.json` needs no edit. Documents written by 1.x are
-read as they are: frontmatter is optional, and a document without it still gets a
-description from its opening lines. `instruction(action: "list", missingMeta: "any")` finds
-the ones worth filling in.
-
-## Installation
-
-```bash
-npm install -g mcp-interactive-instruction
-```
-
-## Configuration
-
-### Claude Code
-
-`.mcp.json` in project root:
-
-```json
-{
-  "mcpServers": {
-    "docs": {
-      "command": "npx",
-      "args": ["-y", "mcp-interactive-instruction", "./docs"]
-    }
-  }
-}
-```
-
-### Reminder Flags (Optional)
-
-Optionally add flags to help AI remember to use the MCP tools:
-
-```json
-{
-  "mcpServers": {
-    "docs": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-interactive-instruction",
-        "./docs",
-        "--remind-mcp",
-        "--remind-organize",
-        "--reminder", "Always check tests before committing"
-      ]
-    }
-  }
-}
-```
-
-| Flag | Effect |
-|------|--------|
-| `--remind-mcp` | Reminds AI to check docs before starting tasks |
-| `--remind-organize` | Reminds AI to keep docs organized (1 topic per file) |
-| `--reminder <message>` | Add custom reminder message (can be used multiple times) |
-| `--topic-for-every-task <id>` | Specify a document AI must re-read before every task |
-| `--info-expires <seconds>` | How long MCP info stays valid (default: 60). Works with `--topic-for-every-task` |
-| `--include <id-prefix>` | Manage only documents under this prefix. Repeatable |
-| `--exclude <id-prefix>` | Do not manage documents under this prefix. Repeatable, applied after `--include` |
-
-### Sharing a directory with another tool
-
-A documents directory is not always all one tool's. This repository's own `./docs` also holds
-`chain/`, which belongs to a different MCP server — those files have their own frontmatter and
-their own relation field, so every check made here reports them as broken. Before excluding
-them, `lint` returned 223 issues; after `--exclude chain`, 38, and the error count went from 60
-to 1.
-
-```
-mcp-interactive-instruction ./docs --exclude chain
-```
-
-Unmanaged documents are invisible: they do not appear in `list`, `lint`, backlinks or the
-graph, `read` finds nothing, and a write that would touch one is refused with a reason rather
-than quietly doing nothing. Prefixes are matched by whole id segments, so `--exclude chain`
-takes `chain__adr__…` and leaves `chainsaw` alone.
-
-### Topic for Every Task
-
-Force AI to re-read a specific document before every task. Useful for critical rules that should never be forgotten:
-
-```json
-{
-  "args": [
-    "-y",
-    "mcp-interactive-instruction",
-    "./docs",
-    "--topic-for-every-task", "every-task",
-    "--info-expires", "60"
-  ]
-}
-```
-
-**Best Practice:** Keep the topic-for-every-task document as a **redirect hub** rather than a detailed rule list:
-
-```markdown
-# Every Task
-
-Read these documents before starting any task:
-
+- **A delete is refused twice, and names what it would break.** The refusal lists the documents
+  whose links would dangle. The file is then removed: an earlier draft of 2.0.0 moved it to a
+  `_mcp_trash/` directory instead, but nothing read that directory and no action restored from it,
+  so it was a worse copy of `git checkout` that grew without bound.
 - `coding-rules` - Essential coding conventions
 - `workflow` - Required workflow steps
 ```

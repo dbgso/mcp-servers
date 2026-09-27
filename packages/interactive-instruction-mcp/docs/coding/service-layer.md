@@ -1,3 +1,11 @@
+---
+description: Where service-layer code goes, and what a handler may not do
+whenToUse:
+  - adding a service
+  - deciding whether logic belongs in a handler
+  - reviewing layer boundaries
+---
+
 # Architecture
 
 Guidelines for service layer architecture and code organization.

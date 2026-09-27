@@ -9,10 +9,15 @@ import { generateDiff, removeDiffFile, writeDiffToFile } from "../../../utils/di
 import { getPendingUpdate, savePendingUpdate } from "../../../utils/pending-update.js";
 import { checkDocument, formatWriteLint } from "../../../services/document-lint.js";
 
-// Deliberately a plain object, with no `.refine`: the tool's inputSchema is
-// assembled by merging every handler's `.shape`, and a refinement wraps the
-// object in a type that has none -- which takes out the schema for every other
-// action too. "At least one field" is checked in `doExecute` instead.
+// "At least one field to change" is checked in `doExecute`, not by a `.refine`
+// on this schema. Not because a refinement cannot be used -- `buildInputSchema`
+// unwraps one, and `safeParse` enforces it -- but because `execute` reports a
+// validation failure as the issue JSON plus the help text, and what this check
+// returns instead is the reason plus the two calls that would work.
+//
+// The trade is real in both directions: in the schema, the constraint is what
+// `describe-matches-schemas` holds the documented examples to. See the design
+// note for the shape that would get both.
 const schema = z.object({
   action: z.literal("update"),
   id: z.string().describe("Document ID to update"),

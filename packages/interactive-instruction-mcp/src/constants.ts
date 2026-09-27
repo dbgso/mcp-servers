@@ -14,17 +14,19 @@ export const PLAN_DIR = "tmp";
  * so the file is visible, backed up and versioned with everything else, and it
  * outlives a reboot.
  */
-export const TRASH_DIR = "_mcp_trash";
 
 /**
  * Directories that hold this server's own files rather than documents.
  *
- * One predicate instead of a `startsWith(DRAFT_DIR)` at each call site. Adding
- * the trash directory to those checks one by one was four edits and a fifth
- * waiting to be forgotten -- `lint` would have reported every trashed document
- * as missing metadata.
+ * One entry, and one predicate rather than a `startsWith(DRAFT_DIR)` at each
+ * call site. There were two: a trash directory took deleted documents so that a
+ * delete could be undone. Nothing ever read it, no action restored from it, and
+ * the corpora this server runs against keep their history in version control
+ * already -- so it was a worse copy of `git checkout`, growing without bound.
+ * Grouping the drafts with it is also what hid, for a whole release, that
+ * `lint` and `graph` were skipping drafts for a reason written about the trash.
  */
-const INTERNAL_DIRS = [DRAFT_DIR, TRASH_DIR];
+const INTERNAL_DIRS = [DRAFT_DIR];
 
 /**
  * Whether an id belongs to one of those directories.
@@ -35,3 +37,5 @@ const INTERNAL_DIRS = [DRAFT_DIR, TRASH_DIR];
 export function isInternalDocument(id: string): boolean {
   return INTERNAL_DIRS.some((dir) => id === dir || id.startsWith(dir + ID_SEPARATOR));
 }
+
+

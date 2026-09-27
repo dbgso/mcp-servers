@@ -1,5 +1,10 @@
 ---
-description: YAML frontmatter format for document metadata (description and whenToUse).
+description: The YAML frontmatter a document may carry, and what each key means
+whenToUse:
+  - writing frontmatter by hand
+  - adding a metadata key
+  - debugging metadata that did not appear in a listing
+approvedAt: 2026-09-27T03:05:34.789Z
 ---
 
 # Frontmatter Format Specification

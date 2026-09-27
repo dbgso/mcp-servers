@@ -16,7 +16,12 @@ const schema = z.object({
   action: z.literal("approve"),
   id: z.string().optional(),
   ids: z.string().optional(),
-  targetId: z.string().optional(),
+  targetId: z
+    .string()
+    .optional()
+    .describe(
+      "Promote the draft under this id instead of its own. Single promotion only -- a batch has one id per draft, so `ids` refuses it."
+    ),
   notes: z.string().optional(),
   explanation: z
     .string()
@@ -25,10 +30,83 @@ const schema = z.object({
     .describe(
       "What this document says and why it should be promoted, in your own words, as you told the user. Required to promote, and identical across every attempt."
     ),
-  force: z.boolean().optional(),
 });
 
 type Args = z.infer<typeof schema>;
+
+/**
+ * Add an advisory to a response without changing what the response was.
+ *
+ * Appended to the first text block rather than pushed as a new one, so a caller
+ * reading `content[0].text` -- which is every caller -- sees it. An empty advice
+ * returns the response untouched, so the caller of this does not have to branch.
+ */
+function withAdvice(params: { response: ToolResponse; advice: string }): ToolResponse {
+  const { response, advice } = params;
+  if (advice === "") return response;
+
+  const first = response.content.findIndex((part) => part.type === "text");
+  if (first === -1) {
+    return { ...response, content: [...response.content, { type: "text" as const, text: advice }] };
+  }
+
+  return {
+    ...response,
+    content: response.content.map((part, index) =>
+      index === first && part.type === "text" ? { ...part, text: part.text + advice } : part
+    ),
+  };
+}
+
+/** How many ids a batch names, for a message that says the count back. */
+function countIds(ids: string): number {
+  return ids.split(",").filter((each) => each.trim().length > 0).length;
+}
+
+/**
+ * The arguments the batch path has never been able to use.
+ *
+ * Both were destructured in `doExecute` and then not passed on, so a batch
+ * carrying either was accepted and answered as though it had been applied.
+ * Each is single-promotion only for its own reason, and neither is a missing
+ * feature:
+ *
+ * - `targetId` is the id one draft is promoted under, and a batch has one draft
+ *   per id, so a single name cannot apply to all of them.
+ * - `notes` is one draft's self-review. The batch path already requires each
+ *   draft to have had its own recorded -- its refusal says so -- and one note
+ *   covering several drafts is the review not having happened.
+ * Refused rather than ignored, and refused before anything is promoted:
+ * promotion cannot be undone from here, so "it did something else" is the one
+ * outcome that cannot be walked back.
+ */
+function batchWouldIgnore(params: {
+  targetId?: string;
+  notes?: string;
+}): { reason: (count: number) => string; singleDescription: string; singleArgs: string } | null {
+  const { targetId, notes } = params;
+
+  if (targetId !== undefined) {
+    return {
+      reason: (count) =>
+        `\`targetId\` renames the one document being promoted, so it cannot apply to a batch of ${count}.`,
+      singleDescription: "Promote one draft under a different id",
+      singleArgs: 'targetId: "<new-id>"',
+    };
+  }
+
+  if (notes !== undefined) {
+    return {
+      reason: (count) =>
+        `\`notes\` is one draft's self-review, so it cannot stand for a batch of ${count}. ` +
+        "Record each draft's own notes first; the batch then promotes them under one explanation.",
+      singleDescription: "Record one draft's self-review",
+      singleArgs: 'notes: "<self-review>"',
+    };
+  }
+
+  return null;
+}
 
 /** Names one promotion to the gate; `what` below is what binds it to content. */
 function buildRequestId(parts: string[]): string {
@@ -53,6 +131,23 @@ function stableDraftBody(content: string): string {
   ].join("\n");
 }
 
+/**
+ * Why there is no draft under this id.
+ *
+ * Out of scope and absent are different facts. A document that has already been
+ * promoted exists -- there is simply nothing left to approve -- and calling
+ * that "not found" sends the caller off to re-check an id that was right.
+ */
+async function noDraftReason(params: {
+  reader: InstructionContext["reader"];
+  id: string;
+}): Promise<string> {
+  const { reader, id } = params;
+  return (await reader.documentExists(id))
+    ? `"${id}" is already promoted, so there is nothing left to approve.`
+    : `Error: Draft "${id}" not found.`;
+}
+
 export class ApproveHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "approve";
   readonly help = `Promote a draft to a managed document.
@@ -67,11 +162,32 @@ promote. \`ids\` promotes several drafts under one explanation.`;
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, ids, targetId, notes, explanation, force } = params.args;
+    const { id, ids, targetId, notes, explanation } = params.args;
     const { reader } = params.context;
 
     // Batch approval mode
     if (ids) {
+      // `targetId` is the name a draft is promoted under, and a batch has one
+      // draft per id -- so a single name cannot apply to all of them. It used
+      // to be dropped without a word, and every draft landed under its own id
+      // while the caller had asked for a different one.
+      const singleOnly = batchWouldIgnore({ targetId, notes });
+      if (singleOnly !== null) {
+        return errorResponse(
+          singleOnly.reason(countIds(ids)) +
+          formatNextActions([
+            {
+              action: "approve",
+              description: singleOnly.singleDescription,
+              example: `instruction(action: "approve", id: "<draft-id>", ${singleOnly.singleArgs}, explanation: "<what it says and why>")`,
+            },
+            {
+              action: "approve",
+              description: "Promote the batch, which takes neither",
+              example: `instruction(action: "approve", ids: "${ids}", explanation: "<what they say and why>")`,
+            },
+          ]));
+      }
       return this.handleBatchApproval({ ids, explanation, reader });
     }
 
@@ -82,7 +198,7 @@ promote. \`ids\` promotes several drafts under one explanation.`;
     const status = await draftWorkflowManager.getStatus({ id });
     const currentState: DraftState = status?.state ?? "editing";
 
-    return this.handleApprovalRequest({ id, targetId, notes, explanation, force, currentState, reader });
+    return this.handleApprovalRequest({ id, targetId, notes, explanation, currentState, reader });
   }
 
   private async handleApprovalRequest(params: {
@@ -90,11 +206,10 @@ promote. \`ids\` promotes several drafts under one explanation.`;
     targetId?: string;
     notes?: string;
     explanation?: string;
-    force?: boolean;
     currentState: DraftState;
     reader: InstructionContext["reader"];
   }): Promise<ToolResponse> {
-    const { id, targetId, notes, explanation, force, reader } = params;
+    const { id, targetId, notes, explanation, reader } = params;
     let { currentState } = params;
 
     // editing: submit the draft's current content and carry on into
@@ -105,7 +220,7 @@ promote. \`ids\` promotes several drafts under one explanation.`;
     if (currentState === "editing") {
       const draftContent = await reader.getDocumentContent(DRAFT_PREFIX + id);
       if (draftContent === null) {
-        return errorResponse(`Error: Draft "${id}" not found.`);
+        return errorResponse(await noDraftReason({ reader, id }));
       }
 
       const submitted = await draftWorkflowManager.trigger({
@@ -201,31 +316,19 @@ ${stateDescriptions.user_reviewing}` +
         );
       }
 
-      // Check consecutive approvals
-      if (!force) {
-        const recentlyConfirmed = await this.getRecentlyConfirmedDrafts({ currentId: id, withinMs: 10_000, reader });
-        if (recentlyConfirmed.length > 0) {
-          const allIds = [id, ...recentlyConfirmed];
-          return errorResponse(
-            `# Warning: Consecutive approval requests detected
-
-You just confirmed "${recentlyConfirmed.join(", ")}" within the last 10 seconds.
-Now you're trying to confirm "${id}" separately.` +
-            formatNextActions([
-              {
-                action: "approve",
-                description: "Promote them together under one explanation (recommended)",
-                example: `instruction(action: "approve", ids: "${allIds.join(",")}", explanation: "<what these say and why>")`,
-              },
-              {
-                action: "approve",
-                description: `Proceed with just "${id}"`,
-                example: `instruction(action: "approve", id: "${id}", explanation: "${explanation}", force: true)`,
-              },
-            ]),
-          );
-        }
-      }
+      // Advisory rather than a gate, and computed before the confirm so it
+      // describes the state the caller was in when they made the call.
+      //
+      // What it protects is the quality of the account the user gets -- one
+      // explanation covering related drafts instead of one vague one per
+      // document -- and not the safety of the write, which the deliberation
+      // gate holds either way. It used to refuse, which is why `force` existed;
+      // the escape hatch outlived its reason, and its heaviest user had become
+      // this package's own test suite, silencing a warning the tests provoked by
+      // running fast. This package already has the shape for a report that is
+      // not a veto: write-time lint says the document was saved and leaves the
+      // decision with the author.
+      const advice = await this.batchingAdvice({ id, reader });
 
       // Into pending_approval before the gate runs. The gate refuses the first
       // attempt, so the state has to be the one the repeat call lands in --
@@ -246,7 +349,10 @@ Now you're trying to confirm "${id}" separately.` +
         reader,
       });
 
-      return this.promote({ id, targetId, explanation, reader });
+      return withAdvice({
+        response: await this.promote({ id, targetId, explanation, reader }),
+        advice,
+      });
     }
 
     // pending_approval: the state a refused attempt leaves behind, so this is
@@ -360,7 +466,9 @@ Expected: self_review, user_reviewing or pending_approval` +
     const sourceDraftId = DRAFT_PREFIX + id;
     const targetPath = reader.getFilePath(finalTargetId);
     const draftContent = await reader.getDocumentContent(sourceDraftId);
-    if (!draftContent) return `**Error:** Draft "${id}" not found.`;
+    // Spliced into the gate preview rather than returned as an error, so it
+    // keeps the marker that tells a reader this block is a failure.
+    if (!draftContent) return `**Error:** ${await noDraftReason({ reader, id })}`;
     const existingContent = await reader.getDocumentContent(finalTargetId);
     if (existingContent === null) {
       return this.generateSummary({ content: draftContent, targetId: finalTargetId, targetPath });
@@ -448,7 +556,17 @@ ${headerSection}`;
     // in a batch without self-review. Persisted state is deleted on promotion
     // now, but the check costs nothing and does not depend on that cleanup.
     const notReady: string[] = [];
+    const alreadyPromoted: string[] = [];
     for (const id of idList) {
+      // Promotion deletes the workflow state, so a promoted document reads back
+      // as `editing` and would be reported as an unreviewed draft -- telling
+      // the caller to record `notes` on an id that will then be refused for
+      // being promoted. Out of scope is not "you have more work to do".
+      if (!(await reader.documentExists(DRAFT_PREFIX + id)) && (await reader.documentExists(id))) {
+        alreadyPromoted.push(id);
+        continue;
+      }
+
       const status = await draftWorkflowManager.getStatus({ id });
       const state = status?.state ?? "editing";
       if (state !== "user_reviewing" && state !== "pending_approval") {
@@ -460,13 +578,24 @@ ${headerSection}`;
       }
     }
 
-    if (notReady.length > 0) {
-      return errorResponse(`# Cannot batch approve
+    if (alreadyPromoted.length > 0 || notReady.length > 0) {
+      const sections = [
+        ...(alreadyPromoted.length === 0
+          ? []
+          : [
+              "These are already promoted, so there is nothing left to approve:",
+              alreadyPromoted.map((id) => `- ${id}`).join("\n"),
+            ]),
+        ...(notReady.length === 0
+          ? []
+          : [
+              "These drafts have not been reviewed yet:",
+              notReady.map((entry) => `- ${entry}`).join("\n"),
+              "Each one needs its \`notes\` recorded first.",
+            ]),
+      ];
 
-These drafts have not been reviewed yet:
-${notReady.map((s) => `- ${s}`).join("\n")}
-
-Each one needs its \`notes\` recorded first.`);
+      return errorResponse(`# Cannot batch approve\n\n${sections.join("\n\n")}`);
     }
 
     // Moved before the gate runs, for the same reason as the single path: the
@@ -558,6 +687,42 @@ Each one needs its \`notes\` recorded first.`);
   }
 
   /**
+   * What to say when related drafts are being promoted one at a time.
+   *
+   * Empty when there is nothing to say, which is the common case, so the caller
+   * can hand the result straight to `withAdvice`.
+   *
+   * The 10-second window is a heuristic and always was: what it is reaching for
+   * is "these were written as one change", which nothing in the corpus records.
+   * As a refusal that made it a guess with a veto; as a note it is a guess with
+   * a suggestion, which is the most it was ever entitled to.
+   */
+  private async batchingAdvice(params: {
+    id: string;
+    reader: InstructionContext["reader"];
+  }): Promise<string> {
+    const { id, reader } = params;
+
+    const recentlyConfirmed = await this.getRecentlyConfirmedDrafts({
+      currentId: id,
+      withinMs: 10_000,
+      reader,
+    });
+    if (recentlyConfirmed.length === 0) return "";
+
+    const together = [...recentlyConfirmed, id].join(",");
+    return `
+
+---
+
+**These may belong together.** "${recentlyConfirmed.join('", "')}" ${recentlyConfirmed.length === 1 ? "was" : "were"} confirmed less than ten seconds ago and ${recentlyConfirmed.length === 1 ? "is" : "are"} still waiting to be promoted. One explanation covering the change reads better to the user than one account per document:
+
+\`instruction(action: "approve", ids: "${together}", explanation: "<what these say and why>")\`
+
+This call is going ahead as made; the batch form is still open afterwards.`;
+  }
+
+  /**
    * Drafts confirmed moments ago and still waiting to be promoted.
    *
    * The draft file has to still be there. Applied drafts used to qualify --
@@ -613,7 +778,7 @@ Each one needs its \`notes\` recorded first.`);
     // already in progress rather than the one being gated.
     const what = await this.buildApprovalWhat({ id, targetId, reader });
     if (what === null) {
-      return errorResponse(`Error: Draft "${id}" not found.`);
+      return errorResponse(await noDraftReason({ reader, id }));
     }
 
     const changeInfo = await this.generateChangeInfo({ id, targetId, reader });
@@ -682,7 +847,7 @@ Each one needs its \`notes\` recorded first.`);
 
     const draftContent = await reader.getDocumentContent(sourceDraftId);
     if (draftContent === null) {
-      return errorResponse(`Error: Draft "${id}" not found.`);
+      return errorResponse(await noDraftReason({ reader, id }));
     }
 
     // Move first, mark approved second. The other order left a failed rename

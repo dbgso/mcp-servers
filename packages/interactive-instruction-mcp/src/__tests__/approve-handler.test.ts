@@ -666,49 +666,43 @@ describe("ApproveHandler", () => {
   });
 
   describe("Recently confirmed drafts detection", () => {
-    it("should detect recently confirmed drafts and suggest batch approval", async () => {
+    it("mentions the batch form alongside the answer, rather than instead of it", async () => {
+      // This used to refuse: the warning came back as the whole response with
+      // `isError`, and the only way past it was `force: true`. What it protects
+      // is the quality of the account the user gets, not the safety of the
+      // write, so it is a note appended to the answer now -- and `force`, whose
+      // one job was suppressing it, is gone.
       const id1 = getTestId("test-draft-1");
       const id2 = getTestId("test-draft-2");
 
-      // Create first draft and confirm it (sets confirmedAt)
       await createDraftAtState(id1, "pending_approval");
-
-      // Create second draft at user_reviewing
       await createDraftAtState(id2, "user_reviewing");
 
-      // Try to confirm second draft without force
-      // Should detect id1 as recently confirmed and return warning
       const result = await approveHandler.execute({
         rawParams: { action: "approve", id: id2, explanation: EXPLANATION },
         context,
       });
 
-      // Warning is returned as isError: true, and what it suggests is
-      // promoting them together under one explanation.
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Consecutive");
-      expect(result.content[0].text).toContain("ids:");
+      // The answer is the gate's, as it would be without another draft pending.
+      expect(isRefusal(result)).toBe(true);
+      // And the advice rides along with it, naming both ids in one call.
+      expect(result.content[0].text).toContain("may belong together");
+      expect(result.content[0].text).toContain(`ids: "${id1},${id2}"`);
     });
 
-    it("should skip recently confirmed check with force: true", async () => {
-      const id1 = getTestId("test-draft-1");
-      const id2 = getTestId("test-draft-2");
+    it("says nothing when no other draft is waiting", async () => {
+      // The common case, and the one that would hide a note appended
+      // unconditionally.
+      const id = getTestId("test-draft-alone");
+      await createDraftAtState(id, "user_reviewing");
 
-      // Create first draft and confirm it
-      await createDraftAtState(id1, "pending_approval");
-
-      // Create second draft at user_reviewing
-      await createDraftAtState(id2, "user_reviewing");
-
-      // Confirm with force: true
       const result = await approveHandler.execute({
-        rawParams: { action: "approve", id: id2, explanation: EXPLANATION, force: true },
+        rawParams: { action: "approve", id, explanation: EXPLANATION },
         context,
       });
 
-      expect(result.isError).toBeFalsy();
-      // Should not mention batch, should proceed with approval
       expect(isRefusal(result)).toBe(true);
+      expect(result.content[0].text).not.toContain("may belong together");
     });
   });
 

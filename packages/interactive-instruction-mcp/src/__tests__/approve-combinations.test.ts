@@ -57,7 +57,6 @@ interface Case {
   draft: "present" | "absent";
   notes: "given" | "omitted";
   explanation: "given" | "omitted";
-  force: "on" | "off";
   mode: "single" | "batch";
   target: "same" | "other_free" | "other_occupied";
   attempts: "once" | "repeated";
@@ -160,7 +159,6 @@ function argumentsFor(params: { id: string; testCase: Case }): Record<string, un
     ...(testCase.target !== "same" && { targetId: targetFor({ id, testCase }) }),
     ...(testCase.notes === "given" && { notes: "reviewed: one topic, ready" }),
     ...(testCase.explanation === "given" && { explanation: EXPLANATION }),
-    ...(testCase.force === "on" && { force: true }),
   };
 }
 
@@ -258,6 +256,12 @@ describe("every pair of inputs to approve", () => {
   it("leaves the draft where it was whenever it refuses", async () => {
     // The other half of the safety property: a refusal must not half-move a
     // draft. Either the document is in the corpus or the draft is still there.
+    //
+    // "In the corpus" means under the id it was promoted to, which is `targetId`
+    // when one was given. Checking only `id` made this pass for the wrong
+    // reason: a `targetId` promotion satisfied neither half, and the case that
+    // would have shown it was being refused earlier by the consecutive-approval
+    // warning -- so removing that warning's veto is what surfaced this.
     const cases = await readCases();
 
     for (const testCase of cases.filter((c) => c.draft === "present")) {
@@ -271,7 +275,7 @@ describe("every pair of inputs to approve", () => {
       }
 
       reader.invalidateCache();
-      const inCorpus = await reader.documentExists(id);
+      const inCorpus = await reader.documentExists(targetFor({ id, testCase }));
       const stillDraft = await reader.documentExists(DRAFT_PREFIX + id);
       expect(inCorpus || stillDraft, JSON.stringify(testCase)).toBe(true);
     }
