@@ -6,37 +6,87 @@ on:
       - main
   pull_request:
 
+# A new push supersedes the one before it, and 22 test jobs per run is enough
+# that letting both sets finish is a way to sit behind the concurrency cap for no
+# reason. `main` is excluded: those runs are the record of what was merged.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
-  test:
+  # Read off the packages rather than listed here. A package added without a line
+  # in a workflow is a package whose tests never run, with nothing going red to
+  # say so. See scripts/ci-test-matrix.mjs.
+  packages:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: list
+        run: echo "matrix=$(node scripts/ci-test-matrix.mjs)" >> "$GITHUB_OUTPUT"
+
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-node-pnpm
+      - run: pnpm lint
 
-      # Starts floci (waits for healthy) and exports AWS_* env for the emulator.
-      - uses: ./.github/actions/floci
+  # The whole repository still has to compile, which is not the same question as
+  # whether each package's own tests pass: a package can be green on its own and
+  # have broken the type of something downstream of it.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-node-pnpm
+      - run: pnpm build
 
-      - name: Lint
-        run: pnpm lint
+  test:
+    needs: packages
+    runs-on: ubuntu-latest
+    strategy:
+      # One package's failure is not a reason to stop learning about the others,
+      # and the point of splitting was to get all the answers in one run.
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.packages.outputs.matrix) }}
+    name: >-
+      test (${{ matrix.package.name }}${{
+        matrix.package.shards > 1 && format(' {0}/{1}', matrix.package.shard, matrix.package.shards) || ''
+      }})
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-node-pnpm
 
-      - name: Build
-        run: pnpm build
+      # Only where the emulator is actually used. It is ten seconds, which is
+      # nothing once -- and twenty-two times is the kind of cost that is only
+      # obvious after somebody adds the second service.
+      - if: matrix.package.floci
+        uses: ./.github/actions/floci
 
-      # `-- --coverage` puts the flag after vitest's `--`, where it is read as a
-      # test-name filter and silently dropped. Coverage has therefore never run
-      # in CI, and the thresholds in every vitest.config.ts have never been
-      # checked -- which is how a package came to sit 7 points under its own.
+      # `...` builds this package's dependencies too, and nothing else. A
+      # separate build job whose artifact these downloaded would be a serial
+      # stage in front of every one of them; this pays only for what the package
+      # needs.
+      - name: Build dependencies
+        run: pnpm --filter ${{ matrix.package.name }}... build
+
+      # `--shard` splits by file, for the one package slow enough to be the whole
+      # run's critical path. A package with coverage thresholds cannot be sharded
+      # -- each shard would measure a subset and fail a threshold written for all
+      # of it -- and the matrix generator refuses that combination rather than
+      # letting CI discover it.
       - name: Test with coverage
-        run: pnpm -r test --coverage
+        run: |
+          pnpm --filter ${{ matrix.package.name }} test --coverage ${{
+            matrix.package.shards > 1 && format('--shard={0}/{1}', matrix.package.shard, matrix.package.shards) || ''
+          }}
 
-      # v7 rather than v5 for the same reason as the rest: v5 pins
-      # `actions/github-script@v7.0.1` internally, which is node20, and the
-      # runner reported it as the last one left. v6 is the release that bumped
-      # it; v7 only changes which account holds the gpg key. Coverage upload
-      # already tolerates its own failure below, so this is the cheapest of the
-      # bumps to be wrong about.
       - name: Upload coverage reports
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          flags: ${{ matrix.package.name }}
           fail_ci_if_error: false
