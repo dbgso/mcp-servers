@@ -147,3 +147,113 @@ describe("sizeExemption through the tool", () => {
     expect(text(meta)).toContain("Deliberately whole.");
   });
 });
+
+/**
+ * The value `null` cannot always reach here.
+ *
+ * Some MCP clients render tool arguments as strings, so `sizeExemption: null`
+ * arrives as the four characters `null`. 2.0.1 stored that as the reason: the
+ * call `stale-size-exemption` recommends did nothing, the finding came back
+ * saying the same thing, and the document was left claiming its reason for
+ * staying whole was "null".
+ */
+describe("a value that is not a reason", () => {
+  it.each(["null", "undefined", "NULL", "  null  "])("refuses %o rather than storing it", async (given) => {
+    await call(new AddHandler(), {
+      action: "add", id: "big", content: `# Big\n\n${LONG}`,
+      description: "a long document", whenToUse: ["testing"],
+      sizeExemption: "A real reason.",
+    });
+
+    const result = await call(new UpdateHandler(), { action: "update", id: "big", sizeExemption: given });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("is not a reason");
+    // The refusal has to carry the call that removes it, because removing is
+    // what the caller was trying to do.
+    expect(text(result)).toContain('sizeExemption: ""');
+    // And the reason that was there is untouched.
+    expect(await draftBody()).toContain("A real reason.");
+  });
+
+  it("takes an empty string as removal, which a stringifying client can send", async () => {
+    await call(new AddHandler(), {
+      action: "add", id: "big", content: `# Big\n\n${LONG}`,
+      description: "a long document", whenToUse: ["testing"],
+      sizeExemption: "A real reason.",
+    });
+
+    const result = await call(new UpdateHandler(), { action: "update", id: "big", sizeExemption: "" });
+
+    expect(result.isError).toBeFalsy();
+    expect(await draftBody()).not.toContain("sizeExemption");
+    expect(text(await call(new LintHandler(), { action: "lint" }))).toContain("document-too-large");
+  });
+
+  it("refuses it at creation too", async () => {
+    const result = await call(new AddHandler(), {
+      action: "add", id: "big", content: `# Big\n\n${LONG}`,
+      description: "a long document", whenToUse: ["testing"],
+      sizeExemption: "null",
+    });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("is not a reason");
+  });
+
+  it("reports one already written into a corpus", async () => {
+    // 2.0.1 stored these, so a corpus can hold them already. The finding has to
+    // name what the field actually says, or it reads as the empty case.
+    await fs.writeFile(
+      path.join(docsDir, DRAFT_DIR, "stored.md"),
+      `---\ndescription: a doc\nwhenToUse:\n  - testing\nsizeExemption: "null"\n---\n\n# Stored\n\n${LONG}\n`,
+      "utf-8"
+    );
+    context.reader.invalidateCache();
+
+    const lint = text(await call(new LintHandler(), { action: "lint" }));
+
+    expect(lint).toContain("size-exemption-without-reason");
+    expect(lint).toContain('set to "null"');
+    // And it is not treated as an exemption, so the size finding stands.
+    expect(lint).toContain("document-too-large");
+  });
+});
+
+/**
+ * The id in an example call has to be an id.
+ *
+ * `lint` labels a draft `<id> (draft)` so the two sets can be told apart. Once
+ * these messages began naming the call that answers them, the label went into
+ * the call: every size finding on a draft offered `id: "big (draft)"`, which no
+ * action accepts. Introduced in 2.0.1 by the same change that added the field.
+ */
+describe("the call a finding names", () => {
+  it("uses the plain id, not the draft label", async () => {
+    await call(new AddHandler(), {
+      action: "add", id: "big", content: `# Big\n\n${LONG}`,
+      description: "a long document", whenToUse: ["testing"],
+    });
+
+    const lint = text(await call(new LintHandler(), { action: "lint" }));
+
+    // The label is still there, because a reader needs to know which set it is in.
+    expect(lint).toContain("**big (draft)**");
+    // The call is not.
+    expect(lint).toContain('instruction(action: "update", id: "big", sizeExemption:');
+    expect(lint).not.toContain('id: "big (draft)"');
+  });
+
+  it("names a removal that works, for a document within the limit", async () => {
+    await call(new AddHandler(), {
+      action: "add", id: "big", content: "# Big\n\nshort",
+      description: "a doc", whenToUse: ["testing"],
+      sizeExemption: "Deliberately whole.",
+    });
+
+    const lint = text(await call(new LintHandler(), { action: "lint" }));
+
+    expect(lint).toContain("stale-size-exemption");
+    expect(lint).not.toContain('id: "big (draft)"');
+  });
+});

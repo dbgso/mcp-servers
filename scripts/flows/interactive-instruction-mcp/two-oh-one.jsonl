@@ -29,3 +29,14 @@
 {"call": "instruction", "args": {"action": "approve", "id": "api", "explanation": "The api spec, promoted so the corpus-wide rules have something to read."}, "expect": ["promoted"]}
 {"call": "instruction", "label": "#70 the orphan finding names the direction", "args": {"action": "lint"}, "expect": ["orphaned-document", "the document it belongs under", "parent to child"], "expectNot": ["consider adding relatedDocs"]}
 
+# 2.0.2 (#73, and the draft label 2.0.1 put into an executable call).
+#
+# A client that renders tool arguments as strings cannot send `null`, so what
+# arrives is the four characters "null" -- stored as the reason in 2.0.1, which
+# made the call `stale-size-exemption` recommends do nothing.
+{"call": "instruction", "label": "#73 \"null\" as a reason is refused", "args": {"action": "update", "id": "big", "sizeExemption": "null"}, "expect": ["is not a reason", "sizeExemption: \"\""], "expectNot": ["Nothing to update"]}
+{"call": "instruction", "label": "#73 an empty string removes it instead", "args": {"action": "update", "id": "big", "sizeExemption": "A real reason."}}
+{"call": "instruction", "label": "#73 and the removal takes", "args": {"action": "update", "id": "big", "sizeExemption": ""}, "expectNot": ["is not a reason"]}
+{"call": "instruction", "label": "#73 so the size finding stands again", "args": {"action": "lint"}, "expect": ["document-too-large"]}
+{"call": "instruction", "label": "the id in a finding's example is an id", "args": {"action": "lint"}, "expect": ["**big (draft)**", "id: \"big\", sizeExemption:"], "expectNot": ["id: \"big (draft)\""]}
+
