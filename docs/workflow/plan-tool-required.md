@@ -1,4 +1,5 @@
 ---
+description: All implementation work goes through the plan tool, for tracking and for visibility of progress.
 whenToUse:
   - Starting any implementation work
   - Tracking progress on multi-step tasks

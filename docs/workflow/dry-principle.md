@@ -1,4 +1,5 @@
 ---
+description: Define information in one place and reference it from elsewhere. Where a duplicate belongs instead.
 whenToUse:
   - Writing or updating help documents
   - Considering whether to duplicate content

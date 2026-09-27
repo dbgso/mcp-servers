@@ -1,4 +1,5 @@
 ---
+description: "What a report of \"it works\" has to contain: what was checked, how, and what the run actually said."
 whenToUse:
   - Reporting test or verification results to user
   - Summarizing what was checked and why it passed
