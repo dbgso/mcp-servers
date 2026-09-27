@@ -11,6 +11,7 @@
   "files": [
     "dist"
   ],
+  "ciShards": 3,
   "scripts": {
     "build": "tsc --noEmit && tsup && node ../../scripts/verify-bundle.mjs .",
     "test": "vitest run",

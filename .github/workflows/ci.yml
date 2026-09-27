@@ -52,7 +52,10 @@ jobs:
       fail-fast: false
       matrix:
         package: ${{ fromJson(needs.packages.outputs.matrix) }}
-    name: test (${{ matrix.package.name }})
+    name: >-
+      test (${{ matrix.package.name }}${{
+        matrix.package.shards > 1 && format(' {0}/{1}', matrix.package.shard, matrix.package.shards) || ''
+      }})
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-node-pnpm
@@ -70,8 +73,16 @@ jobs:
       - name: Build dependencies
         run: pnpm --filter ${{ matrix.package.name }}... build
 
+      # `--shard` splits by file, for the one package slow enough to be the whole
+      # run's critical path. A package with coverage thresholds cannot be sharded
+      # -- each shard would measure a subset and fail a threshold written for all
+      # of it -- and the matrix generator refuses that combination rather than
+      # letting CI discover it.
       - name: Test with coverage
-        run: pnpm --filter ${{ matrix.package.name }} test --coverage
+        run: |
+          pnpm --filter ${{ matrix.package.name }} test --coverage ${{
+            matrix.package.shards > 1 && format('--shard={0}/{1}', matrix.package.shard, matrix.package.shards) || ''
+          }}
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v7
