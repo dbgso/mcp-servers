@@ -1,6 +1,6 @@
 {
   "name": "mcp-shared-graph-viz",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Turn nodes and edges into an interactive cytoscape page. Zero runtime dependencies: cytoscape runs in the browser.",
   "type": "module",
