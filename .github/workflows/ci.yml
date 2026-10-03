@@ -32,6 +32,12 @@ jobs:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm lint
+      # A changeset is published verbatim inside the package's CHANGELOG.md, and
+      # nobody reads a generated file before it ships. This is the one chance to
+      # catch markdown that will say something else once prettier has resolved
+      # it -- after the release there is a wrong version on npm.
+      - name: Verify changeset markdown
+        run: node scripts/verify-changeset-markdown.mjs
 
   # The whole repository still has to compile, which is not the same question as
   # whether each package's own tests pass: a package can be green on its own and
