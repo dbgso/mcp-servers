@@ -127,13 +127,13 @@ function isJsonExt(filePath: string): boolean {
   return path.extname(filePath).toLowerCase() === ".json";
 }
 
-interface LoadJsonParams<T> {
+interface LoadJsonParams {
   filePath: string;
   jsonReader: JsonReader;
   what: string;
 }
 
-async function loadJson<T>(params: LoadJsonParams<T>): Promise<T> {
+async function loadJson<T>(params: LoadJsonParams): Promise<T> {
   const { filePath, jsonReader, what } = params;
   const fsPath = toFsPath(filePath);
   let raw: string;

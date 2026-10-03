@@ -17,18 +17,18 @@ const argsSchema = z.object({
     .describe("Case-insensitive substring filter (ignored when `tables` is provided)"),
 });
 
-export const previewMetadataJsonOp: CodegenOperation<z.infer<typeof argsSchema>> = {
-  id: "preview_metadata_json",
-  summary: "Generate `metadata.json` for the requested tables (no file write)",
-  detail: `Returns a pretty-printed JSON string the caller can save as
+export class PreviewMetadataJsonOp implements CodegenOperation<z.infer<typeof argsSchema>> {
+  readonly id = "preview_metadata_json";
+  readonly summary = "Generate `metadata.json` for the requested tables (no file write)";
+  readonly detail = `Returns a pretty-printed JSON string the caller can save as
 \`metadata.json\`. Each field carries \`type\` (GenericFieldType),
 \`nullable\`, and \`nativeType\` (the original DB type so reviewers can
 sanity-check the mapping).
 
-Read-only — does not write to disk.`,
-  category: "Read",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+Read-only — does not write to disk.`;
+  readonly category = "Read";
+  readonly argsSchema = argsSchema;
+  execute: CodegenOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
     const tables = await introspectAllTables({
       introspector: ctx.introspector,
       schema: args.schema,
@@ -40,5 +40,7 @@ Read-only — does not write to disk.`,
     // string ready to be written to disk. We do NOT wrap it in jsonResponse
     // because that would double-encode.
     return { content: [{ type: "text" as const, text: source }] };
-  },
-};
+  };
+}
+
+export const previewMetadataJsonOp = new PreviewMetadataJsonOp();

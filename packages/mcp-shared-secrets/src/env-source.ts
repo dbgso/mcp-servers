@@ -5,7 +5,10 @@ import type { SecretSource } from "./source.js";
  * Useful for layering / cross-references in env files.
  */
 export function envSource(): SecretSource {
-  return {
-    fetch: async (path) => process.env[path],
-  };
+  return new EnvSource();
+}
+
+/** {@link SecretSource} that reads another env var — see {@link envSource}. */
+export class EnvSource implements SecretSource {
+  fetch = async (path: string): Promise<string | undefined> => process.env[path];
 }

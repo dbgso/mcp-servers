@@ -18,6 +18,7 @@ import type {
   EngineStrategy,
   OpenStrategyArgs,
 } from "./types.js";
+import { SqlEngineConnection } from "./engine-connection.js";
 
 const URL_SCHEME = /^postgres(ql)?:\/\//i;
 
@@ -31,12 +32,12 @@ function buildInsecureWarning(): string {
   return "[db-read-mcp] WARNING: connecting without SSL — append `sslmode=require` to DBREAD_URL when bypassing the SSH bastion.";
 }
 
-export const postgresStrategy: EngineStrategy = {
-  engine: "postgres",
+export class PostgresStrategy implements EngineStrategy {
+  readonly engine = "postgres";
 
   matches(url: string): boolean {
     return URL_SCHEME.test(url);
-  },
+  }
 
   detectInsecureTls(args: DetectInsecureTlsArgs): string | null {
     // Any tunnel (SSH bastion / SSM port forward) encrypts the hop the
@@ -46,7 +47,7 @@ export const postgresStrategy: EngineStrategy = {
     const explicitlyEncrypted =
       sslmode !== undefined && ENCRYPTED_SSLMODE_RE.test(sslmode);
     return explicitlyEncrypted ? null : buildInsecureWarning();
-  },
+  }
 
   async open(args: OpenStrategyArgs): Promise<EngineConnection> {
     const { url: tunneledUrl, tunnel } = await resolveTunneledUrl({
@@ -89,12 +90,8 @@ export const postgresStrategy: EngineStrategy = {
       client: connectedClient,
       tableMetadata: args.tableMetadata,
     });
-    return {
-      dataSource,
-      async close(): Promise<void> {
-        await connectedClient.end();
-        if (tunnel) await tunnel.close();
-      },
-    };
-  },
-};
+    return new SqlEngineConnection({ dataSource, client: connectedClient, tunnel });
+  }
+}
+
+export const postgresStrategy = new PostgresStrategy();

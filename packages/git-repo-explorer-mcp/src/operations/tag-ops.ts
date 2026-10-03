@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { GitOperation } from "./types.js";
+import type { GitOperation, GitOperationContext } from "./types.js";
 import { gitTagList } from "../git-repo-manager.js";
 
 const tagListArgsSchema = z.object({
@@ -10,19 +10,19 @@ const tagListArgsSchema = z.object({
 });
 type TagListArgs = z.infer<typeof tagListArgsSchema>;
 
-export const tagListOp: GitOperation<TagListArgs> = {
-  id: "tag_list",
-  summary: "List tags (newest first)",
-  detail: `List tags in the repository, sorted by newest first. Filter by pattern or limit count.
+export class TagListOp implements GitOperation<TagListArgs> {
+  readonly id = "tag_list";
+  readonly summary = "List tags (newest first)";
+  readonly detail = `List tags in the repository, sorted by newest first. Filter by pattern or limit count.
 
 Examples:
   operation: "tag_list"
   params: {}
   params: { repo_url: "git@github.com:org/repo.git", pattern: "v2.*" }
-  params: { max_count: 10 }`,
-  category: "Reference",
-  argsSchema: tagListArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { max_count: 10 }`;
+  readonly category = "Reference";
+  readonly argsSchema = tagListArgsSchema;
+  async execute(args: TagListArgs, ctx: GitOperationContext): Promise<CallToolResult> {
     const tags = await gitTagList({
       repoPath: ctx.repoPath,
       options: { pattern: args.pattern, max_count: args.max_count },
@@ -38,7 +38,9 @@ Examples:
         }, null, 2),
       }],
     };
-  },
-};
+  }
+}
+
+export const tagListOp = new TagListOp();
 
 export const tagOperations = [tagListOp];

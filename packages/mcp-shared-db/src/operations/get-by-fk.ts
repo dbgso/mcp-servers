@@ -24,15 +24,15 @@ const argsSchema = z.object({
     .describe(`Max rows (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT})`),
 });
 
-export const getByFkOp: DatabaseOperation<z.infer<typeof argsSchema>> = {
-  id: "get_by_fk",
-  summary: "Fetch rows referencing a related record (foreign-key lookup)",
-  detail: `Filters rows by a foreign-key column. Use this when you have an ID of a parent
+export class GetByFkOp implements DatabaseOperation<z.infer<typeof argsSchema>> {
+  readonly id = "get_by_fk";
+  readonly summary = "Fetch rows referencing a related record (foreign-key lookup)";
+  readonly detail = `Filters rows by a foreign-key column. Use this when you have an ID of a parent
 record and want every child row that points at it.
-Returns up to \`limit\` rows. PII fields are redacted as \`"[REDACTED]"\`.`,
-  category: "Read",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+Returns up to \`limit\` rows. PII fields are redacted as \`"[REDACTED]"\`.`;
+  readonly category = "Read";
+  readonly argsSchema = argsSchema;
+  execute: DatabaseOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
     const config = ctx.selectableFields[args.table];
     const meta = ctx.tableMetadata[args.table];
     // Unknown / non-whitelisted table.
@@ -75,5 +75,7 @@ Returns up to \`limit\` rows. PII fields are redacted as \`"[REDACTED]"\`.`,
       response.warning = unindexedColumnWarning({ table: args.table, column: args.column });
     }
     return jsonResponse(response);
-  },
-};
+  };
+}
+
+export const getByFkOp = new GetByFkOp();

@@ -10,16 +10,16 @@ const argsSchema = z.object({
     .describe("Primary key value. Use string for char/varchar PKs, number for int PKs."),
 });
 
-export const getByPkOp: DatabaseOperation<z.infer<typeof argsSchema>> = {
-  id: "get_by_pk",
-  summary: "Fetch a single row by primary key",
-  detail: `Looks up at most one row by the table's primary key column.
+export class GetByPkOp implements DatabaseOperation<z.infer<typeof argsSchema>> {
+  readonly id = "get_by_pk";
+  readonly summary = "Fetch a single row by primary key";
+  readonly detail = `Looks up at most one row by the table's primary key column.
 The PK is read from Layer 1 metadata. Composite primary keys are not supported by this op
 (use \`get_by_fk\` or \`get_by_index\` to filter by a non-PK column).
-PII fields are redacted as \`"[REDACTED]"\`.`,
-  category: "Read",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+PII fields are redacted as \`"[REDACTED]"\`.`;
+  readonly category = "Read";
+  readonly argsSchema = argsSchema;
+  execute: DatabaseOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
     const config = ctx.selectableFields[args.table];
     const meta = ctx.tableMetadata[args.table];
     // Unknown / non-whitelisted table.
@@ -50,5 +50,7 @@ PII fields are redacted as \`"[REDACTED]"\`.`,
     }
     const redacted = redactPii({ row, table: config });
     return jsonResponse({ table: args.table, pk: args.pk, found: true, row: redacted });
-  },
-};
+  };
+}
+
+export const getByPkOp = new GetByPkOp();

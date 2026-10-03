@@ -104,92 +104,97 @@ function physicalTable(params: {
 }
 
 export function createSqlDataSource(config: CreateSqlDataSourceConfig): DataSource {
-  return {
-    async findByPk(input: FindByPkInput) {
-      const meta = requireMetadata({ config, table: input.table });
-      const pkColumn = requireSinglePk({ meta, table: input.table });
-      const built = buildFindByPk({
-        dialect: config.dialect,
-        table: physicalTable({ meta, logical: input.table }),
-        pkColumn,
-        pk: input.pk,
-        columns: input.columns,
-      });
-      const r = await config.query({ sql: built.sql, values: built.values });
-      return r.rows[0] ?? null;
-    },
+  return new SqlDataSource(config);
+}
 
-    async findByEq(input: FindByEqInput) {
-      const meta = requireMetadata({ config, table: input.table });
-      const built = buildFindByEq({
-        dialect: config.dialect,
-        table: physicalTable({ meta, logical: input.table }),
-        field: input.field,
-        value: input.value,
-        columns: input.columns,
-        limit: input.limit,
-      });
-      const r = await config.query({ sql: built.sql, values: built.values });
-      return r.rows;
-    },
+/** Generic SQL-backed {@link DataSource} — see {@link createSqlDataSource}. */
+export class SqlDataSource implements DataSource {
+  constructor(private readonly config: CreateSqlDataSourceConfig) {}
 
-    async findByRange(input: FindByRangeInput) {
-      const meta = requireMetadata({ config, table: input.table });
-      const built = buildFindByRange({
-        dialect: config.dialect,
-        table: physicalTable({ meta, logical: input.table }),
-        field: input.field,
-        from: input.from,
-        to: input.to,
-        columns: input.columns,
-        limit: input.limit,
-      });
-      const r = await config.query({ sql: built.sql, values: built.values });
-      return r.rows;
-    },
+  findByPk = async (input: FindByPkInput) => {
+    const meta = requireMetadata({ config: this.config, table: input.table });
+    const pkColumn = requireSinglePk({ meta, table: input.table });
+    const built = buildFindByPk({
+      dialect: this.config.dialect,
+      table: physicalTable({ meta, logical: input.table }),
+      pkColumn,
+      pk: input.pk,
+      columns: input.columns,
+    });
+    const r = await this.config.query({ sql: built.sql, values: built.values });
+    return r.rows[0] ?? null;
+  };
 
-    async findByJsonPath(input: FindByJsonPathInput) {
-      const meta = requireMetadata({ config, table: input.table });
-      const built = buildFindByJsonPath({
-        dialect: config.dialect,
-        table: physicalTable({ meta, logical: input.table }),
-        field: input.field,
-        path: input.path,
-        value: input.value,
-        columns: input.columns,
-        limit: input.limit,
-      });
-      const r = await config.query({ sql: built.sql, values: built.values });
-      return r.rows;
-    },
+  findByEq = async (input: FindByEqInput) => {
+    const meta = requireMetadata({ config: this.config, table: input.table });
+    const built = buildFindByEq({
+      dialect: this.config.dialect,
+      table: physicalTable({ meta, logical: input.table }),
+      field: input.field,
+      value: input.value,
+      columns: input.columns,
+      limit: input.limit,
+    });
+    const r = await this.config.query({ sql: built.sql, values: built.values });
+    return r.rows;
+  };
 
-    async explainFindByRange(input: FindByRangeInput): Promise<ExplainResult> {
-      const meta = requireMetadata({ config, table: input.table });
-      // Re-use the exact same SELECT the read path would issue. The dialect
-      // wraps it with engine-specific EXPLAIN syntax; the parser normalises
-      // each engine's plan format into a shared shape.
-      const built = buildFindByRange({
-        dialect: config.dialect,
-        table: physicalTable({ meta, logical: input.table }),
-        field: input.field,
-        from: input.from,
-        to: input.to,
-        columns: input.columns,
-        limit: input.limit,
-      });
-      const explainSql = `${config.dialect.explainPrefix()} ${built.sql}`;
-      const r = await config.query({ sql: explainSql, values: built.values });
-      return config.dialect.parseExplainResult(r.rows);
-    },
+  findByRange = async (input: FindByRangeInput) => {
+    const meta = requireMetadata({ config: this.config, table: input.table });
+    const built = buildFindByRange({
+      dialect: this.config.dialect,
+      table: physicalTable({ meta, logical: input.table }),
+      field: input.field,
+      from: input.from,
+      to: input.to,
+      columns: input.columns,
+      limit: input.limit,
+    });
+    const r = await this.config.query({ sql: built.sql, values: built.values });
+    return r.rows;
+  };
 
-    async explainSql(args: { sql: string; params: unknown[] }): Promise<ExplainResult> {
-      // Wrap the caller's SQL with the engine's EXPLAIN prefix. The query
-      // never executes for real (no ANALYZE), and going through `query(sql,
-      // values)` forces extended protocol — multi-statement injection
-      // (`...; DROP TABLE`) is blocked at the wire by the driver.
-      const wrapped = `${config.dialect.explainPrefix()} ${args.sql}`;
-      const r = await config.query({ sql: wrapped, values: args.params });
-      return config.dialect.parseExplainResult(r.rows);
-    },
+  findByJsonPath = async (input: FindByJsonPathInput) => {
+    const meta = requireMetadata({ config: this.config, table: input.table });
+    const built = buildFindByJsonPath({
+      dialect: this.config.dialect,
+      table: physicalTable({ meta, logical: input.table }),
+      field: input.field,
+      path: input.path,
+      value: input.value,
+      columns: input.columns,
+      limit: input.limit,
+    });
+    const r = await this.config.query({ sql: built.sql, values: built.values });
+    return r.rows;
+  };
+
+  explainFindByRange = async (input: FindByRangeInput): Promise<ExplainResult> => {
+    const meta = requireMetadata({ config: this.config, table: input.table });
+    // Re-use the exact same SELECT the read path would issue. The dialect
+    // wraps it with engine-specific EXPLAIN syntax; the parser normalises
+    // each engine's plan format into a shared shape.
+    const built = buildFindByRange({
+      dialect: this.config.dialect,
+      table: physicalTable({ meta, logical: input.table }),
+      field: input.field,
+      from: input.from,
+      to: input.to,
+      columns: input.columns,
+      limit: input.limit,
+    });
+    const explainSql = `${this.config.dialect.explainPrefix()} ${built.sql}`;
+    const r = await this.config.query({ sql: explainSql, values: built.values });
+    return this.config.dialect.parseExplainResult(r.rows);
+  };
+
+  explainSql = async (args: { sql: string; params: unknown[] }): Promise<ExplainResult> => {
+    // Wrap the caller's SQL with the engine's EXPLAIN prefix. The query
+    // never executes for real (no ANALYZE), and going through `query(sql,
+    // values)` forces extended protocol — multi-statement injection
+    // (`...; DROP TABLE`) is blocked at the wire by the driver.
+    const wrapped = `${this.config.dialect.explainPrefix()} ${args.sql}`;
+    const r = await this.config.query({ sql: wrapped, values: args.params });
+    return this.config.dialect.parseExplainResult(r.rows);
   };
 }

@@ -69,7 +69,7 @@ export interface MysqlQueryClient {
 // Duck type for mysql2's `Connection`. Mirrors mysql2's actual positional
 // `query(sql, values)` API — wrapConnection adapts to the params-object
 // MysqlQueryClient surface below.
-interface Mysql2Connection {
+export interface Mysql2Connection {
   query(text: string, values?: unknown[]): Promise<[unknown, unknown]>;
   end(): Promise<void>;
   on(event: string, listener: (err: Error) => void): void;
@@ -161,25 +161,33 @@ export async function createMysqlClient(url: string): Promise<MysqlQueryClient> 
  * already connected after `createConnection`.
  */
 export function wrapConnection(conn: Mysql2Connection): MysqlQueryClient {
-  return {
-    async connect(): Promise<void> {
-      // No-op: mysql2's createConnection already negotiated the handshake.
-    },
-    async query<T extends Record<string, unknown> = Record<string, unknown>>(
-      args: MysqlQueryArgs,
-    ): Promise<{ rows: T[] }> {
-      const [rows] = await conn.query(args.text, args.values ?? []);
-      // For SELECT-shaped statements mysql2 returns `RowDataPacket[]`. For
-      // SET / DDL it returns an `OkPacket` (object). The op layer only
-      // dispatches SELECT, but defensively unwrap to an empty array when we
-      // get a non-array.
-      return { rows: Array.isArray(rows) ? (rows as T[]) : [] };
-    },
-    async end(): Promise<void> {
-      await conn.end();
-    },
-    onError(listener: (err: Error) => void): void {
-      conn.on("error", listener);
-    },
+  return new Mysql2QueryClient(conn);
+}
+
+/** {@link MysqlQueryClient} backed by a mysql2 connection — see {@link wrapConnection}. */
+export class Mysql2QueryClient implements MysqlQueryClient {
+  constructor(private readonly conn: Mysql2Connection) {}
+
+  connect = async (): Promise<void> => {
+    // No-op: mysql2's createConnection already negotiated the handshake.
+  };
+
+  query = async <T extends Record<string, unknown> = Record<string, unknown>>(
+    args: MysqlQueryArgs,
+  ): Promise<{ rows: T[] }> => {
+    const [rows] = await this.conn.query(args.text, args.values ?? []);
+    // For SELECT-shaped statements mysql2 returns `RowDataPacket[]`. For
+    // SET / DDL it returns an `OkPacket` (object). The op layer only
+    // dispatches SELECT, but defensively unwrap to an empty array when we
+    // get a non-array.
+    return { rows: Array.isArray(rows) ? (rows as T[]) : [] };
+  };
+
+  end = async (): Promise<void> => {
+    await this.conn.end();
+  };
+
+  onError = (listener: (err: Error) => void): void => {
+    this.conn.on("error", listener);
   };
 }
