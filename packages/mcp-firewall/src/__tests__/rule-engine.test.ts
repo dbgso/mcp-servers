@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, vi } from "vitest";
+import { describe, test, expect } from "vitest";
 import { RuleEngine } from "../rule-engine.js";
 import type { RuleStore } from "../rule-store.js";
 import type { Rule, RuleAction } from "../types.js";

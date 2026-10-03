@@ -350,18 +350,24 @@ export async function createMysqlClient(url: string): Promise<MysqlQueryClient> 
 export function wrapConnectionForIntrospect(
   conn: Mysql2Connection,
 ): MysqlQueryClient {
-  return {
-    async connect(): Promise<void> {
-      // No-op — mysql2's createConnection already negotiated the handshake.
-    },
-    async query<T extends MysqlQueryResultRow = MysqlQueryResultRow>(
-      args: MysqlQueryArgs,
-    ): Promise<MysqlQueryResult<T>> {
-      const [rows] = await conn.query(args.text, args.values ?? []);
-      return { rows: Array.isArray(rows) ? (rows as T[]) : [] };
-    },
-    async end(): Promise<void> {
-      await conn.end();
-    },
-  };
+  return new Mysql2IntrospectClient(conn);
+}
+
+class Mysql2IntrospectClient implements MysqlQueryClient {
+  constructor(private readonly conn: Mysql2Connection) {}
+
+  async connect(): Promise<void> {
+    // No-op — mysql2's createConnection already negotiated the handshake.
+  }
+
+  async query<T extends MysqlQueryResultRow = MysqlQueryResultRow>(
+    args: MysqlQueryArgs,
+  ): Promise<MysqlQueryResult<T>> {
+    const [rows] = await this.conn.query(args.text, args.values ?? []);
+    return { rows: Array.isArray(rows) ? (rows as T[]) : [] };
+  }
+
+  async end(): Promise<void> {
+    await this.conn.end();
+  }
 }

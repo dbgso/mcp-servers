@@ -13,6 +13,8 @@
  */
 import type { Dialect, DialectExplainResult } from "mcp-shared-db-sql";
 
+type JsonPathEqualsInput = Parameters<Dialect["jsonPathEquals"]>[0];
+
 interface PgPlan {
   "Node Type"?: string;
   "Index Name"?: string;
@@ -69,20 +71,25 @@ function summarisePgPlan(plan: PgPlan): string {
   return parts.join(" ");
 }
 
-export const postgresDialect: Dialect = {
+export class PostgresDialect implements Dialect {
   quoteIdent(name: string): string {
     return `"${name.replace(/"/g, '""')}"`;
-  },
+  }
   placeholder(index: number): string {
     return `$${index}`;
-  },
-  jsonPathEquals({ columnSql, path, valuePlaceholder, params }) {
+  }
+  jsonPathEquals({
+    columnSql,
+    path,
+    valuePlaceholder,
+    params,
+  }: JsonPathEqualsInput): string {
     const segmentsPh = params.add(path.segments);
     return `${columnSql} #>> ${segmentsPh} = ${valuePlaceholder}`;
-  },
+  }
   explainPrefix(): string {
     return "EXPLAIN (FORMAT JSON)";
-  },
+  }
   parseExplainResult(rows: unknown[]): DialectExplainResult {
     // Defensive: the QueryFn contract is `unknown[]`, but real-world driver
     // mishaps (a badly-formed query result, an unexpected adapter return
@@ -118,5 +125,7 @@ export const postgresDialect: Dialect = {
       planSummary: summarisePgPlan(scan),
       raw: plan,
     };
-  },
-};
+  }
+}
+
+export const postgresDialect = new PostgresDialect();

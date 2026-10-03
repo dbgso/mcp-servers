@@ -18,16 +18,16 @@ const argsSchema = z.object({
   limit: z.number().int().positive().max(MAX_LIMIT).optional(),
 });
 
-export const getByIndexOp: DatabaseOperation<z.infer<typeof argsSchema>> = {
-  id: "get_by_index",
-  summary: "Fetch rows by an indexed non-PK / non-FK column",
-  detail: `Filter rows by a column that is neither the primary key nor a foreign key —
+export class GetByIndexOp implements DatabaseOperation<z.infer<typeof argsSchema>> {
+  readonly id = "get_by_index";
+  readonly summary = "Fetch rows by an indexed non-PK / non-FK column";
+  readonly detail = `Filter rows by a column that is neither the primary key nor a foreign key —
 useful for status enums, idempotency keys, lookup attributes etc.
 Caller is responsible for picking a column that actually has an index.
-PII fields are redacted as \`"[REDACTED]"\`.`,
-  category: "Read",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+PII fields are redacted as \`"[REDACTED]"\`.`;
+  readonly category = "Read";
+  readonly argsSchema = argsSchema;
+  execute: DatabaseOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
     const config = ctx.selectableFields[args.table];
     const meta = ctx.tableMetadata[args.table];
     // Unknown / non-whitelisted table.
@@ -67,5 +67,7 @@ PII fields are redacted as \`"[REDACTED]"\`.`,
       response.warning = unindexedColumnWarning({ table: args.table, column: args.column });
     }
     return jsonResponse(response);
-  },
-};
+  };
+}
+
+export const getByIndexOp = new GetByIndexOp();

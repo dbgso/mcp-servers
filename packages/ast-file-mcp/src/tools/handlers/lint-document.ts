@@ -7,7 +7,6 @@ import type {
   LintIssue,
   LintDocumentResult,
   LintRuleId,
-  LintSeverity,
   HeadingSummary,
   CodeBlockSummary,
 } from "../../types/index.js";
@@ -19,14 +18,6 @@ const ALL_RULES: LintRuleId[] = [
   "duplicate-heading",
   "missing-title",
 ];
-
-const RULE_SEVERITY: Record<LintRuleId, LintSeverity> = {
-  "heading-hierarchy": "error",
-  "empty-section": "warning",
-  "code-no-language": "warning",
-  "duplicate-heading": "warning",
-  "missing-title": "warning",
-};
 
 const LintDocumentSchema = z.object({
   file_path: z.string().describe("Absolute path to the file to lint"),

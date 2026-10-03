@@ -42,15 +42,15 @@ function normalizeJsonPath(input: string): string {
   return input.startsWith("$") ? input : `$.${input}`;
 }
 
-export const jsonSearchOp: DatabaseOperation<z.infer<typeof argsSchema>> = {
-  id: "json_search",
-  summary: "Search rows by exact match on a JSON path",
-  detail: `Filters rows where the JSON value at \`<path>\` in \`<column>\` equals \`<value>\`.
+export class JsonSearchOp implements DatabaseOperation<z.infer<typeof argsSchema>> {
+  readonly id = "json_search";
+  readonly summary = "Search rows by exact match on a JSON path";
+  readonly detail = `Filters rows where the JSON value at \`<path>\` in \`<column>\` equals \`<value>\`.
 Column must be selectable AND declared as \`type: "json"\` in Layer 1 metadata.
-PII fields are redacted as \`"[REDACTED]"\`.`,
-  category: "Read",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+PII fields are redacted as \`"[REDACTED]"\`.`;
+  readonly category = "Read";
+  readonly argsSchema = argsSchema;
+  execute: DatabaseOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
     const config = ctx.selectableFields[args.table];
     const meta = ctx.tableMetadata[args.table];
     // Unknown / non-whitelisted table.
@@ -109,5 +109,7 @@ PII fields are redacted as \`"[REDACTED]"\`.`,
       response.warning = unindexedColumnWarning({ table: args.table, column: args.column });
     }
     return jsonResponse(response);
-  },
-};
+  };
+}
+
+export const jsonSearchOp = new JsonSearchOp();
