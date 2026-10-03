@@ -126,13 +126,39 @@ the arguments are written down.
   children.
 - **A DAG, not a tree.** Two parents are allowed, and are a sign the document may
   belong one level up instead. Cycles are reported.
-- **A category with two or more documents wants an index.** Without one, which
-  document a new sibling hangs off is decided afresh every time.
 - **Directories are the other axis, and are not repeated here.** Ids carry the
   hierarchy (\`__\` separates levels) and \`graph\` draws it as node colour. Use
   \`relatedDocs\` for what to read next, not for where a document lives.
 
 \`instruction(action: "link_add", id: "<parent>", relatedDocs: ["<child>"], explanation: "<what the link means>")\`
+
+### The hub of a family
+
+Two or more documents sharing a parent id are a **family**, and a family gets one
+document that indexes it: the **hub**. Everything outside the family points at the
+hub; only the hub names the members.
+
+- **At two members, if anything outside needs to reach them.** One reference to
+  one document is a citation -- it means that document and no other. The second
+  turns the passage into a list, and a list written outside the family is a second
+  copy of the index that nobody maintains. \`IIMCP_LINT_HUB_CHILDREN\` moves the
+  number; where a corpus draws that line is a property of the corpus.
+- **The hub is the document at the family's id.** \`coding-rules\`, not
+  \`coding-rules__overview\`. An \`overview\`, \`index\` or \`readme\` inside the family
+  is a sibling of what it indexes -- the id hierarchy makes it one, whatever the
+  file is called -- so a reference to it is not a reference to the family, and
+  nothing can check its list against what is actually there.
+- **One line per member, and no more.** Enough to choose between them, which is
+  all the hub is for. A summary of a member is a second account of it, and the two
+  disagree the first time one is edited. Anything longer belongs in the member.
+- **The hub's list is the thing that goes stale.** It is what everything else is
+  sent to read, so a member it fails to name is a document nobody is sent to, and
+  a name with no member behind it is a reader sent nowhere. Nothing else notices:
+  the hub is the copy that is never reread.
+
+Reported as \`prefer-hub-reference\` (a document naming members instead of the
+hub, or a family with no hub at all), \`stale-hub-index\` (the hub's list and the
+directory disagree) and \`misplaced-hub\` (an index living inside what it indexes).
 
 ## Reminder
 

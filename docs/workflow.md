@@ -11,7 +11,6 @@ relatedDocs:
   - workflow__measure-dont-assume
   - workflow__skill-as-trigger
   - workflow__edit-docs-through-the-tool
-  - workflow__hub-over-list
   - workflow__dry-principle
   - workflow__ast-tool-evolution
 ---
@@ -43,9 +42,6 @@ exists.
 - `workflow__edit-docs-through-the-tool` — a document in a managed corpus is
   changed with that server's actions, because the frontmatter is YAML and the
   write is checked.
-- `workflow__hub-over-list` — a family of documents gets one document that indexes
-  it, at the family's own id, and everything outside points at that. This document
-  is one.
 
 ## Keeping the tools worth using
 

@@ -33,7 +33,6 @@ describe("describe answers what shape the corpus should take", () => {
     { question: "which direction an edge runs", expected: "Edges run parent to child" },
     { question: "why that direction", expected: "orphaned-document" },
     { question: "whether two parents are allowed", expected: "Two parents are allowed" },
-    { question: "when a category needs an index", expected: "wants an index" },
     { question: "how directories relate to it", expected: "the other axis" },
   ])("answers $question", ({ expected }) => {
     expect(describeText).toContain(expected);
@@ -46,6 +45,35 @@ describe("describe answers what shape the corpus should take", () => {
       'instruction(action: "link_add", id: "<parent>", relatedDocs: ["<child>"]'
     );
   });
+
+  /**
+   * The criterion for a rule has to ship with the rule.
+   *
+   * The hub rules are compiled into the package and run against whatever corpus
+   * the server is pointed at. What a hub is was first written as a document in
+   * this repository's own corpus, which is in no published artifact: `npm pack`
+   * ships `dist`, `templates`, `README.md` and `LICENSE`, and nothing from
+   * `docs/`. So a caller elsewhere was told to rename their `overview` with
+   * nothing to read about why. These assertions are what keeps it in the one
+   * place that travels with the rule.
+   */
+  it.each([
+    { question: "when a family needs a hub", expected: "At two members" },
+    { question: "where the hub lives", expected: "the document at the family's id" },
+    { question: "what the wrong place looks like", expected: "coding-rules__overview" },
+    { question: "how much the hub says per member", expected: "One line per member" },
+    { question: "why the hub is the part that rots", expected: "never reread" },
+    { question: "what moves the threshold", expected: "IIMCP_LINT_HUB_CHILDREN" },
+  ])("answers $question", ({ expected }) => {
+    expect(describeText).toContain(expected);
+  });
+
+  it.each(["prefer-hub-reference", "stale-hub-index", "misplaced-hub"])(
+    "names %s, so a finding can be read back to its criterion",
+    (rule) => {
+      expect(describeText).toContain(rule);
+    },
+  );
 
   it("does not tell the caller to repeat the directory hierarchy", () => {
     // Ids already carry it and `graph` draws it as node colour, so duplicating

@@ -120,7 +120,9 @@ instruction(action: "read", id: "doc-id") → Read a document
   hub whose own list no longer matches what sits under it, in either direction, since the hub is
   what everything else is sent to read and nothing else would notice; and `misplaced-hub` reports
   an `overview`, `index` or `readme` sitting inside a family that has no hub, which at that id is
-  a sibling of its own subject matter and so goes unchecked by the other two. Thresholds:
+  a sibling of its own subject matter and so goes unchecked by the other two. What a hub is --
+  when a family needs one, where it lives, what belongs in it -- is in `describe()` under "The hub
+  of a family", which is where the criterion for a shipped rule has to be. Thresholds:
   `IIMCP_LINT_MAX_LINES` (default 150),
   `IIMCP_LINT_SIMILARITY` (default 0.6), `IIMCP_LINT_MIN_DUPLICATE_LINES` (default 8) and
   `IIMCP_LINT_HUB_CHILDREN` (default 2, the children from one family a document may name before
