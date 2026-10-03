@@ -5,6 +5,7 @@ import { errorResponse, formatNextActions, textResponse } from "../types.js";
 import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import type { DocumentFrontmatter, MarkdownSummary } from "../../../types/index.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
+import { frontmatterErrors, rawFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { buildGraph } from "./graph.js";
 import {
   isDescriptionMissing,
@@ -90,6 +91,32 @@ export class ReadMetaHandler extends BaseActionHandler<Args, InstructionContext>
           action: "list",
           description: "View all documents",
           example: `instruction(action: "list")`,
+        }]));
+    }
+
+    // A block that did not parse reads as absent everywhere else, so this is the
+    // one place that can still show it. `read` hides frontmatter by design, and
+    // without this the caller is told their YAML is wrong at line 1 column 14 and
+    // has no way to look at line 1 -- which is the state this refusal left them
+    // in until it was noticed.
+    const unreadable = frontmatterErrors(found.content);
+    if (unreadable.length > 0) {
+      return textResponse(
+        `# Metadata review: ${draftMarker(found.isDraft)}${id}\n\n` +
+        `## The frontmatter cannot be read\n\n` +
+        `${unreadable[0]}\n\n` +
+        "Nothing below it is being read, so this document has no description, no " +
+        "`whenToUse` and no `relatedDocs` as far as every other action is " +
+        "concerned -- whatever the file says. A value containing `: ` has to be " +
+        "quoted, which is the usual cause.\n\n" +
+        "## What is in the file\n\n" +
+        "```yaml\n" + rawFrontmatter(found.content) + "\n```\n\n" +
+        "This has to be repaired in the file itself: a write cannot keep what it " +
+        "cannot parse, so `update` refuses rather than dropping it." +
+        formatNextActions([{
+          action: "lint",
+          description: "See whether anything else in the corpus is in this state",
+          example: `instruction(action: "lint")`,
         }]));
     }
 

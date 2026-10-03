@@ -72,6 +72,10 @@ to have had its self-review recorded first.
 | `lint` | Quality checks. See `specification__file-structure` for which ones reach a draft. `document-too-large` is answered with `update(id, sizeExemption: "<why>")`; `sizeExemption: null` or `""` removes it, and a value that is not a reason (the string `"null"`, `"undefined"`) is refused rather than stored; `duplicate-heading` counts a heading as repeated only under the same ancestry |
 | `backlinks` | Which promoted documents reference one document, in one hop, with their descriptions. `id` is required |
 
+Frontmatter that is not valid YAML is reported as `frontmatter-unreadable` and suppresses the
+missing-metadata findings it would otherwise cause, and `add` and `update` refuse to write onto
+such a document rather than starting from an empty block and dropping what they cannot read.
+
 `relatedDocs` edges run **parent to child**: a document lists the documents under it.
 `orphaned-document` counts inbound edges, so this direction leaves only the corpus's entry
 points unreferenced, while child to parent leaves every leaf unreferenced -- and silencing

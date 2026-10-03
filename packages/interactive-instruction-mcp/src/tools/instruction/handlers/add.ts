@@ -15,6 +15,7 @@ import {
   stripFrontmatter,
 } from "../../../utils/frontmatter-parser.js";
 import { checkDocument, formatWriteLint } from "../../../services/document-lint.js";
+import { refuseUnreadableFrontmatter } from "./frontmatter-guard.js";
 import {
   readSizeExemption,
   refuseSizeExemption,
@@ -79,6 +80,13 @@ Usage:
     if (exemption.kind === "refused") {
       return refuseSizeExemption({ id, given: exemption.given });
     }
+
+    // `add` is documented as keeping the metadata written in `content`, with the
+    // arguments winning where both say something. A block that does not parse
+    // breaks that promise in silence -- a `relatedDocs` written there is simply
+    // gone from the file that comes out.
+    const unreadable = refuseUnreadableFrontmatter({ id, content });
+    if (unreadable !== null) return unreadable;
 
     // Generate content with frontmatter
     const finalContent = this.generateContentWithFrontmatter({

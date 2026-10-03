@@ -139,6 +139,31 @@ export function assignIfDefined<K extends keyof DocumentFrontmatter>(params: {
   }
 }
 
+/**
+ * Why the frontmatter could not be read, if it could not be.
+ *
+ * `parseFrontmatter` is deliberately forgiving and hands back whatever it
+ * resolved, which means a document whose block failed to parse is
+ * indistinguishable from one that simply has no metadata. That is how a
+ * description containing an unquoted `: ` -- a mapping rather than a string, so
+ * the parse fails for the whole block -- came to be reported as a missing
+ * description and a missing `whenToUse`, neither of which was the cause, while a
+ * `relatedDocs` entry that was plainly there went unseen and made the document it
+ * named look orphaned.
+ *
+ * So the errors are available to whoever wants to say what actually happened.
+ */
+/** The frontmatter block as written, for showing a caller what has to be fixed. */
+export function rawFrontmatter(content: string): string {
+  return frontmatterText(content) ?? "(no frontmatter block)";
+}
+
+export function frontmatterErrors(content: string): string[] {
+  const doc = parseFrontmatterDocument(content);
+  if (doc === null) return [];
+  return doc.errors.map((error) => error.message);
+}
+
 export function parseFrontmatter(content: string): DocumentFrontmatter {
   const doc = parseFrontmatterDocument(content);
   if (doc === null || !isMap(doc.contents)) return {};
