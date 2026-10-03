@@ -7,6 +7,7 @@ whenToUse:
 relatedDocs:
   - policy
   - workflow
+  - coding-rules
 ---
 
 # Every Task Checklist

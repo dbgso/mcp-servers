@@ -250,8 +250,8 @@ describe("misplaced-hub", () => {
    *
    * `stale-hub-index` needs a document at the family's id to check against the
    * directory, and the whole defect is that there is none -- so this repository's
-   * `coding-rules__overview` named 14 of its 18 siblings, and one that does not
-   * exist, with nothing saying so. It surfaced from writing down what a hub is,
+   * `coding-rules__overview` named 14 of its 18 siblings, plus one document from
+   * a different family, with nothing saying so. It surfaced from writing down what a hub is,
    * after the detection had already been built.
    */
   it("reports an index living inside what it indexes", () => {

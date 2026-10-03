@@ -289,8 +289,8 @@ function isMisplacedHub(params: {
  * Neither of the other two rules reaches this. `stale-hub-index` needs a document
  * at the family's id to check, and there is none -- that is the defect -- so the
  * list goes unchecked however wrong it gets. This repository's own
- * `coding-rules__overview` named 14 of 18 documents and one that does not exist,
- * and nothing said so.
+ * `coding-rules__overview` named 14 of its 18 siblings, plus one document from a
+ * different family, and nothing said so.
  *
  * Found by writing down what a hub is, which is the order that was skipped the
  * first time: the detection was built before the criterion, and it could only
