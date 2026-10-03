@@ -91,7 +91,7 @@
       "args": [
         "tsx", "./packages/mcp-firewall/src/index.ts",
         "--command", "npx",
-        "--args", "tsx ./packages/cli-to-mcp/src/index.ts",
+        "--args", "tsx", "./packages/cli-to-mcp/src/index.ts",
         "--rules-file", "./packages/cli-to-mcp/aws-rules.json"
       ]
     }
