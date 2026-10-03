@@ -16,29 +16,34 @@ import { awsExec, type AwsExecOptions } from "./aws-exec.js";
  * errors propagate.
  */
 export function secretsManagerSource(options: AwsExecOptions = {}): SecretSource {
-  return {
-    fetch: async (path) => {
-      try {
-        return await awsExec({
-          args: [
-            "secretsmanager",
-            "get-secret-value",
-            "--secret-id",
-            path,
-            "--query",
-            "SecretString",
-            "--output",
-            "text",
-          ],
-          options,
-        });
-      } catch (err) {
-        if (isResourceNotFound(err)) {
-          return undefined;
-        }
-        throw err;
+  return new SecretsManagerSource(options);
+}
+
+/** {@link SecretSource} backed by the AWS CLI — see {@link secretsManagerSource}. */
+export class SecretsManagerSource implements SecretSource {
+  constructor(private readonly options: AwsExecOptions = {}) {}
+
+  fetch = async (path: string): Promise<string | undefined> => {
+    try {
+      return await awsExec({
+        args: [
+          "secretsmanager",
+          "get-secret-value",
+          "--secret-id",
+          path,
+          "--query",
+          "SecretString",
+          "--output",
+          "text",
+        ],
+        options: this.options,
+      });
+    } catch (err) {
+      if (isResourceNotFound(err)) {
+        return undefined;
       }
-    },
+      throw err;
+    }
   };
 }
 

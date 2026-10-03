@@ -87,7 +87,6 @@ export class ChainDescribeHandler extends BaseToolHandler<DescribeArgs> {
 
     // List mode
     const types = this.manager.getTypes();
-    const rootTypes = this.manager.getRootTypes();
 
     const lines = [
       `# Traceable Chain`,
@@ -97,7 +96,6 @@ export class ChainDescribeHandler extends BaseToolHandler<DescribeArgs> {
     ];
 
     for (const [typeName, cfg] of Object.entries(types)) {
-      const isRoot = rootTypes.includes(typeName);
       const requires = cfg.requires === null
         ? "(root)"
         : Array.isArray(cfg.requires)

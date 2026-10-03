@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { GitOperation } from "./types.js";
+import type { GitOperation, GitOperationContext } from "./types.js";
 import { gitBranchList } from "../git-repo-manager.js";
 
 const branchListArgsSchema = z.object({
@@ -9,19 +9,19 @@ const branchListArgsSchema = z.object({
 });
 type BranchListArgs = z.infer<typeof branchListArgsSchema>;
 
-export const branchListOp: GitOperation<BranchListArgs> = {
-  id: "branch_list",
-  summary: "List branches",
-  detail: `List branches in the repository. Filter by pattern.
+export class BranchListOp implements GitOperation<BranchListArgs> {
+  readonly id = "branch_list";
+  readonly summary = "List branches";
+  readonly detail = `List branches in the repository. Filter by pattern.
 
 Examples:
   operation: "branch_list"
   params: {}
   params: { repo_url: "git@github.com:org/repo.git" }
-  params: { pattern: "feature/*" }`,
-  category: "Reference",
-  argsSchema: branchListArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { pattern: "feature/*" }`;
+  readonly category = "Reference";
+  readonly argsSchema = branchListArgsSchema;
+  async execute(args: BranchListArgs, ctx: GitOperationContext): Promise<CallToolResult> {
     const branches = await gitBranchList({
       repoPath: ctx.repoPath,
       options: { pattern: args.pattern },
@@ -37,7 +37,9 @@ Examples:
         }, null, 2),
       }],
     };
-  },
-};
+  }
+}
+
+export const branchListOp = new BranchListOp();
 
 export const branchOperations = [branchListOp];

@@ -34,20 +34,20 @@ const prListArgsSchema = z.object({
 });
 type PrListArgs = z.infer<typeof prListArgsSchema>;
 
-export const prListOp: GitOperation<PrListArgs> = {
-  id: "pr_list",
-  summary: "List pull requests in a repository (requires gh CLI)",
-  detail: `List pull requests with filtering. Results are cached to avoid rate limits.
+export class PrListOp implements GitOperation<PrListArgs> {
+  readonly id = "pr_list";
+  readonly summary = "List pull requests in a repository (requires gh CLI)";
+  readonly detail = `List pull requests with filtering. Results are cached to avoid rate limits.
 Requires gh CLI to be installed and authenticated.
 
 Examples:
   operation: "pr_list"
   params: { repo: "dbgso/mcp-servers" }
   params: { repo: "dbgso/mcp-servers", state: "open", author: "username" }
-  params: { repo: "dbgso/mcp-servers", state: "merged", base: "main", limit: 10 }`,
-  category: "GitHub",
-  argsSchema: prListArgsSchema,
-  execute: async (args): Promise<CallToolResult> => {
+  params: { repo: "dbgso/mcp-servers", state: "merged", base: "main", limit: 10 }`;
+  readonly category = "GitHub";
+  readonly argsSchema = prListArgsSchema;
+  async execute(args: PrListArgs): Promise<CallToolResult> {
     if (!(await isGhAvailable())) {
       return errorResponse(
         "gh CLI is not installed or not authenticated. Run `gh auth login` first.",
@@ -120,7 +120,9 @@ Examples:
       from_cache: fromCache,
       cache_age_seconds: cacheAge,
     });
-  },
-};
+  }
+}
+
+export const prListOp = new PrListOp();
 
 export const prListOperations = [prListOp];

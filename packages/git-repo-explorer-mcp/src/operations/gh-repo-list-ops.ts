@@ -28,10 +28,10 @@ const repoListArgsSchema = z.object({
 });
 type RepoListArgs = z.infer<typeof repoListArgsSchema>;
 
-export const repoListOp: GitOperation<RepoListArgs> = {
-  id: "repo_list",
-  summary: "List GitHub repositories in an organization (requires gh CLI)",
-  detail: `List repositories in a GitHub organization. Results are cached to avoid rate limits.
+export class RepoListOp implements GitOperation<RepoListArgs> {
+  readonly id = "repo_list";
+  readonly summary = "List GitHub repositories in an organization (requires gh CLI)";
+  readonly detail = `List repositories in a GitHub organization. Results are cached to avoid rate limits.
 Use query to filter by name, language to filter by primary language.
 Requires gh CLI to be installed and authenticated.
 
@@ -39,10 +39,10 @@ Examples:
   operation: "repo_list"
   params: { org: "dbgso" }
   params: { org: "dbgso", query: "mcp", limit: 10 }
-  params: { org: "dbgso", language: "TypeScript", force_refresh: true }`,
-  category: "GitHub",
-  argsSchema: repoListArgsSchema,
-  execute: async (args): Promise<CallToolResult> => {
+  params: { org: "dbgso", language: "TypeScript", force_refresh: true }`;
+  readonly category = "GitHub";
+  readonly argsSchema = repoListArgsSchema;
+  async execute(args: RepoListArgs): Promise<CallToolResult> {
     if (!(await isGhAvailable())) {
       return errorResponse(
         "gh CLI is not installed or not authenticated. Run `gh auth login` first.",
@@ -103,7 +103,9 @@ Examples:
       from_cache: fromCache,
       cache_age_seconds: cacheAge,
     });
-  },
-};
+  }
+}
+
+export const repoListOp = new RepoListOp();
 
 export const repoListOperations = [repoListOp];

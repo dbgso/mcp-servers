@@ -52,10 +52,10 @@ async function readSelectableFields(filePath: string): Promise<SelectableFieldsM
   }
 }
 
-export const validateSelectableFieldsOp: CodegenOperation<ValidateArgs> = {
-  id: "validate_selectable_fields",
-  summary: "Cross-check `selectable-fields.json` against the live DB schema",
-  detail: `Returns \`{ issues, summary }\`. Issue kinds:
+export class ValidateSelectableFieldsOp implements CodegenOperation<ValidateArgs> {
+  readonly id = "validate_selectable_fields";
+  readonly summary = "Cross-check `selectable-fields.json` against the live DB schema";
+  readonly detail = `Returns \`{ issues, summary }\`. Issue kinds:
 - missing_table / orphan_table — drift at the table level (severity: error)
 - missing_field / orphan_field — drift at the field level (severity: error)
 - missing_pii_reason          — pii: true with empty piiReason (severity: warn)
@@ -72,10 +72,10 @@ PII judgement, not just clear individual warns. Edge cases (\`date\`
 birthdates, gender enums) are warns, not errors, so legitimate PII is kept.
 
 Live introspection is the source of truth — if your \`metadata.json\` is stale
-the issues will reveal it indirectly.`,
-  category: "Read",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+the issues will reveal it indirectly.`;
+  readonly category = "Read";
+  readonly argsSchema = argsSchema;
+  execute: CodegenOperation<ValidateArgs>["execute"] = async ({ args, ctx }) => {
     const tables = await introspectAllTables({
       introspector: ctx.introspector,
       schema: args.schema,
@@ -85,5 +85,7 @@ the issues will reveal it indirectly.`,
     const selectableFields = await readSelectableFields(args.selectable_fields_path);
     const result = validateSelectableFieldsCoverage({ metadata, selectableFields });
     return jsonResponse(result);
-  },
-};
+  };
+}
+
+export const validateSelectableFieldsOp = new ValidateSelectableFieldsOp();

@@ -7,19 +7,21 @@ const argsSchema = z.object({
   table: z.string().min(1).describe("Table name within the schema"),
 });
 
-export const introspectTableOp: CodegenOperation<z.infer<typeof argsSchema>> = {
-  id: "introspect_table",
-  summary: "Read columns / PK / indexes / foreign keys for a single table",
-  detail: `Returns a \`RawTableMetadata\` object with columns (native + mapped types,
+export class IntrospectTableOp implements CodegenOperation<z.infer<typeof argsSchema>> {
+  readonly id = "introspect_table";
+  readonly summary = "Read columns / PK / indexes / foreign keys for a single table";
+  readonly detail = `Returns a \`RawTableMetadata\` object with columns (native + mapped types,
 nullability, defaults, descriptions), primary key, indexes, and foreign keys.
-Use \`introspect_all\` to fetch every table in a schema at once.`,
-  category: "Read",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+Use \`introspect_all\` to fetch every table in a schema at once.`;
+  readonly category = "Read";
+  readonly argsSchema = argsSchema;
+  execute: CodegenOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
     const metadata = await ctx.introspector.introspectTable({
       schema: args.schema,
       table: args.table,
     });
     return jsonResponse(metadata);
-  },
-};
+  };
+}
+
+export const introspectTableOp = new IntrospectTableOp();

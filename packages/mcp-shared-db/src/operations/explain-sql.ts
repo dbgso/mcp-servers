@@ -23,10 +23,10 @@ const argsSchema = z.object({
     ),
 });
 
-export const explainSqlOp: DatabaseOperation<z.infer<typeof argsSchema>> = {
-  id: "explain_sql",
-  summary: "EXPLAIN an arbitrary SQL string without executing it",
-  detail: `Wraps the input SQL with the engine's \`EXPLAIN\` prefix (no ANALYZE)
+export class ExplainSqlOp implements DatabaseOperation<z.infer<typeof argsSchema>> {
+  readonly id = "explain_sql";
+  readonly summary = "EXPLAIN an arbitrary SQL string without executing it";
+  readonly detail = `Wraps the input SQL with the engine's \`EXPLAIN\` prefix (no ANALYZE)
 so the query is parsed + planned but **never executed**. SELECT / DML
 (\`INSERT\` / \`UPDATE\` / \`DELETE\`) and \`CREATE TABLE AS\` come back as
 plan only. Pure DDL (\`DROP TABLE\`, \`ALTER\`, \`TRUNCATE\`) errors at parse
@@ -44,10 +44,10 @@ Operators must restrict the role to tables that may be revealed.
 injection (\`SELECT 1; DROP TABLE x\`) is rejected at the wire.
 
 Defaults to a compact response (\`estimatedRows\` / \`totalCost\` /
-\`planSummary\`); pass \`verbose: true\` to also receive the raw plan tree.`,
-  category: "Discovery",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+\`planSummary\`); pass \`verbose: true\` to also receive the raw plan tree.`;
+  readonly category = "Discovery";
+  readonly argsSchema = argsSchema;
+  execute: DatabaseOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
     const result = await ctx.dataSource.explainSql({ sql: args.sql, params: args.params ?? [] });
     const response: Record<string, unknown> = {
       estimatedRows: result.estimatedRows,
@@ -58,5 +58,7 @@ Defaults to a compact response (\`estimatedRows\` / \`totalCost\` /
       response.raw = result.raw;
     }
     return jsonResponse(response);
-  },
-};
+  };
+}
+
+export const explainSqlOp = new ExplainSqlOp();
