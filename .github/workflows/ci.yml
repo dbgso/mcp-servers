@@ -31,6 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-node-pnpm
+      # `pnpm lint` is type-aware, and a workspace package's types come from its
+      # built `dist/*.d.ts`. Unbuilt, every cross-package type is an error type
+      # that acts as `any`: unbound-method stops seeing methods across packages,
+      # and rules like require-array-sort-compare report what a build resolves.
+      - run: pnpm build
       - run: pnpm lint
       # A changeset is published verbatim inside the package's CHANGELOG.md, and
       # nobody reads a generated file before it ships. This is the one chance to
