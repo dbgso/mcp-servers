@@ -43,6 +43,8 @@ export {
   wrapError,
 } from "./utils/error.js";
 
+export { displayText } from "./utils/display-text.js";
+
 export {
   processMultipleFiles,
   formatMultiFileResponse,

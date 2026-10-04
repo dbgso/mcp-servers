@@ -7,7 +7,8 @@ import remarkStringify from "remark-stringify";
 import type { Root as MdastRoot, Heading, Code, List, Link, Text, ListItem } from "mdast";
 import type { GoToDefinitionResult, DefinitionLocation } from "mcp-shared";
 import { BaseHandler } from "./base.js";
-import { diffStructures, getErrorMessage, type DiffableItem } from "mcp-shared";
+import { headingToDiffable } from "./heading-diff.js";
+import { diffStructures, displayText, getErrorMessage } from "mcp-shared";
 import type {
   AstReadResult,
   HeadingSummary,
@@ -877,27 +878,9 @@ export class MarkdownHandler extends BaseHandler {
     const headingsA = this.getHeadings({ ast: astA });
     const headingsB = this.getHeadings({ ast: astB });
 
-    // Convert HeadingSummary to DiffableItem
-    // Use depth + text as key for matching (allows same text at different depths)
-    const itemsA: DiffableItem[] = headingsA.map((h) => ({
-      key: `${h.depth}:${h.text}`,
-      kind: `h${h.depth}`,
-      line: h.line,
-      properties: level === "detailed" ? {
-        depth: h.depth,
-        text: h.text,
-      } : undefined,
-    }));
-
-    const itemsB: DiffableItem[] = headingsB.map((h) => ({
-      key: `${h.depth}:${h.text}`,
-      kind: `h${h.depth}`,
-      line: h.line,
-      properties: level === "detailed" ? {
-        depth: h.depth,
-        text: h.text,
-      } : undefined,
-    }));
+    const detailed = level === "detailed";
+    const itemsA = headingsA.map((heading) => headingToDiffable({ heading, detailed }));
+    const itemsB = headingsB.map((heading) => headingToDiffable({ heading, detailed }));
 
     // Perform diff
     const diffResult = diffStructures({ itemsA, itemsB, options: { level } });
@@ -999,7 +982,7 @@ export class MarkdownHandler extends BaseHandler {
     const headerRow = `| ${headers.join(" | ")} |`;
     const separatorRow = `| ${headers.map(() => "---").join(" | ")} |`;
     const dataRows = data.map((row) => {
-      const cells = headers.map((h) => String(row[h] ?? ""));
+      const cells = headers.map((h) => displayText(row[h]));
       return `| ${cells.join(" | ")} |`;
     });
 

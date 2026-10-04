@@ -14,6 +14,7 @@ import {
   startServer,
   type Connection,
   type ConnectParams,
+  type StartServerOptions,
 } from "../server.js";
 import { fakeResolver } from "./fixtures/fake-resolver.js";
 
@@ -592,7 +593,7 @@ describe("db-read-mcp server", () => {
       await expect(startServer({})).rejects.toThrow(/requires CLI arguments/);
     });
 
-    async function runStartServer(extra: Partial<Parameters<typeof startServer>[0]> = {}) {
+    async function runStartServer(extra: Partial<StartServerOptions> = {}) {
       const resolver = fakeResolver({
         cache: { [URL_KEY]: "postgres://u:p@h:5432/d" },
       });

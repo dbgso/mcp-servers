@@ -25,14 +25,14 @@ describe("TokenApprovalStrategy", () => {
     const what = "diff-A";
     // Acquire a real token via the low-level API (present() hides it by design).
     const { token } = await requestApproval({ request: baseRequest("ts-match", what) });
-    const ok = await s.validate({ requestId: "ts-match", providedToken: token, currentWhat: what });
+    const ok = s.validate({ requestId: "ts-match", providedToken: token, currentWhat: what });
     expect(ok).toEqual({ valid: true });
   });
 
   it("validate() rejects a swapped change with content_mismatch", async () => {
     const s = new TokenApprovalStrategy();
     const { token } = await requestApproval({ request: baseRequest("ts-swap", "diff-A") });
-    const res = await s.validate({
+    const res = s.validate({
       requestId: "ts-swap",
       providedToken: token,
       currentWhat: "diff-B",
@@ -43,7 +43,7 @@ describe("TokenApprovalStrategy", () => {
   it("validate() rejects a wrong token before checking content", async () => {
     const s = new TokenApprovalStrategy();
     const { requestId } = await s.present(baseRequest("ts-wrong", "diff-A"));
-    const res = await s.validate({ requestId, providedToken: "0000", currentWhat: "diff-A" });
+    const res = s.validate({ requestId, providedToken: "0000", currentWhat: "diff-A" });
     expect(res).toEqual({ valid: false, reason: "invalid_token" });
   });
 
@@ -53,7 +53,7 @@ describe("TokenApprovalStrategy", () => {
     // the supplied generator, so validate() accepts exactly that token.
     const s = new TokenApprovalStrategy({ tokenGenerator: () => "CTOR-9" });
     const { requestId } = await s.present(baseRequest("ts-ctor-gen", "diff-A"));
-    const ok = await s.validate({ requestId, providedToken: "CTOR-9", currentWhat: "diff-A" });
+    const ok = s.validate({ requestId, providedToken: "CTOR-9", currentWhat: "diff-A" });
     expect(ok).toEqual({ valid: true });
   });
 });
@@ -66,7 +66,7 @@ describe("an operation holds its strategy directly", () => {
     const op = { approval: new TokenApprovalStrategy({ tokenGenerator: () => "CFG-6" }) };
 
     const { requestId } = await op.approval.present(baseRequest("ts-configured", "diff-A"));
-    const ok = await op.approval.validate({
+    const ok = op.approval.validate({
       requestId,
       providedToken: "CFG-6",
       currentWhat: "diff-A",
