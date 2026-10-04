@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { jsonResponse, errorResponse } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
-import { getHandler, HANDLERS } from "../../handlers/index.js";
+import { getHandler, getSupportedExtensions, HANDLERS, type DocumentHandler } from "../../handlers/index.js";
 import { headingAnchor, normalizeAnchor } from "../../handlers/anchor.js";
 import { FileTarget, parseLinkTarget } from "../../handlers/links.js";
 import type { Backlink, FindBacklinksResult, LinkSummary } from "../../types/index.js";
@@ -25,6 +25,27 @@ const FindBacklinksSchema = z.object({
 });
 
 type FindBacklinksArgs = z.infer<typeof FindBacklinksSchema>;
+
+/** A document extension at the end of a path, for every type a handler reads. */
+const DOCUMENT_EXTENSION = new RegExp(`\\.(${getSupportedExtensions().join("|")})$`);
+
+/** An Antora `module:page` names `page` within the same module. */
+function withoutModule(pathPart: string): string {
+  if (!pathPart.includes(":") || pathPart.startsWith(".")) return pathPart;
+  return pathPart.slice(pathPart.lastIndexOf(":") + 1);
+}
+
+/**
+ * The paths a link may mean, relative to the linking file: as written, with
+ * `.adoc` added, and -- for a bare name with no directory part -- the name with
+ * its extension swapped for `.adoc` or `.md` (`xref:data-flow[]`).
+ */
+function candidatePaths(path: string): string[] {
+  const candidates = [path, `${path}.adoc`];
+  if (/\/|\.\./.test(path)) return candidates;
+  const bare = path.replace(DOCUMENT_EXTENSION, "");
+  return [...candidates, `${bare}.adoc`, `${bare}.md`];
+}
 
 export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
   readonly name = "find_backlinks";
@@ -76,54 +97,20 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
     // Every document in the directory, with the handler that reads it
     const handlers = Object.values(HANDLERS);
     const found = await Promise.all(handlers.map((handler) => handler.findFiles({ directory })));
-    const allFiles = handlers.flatMap((handler, i) => found[i].map((sourceFile) => ({ sourceFile, handler })));
-    const backlinks: Backlink[] = [];
-    const sourceFilesSet = new Set<string>();
+    const sources = handlers
+      .flatMap((handler, i) => found[i].map((sourceFile) => ({ sourceFile, handler })))
+      .filter(({ sourceFile }) => resolve(sourceFile) !== targetPath); // Skip self-references
 
     // Generate expected anchor from section heading
     const expectedAnchor = section_heading
       ? headingAnchor({ text: section_heading, fileType: getHandler(targetPath)?.fileType ?? "markdown" })
       : null;
 
-    for (const { sourceFile, handler } of allFiles) {
-      // Skip self-references
-      if (resolve(sourceFile) === targetPath) {
-        continue;
-      }
-
-      try {
-        const links = await handler.getLinksFromFile(sourceFile);
-        const fileContent = await readFile(sourceFile, "utf-8");
-        const lines = fileContent.split("\n");
-
-        for (const link of links) {
-          const matchResult = this.checkLinkMatchesTarget({
-            link,
-            sourceFile,
-            targetPath,
-            expectedAnchor,
-            includeAnchors: include_anchors,
-          });
-
-          if (matchResult.matches) {
-            sourceFilesSet.add(sourceFile);
-
-            // Extract context (~50 chars before/after the link on the same line)
-            const context = this.extractContext({ lines, line: link.line, linkText: link.text });
-
-            backlinks.push({
-              sourceFile,
-              sourceLine: link.line,
-              linkText: link.text,
-              linkUrl: link.url,
-              context,
-            });
-          }
-        }
-      } catch {
-        // Skip files that can't be read
-        continue;
-      }
+    const backlinks: Backlink[] = [];
+    for (const source of sources) {
+      backlinks.push(
+        ...(await this.backlinksFrom({ ...source, targetPath, expectedAnchor, includeAnchors: include_anchors })),
+      );
     }
 
     const result: FindBacklinksResult = {
@@ -132,11 +119,39 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
       backlinks,
       summary: {
         totalBacklinks: backlinks.length,
-        sourceFiles: sourceFilesSet.size,
+        sourceFiles: new Set(backlinks.map((b) => b.sourceFile)).size,
       },
     };
 
     return jsonResponse(result);
+  }
+
+  /** The links in one source file that point at the target; none when it cannot be read. */
+  private async backlinksFrom(params: {
+    sourceFile: string;
+    handler: DocumentHandler;
+    targetPath: string;
+    expectedAnchor: string | null;
+    includeAnchors: boolean;
+  }): Promise<Backlink[]> {
+    const { sourceFile, handler, targetPath, expectedAnchor, includeAnchors } = params;
+    try {
+      const links = await handler.getLinksFromFile(sourceFile);
+      const lines = (await readFile(sourceFile, "utf-8")).split("\n");
+      return links
+        .filter((link) => this.checkLinkMatchesTarget({ link, sourceFile, targetPath, expectedAnchor, includeAnchors }).matches)
+        .map((link) => ({
+          sourceFile,
+          sourceLine: link.line,
+          linkText: link.text,
+          linkUrl: link.url,
+          // ~50 chars before/after the link on the same line
+          context: this.extractContext({ lines, line: link.line, linkText: link.text }),
+        }));
+    } catch {
+      // Skip files that can't be read
+      return [];
+    }
   }
 
   /**
@@ -169,15 +184,9 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
       return { matches: false };
     }
 
-    // If we're looking for a specific section, check the anchor
-    if (expectedAnchor) {
-      if (!anchor) {
-        return { matches: false };
-      }
-
-      if (normalizeAnchor(anchor) !== normalizeAnchor(expectedAnchor)) {
-        return { matches: false };
-      }
+    // If we're looking for a specific section, the link has to name it
+    if (expectedAnchor && normalizeAnchor(anchor ?? "") !== normalizeAnchor(expectedAnchor)) {
+      return { matches: false };
     }
 
     return { matches: true };
@@ -202,50 +211,7 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
     }
 
     const sourceDir = dirname(sourceFile);
-    const targetBasename = targetPath.split("/").pop() ?? "";
-    const targetBasenameNoExt = targetBasename.replace(/\.(adoc|asciidoc|asc|md|markdown)$/, "");
-
-    // Handle Antora module prefix (e.g., "module:page" -> "page")
-    let cleanPath = pathPart;
-    if (pathPart.includes(":") && !pathPart.startsWith(".")) {
-      // Remove module prefix for same-module links
-      cleanPath = pathPart.split(":").pop() ?? pathPart;
-    }
-
-    // Try direct resolution first
-    const resolvedPath = resolve(sourceDir, cleanPath);
-    if (resolvedPath === targetPath) {
-      return true;
-    }
-
-    // Try with .adoc extension added
-    const resolvedWithAdoc = resolve(sourceDir, cleanPath + ".adoc");
-    if (resolvedWithAdoc === targetPath) {
-      return true;
-    }
-
-    // Try basename matching (for simple xref like "data-flow" matching "data-flow.adoc")
-    const linkBasename = cleanPath.split("/").pop() ?? "";
-    const linkBasenameNoExt = linkBasename.replace(/\.(adoc|asciidoc|asc|md|markdown)$/, "");
-
-    // Check if link is just a basename (no directory separators)
-    if (!cleanPath.includes("/") && !cleanPath.includes("..")) {
-      // Compare basenames (case-insensitive)
-      if (linkBasenameNoExt.toLowerCase() === targetBasenameNoExt.toLowerCase()) {
-        // Verify they're in the same directory or the link could resolve to target
-        const potentialPath = resolve(sourceDir, linkBasenameNoExt + ".adoc");
-        if (potentialPath === targetPath) {
-          return true;
-        }
-        // Also check if target is in a parent/sibling architecture folder
-        const potentialPathMd = resolve(sourceDir, linkBasenameNoExt + ".md");
-        if (potentialPathMd === targetPath) {
-          return true;
-        }
-      }
-    }
-
-    return false;
+    return candidatePaths(withoutModule(pathPart)).some((candidate) => resolve(sourceDir, candidate) === targetPath);
   }
 
   /**
