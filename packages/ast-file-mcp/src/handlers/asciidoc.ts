@@ -5,6 +5,7 @@ import Asciidoctor from "@asciidoctor/core";
 import { BaseHandler } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
 import { anchorMatchesHeading, headingAnchor } from "./anchor.js";
+import { groupSections } from "./sections.js";
 import { convertBlocks } from "./asciidoc-convert.js";
 import { serializeBlocks } from "./asciidoc-serialize.js";
 import { generateContent, type ContentGenerator } from "./content-format.js";
@@ -27,7 +28,6 @@ import type {
   QueryType,
   QueryResult,
   SectionResult,
-  Section,
   WriteSectionsParams,
 } from "../types/index.js";
 
@@ -1005,27 +1005,13 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
     const { ast } = await this.read(filePath);
     const doc = ast as AsciidocDocument;
 
-    const preamble: AsciidocBlock[] = [];
-    const sections: Section<AsciidocBlock>[] = [];
-
-    for (const block of doc.blocks) {
-      if (block.context === "preamble") {
-        // Preamble content goes before sections
-        if (block.blocks) {
-          preamble.push(...block.blocks);
-        }
-      } else if (block.context === "section" && block.level === level) {
-        // Top-level section
-        sections.push({
-          title: block.title ?? "",
-          level: block.level,
-          content: [block],
-        });
-      } else {
-        // Content outside of sections goes to preamble
-        preamble.push(block);
-      }
-    }
+    // asciidoctor wraps what precedes the first section in a `preamble` block
+    const items = doc.blocks.flatMap((block) => (block.context === "preamble" ? (block.blocks ?? []) : [block]));
+    const { preamble, sections } = groupSections({
+      items,
+      sectionTitle: (block) => (block.context === "section" && block.level === level ? (block.title ?? "") : undefined),
+      level,
+    });
 
     return {
       preamble,

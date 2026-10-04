@@ -9,6 +9,7 @@ import type { GoToDefinitionResult, DefinitionLocation } from "mcp-shared";
 import { BaseHandler } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
 import { anchorMatchesHeading, headingAnchor } from "./anchor.js";
+import { groupSections } from "./sections.js";
 import { generateContent, type ContentGenerator } from "./content-format.js";
 import { diffStructures, displayText, getErrorMessage } from "mcp-shared";
 import type {
@@ -28,7 +29,6 @@ import type {
   DiffStructureParams,
   DiffStructureResult,
   SectionResult,
-  Section,
   WriteSectionsParams,
 } from "../types/index.js";
 import type { RootContent } from "mdast";
@@ -925,36 +925,11 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
     const processor = unified().use(remarkParse);
     const ast = processor.parse(content) as MdastRoot;
 
-    const preamble: RootContent[] = [];
-    const sections: Section<RootContent>[] = [];
-    let currentSection: Section<RootContent> | null = null;
-
-    for (const node of ast.children) {
-      if (node.type === "heading" && node.depth === level) {
-        // Start a new section
-        if (currentSection) {
-          sections.push(currentSection);
-        }
-        currentSection = {
-          title: this.extractText(node),
-          level: node.depth,
-          content: [node],
-        };
-      } else if (currentSection) {
-        // Add to current section
-        currentSection.content.push(node);
-      } else {
-        // Content before first heading goes to preamble
-        preamble.push(node);
-      }
-    }
-
-    // Don't forget the last section
-    if (currentSection) {
-      sections.push(currentSection);
-    }
-
-    return { preamble, sections };
+    return groupSections({
+      items: ast.children,
+      sectionTitle: (node) => (node.type === "heading" && node.depth === level ? this.extractText(node) : undefined),
+      level,
+    });
   }
 
   /**
