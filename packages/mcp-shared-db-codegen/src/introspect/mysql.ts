@@ -13,16 +13,9 @@
  * for million-row tables. Use it for descriptive output only, not for
  * runtime cost-control decisions.
  */
-import type {
-  IntrospectTableInput,
-  Introspector,
-  RawColumn,
-  RawForeignKey,
-  RawIndex,
-  RawTableMetadata,
-  TableInfo,
-} from "./types.js";
+import type { RawColumn } from "./types.js";
 import { mapMysqlType } from "./mysql-types.js";
+import { CatalogIntrospector, type CatalogQuery } from "./catalog-introspector.js";
 
 export { createMysqlClient } from "mcp-shared-db-mysql";
 
@@ -113,14 +106,6 @@ export const MYSQL_QUERIES = {
   `,
 } as const;
 
-type SchemaRow = MysqlQueryResultRow & { schema_name: string };
-
-type TableRow = MysqlQueryResultRow & {
-  name: string;
-  description: string | null;
-  row_count: number | string | null;
-};
-
 type ColumnRow = MysqlQueryResultRow & {
   name: string;
   data_type: string;
@@ -130,33 +115,6 @@ type ColumnRow = MysqlQueryResultRow & {
   column_default: string | null;
   description: string | null;
 };
-
-type PrimaryKeyRow = MysqlQueryResultRow & {
-  column_name: string;
-};
-
-type IndexRow = MysqlQueryResultRow & {
-  index_name: string;
-  column_name: string;
-  // `(non_unique = 0)` returns 0/1 from MySQL; the driver may surface that as
-  // a number or boolean depending on driver flags.
-  is_unique: boolean | number;
-};
-
-type ForeignKeyRow = MysqlQueryResultRow & {
-  field: string;
-  ref_schema: string;
-  ref_table: string;
-  ref_field: string;
-};
-
-function toRowCount(value: number | string | null): number | undefined {
-  if (value === null || value === undefined) return undefined;
-  const n = typeof value === "string" ? Number(value) : value;
-  if (Number.isNaN(n)) return undefined;
-  if (n < 0) return undefined;
-  return n;
-}
 
 function rowToColumn(row: ColumnRow): RawColumn {
   // `column_type` carries the precision suffix (e.g. `tinyint(1)`) we need
@@ -170,122 +128,24 @@ function rowToColumn(row: ColumnRow): RawColumn {
     nullable: row.is_nullable === "YES",
   };
   if (row.column_default !== null) column.default = row.column_default;
+  // MySQL reports a column without a comment as "".
   if (row.description !== null && row.description !== "") {
     column.description = row.description;
   }
   return column;
 }
 
-function groupIndexRows(rows: IndexRow[]): RawIndex[] {
-  const byName = new Map<string, RawIndex>();
-  for (const r of rows) {
-    let idx = byName.get(r.index_name);
-    if (!idx) {
-      idx = {
-        name: r.index_name,
-        fields: [],
-        // MySQL returns `non_unique` as 0/1; boolean coercion handles either
-        // a Number or a Boolean coming from the driver.
-        isUnique: Boolean(r.is_unique),
-      };
-      byName.set(r.index_name, idx);
-    }
-    idx.fields.push(r.column_name);
-  }
-  return [...byName.values()];
-}
-
-export class MysqlIntrospector implements Introspector {
-  private connected = false;
-
-  constructor(private readonly client: MysqlQueryClient) {}
-
-  private async ensureConnected(): Promise<void> {
-    if (this.connected) return;
-    await this.client.connect();
-    this.connected = true;
+export class MysqlIntrospector extends CatalogIntrospector<ColumnRow> {
+  constructor(private readonly client: MysqlQueryClient) {
+    super(client);
   }
 
-  async listSchemas(): Promise<string[]> {
-    await this.ensureConnected();
-    const result = await this.client.query<SchemaRow>({
-      text: MYSQL_QUERIES.schemas,
-    });
-    return result.rows.map((r) => r.schema_name);
+  protected async query<T extends MysqlQueryResultRow>({ key, values }: CatalogQuery): Promise<T[]> {
+    const result = await this.client.query<T>({ text: MYSQL_QUERIES[key], values });
+    return result.rows;
   }
 
-  async listTables(schema: string): Promise<TableInfo[]> {
-    await this.ensureConnected();
-    const result = await this.client.query<TableRow>({
-      text: MYSQL_QUERIES.tables,
-      values: [schema],
-    });
-    return result.rows.map((r) => {
-      const info: TableInfo = { schema, name: r.name };
-      if (r.description !== null && r.description !== "") {
-        info.description = r.description;
-      }
-      const rowCount = toRowCount(r.row_count);
-      if (rowCount !== undefined) info.rowCount = rowCount;
-      return info;
-    });
-  }
-
-  async introspectTable(
-    input: IntrospectTableInput,
-  ): Promise<RawTableMetadata> {
-    const { schema, table } = input;
-    await this.ensureConnected();
-    // Sequential round-trips — same rationale as the PG introspector: a
-    // single mysql2 connection cannot serve concurrent queries, and
-    // round-trip cost is dominated by the SSH tunnel anyway.
-    const tablesResult = await this.client.query<TableRow>({
-      text: MYSQL_QUERIES.tables,
-      values: [schema],
-    });
-    const columnsResult = await this.client.query<ColumnRow>({
-      text: MYSQL_QUERIES.columns,
-      values: [schema, table],
-    });
-    const pkResult = await this.client.query<PrimaryKeyRow>({
-      text: MYSQL_QUERIES.primaryKey,
-      values: [schema, table],
-    });
-    const indexResult = await this.client.query<IndexRow>({
-      text: MYSQL_QUERIES.indexes,
-      values: [schema, table],
-    });
-    const fkResult = await this.client.query<ForeignKeyRow>({
-      text: MYSQL_QUERIES.foreignKeys,
-      values: [schema, table],
-    });
-
-    const tableInfo = tablesResult.rows.find((r) => r.name === table);
-    const columns = columnsResult.rows.map(rowToColumn);
-    const primaryKey = pkResult.rows.map((r) => r.column_name);
-    const indexes = groupIndexRows(indexResult.rows);
-    const foreignKeys: RawForeignKey[] = fkResult.rows.map((r) => ({
-      field: r.field,
-      referencedSchema: r.ref_schema,
-      referencedTable: r.ref_table,
-      referencedField: r.ref_field,
-    }));
-
-    const meta: RawTableMetadata = {
-      schema,
-      name: table,
-      primaryKey,
-      columns,
-      indexes,
-      foreignKeys,
-    };
-    if (tableInfo?.description) meta.description = tableInfo.description;
-    return meta;
-  }
-
-  async close(): Promise<void> {
-    if (!this.connected) return;
-    await this.client.end();
-    this.connected = false;
+  protected toColumn(row: ColumnRow): RawColumn {
+    return rowToColumn(row);
   }
 }

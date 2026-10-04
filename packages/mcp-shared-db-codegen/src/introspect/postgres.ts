@@ -7,16 +7,9 @@
  * `pg.Client` — keeping `pg` out of the import graph for callers that only
  * use the format / heuristics modules.
  */
-import type {
-  IntrospectTableInput,
-  Introspector,
-  RawColumn,
-  RawForeignKey,
-  RawIndex,
-  RawTableMetadata,
-  TableInfo,
-} from "./types.js";
+import type { RawColumn } from "./types.js";
 import { mapPostgresType } from "./postgres-types.js";
+import { CatalogIntrospector, type CatalogQuery } from "./catalog-introspector.js";
 
 export { createPgClient } from "mcp-shared-db-postgres";
 
@@ -119,16 +112,6 @@ export const POSTGRES_QUERIES = {
   `,
 } as const;
 
-type SchemaRow = PgQueryResultRow & {
-  schema_name: string;
-};
-
-type TableRow = PgQueryResultRow & {
-  name: string;
-  description: string | null;
-  row_count: string | number | null;
-};
-
 type ColumnRow = PgQueryResultRow & {
   name: string;
   data_type: string;
@@ -138,36 +121,6 @@ type ColumnRow = PgQueryResultRow & {
   column_default: string | null;
   description: string | null;
 };
-
-type PrimaryKeyRow = PgQueryResultRow & {
-  column_name: string;
-};
-
-type IndexRow = PgQueryResultRow & {
-  index_name: string;
-  column_name: string;
-  is_unique: boolean;
-};
-
-type ForeignKeyRow = PgQueryResultRow & {
-  field: string;
-  ref_schema: string;
-  ref_table: string;
-  ref_field: string;
-};
-
-/**
- * Parse `pg_class.reltuples` into a number, treating null/undefined as
- * "unknown row count" and returning `undefined`.
- */
-function toRowCount(value: string | number | null): number | undefined {
-  if (value === null || value === undefined) return undefined;
-  const n = typeof value === "string" ? Number(value) : value;
-  if (Number.isNaN(n)) return undefined;
-  // Postgres returns -1 for never-analysed tables; treat that as unknown.
-  if (n < 0) return undefined;
-  return n;
-}
 
 /**
  * Build the printable native type. `data_type` reads `character varying`
@@ -203,90 +156,17 @@ function rowToColumn(row: ColumnRow): RawColumn {
   return column;
 }
 
-function groupIndexRows(rows: IndexRow[]): RawIndex[] {
-  const byName = new Map<string, RawIndex>();
-  for (const r of rows) {
-    let idx = byName.get(r.index_name);
-    if (!idx) {
-      idx = { name: r.index_name, fields: [], isUnique: r.is_unique };
-      byName.set(r.index_name, idx);
-    }
-    idx.fields.push(r.column_name);
-  }
-  return [...byName.values()];
-}
-
-export class PostgresIntrospector implements Introspector {
-  private connected = false;
-
-  constructor(private readonly client: PgQueryClient) {}
-
-  private async ensureConnected(): Promise<void> {
-    if (this.connected) return;
-    await this.client.connect();
-    this.connected = true;
+export class PostgresIntrospector extends CatalogIntrospector<ColumnRow> {
+  constructor(private readonly client: PgQueryClient) {
+    super(client);
   }
 
-  async listSchemas(): Promise<string[]> {
-    await this.ensureConnected();
-    const result = await this.client.query<SchemaRow>(POSTGRES_QUERIES.schemas);
-    return result.rows.map((r) => r.schema_name);
+  protected async query<T extends PgQueryResultRow>({ key, values }: CatalogQuery): Promise<T[]> {
+    const result = await this.client.query<T>(POSTGRES_QUERIES[key], values);
+    return result.rows;
   }
 
-  async listTables(schema: string): Promise<TableInfo[]> {
-    await this.ensureConnected();
-    const result = await this.client.query<TableRow>(POSTGRES_QUERIES.tables, [schema]);
-    return result.rows.map((r) => {
-      const info: TableInfo = { schema, name: r.name };
-      if (r.description !== null && r.description !== undefined) {
-        info.description = r.description;
-      }
-      const rowCount = toRowCount(r.row_count);
-      if (rowCount !== undefined) info.rowCount = rowCount;
-      return info;
-    });
-  }
-
-  async introspectTable(input: IntrospectTableInput): Promise<RawTableMetadata> {
-    const { schema, table } = input;
-    await this.ensureConnected();
-    // Run the per-table queries sequentially. A single `pg.Client` cannot
-    // serve concurrent queries (pg@9 will reject this outright), and the
-    // round-trip cost is dominated by the SSH tunnel anyway. Callers that
-    // want concurrency across *tables* should construct a Pool-backed
-    // introspector — out of scope for now.
-    const tablesResult = await this.client.query<TableRow>(POSTGRES_QUERIES.tables, [schema]);
-    const columnsResult = await this.client.query<ColumnRow>(POSTGRES_QUERIES.columns, [schema, table]);
-    const pkResult = await this.client.query<PrimaryKeyRow>(POSTGRES_QUERIES.primaryKey, [schema, table]);
-    const indexResult = await this.client.query<IndexRow>(POSTGRES_QUERIES.indexes, [schema, table]);
-    const fkResult = await this.client.query<ForeignKeyRow>(POSTGRES_QUERIES.foreignKeys, [schema, table]);
-
-    const tableInfo = tablesResult.rows.find((r) => r.name === table);
-    const columns = columnsResult.rows.map(rowToColumn);
-    const primaryKey = pkResult.rows.map((r) => r.column_name);
-    const indexes = groupIndexRows(indexResult.rows);
-    const foreignKeys: RawForeignKey[] = fkResult.rows.map((r) => ({
-      field: r.field,
-      referencedSchema: r.ref_schema,
-      referencedTable: r.ref_table,
-      referencedField: r.ref_field,
-    }));
-
-    const meta: RawTableMetadata = {
-      schema,
-      name: table,
-      primaryKey,
-      columns,
-      indexes,
-      foreignKeys,
-    };
-    if (tableInfo?.description) meta.description = tableInfo.description;
-    return meta;
-  }
-
-  async close(): Promise<void> {
-    if (!this.connected) return;
-    await this.client.end();
-    this.connected = false;
+  protected toColumn(row: ColumnRow): RawColumn {
+    return rowToColumn(row);
   }
 }
