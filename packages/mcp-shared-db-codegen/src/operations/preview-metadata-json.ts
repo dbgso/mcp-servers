@@ -28,7 +28,7 @@ sanity-check the mapping).
 Read-only — does not write to disk.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
-  execute: CodegenOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<CodegenOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
     const tables = await introspectAllTables({
       introspector: ctx.introspector,
       schema: args.schema,
@@ -40,7 +40,7 @@ Read-only — does not write to disk.`;
     // string ready to be written to disk. We do NOT wrap it in jsonResponse
     // because that would double-encode.
     return { content: [{ type: "text" as const, text: source }] };
-  };
+  }
 }
 
 export const previewMetadataJsonOp = new PreviewMetadataJsonOp();

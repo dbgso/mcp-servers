@@ -111,7 +111,7 @@ export function createSqlDataSource(config: CreateSqlDataSourceConfig): DataSour
 export class SqlDataSource implements DataSource {
   constructor(private readonly config: CreateSqlDataSourceConfig) {}
 
-  findByPk = async (input: FindByPkInput) => {
+  async findByPk(input: FindByPkInput) {
     const meta = requireMetadata({ config: this.config, table: input.table });
     const pkColumn = requireSinglePk({ meta, table: input.table });
     const built = buildFindByPk({
@@ -123,9 +123,9 @@ export class SqlDataSource implements DataSource {
     });
     const r = await this.config.query({ sql: built.sql, values: built.values });
     return r.rows[0] ?? null;
-  };
+  }
 
-  findByEq = async (input: FindByEqInput) => {
+  async findByEq(input: FindByEqInput) {
     const meta = requireMetadata({ config: this.config, table: input.table });
     const built = buildFindByEq({
       dialect: this.config.dialect,
@@ -137,9 +137,9 @@ export class SqlDataSource implements DataSource {
     });
     const r = await this.config.query({ sql: built.sql, values: built.values });
     return r.rows;
-  };
+  }
 
-  findByRange = async (input: FindByRangeInput) => {
+  async findByRange(input: FindByRangeInput) {
     const meta = requireMetadata({ config: this.config, table: input.table });
     const built = buildFindByRange({
       dialect: this.config.dialect,
@@ -152,9 +152,9 @@ export class SqlDataSource implements DataSource {
     });
     const r = await this.config.query({ sql: built.sql, values: built.values });
     return r.rows;
-  };
+  }
 
-  findByJsonPath = async (input: FindByJsonPathInput) => {
+  async findByJsonPath(input: FindByJsonPathInput) {
     const meta = requireMetadata({ config: this.config, table: input.table });
     const built = buildFindByJsonPath({
       dialect: this.config.dialect,
@@ -167,9 +167,9 @@ export class SqlDataSource implements DataSource {
     });
     const r = await this.config.query({ sql: built.sql, values: built.values });
     return r.rows;
-  };
+  }
 
-  explainFindByRange = async (input: FindByRangeInput): Promise<ExplainResult> => {
+  async explainFindByRange(input: FindByRangeInput): Promise<ExplainResult> {
     const meta = requireMetadata({ config: this.config, table: input.table });
     // Re-use the exact same SELECT the read path would issue. The dialect
     // wraps it with engine-specific EXPLAIN syntax; the parser normalises
@@ -186,9 +186,9 @@ export class SqlDataSource implements DataSource {
     const explainSql = `${this.config.dialect.explainPrefix()} ${built.sql}`;
     const r = await this.config.query({ sql: explainSql, values: built.values });
     return this.config.dialect.parseExplainResult(r.rows);
-  };
+  }
 
-  explainSql = async (args: { sql: string; params: unknown[] }): Promise<ExplainResult> => {
+  async explainSql(args: { sql: string; params: unknown[] }): Promise<ExplainResult> {
     // Wrap the caller's SQL with the engine's EXPLAIN prefix. The query
     // never executes for real (no ANALYZE), and going through `query(sql,
     // values)` forces extended protocol — multi-statement injection
@@ -196,5 +196,5 @@ export class SqlDataSource implements DataSource {
     const wrapped = `${this.config.dialect.explainPrefix()} ${args.sql}`;
     const r = await this.config.query({ sql: wrapped, values: args.params });
     return this.config.dialect.parseExplainResult(r.rows);
-  };
+  }
 }

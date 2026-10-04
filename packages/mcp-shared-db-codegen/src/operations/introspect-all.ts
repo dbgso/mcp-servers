@@ -20,14 +20,14 @@ Use \`tableFilter\` to scope to a subset (e.g. \`"user"\`). Output is an array o
 \`RawTableMetadata\`. For very large schemas, prefer running \`list_tables\` first.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
-  execute: CodegenOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<CodegenOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
     const tables = await introspectAllTables({
       introspector: ctx.introspector,
       schema: args.schema,
       ...(args.tableFilter !== undefined && { tableFilter: args.tableFilter }),
     });
     return jsonResponse({ schema: args.schema, count: tables.length, tables });
-  };
+  }
 }
 
 export const introspectAllOp = new IntrospectAllOp();

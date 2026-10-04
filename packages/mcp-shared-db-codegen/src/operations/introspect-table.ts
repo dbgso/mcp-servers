@@ -15,13 +15,13 @@ nullability, defaults, descriptions), primary key, indexes, and foreign keys.
 Use \`introspect_all\` to fetch every table in a schema at once.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
-  execute: CodegenOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<CodegenOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
     const metadata = await ctx.introspector.introspectTable({
       schema: args.schema,
       table: args.table,
     });
     return jsonResponse(metadata);
-  };
+  }
 }
 
 export const introspectTableOp = new IntrospectTableOp();

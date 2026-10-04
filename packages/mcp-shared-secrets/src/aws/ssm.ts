@@ -19,7 +19,7 @@ export function ssmSource(options: AwsExecOptions = {}): SecretSource {
 export class SsmSource implements SecretSource {
   constructor(private readonly options: AwsExecOptions = {}) {}
 
-  fetch = async (path: string): Promise<string | undefined> => {
+  async fetch(path: string): Promise<string | undefined> {
     try {
       return await awsExec({
         args: [
@@ -41,7 +41,7 @@ export class SsmSource implements SecretSource {
       }
       throw err;
     }
-  };
+  }
 }
 
 function isParameterNotFound(err: unknown): boolean {

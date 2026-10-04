@@ -47,7 +47,7 @@ Defaults to a compact response (\`estimatedRows\` / \`totalCost\` /
 \`planSummary\`); pass \`verbose: true\` to also receive the raw plan tree.`;
   readonly category = "Discovery";
   readonly argsSchema = argsSchema;
-  execute: DatabaseOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<DatabaseOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
     const result = await ctx.dataSource.explainSql({ sql: args.sql, params: args.params ?? [] });
     const response: Record<string, unknown> = {
       estimatedRows: result.estimatedRows,
@@ -58,7 +58,7 @@ Defaults to a compact response (\`estimatedRows\` / \`totalCost\` /
       response.raw = result.raw;
     }
     return jsonResponse(response);
-  };
+  }
 }
 
 export const explainSqlOp = new ExplainSqlOp();
