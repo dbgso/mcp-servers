@@ -83,6 +83,14 @@
         "typescript/unbound-method": "off",
         "custom/no-arrow-class-method": "off"
       }
+    },
+    {
+      "files": [
+        "packages/interactive-instruction-mcp/src/tools/instruction/handlers/**"
+      ],
+      "rules": {
+        "custom/no-strict-scalar-in-untyped-args": "error"
+      }
     }
   ]
 }

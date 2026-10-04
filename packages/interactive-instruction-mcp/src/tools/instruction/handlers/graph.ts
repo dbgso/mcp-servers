@@ -14,6 +14,7 @@ import {
 } from "mcp-shared-graph-viz";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
+import { looseBoolean, looseNumber } from "../schema-coerce.js";
 import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import { isDescriptionMissing } from "../../../services/metadata-completeness.js";
 import type { MarkdownSummary } from "../../../types/index.js";
@@ -70,16 +71,20 @@ const schema = z.object({
     .string()
     .optional()
     .describe("Draw only the neighbourhood of this document. Omit for the whole corpus."),
-  depth: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .describe("How many hops from `id` to include. Defaults to 1. Ignored without `id`."),
-  includeUnlinked: z
-    .boolean()
-    .optional()
-    .describe("Include documents that have no relations at all. Defaults to false."),
+  depth: looseNumber(
+    z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("How many hops from `id` to include. Defaults to 1. Ignored without `id`."),
+  ),
+  includeUnlinked: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .describe("Include documents that have no relations at all. Defaults to false."),
+  ),
   layout: z
     .enum(LAYOUT_NAMES)
     .optional()
@@ -90,11 +95,13 @@ const schema = z.object({
     .describe(
       "Rank direction for dagre. Defaults to TB. LR reads better for a wide, shallow graph.",
     ),
-  spacing: z
-    .number()
-    .positive()
-    .optional()
-    .describe("Multiplier on the gaps between nodes. Defaults to 1."),
+  spacing: looseNumber(
+    z
+      .number()
+      .positive()
+      .optional()
+      .describe("Multiplier on the gaps between nodes. Defaults to 1."),
+  ),
   edgeStyle: z
     .enum(["bezier", "taxi", "segments", "straight", "haystack"])
     .optional()
