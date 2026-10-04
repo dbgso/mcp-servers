@@ -186,6 +186,9 @@ importers:
       mcp-shared-db-codegen:
         specifier: workspace:*
         version: link:../mcp-shared-db-codegen
+      mcp-shared-db-core:
+        specifier: workspace:*
+        version: link:../mcp-shared-db-core
       mcp-shared-secrets:
         specifier: workspace:*
         version: link:../mcp-shared-secrets

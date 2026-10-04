@@ -26,7 +26,8 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { errorResponse, ToolRegistry, type ToolHandler } from "mcp-shared";
-import { ssmConfigFromEnv, type BastionConfig, type TunnelSpec } from "mcp-shared/tunnel";
+import type { BastionConfig, TunnelSpec } from "mcp-shared/tunnel";
+import { bastionConfigFromSecrets, tunnelConfigFromSecrets } from "mcp-shared-db-core";
 import {
   createCodegenTools,
   type CreateCodegenToolsConfig,
@@ -44,6 +45,8 @@ import { parseArgs, type CliArgs } from "./cli.js";
 import { VERSION } from "./version.js";
 
 export const SERVER_NAME = "db-codegen-mcp";
+/** Prefix of every env key this server reads. */
+const ENV_PREFIX = "DBGEN";
 export const SERVER_VERSION = VERSION;
 
 /** Env keys whose values are eagerly resolved during startup. */
@@ -103,58 +106,22 @@ export function buildDefaultResolver(): SecretResolver {
 }
 
 /**
- * Build a `BastionConfig` from a resolver's pre-cached entries.
- *
- * Returns `null` when `DBGEN_BASTION_HOST` is unset (codegen layer treats
- * `null` as "no bastion → direct connection"). When `DBGEN_BASTION_KEY` is
- * present we attach it as `identityFile`; absent is allowed (e.g. ssh-agent).
+ * Build a `BastionConfig` from a resolver's pre-cached
+ * `DBGEN_BASTION_HOST` / `DBGEN_BASTION_KEY`; `null` means "no bastion →
+ * direct connection".
  */
 export function buildBastionConfig(resolver: SecretResolver): BastionConfig | null {
-  const host = tryCached({ resolver, key: "DBGEN_BASTION_HOST" });
-  if (host === undefined) return null;
-  const identityFile = tryCached({ resolver, key: "DBGEN_BASTION_KEY" });
-  return identityFile ? { host, identityFile } : { host };
+  return bastionConfigFromSecrets({ secrets: resolver, prefix: ENV_PREFIX });
 }
 
 /**
- * Build a `TunnelSpec` from a resolver's pre-cached entries, picking SSH
- * bastion or AWS SSM port forward based on which env signal is set. Throws
- * when both are set.
+ * Build a `TunnelSpec` from a resolver's pre-cached entries: SSH bastion
+ * (`DBGEN_BASTION_HOST`) or AWS SSM port forward (`DBGEN_SSM_TARGET`),
+ * `null` for neither, and a throw when both are set. The rule is shared
+ * with db-read-mcp — see `tunnelConfigFromSecrets` in mcp-shared-db-core.
  */
 export function buildTunnelConfig(resolver: SecretResolver): TunnelSpec | null {
-  const bastion = buildBastionConfig(resolver);
-  // Mirror cached SSM keys into process.env so ssmConfigFromEnv reads them.
-  for (const key of [
-    "DBGEN_SSM_TARGET",
-    "DBGEN_SSM_REGION",
-    "DBGEN_SSM_PROFILE",
-    "DBGEN_SSM_DOCUMENT_NAME",
-    "DBGEN_SSM_READY_TIMEOUT_MS",
-  ] as const) {
-    if (process.env[key] === undefined) {
-      const cached = tryCached({ resolver, key });
-      if (cached !== undefined) process.env[key] = cached;
-    }
-  }
-  const ssm = ssmConfigFromEnv("DBGEN");
-  if (bastion && ssm) {
-    throw new Error(
-      "Set at most one of DBGEN_BASTION_HOST or DBGEN_SSM_TARGET, not both",
-    );
-  }
-  if (bastion) return { bastion };
-  if (ssm) return { ssm };
-  return null;
-}
-
-/** Sync cache lookup that returns undefined instead of throwing for missing keys. */
-function tryCached(params: { resolver: SecretResolver; key: string }): string | undefined {
-  const { resolver, key } = params;
-  try {
-    return resolver.cached(key);
-  } catch {
-    return undefined;
-  }
+  return tunnelConfigFromSecrets({ secrets: resolver, prefix: ENV_PREFIX });
 }
 
 interface TryComposeDbUrlParams {
@@ -182,7 +149,7 @@ function resolveToolsConfig(params: {
 }): CreateCodegenToolsConfig {
   const { resolver, override = {} } = params;
   const merged: CreateCodegenToolsConfig = {
-    getUrl: override.getUrl ?? (() => tryComposeDbUrl({ resolver, prefix: "DBGEN" }) ?? ""),
+    getUrl: override.getUrl ?? (() => tryComposeDbUrl({ resolver, prefix: ENV_PREFIX }) ?? ""),
   };
   if (override.getTunnel) {
     merged.getTunnel = override.getTunnel;

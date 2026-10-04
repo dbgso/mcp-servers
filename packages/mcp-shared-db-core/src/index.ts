@@ -76,3 +76,11 @@ export type {
   ValidateSelectableFieldsCoverageResult,
 } from "./validate.js";
 export { validateSelectableFieldsCoverage } from "./validate.js";
+
+// Tunnel config shared by the DB servers (bastion xor SSM, per env prefix)
+export type { CachedSecrets } from "./tunnel-config.js";
+export {
+  bastionConfigFromSecrets,
+  pickTunnelSpec,
+  tunnelConfigFromSecrets,
+} from "./tunnel-config.js";

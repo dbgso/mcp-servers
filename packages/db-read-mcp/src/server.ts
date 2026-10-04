@@ -29,7 +29,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { errorResponse, ToolRegistry, type ToolHandler } from "mcp-shared";
-import { ssmConfigFromEnv, type BastionConfig, type TunnelSpec } from "mcp-shared/tunnel";
+import type { BastionConfig, TunnelSpec } from "mcp-shared/tunnel";
 import {
   createDatabaseTools,
   type DataSource,
@@ -37,7 +37,9 @@ import {
   type TableMetadataMap,
 } from "mcp-shared-db";
 import {
+  bastionConfigFromSecrets,
   detectLegacySelectableFieldsUsage,
+  tunnelConfigFromSecrets,
   type LegacyUsageReport,
 } from "mcp-shared-db-core";
 import {
@@ -59,6 +61,8 @@ import { pickEngineStrategy } from "./strategies/pick.js";
 import { VERSION } from "./version.js";
 
 export const SERVER_NAME = "db-read-mcp";
+/** Prefix of every env key this server reads. */
+const ENV_PREFIX = "DBREAD";
 export const SERVER_VERSION = VERSION;
 
 /** Env keys whose values are eagerly resolved during startup. */
@@ -154,73 +158,22 @@ export function buildDefaultResolver(options: BuildDefaultResolverOptions = {}):
 }
 
 /**
- * Build a `BastionConfig` from a resolver's pre-cached entries.
- *
- * Returns `null` when `DBREAD_BASTION_HOST` is unset (we treat null as
- * "no bastion → direct connection"). When `DBREAD_BASTION_KEY` is present we
- * attach it as `identityFile`; absent is allowed (e.g. ssh-agent).
+ * Build a `BastionConfig` from a resolver's pre-cached
+ * `DBREAD_BASTION_HOST` / `DBREAD_BASTION_KEY`; `null` means "no bastion →
+ * direct connection".
  */
 export function buildBastionConfig(resolver: SecretResolver): BastionConfig | null {
-  const host = tryCached({ resolver, key: "DBREAD_BASTION_HOST" });
-  if (host === undefined) return null;
-  const identityFile = tryCached({ resolver, key: "DBREAD_BASTION_KEY" });
-  return identityFile ? { host, identityFile } : { host };
+  return bastionConfigFromSecrets({ secrets: resolver, prefix: ENV_PREFIX });
 }
 
 /**
- * Build a `TunnelSpec` from a resolver's pre-cached entries, picking SSH
- * bastion or AWS SSM port forward based on which env signal is set.
- *
- *   - `DBREAD_BASTION_HOST` set → `{ bastion: ... }`
- *   - `DBREAD_SSM_TARGET` set   → `{ ssm: ... }`
- *   - both set                  → throw (operator must pick one)
- *   - neither                   → `null` (direct connection)
- *
- * The cached resolver layer handles the `ssm:` / `sm:` URI resolution
- * before this runs, so values are guaranteed to be plain strings here.
- *
- * `ssmConfigFromEnv` reads from `process.env`; we mirror cached resolver
- * values into env (if not already set) so it picks them up.
+ * Build a `TunnelSpec` from a resolver's pre-cached entries: SSH bastion
+ * (`DBREAD_BASTION_HOST`) or AWS SSM port forward (`DBREAD_SSM_TARGET`),
+ * `null` for neither, and a throw when both are set. The rule is shared
+ * with db-codegen-mcp — see `tunnelConfigFromSecrets` in mcp-shared-db-core.
  */
 export function buildTunnelConfig(resolver: SecretResolver): TunnelSpec | null {
-  const bastion = buildBastionConfig(resolver);
-  // ssmConfigFromEnv reads process.env directly; ensure cached values land
-  // there for the read. Mirror only when env doesn't already define the key.
-  for (const key of [
-    "DBREAD_SSM_TARGET",
-    "DBREAD_SSM_REGION",
-    "DBREAD_SSM_PROFILE",
-    "DBREAD_SSM_DOCUMENT_NAME",
-    "DBREAD_SSM_READY_TIMEOUT_MS",
-  ] as const) {
-    if (process.env[key] === undefined) {
-      const cached = tryCached({ resolver, key });
-      if (cached !== undefined) process.env[key] = cached;
-    }
-  }
-  const ssm = ssmConfigFromEnv("DBREAD");
-  if (bastion && ssm) {
-    throw new Error(
-      "Set at most one of DBREAD_BASTION_HOST or DBREAD_SSM_TARGET, not both",
-    );
-  }
-  if (bastion) return { bastion };
-  if (ssm) return { ssm };
-  return null;
-}
-
-interface TryCachedParams {
-  resolver: SecretResolver;
-  key: string;
-}
-
-/** Sync cache lookup that returns undefined instead of throwing for missing keys. */
-function tryCached(params: TryCachedParams): string | undefined {
-  try {
-    return params.resolver.cached(params.key);
-  } catch {
-    return undefined;
-  }
+  return tunnelConfigFromSecrets({ secrets: resolver, prefix: ENV_PREFIX });
 }
 
 /** Cap on inline legacy-site listings before truncating with a count. */
@@ -396,7 +349,7 @@ export async function startServer(
     filePath: cli.selectableFields,
   });
 
-  const { url } = composeDbUrlFromResolver({ resolver, prefix: "DBREAD" });
+  const { url } = composeDbUrlFromResolver({ resolver, prefix: ENV_PREFIX });
   const tunnel = buildTunnelConfig(resolver);
   const opener = options.openConnection ?? defaultOpenConnection;
   const connection = await opener({ url, tunnel, tableMetadata });

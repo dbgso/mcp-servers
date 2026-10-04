@@ -51,6 +51,7 @@
     "@vitest/coverage-v8": "catalog:",
     "mcp-shared": "workspace:*",
     "mcp-shared-db-codegen": "workspace:*",
+    "mcp-shared-db-core": "workspace:*",
     "mcp-shared-secrets": "workspace:*",
     "tsup": "catalog:",
     "vitest": "catalog:"
