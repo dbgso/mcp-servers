@@ -9,6 +9,7 @@
   "references": [
     { "path": "../mcp-shared" },
     { "path": "../mcp-shared-db-codegen" },
+    { "path": "../mcp-shared-db-core" },
     { "path": "../mcp-shared-secrets" }
   ]
 }

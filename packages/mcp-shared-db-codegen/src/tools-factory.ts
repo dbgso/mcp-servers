@@ -8,6 +8,7 @@
  */
 import { createDescribeExecuteHandlers, type ToolHandler } from "mcp-shared";
 import { bastionConfigFromEnv, resolveTunneledUrl, ssmConfigFromEnv, type BastionConfig, type TunnelSpec } from "mcp-shared/tunnel";
+import { pickTunnelSpec } from "mcp-shared-db-core";
 import type { Introspector } from "./introspect/types.js";
 import {
   pickIntrospector,
@@ -180,14 +181,9 @@ export function resolveTunnelSpec(params: {
     const bastion = config.getBastion();
     return bastion ? { bastion } : null;
   }
-  const bastion = bastionConfigFromEnv(envPrefix);
-  const ssm = ssmConfigFromEnv(envPrefix);
-  if (bastion && ssm) {
-    throw new Error(
-      `Set at most one of ${envPrefix}_BASTION_HOST or ${envPrefix}_SSM_TARGET, not both`,
-    );
-  }
-  if (bastion) return { bastion };
-  if (ssm) return { ssm };
-  return null;
+  return pickTunnelSpec({
+    prefix: envPrefix,
+    bastion: bastionConfigFromEnv(envPrefix),
+    ssm: ssmConfigFromEnv(envPrefix),
+  });
 }
