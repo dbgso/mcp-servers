@@ -102,6 +102,33 @@ export function getQueryableFieldNames(table: TableConfig): string[] {
     .map(([name]) => name);
 }
 
+type ApplyPolicy = (params: { row: Record<string, unknown>; name: string }) => void;
+
+const redactField: ApplyPolicy = ({ row, name }) => {
+  if (row[name] === null || row[name] === undefined) return;
+  row[name] = REDACTED;
+};
+
+/**
+ * What each visibility policy does to one field of a row (in place). A Map,
+ * not an object literal: the policy string can come from a hand-edited JSON
+ * file, and a typo such as `"constructor"` must not resolve to an
+ * `Object.prototype` member.
+ */
+const APPLY_POLICY: ReadonlyMap<FieldVisibility, ApplyPolicy> = new Map<
+  FieldVisibility,
+  ApplyPolicy
+>([
+  ["expose", () => {}],
+  [
+    "exclude",
+    ({ row, name }) => {
+      delete row[name];
+    },
+  ],
+  ["redact", redactField],
+]);
+
 /**
  * Apply each field's visibility policy to a row:
  *
@@ -120,16 +147,9 @@ export function redactPii<T extends Record<string, unknown>>(params: {
   const { row, table } = params;
   const out: Record<string, unknown> = { ...row };
   for (const [name, info] of Object.entries(table.fields)) {
-    const policy = getEffectivePolicy(info);
-    if (policy === "expose") continue;
-    if (policy === "exclude") {
-      delete out[name];
-      continue;
-    }
-    // policy === "redact"
-    if (!(name in out)) continue;
-    if (out[name] === null || out[name] === undefined) continue;
-    out[name] = REDACTED;
+    // An unknown policy string (a typo in a JSON config) fails safe to redact.
+    const apply = APPLY_POLICY.get(getEffectivePolicy(info)) ?? redactField;
+    apply({ row: out, name });
   }
   return out as T;
 }
