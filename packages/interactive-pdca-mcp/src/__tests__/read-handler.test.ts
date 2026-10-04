@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ReadHandler } from "../tools/plan/handlers/read-handler.js";
+import { ReadHandler, formatFeedbackHistory } from "../tools/plan/handlers/read-handler.js";
 import type { PlanActionContext, PlanRawParams, PlanReader, Task } from "../types/index.js";
 
 describe("ReadHandler", () => {
@@ -199,5 +199,25 @@ describe("ReadHandler", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error:");
     });
+  });
+});
+
+describe("formatFeedbackHistory", () => {
+  it.each([
+    ["no feedback field", undefined],
+    ["an empty list", []],
+  ])("is empty for %s", (_label, feedback) => {
+    expect(formatFeedbackHistory(feedback as unknown as Task["feedback"])).toBe("");
+  });
+
+  it("renders one entry per feedback, in order", () => {
+    const text = formatFeedbackHistory([
+      { decision: "adopted", timestamp: "t1", comment: "yes" },
+      { decision: "rejected", timestamp: "t2", comment: "no" },
+    ] as Task["feedback"]);
+
+    expect(text).toBe(
+      "\n\n## Feedback History\n\n✅ **adopted** (t1)\n> yes\n\n❌ **rejected** (t2)\n> no\n\n",
+    );
   });
 });
