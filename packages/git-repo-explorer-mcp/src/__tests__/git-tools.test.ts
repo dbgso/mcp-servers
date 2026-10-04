@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
-import { extractRepoName, parseGitGrepOutput } from "../git-repo-manager.js";
+import { extractRepoName, parseGitGrepOutput, globToRegex, buildGrepArgs } from "../git-repo-manager.js";
 import { allOperations, getOperation, getCategories, getOperationsByCategory } from "../operations/registry.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -97,6 +97,33 @@ describe("parseGitGrepOutput", () => {
     expect(result).toHaveLength(2);
     expect(result[0].file).toBe("valid.ts");
     expect(result[1].file).toBe("valid2.ts");
+  });
+});
+
+describe("globToRegex", () => {
+  test.each([
+    { glob: "**/*.ts", path: "src/a/b.ts", matches: true },
+    { glob: "*.ts", path: "src/b.ts", matches: false },
+    { glob: "src/?.ts", path: "src/b.ts", matches: true },
+    { glob: "src/?.ts", path: "src/bb.ts", matches: false },
+    { glob: "feature/*", path: "feature/x", matches: true },
+    { glob: "a.b", path: "aXb", matches: false },
+  ])("$glob against $path is $matches", ({ glob, path, matches }) => {
+    expect(globToRegex(glob).test(path)).toBe(matches);
+  });
+});
+
+describe("buildGrepArgs", () => {
+  test("passes the pattern with -e, asks for one more than the limit, and adds options", () => {
+    expect(
+      buildGrepArgs({ pattern: "-x", ref: "main", maxCount: 10, options: { ignore_case: true, path: "src" } }),
+    ).toEqual(["grep", "-n", "-z", "-i", "--max-count=11", "-e", "-x", "main", "--", "src"]);
+  });
+
+  test("leaves out the optional flags when not asked for", () => {
+    expect(buildGrepArgs({ pattern: "x", ref: "HEAD", maxCount: 1, options: {} })).toEqual([
+      "grep", "-n", "-z", "--max-count=2", "-e", "x", "HEAD",
+    ]);
   });
 });
 
