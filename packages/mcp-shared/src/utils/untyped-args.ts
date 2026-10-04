@@ -38,10 +38,16 @@ function numberFromString(value: unknown): unknown {
 /** A JSON array in a string: `'["a","b"]'`. Anything else is left for the schema to judge. */
 function arrayFromString(value: unknown): unknown {
   if (typeof value !== "string" || !value.trimStart().startsWith("[")) return value;
-  return parseJsonArray(value);
+  return parseJson(value);
 }
 
-function parseJsonArray(value: string): unknown {
+/** A JSON object in a string: `'{"kind":"x"}'`. Anything else is left for the schema to judge. */
+function objectFromString(value: unknown): unknown {
+  if (typeof value !== "string" || !value.trimStart().startsWith("{")) return value;
+  return parseJson(value);
+}
+
+function parseJson(value: string): unknown {
   try {
     return JSON.parse(value);
   } catch {
@@ -62,4 +68,13 @@ export function looseNumber<T extends z.ZodTypeAny>(schema: T) {
 /** `z.array()` that also takes the array as a JSON string, such as `'["a","b"]'`. */
 export function looseArray<T extends z.ZodTypeAny>(schema: T) {
   return z.preprocess(arrayFromString, schema);
+}
+
+/**
+ * An object schema that also takes the object as a JSON string, such as
+ * `'{"kind":"CallExpression"}'`. Values inside a parsed object keep their JSON
+ * types, so nested booleans and numbers need no wrapping of their own.
+ */
+export function looseObject<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess(objectFromString, schema);
 }

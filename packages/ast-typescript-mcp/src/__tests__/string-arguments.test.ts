@@ -33,6 +33,7 @@ import {
   RemoveUnusedImportsHandler,
   RenameSymbolHandler,
   TransformAstHandler,
+  TsStructureWriteHandler,
   TransformCallSiteHandler,
   TransformSignatureHandler,
   TsStructureReadHandler,
@@ -260,5 +261,37 @@ describe("ts_ast with string arguments", () => {
     const body = JSON.parse(text(result)) as { matches: { file: string }[] };
     expect(body.matches).toHaveLength(2);
     expect(body.matches.every((m) => m.file.endsWith("many-logs.ts"))).toBe(true);
+  });
+});
+
+describe("an object argument sent as a JSON string", () => {
+  it("is read as the object for query, additions and structure", () => {
+    const transform = new TransformAstHandler().schema.parse({
+      path: "src",
+      query: '{"kind":"CallExpression"}',
+      replacement: "${0}",
+      additions: '{"Foo":{"enabled":true}}',
+    });
+    const write = new TsStructureWriteHandler().schema.parse({
+      file_path: "a.ts",
+      structure: '{"statements":[]}',
+    });
+
+    expect(transform.query).toEqual({ kind: "CallExpression" });
+    expect(transform.additions).toEqual({ Foo: { enabled: true } });
+    expect(write.structure).toEqual({ statements: [] });
+  });
+
+  it("runs a custom query given as a string", async () => {
+    const result = await new TsAstHandler().execute({
+      action: "query",
+      path: join(FIXTURES, "query-ast", "many-logs.ts"),
+      query: '{"kind":"CallExpression","expression":{"kind":"PropertyAccessExpression","name":"log"}}',
+      output: "summary",
+    });
+
+    expect(result.isError).toBeFalsy();
+    const body = JSON.parse(text(result)) as { matches: unknown[] };
+    expect(body.matches.length).toBeGreaterThan(0);
   });
 });

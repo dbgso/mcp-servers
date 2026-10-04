@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler, looseArray, looseBoolean } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseBoolean, looseObject } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { QueryEngine, QUERY_PRESETS } from "../../query/engine.js";
 import type { AstQuery, AstQueryBase, QueryMatch, CapturedNode } from "../../query/engine.js";
@@ -78,7 +78,7 @@ const TransformAstSchema = z.object({
   path: z.string().describe("File or directory path to transform"),
 
   // Query-based transformation
-  query: AstQuerySchema.optional().describe("AST query to match patterns"),
+  query: looseObject(AstQuerySchema.optional().describe("AST query to match patterns")),
   query_preset: z.enum([
     "instanceof",
     "console_log",
@@ -97,7 +97,7 @@ const TransformAstSchema = z.object({
   property_mappings: looseArray(z.array(PropertyMappingSchema).optional()),
   method_mappings: looseArray(z.array(MethodMappingSchema).optional()),
   remove_properties: looseArray(z.array(z.string()).optional()),
-  additions: z.record(z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]))).optional(),
+  additions: looseObject(z.record(z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]))).optional()),
   target_type: z.string().optional(),
 
   // Common options

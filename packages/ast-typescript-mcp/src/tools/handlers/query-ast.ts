@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler, looseArray, looseNumber } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseNumber, looseObject } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { Project, Node, SyntaxKind } from "ts-morph";
 import type { SourceFile } from "ts-morph";
@@ -168,7 +168,7 @@ const AstQuerySchema: z.ZodType<AstQuery> = AstQueryBaseSchema.refine(
 
 const QueryAstSchema = z.object({
   path: z.string().describe("File or directory to search"),
-  query: AstQuerySchema.optional().describe("AST query object"),
+  query: looseObject(AstQuerySchema.optional().describe("AST query object")),
   preset: z.enum([
     "instanceof",
     "console_log",
