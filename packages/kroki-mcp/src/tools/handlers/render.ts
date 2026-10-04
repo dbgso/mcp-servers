@@ -101,13 +101,15 @@ export class KrokiRenderHandler extends BaseToolHandler<RenderArgs> {
         }
 
         const base64 = Buffer.from(buffer).toString("base64");
-        const mimeType = format === "png" ? "image/png" : "application/pdf";
+        if (format === "png") {
+          return { content: [{ type: "image", data: base64, mimeType: "image/png" }] };
+        }
+        // A PDF is not an image: it goes back as an embedded resource
         return {
           content: [
             {
-              type: "image",
-              data: base64,
-              mimeType,
+              type: "resource",
+              resource: { uri: `kroki://${tool}/diagram.pdf`, mimeType: "application/pdf", blob: base64 },
             },
           ],
         };

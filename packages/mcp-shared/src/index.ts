@@ -86,6 +86,7 @@ export type {
   RegistrableActionHandler,
   TextContent,
   ImageContent,
+  BlobResourceContent,
   ToolContent,
 } from "./tools/index.js";
 
