@@ -26,10 +26,25 @@ function toFieldMetadata(column: RawColumn): GenericFieldMetadata {
   return out;
 }
 
-function toRdbTable(table: RawTableMetadata): RdbTableMetadata {
-  const fields: Record<string, GenericFieldMetadata> = {};
-  for (const c of table.columns) fields[c.name] = toFieldMetadata(c);
-  const out: RdbTableMetadata = {
+/** `RdbTableMetadata` with a caller-chosen field shape. */
+export type TableMetadataWithFields<F> = Omit<RdbTableMetadata, "fields"> & {
+  fields: Record<string, F>;
+};
+
+/**
+ * Build one table entry from introspected metadata. The table part is the
+ * same for every output; `toField` decides what each field looks like
+ * (`metadata.json` keeps `nativeType` on every field, the runtime map keeps
+ * `default` too).
+ */
+export function buildTableMetadata<F>(params: {
+  table: RawTableMetadata;
+  toField: (column: RawColumn) => F;
+}): TableMetadataWithFields<F> {
+  const { table, toField } = params;
+  const fields: Record<string, F> = {};
+  for (const c of table.columns) fields[c.name] = toField(c);
+  const out: TableMetadataWithFields<F> = {
     tableName: table.name,
     primaryKey: table.primaryKey,
     fields,
@@ -54,6 +69,8 @@ function toRdbTable(table: RawTableMetadata): RdbTableMetadata {
 
 export function toRdbMetadataMap(tables: RawTableMetadata[]): RdbTableMetadataMap {
   const out: RdbTableMetadataMap = {};
-  for (const t of tables) out[t.name] = toRdbTable(t);
+  for (const t of tables) {
+    out[t.name] = buildTableMetadata({ table: t, toField: toFieldMetadata });
+  }
   return out;
 }
