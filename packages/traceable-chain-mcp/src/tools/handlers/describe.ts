@@ -2,6 +2,7 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
+import { parentTypes } from "../../chain-manager.js";
 import type { ChainManager } from "../../chain-manager.js";
 import {
   allQueryOperations,
@@ -44,48 +45,56 @@ export class ChainDescribeHandler extends BaseToolHandler<DescribeArgs> {
       };
     }
 
-    // Detail mode
-    if (operation) {
-      const queryOp = getQueryOperation(operation);
-      const mutateOp = getMutateOperation(operation);
-      const op = queryOp ?? mutateOp;
+    return operation ? this.describeOperation(operation) : this.listAll();
+  }
 
-      if (!op) {
-        const available = [
-          ...allQueryOperations.map(o => o.id),
-          ...allMutateOperations.map(o => o.id),
-          "guide",
-        ].join(", ");
-        return {
-          content: [{ type: "text", text: `Unknown operation: "${operation}"\n\nAvailable operations: ${available}` }],
-          isError: true,
-        };
-      }
+  /**
+   * Detail mode: one operation, with its category and parameter schema
+   */
+  private describeOperation(operation: string): ToolResponse {
+    const queryOp = getQueryOperation(operation);
+    const mutateOp = getMutateOperation(operation);
+    const op = queryOp ?? mutateOp;
 
-      const jsonSchema = zodToJsonSchema(op.argsSchema, { target: "openApi3" });
-      const category = queryOp ? "Query (no approval)" : "Mutate (approval required)";
-
-      const lines = [
-        `## ${op.id}`,
-        ``,
-        `**Category:** ${category}`,
-        ``,
-        `Use \`chain_${queryOp ? "query" : "mutate"}({ operation: "${op.id}", params: {...} })\` to execute.`,
-        ``,
-        op.detail,
-        ``,
-        `**Parameters (JSON Schema):**`,
-        "```json",
-        JSON.stringify(jsonSchema, null, 2),
-        "```",
-      ];
-
+    if (!op) {
+      const available = [
+        ...allQueryOperations.map(o => o.id),
+        ...allMutateOperations.map(o => o.id),
+        "guide",
+      ].join(", ");
       return {
-        content: [{ type: "text", text: lines.join("\n") }],
+        content: [{ type: "text", text: `Unknown operation: "${operation}"\n\nAvailable operations: ${available}` }],
+        isError: true,
       };
     }
 
-    // List mode
+    const jsonSchema = zodToJsonSchema(op.argsSchema, { target: "openApi3" });
+    const category = queryOp ? "Query (no approval)" : "Mutate (approval required)";
+
+    const lines = [
+      `## ${op.id}`,
+      ``,
+      `**Category:** ${category}`,
+      ``,
+      `Use \`chain_${queryOp ? "query" : "mutate"}({ operation: "${op.id}", params: {...} })\` to execute.`,
+      ``,
+      op.detail,
+      ``,
+      `**Parameters (JSON Schema):**`,
+      "```json",
+      JSON.stringify(jsonSchema, null, 2),
+      "```",
+    ];
+
+    return {
+      content: [{ type: "text", text: lines.join("\n") }],
+    };
+  }
+
+  /**
+   * List mode: the configured types and every operation
+   */
+  private listAll(): ToolResponse {
     const types = this.manager.getTypes();
 
     const lines = [
@@ -96,11 +105,7 @@ export class ChainDescribeHandler extends BaseToolHandler<DescribeArgs> {
     ];
 
     for (const [typeName, cfg] of Object.entries(types)) {
-      const requires = cfg.requires === null
-        ? "(root)"
-        : Array.isArray(cfg.requires)
-          ? cfg.requires.join(" | ")
-          : cfg.requires;
+      const requires = parentTypes(cfg.requires)?.join(" | ") ?? "(root)";
       lines.push(`- **${typeName}**: requires ${requires}${cfg.description ? ` - ${cfg.description}` : ""}`);
     }
 

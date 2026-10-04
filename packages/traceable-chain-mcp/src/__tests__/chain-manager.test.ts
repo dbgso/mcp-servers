@@ -1,7 +1,17 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, rmSync, mkdirSync } from "node:fs";
-import { ChainManager } from "../chain-manager.js";
+import { ChainManager, parentTypes } from "../chain-manager.js";
 import type { ChainConfig } from "../types.js";
+
+describe("parentTypes", () => {
+  test.each([
+    { name: "a root type", requires: null, expected: null },
+    { name: "one parent type", requires: "spec", expected: ["spec"] },
+    { name: "a list of parent types", requires: ["spec", "design"], expected: ["spec", "design"] },
+  ])("reads $name", ({ requires, expected }) => {
+    expect(parentTypes(requires)).toEqual(expected);
+  });
+});
 
 const TEST_DIR = "/tmp/chain-test-docs";
 
