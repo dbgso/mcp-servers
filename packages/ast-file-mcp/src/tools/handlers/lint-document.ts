@@ -3,6 +3,7 @@ import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
+import { findHeadingSkips } from "../heading-skips.js";
 import type {
   LintIssue,
   LintDocumentResult,
@@ -34,39 +35,31 @@ const LintDocumentSchema = z.object({
 
 type LintDocumentArgs = z.infer<typeof LintDocumentSchema>;
 
+/** What every rule reads from the document being linted. */
+interface LintInput {
+  headings: HeadingSummary[];
+  codeBlocks: CodeBlockSummary[];
+  totalLines: number;
+}
+
 /**
  * Check for heading level skips (e.g., h1 -> h3 without h2)
  */
-function checkHeadingHierarchy(headings: HeadingSummary[]): LintIssue[] {
-  const issues: LintIssue[] = [];
-
-  for (let i = 1; i < headings.length; i++) {
-    const prev = headings[i - 1];
-    const curr = headings[i];
-
-    // If current heading is deeper than previous by more than 1 level, it's a skip
-    if (curr.depth > prev.depth + 1) {
-      issues.push({
-        ruleId: "heading-hierarchy",
-        severity: "error",
-        message: `Heading level skip: h${prev.depth} to h${curr.depth}`,
-        line: curr.line,
-        section: curr.text,
-        suggestion: `Use h${prev.depth + 1} instead of h${curr.depth}`,
-      });
-    }
-  }
-
-  return issues;
+function checkHeadingHierarchy({ headings }: LintInput): LintIssue[] {
+  return findHeadingSkips(headings).map(({ previous, current }) => ({
+    ruleId: "heading-hierarchy",
+    severity: "error",
+    message: `Heading level skip: h${previous.depth} to h${current.depth}`,
+    line: current.line,
+    section: current.text,
+    suggestion: `Use h${previous.depth + 1} instead of h${current.depth}`,
+  }));
 }
 
 /**
  * Check for sections with no content between headings
  */
-function checkEmptySections(params: {
-  headings: HeadingSummary[];
-  totalLines: number;
-}): LintIssue[] {
+function checkEmptySections(params: LintInput): LintIssue[] {
   const { headings, totalLines } = params;
   const issues: LintIssue[] = [];
 
@@ -94,7 +87,7 @@ function checkEmptySections(params: {
 /**
  * Check for code blocks without language specification
  */
-function checkCodeNoLanguage(codeBlocks: CodeBlockSummary[]): LintIssue[] {
+function checkCodeNoLanguage({ codeBlocks }: LintInput): LintIssue[] {
   const issues: LintIssue[] = [];
 
   for (const block of codeBlocks) {
@@ -115,7 +108,7 @@ function checkCodeNoLanguage(codeBlocks: CodeBlockSummary[]): LintIssue[] {
 /**
  * Check for duplicate heading text at the same level
  */
-function checkDuplicateHeading(headings: HeadingSummary[]): LintIssue[] {
+function checkDuplicateHeading({ headings }: LintInput): LintIssue[] {
   const issues: LintIssue[] = [];
   const seenByLevel = new Map<number, Map<string, number>>();
 
@@ -144,7 +137,7 @@ function checkDuplicateHeading(headings: HeadingSummary[]): LintIssue[] {
 /**
  * Check if document has no h1/title
  */
-function checkMissingTitle(headings: HeadingSummary[]): LintIssue[] {
+function checkMissingTitle({ headings }: LintInput): LintIssue[] {
   const hasTitle = headings.some((h) => h.depth === 1);
 
   if (!hasTitle) {
@@ -160,6 +153,14 @@ function checkMissingTitle(headings: HeadingSummary[]): LintIssue[] {
 
   return [];
 }
+
+const RULES: Record<LintRuleId, (input: LintInput) => LintIssue[]> = {
+  "heading-hierarchy": checkHeadingHierarchy,
+  "empty-section": checkEmptySections,
+  "code-no-language": checkCodeNoLanguage,
+  "duplicate-heading": checkDuplicateHeading,
+  "missing-title": checkMissingTitle,
+};
 
 export class LintDocumentHandler extends BaseToolHandler<LintDocumentArgs> {
   readonly name = "lint_document";
@@ -220,28 +221,9 @@ export class LintDocumentHandler extends BaseToolHandler<LintDocumentArgs> {
       const content = await readFile(file_path, "utf-8");
       const totalLines = content.split("\n").length;
 
-      // Run enabled rules
-      let issues: LintIssue[] = [];
-
-      if (enabledRules.includes("heading-hierarchy")) {
-        issues.push(...checkHeadingHierarchy(headings));
-      }
-
-      if (enabledRules.includes("empty-section")) {
-        issues.push(...checkEmptySections({ headings, totalLines }));
-      }
-
-      if (enabledRules.includes("code-no-language")) {
-        issues.push(...checkCodeNoLanguage(codeBlocks));
-      }
-
-      if (enabledRules.includes("duplicate-heading")) {
-        issues.push(...checkDuplicateHeading(headings));
-      }
-
-      if (enabledRules.includes("missing-title")) {
-        issues.push(...checkMissingTitle(headings));
-      }
+      // Run enabled rules, in the order ALL_RULES lists them
+      const input: LintInput = { headings, codeBlocks, totalLines };
+      let issues = ALL_RULES.filter((rule) => enabledRules.includes(rule)).flatMap((rule) => RULES[rule](input));
 
       // Filter by severity
       if (severity_filter !== "all") {
