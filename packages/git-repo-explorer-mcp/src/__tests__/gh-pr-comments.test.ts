@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isBot, flattenReviews } from "../operations/gh-pr-comments-ops.js";
+import { isBot, reviewBodies } from "../operations/gh-pr-comments-ops.js";
 
 describe("isBot", () => {
   it.each([
@@ -28,19 +28,18 @@ describe("isBot", () => {
   });
 });
 
-describe("flattenReviews", () => {
+describe("reviewBodies", () => {
   it("returns an empty array for no reviews", () => {
-    expect(flattenReviews([])).toEqual([]);
+    expect(reviewBodies([])).toEqual([]);
   });
 
   it("emits a top-level entry for non-empty review body", () => {
-    const result = flattenReviews([
+    const result = reviewBodies([
       {
         author: { login: "alice" },
         body: "LGTM",
         state: "APPROVED",
         createdAt: "2026-01-01T00:00:00Z",
-        comments: [],
       },
     ]);
     expect(result).toHaveLength(1);
@@ -55,69 +54,44 @@ describe("flattenReviews", () => {
   });
 
   it("skips reviews with empty or whitespace-only bodies", () => {
-    const result = flattenReviews([
+    const result = reviewBodies([
       {
         author: { login: "alice" },
         body: "",
         state: "COMMENTED",
         createdAt: "2026-01-01T00:00:00Z",
-        comments: [],
       },
       {
         author: { login: "alice" },
         body: "   ",
         state: "COMMENTED",
         createdAt: "2026-01-02T00:00:00Z",
-        comments: [],
       },
     ]);
     expect(result).toEqual([]);
   });
 
-  it("flattens inline review comments and marks bot authors", () => {
-    const result = flattenReviews([
+  it("marks a bot's review body as a bot comment", () => {
+    const result = reviewBodies([
       {
         author: { login: "coderabbit-ai" },
         body: "Found issues",
         state: "CHANGES_REQUESTED",
         createdAt: "2026-01-01T00:00:00Z",
-        comments: [
-          {
-            author: { login: "coderabbit-ai" },
-            body: "nit",
-            createdAt: "2026-01-01T00:00:01Z",
-            path: "src/foo.ts",
-            line: 42,
-            startLine: 40,
-            diffHunk: "@@ -40,3 +40,3 @@",
-          },
-        ],
       },
     ]);
-    expect(result).toHaveLength(2);
-    expect(result[0].is_bot).toBe(true);
-    expect(result[1]).toMatchObject({
-      author: "coderabbit-ai",
-      is_bot: true,
-      body: "nit",
-      path: "src/foo.ts",
-      line: 42,
-      start_line: 40,
-      diff_hunk: "@@ -40,3 +40,3 @@",
-      review_state: "CHANGES_REQUESTED",
-    });
-  });
-
-  it("treats missing comments array as empty", () => {
-    const result = flattenReviews([
+    expect(result).toEqual([
       {
-        author: { login: "alice" },
-        body: "Looks good",
-        state: "APPROVED",
-        createdAt: "2026-01-01T00:00:00Z",
-        comments: undefined as unknown as never,
+        author: "coderabbit-ai",
+        is_bot: true,
+        body: "Found issues",
+        path: null,
+        line: null,
+        start_line: null,
+        diff_hunk: null,
+        created_at: "2026-01-01T00:00:00Z",
+        review_state: "CHANGES_REQUESTED",
       },
     ]);
-    expect(result).toHaveLength(1);
   });
 });

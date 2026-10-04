@@ -272,14 +272,12 @@ describe("prCommentsOp.execute", () => {
       body: "Looks good",
       state: "APPROVED",
       createdAt: "2026-01-02T00:00:00Z",
-      comments: [],
     },
     {
       author: { login: "coderabbit-ai" },
       body: "Issues found",
       state: "CHANGES_REQUESTED",
       createdAt: "2026-01-01T00:00:00Z",
-      comments: [],
     },
   ];
 

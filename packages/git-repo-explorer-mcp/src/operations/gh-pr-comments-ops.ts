@@ -20,7 +20,6 @@ interface GhReview {
   body: string;
   state: string;
   createdAt: string;
-  comments: GhComment[];
 }
 
 interface ClassifiedComment {
@@ -54,42 +53,24 @@ export function isBot(login: string): boolean {
   return BOT_PATTERNS.some((p) => p.test(login));
 }
 
-export function flattenReviews(reviews: GhReview[]): ClassifiedComment[] {
-  const comments: ClassifiedComment[] = [];
-
-  for (const review of reviews) {
-    // Review body itself (if non-empty)
-    if (review.body?.trim()) {
-      comments.push({
-        author: review.author.login,
-        is_bot: isBot(review.author.login),
-        body: review.body,
-        path: null,
-        line: null,
-        start_line: null,
-        diff_hunk: null,
-        created_at: review.createdAt,
-        review_state: review.state,
-      });
-    }
-
-    // Inline review comments
-    for (const c of review.comments ?? []) {
-      comments.push({
-        author: c.author.login,
-        is_bot: isBot(c.author.login),
-        body: c.body,
-        path: c.path,
-        line: c.line,
-        start_line: c.startLine,
-        diff_hunk: c.diffHunk,
-        created_at: c.createdAt,
-        review_state: review.state,
-      });
-    }
-  }
-
-  return comments;
+/**
+ * The non-empty review bodies, as comments carrying the review's state.
+ * Inline comments are fetched from the pulls/comments endpoint instead.
+ */
+export function reviewBodies(reviews: GhReview[]): ClassifiedComment[] {
+  return reviews
+    .filter((review) => review.body?.trim())
+    .map((review) => ({
+      author: review.author.login,
+      is_bot: isBot(review.author.login),
+      body: review.body,
+      path: null,
+      line: null,
+      start_line: null,
+      diff_hunk: null,
+      created_at: review.createdAt,
+      review_state: review.state,
+    }));
 }
 
 const prCommentsArgsSchema = z.object({
@@ -138,7 +119,7 @@ Examples:
         "--paginate",
         "--jq",
         // One object per line: gh applies --jq to each page separately
-        ".[] | {author: .user, body: .body, state: .state, createdAt: .submitted_at, comments: []}",
+        ".[] | {author: .user, body: .body, state: .state, createdAt: .submitted_at}",
       ],
       cacheKey: `${cacheKey}-reviews`,
       parse: parseJsonLines<GhReview>,
@@ -160,10 +141,9 @@ Examples:
       forceRefresh: args.force_refresh,
     });
 
-    // Merge inline comments into their parent reviews
-    const allComments = flattenReviews(reviews);
+    const allComments = reviewBodies(reviews);
 
-    // Add standalone review comments not captured by reviews
+    // Add the inline review comments
     for (const c of reviewComments) {
       allComments.push({
         author: c.author.login,
