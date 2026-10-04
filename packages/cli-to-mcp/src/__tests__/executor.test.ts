@@ -50,13 +50,37 @@ describe("parseCommandArgs", () => {
     ]);
   });
 
-  it("should handle escaped space", () => {
-    // Backslash escapes the space, keeping "hello world" as single arg
-    // Note: Current impl keeps backslash, so result is "hello\ world"
-    const result = parseCommandArgs("echo hello\\ world");
-    expect(result[0]).toBe("echo");
-    // The escape is processed (space doesn't split)
-    expect(result.length).toBe(2);
+  it("drops the backslash of an escaped space and keeps the word whole", () => {
+    expect(parseCommandArgs("echo hello\\ world")).toEqual(["echo", "hello world"]);
+  });
+
+  it("reads an escaped backslash as one literal backslash that escapes nothing", () => {
+    // `a\\ b` is `a\` followed by a separate `b`, as in a shell.
+    expect(parseCommandArgs("a\\\\ b")).toEqual(["a\\", "b"]);
+  });
+
+  it("escapes a quote outside quotes instead of opening a quoted string", () => {
+    expect(parseCommandArgs('say \\"hi')).toEqual(["say", '"hi']);
+  });
+
+  it("escapes a double quote and a backslash inside double quotes, and nothing else", () => {
+    expect(parseCommandArgs('"a\\"b" "c\\\\d" "e\\nf"')).toEqual(['a"b', "c\\d", "e\\nf"]);
+  });
+
+  it("keeps backslashes literally inside single quotes", () => {
+    expect(parseCommandArgs("'a\\ b'")).toEqual(["a\\ b"]);
+  });
+
+  it("keeps a trailing backslash", () => {
+    expect(parseCommandArgs("end\\")).toEqual(["end\\"]);
+  });
+
+  it("joins quoted and unquoted parts of one word", () => {
+    expect(parseCommandArgs(`--name="a b"c`)).toEqual(["--name=a bc"]);
+  });
+
+  it("splits on tabs and newlines as well as spaces", () => {
+    expect(parseCommandArgs("a\tb\nc")).toEqual(["a", "b", "c"]);
   });
 
   it("should handle nested quotes", () => {
@@ -66,11 +90,8 @@ describe("parseCommandArgs", () => {
     ]);
   });
 
-  it("should handle empty quoted strings", () => {
-    // Current implementation skips empty strings (which is reasonable for CLI)
-    const result = parseCommandArgs('echo "" end');
-    expect(result).toContain("echo");
-    expect(result).toContain("end");
+  it("passes an empty quoted string on as an empty argument", () => {
+    expect(parseCommandArgs(`echo "" end ''`)).toEqual(["echo", "", "end", ""]);
   });
 });
 
