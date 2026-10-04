@@ -183,6 +183,29 @@ describe.each(columnTargetingCases)("$name: column-arg error paths", ({ op, args
     const result = await op.execute({ args: { ...args, column: "ssn" }, ctx });
     expect(parse(result).error).toContain("not selectable");
   });
+
+  // Regression: the guard only checked that the column was listed, so a
+  // column marked `select: "exclude"` -- "rejected from queries entirely" --
+  // could still be filtered on, which tells the caller whether a row with
+  // that hidden value exists.
+  it("rejects a listed column whose policy is exclude", async () => {
+    const { ctx, fake } = buildCtx();
+    const column = String(args.column);
+    ctx.selectableFields = {
+      ...selectableFields,
+      users: {
+        ...selectableFields.users,
+        fields: { ...selectableFields.users.fields, [column]: { select: "exclude" } },
+      },
+    };
+    const data = parse(await op.execute({ args, ctx }));
+
+    expect(data.error).toBe(`Column '${column}' is not selectable on 'users'.`);
+    expect(data.allowedColumns).not.toContain(column);
+    for (const method of [fake.findByEq, fake.findByRange, fake.findByJsonPath]) {
+      expect(method).not.toHaveBeenCalled();
+    }
+  });
 });
 
 // Type-check error paths (date_range / json_search).
@@ -235,6 +258,22 @@ describe("get_by_pk: behavior unique to single-PK lookup", () => {
       pk: 1,
       columns: Object.keys(selectableFields.users.fields),
     });
+  });
+
+  it("does not select a column whose policy is exclude", async () => {
+    const { ctx, fake } = buildCtx();
+    ctx.selectableFields = {
+      ...selectableFields,
+      users: {
+        ...selectableFields.users,
+        fields: { ...selectableFields.users.fields, email: { select: "exclude" } },
+      },
+    };
+    await getByPkOp.execute({ args: { table: "users", pk: 1 }, ctx });
+
+    const input = fake.findByPk.mock.calls[0]?.[0] as { columns: string[] } | undefined;
+    expect(input?.columns).not.toContain("email");
+    expect(input?.columns).toContain("name");
   });
 
   it("reports found=false when no rows match", async () => {

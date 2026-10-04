@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse } from "mcp-shared";
-import { redactPiiMany } from "mcp-shared-db-core";
+import { getQueryableFieldNames, redactPiiMany } from "mcp-shared-db-core";
 import { resolveColumn, withUnindexedWarning } from "./column-guard.js";
 import { DEFAULT_LIMIT, MAX_LIMIT } from "./find-by-eq.js";
 import type { DatabaseOperation } from "./types.js";
@@ -56,7 +56,7 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
 
     const path = normalizeJsonPath(args.path);
     const limit = args.limit ?? DEFAULT_LIMIT;
-    const columns = Object.keys(config.fields);
+    const columns = getQueryableFieldNames(config);
     const rows = await ctx.dataSource.findByJsonPath({
       table: args.table,
       field: args.column,

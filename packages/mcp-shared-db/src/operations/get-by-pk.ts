@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse } from "mcp-shared";
-import { redactPii, resolveTable } from "mcp-shared-db-core";
+import { getQueryableFieldNames, redactPii, resolveTable } from "mcp-shared-db-core";
 import type { DatabaseOperation } from "./types.js";
 
 const argsSchema = z.object({
@@ -36,7 +36,7 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
       });
     }
 
-    const columns = Object.keys(config.fields);
+    const columns = getQueryableFieldNames(config);
     const row = await ctx.dataSource.findByPk({ table: args.table, pk: args.pk, columns });
 
     if (!row) {
