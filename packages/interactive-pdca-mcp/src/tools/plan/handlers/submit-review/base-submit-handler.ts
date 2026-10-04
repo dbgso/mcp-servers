@@ -4,7 +4,9 @@ import type {
   ToolResult,
   PlanRawParams,
   PlanActionHandler,
+  TaskPhase,
 } from "../../../../types/index.js";
+import { TASK_PHASES } from "../../../../types/index.js";
 
 /**
  * Base schema for all submit_review actions
@@ -24,11 +26,7 @@ export const baseParamsSchema = z.object({
 
 export type BaseSubmitParams = z.infer<typeof baseParamsSchema>;
 
-/**
- * Task phase suffixes (PDCA cycle)
- */
-export const TASK_PHASES = ["plan", "do", "check", "act"] as const;
-export type TaskPhase = (typeof TASK_PHASES)[number];
+export { TASK_PHASES, type TaskPhase };
 
 /**
  * Extract task phase from task ID

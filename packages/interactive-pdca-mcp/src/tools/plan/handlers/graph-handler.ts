@@ -1,6 +1,17 @@
 import { z } from "zod";
 import { BaseActionHandler } from "mcp-shared";
-import type { PlanActionContext, TaskSummary } from "../../../types/index.js";
+import type { PlanActionContext, TaskStatus, TaskSummary } from "../../../types/index.js";
+import { STATUS_STYLE, statusLookup } from "../../../services/task-presentation.js";
+
+const STATUS_ICON: Record<TaskStatus, string> = {
+  completed: "✓",
+  self_review: "◐",
+  pending_review: "⏳",
+  in_progress: "●",
+  blocked: "◇",
+  skipped: "⊘",
+  pending: "○",
+};
 
 const graphSchema = z.object({});
 type GraphArgs = z.infer<typeof graphSchema>;
@@ -55,7 +66,7 @@ None
     // Define nodes with status styling
     for (const task of tasks) {
       const status = blockedIds.has(task.id) ? "blocked" : task.status;
-      const icon = this.getStatusIcon(status);
+      const icon = statusLookup({ table: STATUS_ICON, status });
       const label = `${task.title} ${icon}`;
       const nodeId = this.sanitizeId(task.id);
 
@@ -84,7 +95,7 @@ None
     mermaid += "  %% Styling\n";
     for (const task of tasks) {
       const status = blockedIds.has(task.id) ? "blocked" : task.status;
-      const style = this.getStatusStyle(status);
+      const style = statusLookup({ table: STATUS_STYLE, status });
       const nodeId = this.sanitizeId(task.id);
       mermaid += `  style ${nodeId} ${style}\n`;
     }
@@ -96,6 +107,7 @@ None
     output += mermaid;
     output += "\n\n## Legend\n";
     output += "- ✓ completed\n";
+    output += "- ◐ self_review\n";
     output += "- ⏳ pending_review\n";
     output += "- ● in_progress\n";
     output += "- ○ pending/ready\n";
@@ -112,39 +124,5 @@ None
   private sanitizeId(id: string): string {
     // Mermaid IDs can't have hyphens in some contexts, replace with underscore
     return id.replace(/-/g, "_");
-  }
-
-  private getStatusIcon(status: string): string {
-    switch (status) {
-      case "completed":
-        return "✓";
-      case "in_progress":
-        return "●";
-      case "pending_review":
-        return "⏳";
-      case "blocked":
-        return "◇";
-      case "skipped":
-        return "⊘";
-      default:
-        return "○";
-    }
-  }
-
-  private getStatusStyle(status: string): string {
-    switch (status) {
-      case "completed":
-        return "fill:#90EE90,stroke:#228B22";
-      case "in_progress":
-        return "fill:#87CEEB,stroke:#4169E1";
-      case "pending_review":
-        return "fill:#DDA0DD,stroke:#8B008B";
-      case "blocked":
-        return "fill:#FFB6C1,stroke:#DC143C";
-      case "skipped":
-        return "fill:#D3D3D3,stroke:#808080";
-      default:
-        return "fill:#FFFACD,stroke:#DAA520";
-    }
   }
 }

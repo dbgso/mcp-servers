@@ -10,6 +10,7 @@ import type {
   PlanReader as IPlanReader,
 } from "../types/index.js";
 import { getErrorMessage } from "mcp-shared";
+import { withStringFields } from "../utils/metadata.js";
 
 export class PlanReader implements IPlanReader {
   private readonly directory: string;
@@ -86,14 +87,8 @@ export class PlanReader implements IPlanReader {
       metadata[key] = this.parseYamlValue(value);
     }
 
-    // Validate required fields
-    if (
-      typeof metadata.id !== "string" ||
-      typeof metadata.title !== "string" ||
-      typeof metadata.status !== "string"
-    ) {
-      return null;
-    }
+    const required = withStringFields({ metadata, keys: ["id", "title", "status"] as const });
+    if (required === null) return null;
 
     // Parse feedback from JSON string if present (unescape quotes first)
     const feedback: Feedback[] = (() => {
@@ -139,9 +134,9 @@ export class PlanReader implements IPlanReader {
     })();
 
     return {
-      id: metadata.id as string,
-      title: metadata.title as string,
-      status: metadata.status as TaskStatus,
+      id: required.id,
+      title: required.title,
+      status: required.status as TaskStatus,
       parent: (metadata.parent as string) || "",
       dependencies: (metadata.dependencies as string[]) || [],
       dependency_reason: (metadata.dependency_reason as string) || "",
