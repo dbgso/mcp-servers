@@ -3,12 +3,13 @@ import { existsSync } from "node:fs";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkStringify from "remark-stringify";
-import type { Root as MdastRoot, Heading, Code, List, Link, Text, ListItem } from "mdast";
+import type { Root as MdastRoot, Heading, Nodes, Text } from "mdast";
 import type { GoToDefinitionResult, DefinitionLocation } from "mcp-shared";
 import { BaseHandler, type DocumentSummary } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
 import { anchorMatchesHeading, headingAnchor } from "./anchor.js";
 import { findSectionRange, groupSections } from "./sections.js";
+import { collectNodes, findNodeAt } from "./mdast-walk.js";
 import {
   ExternalTarget,
   FileTarget,
@@ -32,6 +33,11 @@ import type {
   WriteSectionsParams,
 } from "../types/index.js";
 import type { RootContent } from "mdast";
+
+/** The line a node starts on; 0 for a node built by hand, which has no position. */
+function startLine(node: Nodes): number {
+  return node.position?.start.line ?? 0;
+}
 
 function parseMarkdown(content: string): MdastRoot {
   return unified().use(remarkParse).parse(content) as MdastRoot;
@@ -203,102 +209,34 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
 
   getHeadings(params: { ast: MdastRoot; maxDepth?: number }): HeadingSummary[] {
     const { ast, maxDepth } = params;
-    const headings: HeadingSummary[] = [];
-
-    const traverse = (node: unknown): void => {
-      const n = node as { type?: string; children?: unknown[]; depth?: number; position?: { start?: { line?: number } } };
-      if (n.type === "heading") {
-        const heading = node as Heading;
-        if (!maxDepth || heading.depth <= maxDepth) {
-          headings.push({
-            depth: heading.depth,
-            text: this.extractText(heading),
-            line: heading.position?.start?.line ?? 0,
-          });
-        }
-      }
-      if (n.children) {
-        for (const child of n.children) {
-          traverse(child);
-        }
-      }
-    };
-
-    traverse(ast);
-    return headings;
+    return collectNodes({ root: ast, type: "heading" })
+      .filter((heading) => !maxDepth || heading.depth <= maxDepth)
+      .map((heading) => ({ depth: heading.depth, text: this.extractText(heading), line: startLine(heading) }));
   }
 
   getCodeBlocks(ast: MdastRoot): CodeBlockSummary[] {
-    const codeBlocks: CodeBlockSummary[] = [];
-
-    const traverse = (node: unknown): void => {
-      const n = node as { type?: string; children?: unknown[] };
-      if (n.type === "code") {
-        const code = node as Code;
-        codeBlocks.push({
-          lang: code.lang ?? null,
-          value: code.value,
-          line: code.position?.start?.line ?? 0,
-        });
-      }
-      if (n.children) {
-        for (const child of n.children) {
-          traverse(child);
-        }
-      }
-    };
-
-    traverse(ast);
-    return codeBlocks;
+    return collectNodes({ root: ast, type: "code" }).map((code) => ({
+      lang: code.lang ?? null,
+      value: code.value,
+      line: startLine(code),
+    }));
   }
 
   getLists(ast: MdastRoot): ListSummary[] {
-    const lists: ListSummary[] = [];
-
-    const traverse = (node: unknown): void => {
-      const n = node as { type?: string; children?: unknown[] };
-      if (n.type === "list") {
-        const list = node as List;
-        lists.push({
-          ordered: list.ordered ?? false,
-          items: list.children.map((item: ListItem) => this.extractText(item)),
-          line: list.position?.start?.line ?? 0,
-        });
-      }
-      if (n.children) {
-        for (const child of n.children) {
-          traverse(child);
-        }
-      }
-    };
-
-    traverse(ast);
-    return lists;
+    return collectNodes({ root: ast, type: "list" }).map((list) => ({
+      ordered: list.ordered ?? false,
+      items: list.children.map((item) => this.extractText(item)),
+      line: startLine(list),
+    }));
   }
 
   getLinks(ast: MdastRoot): LinkSummary[] {
-    const links: LinkSummary[] = [];
-
-    const traverse = (node: unknown): void => {
-      const n = node as { type?: string; children?: unknown[] };
-      if (n.type === "link") {
-        const link = node as Link;
-        links.push({
-          url: link.url,
-          title: link.title ?? null,
-          text: this.extractText(link),
-          line: link.position?.start?.line ?? 0,
-        });
-      }
-      if (n.children) {
-        for (const child of n.children) {
-          traverse(child);
-        }
-      }
-    };
-
-    traverse(ast);
-    return links;
+    return collectNodes({ root: ast, type: "link" }).map((link) => ({
+      url: link.url,
+      title: link.title ?? null,
+      text: this.extractText(link),
+      line: startLine(link),
+    }));
   }
 
   getSection(params: { ast: MdastRoot; headingText: string }): MdastRoot {
@@ -357,8 +295,7 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
     const content = await readFile(filePath, "utf-8");
     const ast = parseMarkdown(content);
 
-    // Find the node at the given position
-    const link = this.findLinkAtPosition({ ast, line, column });
+    const link = findNodeAt({ root: ast, type: "link", line, column });
 
     if (!link) {
       return {
@@ -383,65 +320,11 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
     };
   }
 
-  private findLinkAtPosition(params: {
-    ast: MdastRoot;
-    line: number;
-    column: number;
-  }): Link | null {
-    const { ast, line, column } = params;
-    let foundLink: Link | null = null;
-
-    const traverse = (node: unknown): void => {
-      const n = node as {
-        type?: string;
-        children?: unknown[];
-        position?: { start?: { line?: number; column?: number }; end?: { line?: number; column?: number } };
-      };
-
-      if (n.position) {
-        const startLine = n.position.start?.line ?? 0;
-        const endLine = n.position.end?.line ?? 0;
-        const startCol = n.position.start?.column ?? 0;
-        const endCol = n.position.end?.column ?? 0;
-
-        // Check if position is within this node
-        const withinLines = line >= startLine && line <= endLine;
-        const withinCols =
-          (line === startLine && line === endLine && column >= startCol && column <= endCol) ||
-          (line === startLine && line < endLine && column >= startCol) ||
-          (line > startLine && line < endLine) ||
-          (line > startLine && line === endLine && column <= endCol);
-
-        if (n.type === "link" && withinLines && withinCols) {
-          foundLink = node as Link;
-          return;
-        }
-      }
-
-      if (n.children) {
-        for (const child of n.children) {
-          traverse(child);
-          if (foundLink) return;
-        }
-      }
-    };
-
-    traverse(ast);
-    return foundLink;
-  }
-
   findHeadingBySlug(params: { ast: MdastRoot; slug: string }): Heading | null {
     const { ast, slug } = params;
-    for (const node of ast.children) {
-      if (node.type === "heading") {
-        const heading = node as Heading;
-        if (anchorMatchesHeading({ anchor: slug, headingText: this.extractText(heading), fileType: "markdown" })) {
-          return heading;
-        }
-      }
-    }
-
-    return null;
+    const matches = (node: RootContent): node is Heading =>
+      node.type === "heading" && anchorMatchesHeading({ anchor: slug, headingText: this.extractText(node), fileType: "markdown" });
+    return ast.children.find(matches) ?? null;
   }
 
   /**
