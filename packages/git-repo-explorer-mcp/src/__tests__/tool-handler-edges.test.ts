@@ -49,6 +49,13 @@ describe("git_execute", () => {
     expect(text(result)).toContain("nonesuch");
   });
 
+  it("answers an unknown operation the same way git_describe does", async () => {
+    const executed = await new GitExecuteHandler().execute({ operation: "nonesuch", params: {} });
+    const described = await new GitDescribeHandler().execute({ operation: "nonesuch" });
+
+    expect(executed).toEqual(described);
+  });
+
   it("reports which argument is wrong rather than running the command", async () => {
     // `grep` needs a pattern. Running git without one would fail somewhere
     // deeper, with a message about git rather than about the call.

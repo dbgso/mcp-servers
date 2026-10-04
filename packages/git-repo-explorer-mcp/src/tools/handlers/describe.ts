@@ -3,12 +3,58 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
 import { allOperations, getOperation, getOperationsByCategory } from "../../operations/registry.js";
+import type { GitOperation } from "../../operations/types.js";
+import { unknownOperationResponse } from "./unknown-operation.js";
 
 const DescribeSchema = z.object({
   operation: z.string().optional().describe("Operation ID for details (omit for full list)"),
 });
 
 type DescribeArgs = z.infer<typeof DescribeSchema>;
+
+function textResponse(text: string): ToolResponse {
+  return { content: [{ type: "text", text }] };
+}
+
+/** One operation: category, how to call it, its detail text and parameter schema. */
+function renderOperationDetail(op: GitOperation): string {
+  const jsonSchema = zodToJsonSchema(op.argsSchema, { target: "openApi3" });
+  return [
+    `## ${op.id}`,
+    ``,
+    `**Category:** ${op.category}`,
+    ``,
+    `Use \`git_execute({ operation: "${op.id}", params: {...} })\` to execute.`,
+    ``,
+    op.detail,
+    ``,
+    `**Parameters (JSON Schema):**`,
+    "```json",
+    JSON.stringify(jsonSchema, null, 2),
+    "```",
+  ].join("\n");
+}
+
+/** Every operation, grouped by category. */
+function renderOperationList(): string {
+  const lines = [
+    `# Git Operations (${allOperations.length} total)`,
+    ``,
+    `All operations are read-only. Omit repo_url to use current working directory.`,
+    ``,
+    `Use \`git_describe({ operation: "<id>" })\` for details.`,
+    `Use \`git_execute({ operation: "<id>", params: {...} })\` to execute.`,
+    ``,
+  ];
+  for (const [category, ops] of Object.entries(getOperationsByCategory())) {
+    lines.push(`## ${category}`);
+    for (const op of ops) {
+      lines.push(`- **${op.id}**: ${op.summary}`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
 
 export class GitDescribeHandler extends BaseToolHandler<DescribeArgs> {
   readonly name = "git_describe";
@@ -26,62 +72,13 @@ export class GitDescribeHandler extends BaseToolHandler<DescribeArgs> {
 
   protected async doExecute(args: DescribeArgs): Promise<ToolResponse> {
     const { operation } = args;
-
-    // Detail mode
-    if (operation) {
-      const op = getOperation(operation);
-      if (!op) {
-        const available = allOperations.map(o => o.id).join(", ");
-        return {
-          content: [{ type: "text", text: `Unknown operation: "${operation}"\n\nAvailable operations: ${available}` }],
-          isError: true,
-        };
-      }
-
-      const jsonSchema = zodToJsonSchema(op.argsSchema, { target: "openApi3" });
-
-      const lines = [
-        `## ${op.id}`,
-        ``,
-        `**Category:** ${op.category}`,
-        ``,
-        `Use \`git_execute({ operation: "${op.id}", params: {...} })\` to execute.`,
-        ``,
-        op.detail,
-        ``,
-        `**Parameters (JSON Schema):**`,
-        "```json",
-        JSON.stringify(jsonSchema, null, 2),
-        "```",
-      ];
-
-      return {
-        content: [{ type: "text", text: lines.join("\n") }],
-      };
+    if (!operation) {
+      return textResponse(renderOperationList());
     }
-
-    // List mode
-    const byCategory = getOperationsByCategory();
-    const lines = [
-      `# Git Operations (${allOperations.length} total)`,
-      ``,
-      `All operations are read-only. Omit repo_url to use current working directory.`,
-      ``,
-      `Use \`git_describe({ operation: "<id>" })\` for details.`,
-      `Use \`git_execute({ operation: "<id>", params: {...} })\` to execute.`,
-      ``,
-    ];
-
-    for (const [category, ops] of Object.entries(byCategory)) {
-      lines.push(`## ${category}`);
-      for (const op of ops) {
-        lines.push(`- **${op.id}**: ${op.summary}`);
-      }
-      lines.push("");
+    const op = getOperation(operation);
+    if (!op) {
+      return unknownOperationResponse(operation);
     }
-
-    return {
-      content: [{ type: "text", text: lines.join("\n") }],
-    };
+    return textResponse(renderOperationDetail(op));
   }
 }
