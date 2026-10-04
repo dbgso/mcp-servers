@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -328,6 +328,24 @@ describe("FeedbackReader", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("not confirmed");
+    });
+  });
+
+  describe("feedback ids", () => {
+    it("never repeats, even within one millisecond", async () => {
+      // Pin the clock: before, both entries got fb-<now> and the second file
+      // overwrote the first.
+      const now = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+      try {
+        const a = await feedbackReader.createDraftFeedback({ taskId: "task-1", original: "A", decision: "adopted" });
+        const b = await feedbackReader.createDraftFeedback({ taskId: "task-1", original: "B", decision: "adopted" });
+
+        expect(a.feedbackId).not.toBe(b.feedbackId);
+        const originals = (await feedbackReader.listFeedback("task-1")).map((fb) => fb.original).sort();
+        expect(originals).toEqual(["A", "B"]);
+      } finally {
+        now.mockRestore();
+      }
     });
   });
 
