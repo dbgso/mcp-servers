@@ -489,8 +489,9 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
     while (i < lines.length) {
       const line = lines[i];
 
-      // [source,lang] or [source] directly above an opening ----
-      const sourceMatch = line.match(/^\[source(?:,\s*(\w+))?\]/);
+      // [source], [source,lang] or [source,lang,more-attributes] directly above
+      // an opening ----; the language runs to the next comma or the bracket
+      const sourceMatch = line.match(/^\[source(?:,\s*([^,\]\s]+))?[^\]]*\]/);
       if (sourceMatch && lines[i + 1]?.trim() === LISTING_DELIMITER) {
         const body = listingBody({ lines, open: i + 1 });
         codeBlocks.push({ lang: sourceMatch[1] ?? null, value: body.value, line: i + 2 });
