@@ -94,6 +94,10 @@
         "--args", "tsx ./packages/cli-to-mcp/src/index.ts",
         "--rules-file", "./packages/cli-to-mcp/aws-rules.json"
       ]
+    },
+    "mcp-lab": {
+      "command": "./scripts/wait-for-session-setup.sh",
+      "args": ["npx", "tsx", "./packages/mcp-lab/src/index.ts"]
     }
   }
 }
