@@ -14,6 +14,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { ListHandler } from "../tools/instruction/handlers/list.js";
 import { GraphHandler } from "../tools/instruction/handlers/graph.js";
+import { AddHandler } from "../tools/instruction/handlers/add.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
 import { DRAFT_DIR } from "../constants.js";
 import type { InstructionContext, ReminderConfig } from "../types/index.js";
@@ -45,7 +46,7 @@ async function write(params: { id: string; relatedDocs?: string[] }): Promise<vo
 }
 
 async function run(params: {
-  handler: ListHandler | GraphHandler;
+  handler: ListHandler | GraphHandler | AddHandler;
   rawParams: Record<string, unknown>;
 }): Promise<{ text: string; isError?: boolean }> {
   const { handler, rawParams } = params;
@@ -142,6 +143,38 @@ describe("graph", () => {
     const { isError } = await run({
       handler: graph,
       rawParams: { action: "graph", format: "text", [name]: value },
+    });
+
+    expect(isError).toBe(true);
+  });
+});
+
+describe("add", () => {
+  const add = new AddHandler();
+  const draft = (id: string) => fs.readFile(path.join(docsDir, DRAFT_DIR, `${id}.md`), "utf-8");
+
+  it("treats whenToUse and relatedDocs sent as JSON strings as arrays", async () => {
+    // `add` requires whenToUse, so before looseArray it could not be called from
+    // a client that serialises arrays as strings -- Claude Code does.
+    const base = { action: "add", content: "# doc\n\nbody", description: "a doc" };
+    const asString = await run({
+      handler: add,
+      rawParams: { ...base, id: "as-string", whenToUse: '["writing a doc"]', relatedDocs: '["other"]' },
+    });
+    const asArray = await run({
+      handler: add,
+      rawParams: { ...base, id: "as-array", whenToUse: ["writing a doc"], relatedDocs: ["other"] },
+    });
+
+    expect(asString.isError).toBeUndefined();
+    expect(asArray.isError).toBeUndefined();
+    expect(await draft("as-string")).toBe(await draft("as-array"));
+  });
+
+  it.each(["writing a doc", "[not json", "{}"])("still rejects whenToUse: %j", async (value) => {
+    const { isError } = await run({
+      handler: add,
+      rawParams: { action: "add", id: "bad", content: "# doc", description: "a doc", whenToUse: value },
     });
 
     expect(isError).toBe(true);

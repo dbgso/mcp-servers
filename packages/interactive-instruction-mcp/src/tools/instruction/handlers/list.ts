@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { BaseActionHandler, type ToolResponse } from "mcp-shared";
+import { BaseActionHandler, looseBoolean, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
-import { looseBoolean } from "../schema-coerce.js";
 import {
   errorResponse,
   formatNextActions,

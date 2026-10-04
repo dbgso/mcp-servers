@@ -315,8 +315,14 @@ function formatObject(value: object): string {
 
 function formatComposite(value: unknown): string {
   if (value === null) return "null";
-  if (typeof value !== "object") return String(value);
+  if (typeof value !== "object") return formatOther(value);
   return formatObject(value);
+}
+
+/** What is left once strings, numbers, booleans, null and objects are handled. */
+function formatOther(value: unknown): string {
+  if (typeof value === "bigint" || typeof value === "symbol") return value.toString();
+  return typeof value; // "undefined" or "function"
 }
 
 /**

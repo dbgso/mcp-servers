@@ -49,7 +49,7 @@
     "typescript/no-this-alias": "off",
     "unicorn/prefer-string-starts-ends-with": "off",
     "custom/no-branching-literal": [
-      "warn",
+      "error",
       {
         "maxLines": 3
       }
@@ -59,12 +59,12 @@
       3
     ],
     "typescript/unbound-method": "error",
-    "typescript/no-base-to-string": "warn",
-    "typescript/await-thenable": "warn",
-    "typescript/no-useless-default-assignment": "warn",
-    "typescript/no-redundant-type-constituents": "warn",
-    "typescript/restrict-template-expressions": "warn",
-    "typescript/no-misused-spread": "warn",
+    "typescript/no-base-to-string": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-useless-default-assignment": "error",
+    "typescript/no-redundant-type-constituents": "error",
+    "typescript/restrict-template-expressions": "error",
+    "typescript/no-misused-spread": "error",
     "custom/no-arrow-class-method": "error"
   },
   "overrides": [
