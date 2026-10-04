@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { z } from "zod";
-import { BaseActionHandler, type ToolResponse } from "mcp-shared";
+import { BaseActionHandler, looseBoolean, looseNumber, type ToolResponse } from "mcp-shared";
 import {
   renderGraphHtml,
   type GraphEdge,
@@ -14,7 +14,6 @@ import {
 } from "mcp-shared-graph-viz";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions, textResponse } from "../types.js";
-import { looseBoolean, looseNumber } from "../schema-coerce.js";
 import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import { isDescriptionMissing } from "../../../services/metadata-completeness.js";
 import type { MarkdownSummary } from "../../../types/index.js";

@@ -1,13 +1,15 @@
 /**
- * ESLint / oxlint rule: a boolean or number argument of a tool that publishes no
- * argument types must accept its string spelling.
+ * ESLint / oxlint rule: a boolean, number or array argument of a tool that
+ * publishes no argument types must accept its string spelling.
  *
  * `instruction` advertises `additionalProperties: true` and nothing else --
  * `describe` is where its arguments are written down. A client then has no type
  * to serialise against, and Claude Code sent `recursive: true` as `"true"`. The
  * handler's strict `z.boolean()` rejected it, so `list(recursive: true)`, the
  * first call CLAUDE.md asks for, failed while being made exactly as documented.
- * Nothing caught it until someone made that call.
+ * Nothing caught it until someone made that call. Arrays then turned out to
+ * arrive the same way (`whenToUse: ["a"]` as `'["a"]'`), which made `add`, whose
+ * `whenToUse` is required, uncallable from Claude Code: `looseArray`.
  *
  * Examples of INVALID code (in a file this rule is enabled for):
  *
@@ -23,20 +25,22 @@
  * shape to write and one to check: the schema the handler declares is exactly
  * what runs after the conversion.
  *
- * Enabled only where the tool's input schema is untyped (`.oxlintrc.json`
- * overrides). A tool that publishes its types gets real booleans from the client
+ * The wrappers live in mcp-shared (`utils/untyped-args.ts`), since every server
+ * that follows policy__mcp-tool-surface publishes no argument types and has the
+ * same problem. Enabled only where the tool's input schema is untyped
+ * (`.oxlintrc.json` overrides). A tool that publishes its types gets real booleans from the client
  * and should keep rejecting strings.
  */
 
-const DEFAULT_WRAPPERS = { boolean: "looseBoolean", number: "looseNumber" };
+const DEFAULT_WRAPPERS = { boolean: "looseBoolean", number: "looseNumber", array: "looseArray" };
 
-/** `z.boolean()` / `z.number()`, and which of the two. */
+/** `z.boolean()` / `z.number()` / `z.array()`, and which of them. */
 function strictScalar(node) {
   const callee = node.callee;
   if (callee.type !== "MemberExpression" || callee.computed) return null;
   if (callee.object.type !== "Identifier" || callee.object.name !== "z") return null;
   const name = callee.property.name;
-  return name === "boolean" || name === "number" ? name : null;
+  return name in DEFAULT_WRAPPERS ? name : null;
 }
 
 /** Climb `z.boolean().optional().describe(...)` to the end of the chain. */
@@ -65,7 +69,7 @@ module.exports = {
     type: "problem",
     docs: {
       description:
-        "Wrap z.boolean() / z.number() so a tool with untyped arguments accepts \"true\" and \"2\"",
+        "Wrap z.boolean() / z.number() / z.array() so a tool with untyped arguments accepts \"true\", \"2\" and '[\"a\"]'",
     },
     schema: [
       {
@@ -76,6 +80,7 @@ module.exports = {
             properties: {
               boolean: { type: "string" },
               number: { type: "string" },
+              array: { type: "string" },
             },
             additionalProperties: false,
           },
