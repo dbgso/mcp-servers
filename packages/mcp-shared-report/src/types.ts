@@ -20,12 +20,14 @@ export interface Claim {
   evidence: Evidence[];
 }
 
+/** One row of a comparison: an option and what speaks for and against it (R9). */
 export interface DecisionOption {
   label: string;
-  /** What happens if this option is picked. */
-  consequence: string;
+  pros: string;
+  cons: string;
 }
 
+/** The option picked out of a comparison, and why it was picked over the rest. */
 export interface Recommendation {
   /** The `label` of one of the options. */
   label: string;
@@ -48,18 +50,12 @@ export interface ActionAsk {
 
 export type Ask = DecisionAsk | ActionAsk;
 
-/** An option the reporter considered and did not take. */
-export interface RejectedOption {
-  option: string;
-  why: string;
-}
-
-/** Something the reporter decided on their own, with what they turned down (R8). */
+/** Something the reporter decided on their own, with every option they weighed (R8). */
 export interface Decision {
   what: string;
-  chosen: string;
-  why: string;
-  rejected: RejectedOption[];
+  /** Two or more, the chosen one among them. */
+  options: DecisionOption[];
+  chosen: Recommendation;
 }
 
 /** A correction to something said earlier (R6). */

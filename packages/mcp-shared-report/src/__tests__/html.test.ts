@@ -31,11 +31,13 @@ describe("renderHtml", () => {
     expect(html).toContain('<section class="decisions none"><h2>自分で判断したこと</h2><p>なし</p></section>');
   });
 
-  it("shows a decision with its grounds and what was turned down", () => {
+  it("compares a decision's options in a table of pros and cons, the chosen row marked", () => {
     const html = renderHtml({ report: fullReport() });
-    expect(html).toContain("<strong>npm pack の出力を見る</strong>");
-    expect(html).toContain("根拠: 配布物そのものを見られる");
-    expect(html).toContain("<s>package.json を読む</s><span class=\"why\">退けた理由: .npmignore を見落とす</span>");
+    expect(html).toContain(
+      '<tr class="is-picked"><td><strong>npm pack の出力を見る</strong> <span class="recommended">採用</span></td><td>配布物そのものを見られる</td><td>pack を実行する手間がある</td></tr>',
+    );
+    expect(html).toContain("<tr><td><strong>package.json を読む</strong></td><td>すぐ読める</td><td>.npmignore を見落とす</td></tr>");
+    expect(html).toContain('<p class="reason">採用した理由: 見落としが起きない</p>');
   });
 
   it("leaves out optional sections the report does not fill", () => {
@@ -47,9 +49,12 @@ describe("renderHtml", () => {
 
   it("marks the recommended option and gives the reason", () => {
     const html = renderHtml({ report: fullReport() });
-    expect(html).toContain('<li class="is-recommended"><strong>describe</strong> <span class="recommended">推奨</span>');
-    expect(html).toContain("<li><strong>README</strong><br>");
-    expect(html).toContain("推奨の理由: 配布物に含まれる唯一の場所なので");
+    expect(html).toContain('<thead><tr><th>候補</th><th>長所</th><th>短所</th></tr></thead>');
+    expect(html).toContain(
+      '<tr class="is-picked"><td><strong>describe</strong> <span class="recommended">推奨</span></td><td>パッケージと一緒に届く</td><td>長くなると読まれにくい</td></tr>',
+    );
+    expect(html).toContain("<tr><td><strong>README</strong></td><td>書き慣れた場所</td><td>読まれないことがある</td></tr>");
+    expect(html).toContain("推奨した理由: 配布物に含まれる唯一の場所なので");
     expect(html).toContain('<span class="kind">作業</span> PR をマージする');
   });
 

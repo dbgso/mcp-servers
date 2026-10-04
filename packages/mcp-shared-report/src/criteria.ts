@@ -54,4 +54,9 @@ export const CRITERIA: readonly Criterion[] = [
     rule: "A decision made alone shows what was turned down and why",
     failure: "Stated the approach taken, with no alternatives or grounds the reader could check",
   },
+  {
+    id: "R9",
+    rule: "Options are compared in a table of pros and cons",
+    failure: "Listed the options as bullets, so their pros and cons could not be set side by side",
+  },
 ];

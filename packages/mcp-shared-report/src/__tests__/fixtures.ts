@@ -17,8 +17,8 @@ export function fullReport(): Report {
         kind: "decision",
         what: "ルールをどこに置くか決める",
         options: [
-          { label: "describe", consequence: "パッケージと一緒に届く" },
-          { label: "README", consequence: "読まれないことがある" },
+          { label: "describe", pros: "パッケージと一緒に届く", cons: "長くなると読まれにくい" },
+          { label: "README", pros: "書き慣れた場所", cons: "読まれないことがある" },
         ],
         recommendation: { label: "describe", reason: "配布物に含まれる唯一の場所なので" },
       },
@@ -27,9 +27,11 @@ export function fullReport(): Report {
     decisions: [
       {
         what: "確認の方法",
-        chosen: "npm pack の出力を見る",
-        why: "配布物そのものを見られる",
-        rejected: [{ option: "package.json を読む", why: ".npmignore を見落とす" }],
+        options: [
+          { label: "npm pack の出力を見る", pros: "配布物そのものを見られる", cons: "pack を実行する手間がある" },
+          { label: "package.json を読む", pros: "すぐ読める", cons: ".npmignore を見落とす" },
+        ],
+        chosen: { label: "npm pack の出力を見る", reason: "見落としが起きない" },
       },
     ],
     corrections: [{ said: "lint が強制している", actually: "lint は強制していない", why: "設定を読まずに書いた" }],

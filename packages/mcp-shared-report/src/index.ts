@@ -18,7 +18,6 @@ export type {
   Evidence,
   Problem,
   Recommendation,
-  RejectedOption,
   Remaining,
   Report,
   ValidationResult,

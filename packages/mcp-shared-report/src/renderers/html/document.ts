@@ -45,8 +45,10 @@ h2 { font-size: 1.15rem; margin: 32px 0 8px; padding-bottom: 4px; border-bottom:
 .asks.none { background: var(--panel); border-color: var(--line); }
 .asks.none h2 { border-bottom-color: var(--line); }
 .kind { display: inline-block; font-size: .8rem; padding: 0 8px; border-radius: 999px; border: 1px solid var(--ask-line); }
-.options { margin: 8px 0; }
-.is-recommended { font-weight: 500; }
+.comparison { display: table; margin: 8px 0 4px; }
+.comparison th:first-child { width: 28%; }
+.is-picked td { background: var(--panel); }
+.is-picked td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .recommended { font-size: .8rem; color: var(--accent); }
 .reason, .why { color: var(--muted); }
 .why { display: block; font-size: .9rem; }
@@ -54,7 +56,6 @@ h2 { font-size: 1.15rem; margin: 32px 0 8px; padding-bottom: 4px; border-bottom:
 .background { margin: 12px 0 0; }
 .label { display: inline-block; font-size: .8rem; padding: 0 8px; margin-right: 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
 .decisions .what { font-weight: 600; margin: 0 0 4px; }
-.decisions .chosen, .decisions .grounds { margin: 0 0 4px; }
 .decisions.none p { color: var(--muted); }
 figure { margin: 0 0 12px; }
 figcaption { font-size: .85rem; color: var(--muted); }

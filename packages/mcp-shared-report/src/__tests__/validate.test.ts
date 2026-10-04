@@ -28,14 +28,19 @@ describe("validateReport", () => {
     ]);
   });
 
-  it("needs a rejected option for each decision made", () => {
-    const input = { ...minimalReport(), decisions: [{ what: "w", chosen: "c", why: "y", rejected: [] }] };
-    expect(problemsOf(input)).toEqual([
+  it("needs two options and a chosen one among them for each decision made", () => {
+    const decision = { what: "w", options: [{ label: "a", pros: "p", cons: "c" }], chosen: { label: "a", reason: "r" } };
+    expect(problemsOf({ ...minimalReport(), decisions: [decision] })).toEqual([
       {
-        path: "decisions[0].rejected",
-        message: "at least one rejected option is required; a choice with no alternative is not a decision",
-        criterion: "R8",
+        path: "decisions[0].options",
+        message: "at least two options are required; a comparison needs an alternative",
+        criterion: "R9",
       },
+    ]);
+    const options = [...decision.options, { label: "b", pros: "p", cons: "c" }];
+    const strayed = { ...decision, options, chosen: { label: "z", reason: "r" } };
+    expect(problemsOf({ ...minimalReport(), decisions: [strayed] })).toEqual([
+      { path: "decisions[0].chosen.label", message: "must be the label of one of the options", criterion: "R8" },
     ]);
   });
 
@@ -65,13 +70,13 @@ describe("validateReport", () => {
         {
           kind: "decision",
           what: "w",
-          options: [{ label: "a", consequence: "x" }],
+          options: [{ label: "a", pros: "p", cons: "c" }],
           recommendation: { label: "a", reason: "r" },
         },
       ],
     };
     expect(problemsOf(input)).toEqual([
-      { path: "asks[0].options", message: "a decision needs at least two options", criterion: "R4" },
+      { path: "asks[0].options", message: "at least two options are required; a comparison needs an alternative", criterion: "R9" },
     ]);
   });
 
@@ -84,8 +89,8 @@ describe("validateReport", () => {
           kind: "decision",
           what: "w",
           options: [
-            { label: "a", consequence: "x" },
-            { label: "b", consequence: "y" },
+            { label: "a", pros: "p", cons: "c" },
+            { label: "b", pros: "p", cons: "c" },
           ],
           recommendation: { label: "c", reason: "r" },
         },

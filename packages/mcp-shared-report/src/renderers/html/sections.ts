@@ -1,4 +1,4 @@
-import type { Ask, Report } from "../../types.js";
+import type { Ask, DecisionOption, Recommendation, Report } from "../../types.js";
 import { escapeHtml } from "./escape.js";
 
 /**
@@ -25,24 +25,39 @@ class HeaderSection implements Section {
   }
 }
 
-/** A decision lists its options with what each one leads to, and marks the recommended one. */
+/**
+ * Options as a table, one row each with what speaks for and against it, the
+ * picked row marked and the reason it was picked right under the table (R9).
+ */
+function renderComparison(params: {
+  options: DecisionOption[];
+  picked: Recommendation;
+  mark: string;
+}): string {
+  const { options, picked, mark } = params;
+  const rows = options
+    .map((option) => {
+      const isPicked = option.label === picked.label;
+      const badge = isPicked ? ` <span class="recommended">${mark}</span>` : "";
+      return `<tr${isPicked ? ' class="is-picked"' : ""}><td><strong>${e(option.label)}</strong>${badge}</td><td>${e(option.pros)}</td><td>${e(option.cons)}</td></tr>`;
+    })
+    .join("\n");
+  return `<table class="comparison">
+<thead><tr><th>候補</th><th>長所</th><th>短所</th></tr></thead>
+<tbody>
+${rows}
+</tbody>
+</table>
+<p class="reason">${mark}した理由: ${e(picked.reason)}</p>`;
+}
+
 function renderAsk(params: { ask: Ask }): string {
   const { ask } = params;
   if (ask.kind === "action") {
     return `<li class="ask"><span class="kind">作業</span> ${e(ask.what)}</li>`;
   }
-  const options = ask.options
-    .map((option) => {
-      const recommended = option.label === ask.recommendation.label;
-      const mark = recommended ? ` <span class="recommended">推奨</span>` : "";
-      return `<li${recommended ? ' class="is-recommended"' : ""}><strong>${e(option.label)}</strong>${mark}<br>${e(option.consequence)}</li>`;
-    })
-    .join("\n");
   return `<li class="ask"><span class="kind">判断</span> ${e(ask.what)}
-<ul class="options">
-${options}
-</ul>
-<p class="reason">推奨の理由: ${e(ask.recommendation.reason)}</p>
+${renderComparison({ options: ask.options, picked: ask.recommendation, mark: "推奨" })}
 </li>`;
 }
 
@@ -79,24 +94,18 @@ ${items}
   }
 }
 
-/** What the reporter chose, on what grounds, and what they turned down, so the reader can check it (R8). */
+/** What the reporter chose and every option they weighed, so the reader can check the choice (R8). */
 class DecisionsSection implements Section {
   render(report: Report): string {
     if (report.decisions.length === 0) {
       return `<section class="decisions none"><h2>自分で判断したこと</h2><p>なし</p></section>`;
     }
     const items = report.decisions
-      .map((d) => {
-        const rejected = d.rejected
-          .map((r) => `<li><s>${e(r.option)}</s><span class="why">退けた理由: ${e(r.why)}</span></li>`)
-          .join("\n");
-        return `<li><p class="what">${e(d.what)}</p>
-<p class="chosen"><strong>${e(d.chosen)}</strong></p>
-<p class="grounds">根拠: ${e(d.why)}</p>
-<ul class="rejected">
-${rejected}
-</ul></li>`;
-      })
+      .map(
+        (d) => `<li><p class="what">${e(d.what)}</p>
+${renderComparison({ options: d.options, picked: d.chosen, mark: "採用" })}
+</li>`,
+      )
       .join("\n");
     return `<section class="decisions"><h2>自分で判断したこと</h2>
 <ol>

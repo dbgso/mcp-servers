@@ -25,8 +25,8 @@ export const EXAMPLE_REPORT: Report = {
       kind: "decision",
       what: "Choose where the enforced rules are written",
       options: [
-        { label: "describe", consequence: "Ships with the package and is read on every call" },
-        { label: "README", consequence: "Ships, but nothing makes a caller read it" },
+        { label: "describe", pros: "Ships with the package and is read on every call", cons: "Grows long as rules are added" },
+        { label: "README", pros: "The usual place people look", cons: "Nothing makes a caller read it" },
       ],
       recommendation: { label: "describe", reason: "It is the one place every caller reads" },
     },
@@ -34,9 +34,11 @@ export const EXAMPLE_REPORT: Report = {
   decisions: [
     {
       what: "How to check what the package ships",
-      chosen: "Read the output of npm pack --dry-run",
-      why: "It lists the files that are actually published",
-      rejected: [{ option: "Read the files field in package.json", why: "It misses what .npmignore removes" }],
+      options: [
+        { label: "npm pack --dry-run", pros: "Lists the files actually published", cons: "Needs a build first" },
+        { label: "Read package.json", pros: "Instant", cons: "Misses what .npmignore removes" },
+      ],
+      chosen: { label: "npm pack --dry-run", reason: "It is the only one that cannot miss a file" },
     },
   ],
   corrections: [
@@ -89,9 +91,9 @@ ${criteriaTable()}
 | \`claims[]\` | At least one. \`{ statement, evidence[] }\`, one claim per entry | R2 |
 | \`claims[].evidence[]\` | At least one. \`{ source, output }\`: what was run, and its output verbatim -- never a summary of it | R3 |
 | \`asks[]\` | What the reader has to do. Pass \`[]\` when nothing is needed; it cannot be left out | R4 |
-| \`asks[]\` (decision) | \`{ kind: "decision", what, options[] (2+, each { label, consequence }), recommendation { label, reason } }\`. The recommendation's label must be one of the options | R4 |
+| \`asks[]\` (decision) | \`{ kind: "decision", what, options[] (2+, each { label, pros, cons }), recommendation { label, reason } }\`. The recommendation's label must be one of the options | R4, R9 |
 | \`asks[]\` (action) | \`{ kind: "action", what }\` | R4 |
-| \`decisions[]\` | What you decided on your own. \`{ what, chosen, why, rejected[] (1+, each { option, why }) }\`. Pass \`[]\` when you decided nothing; it cannot be left out | R8 |
+| \`decisions[]\` | What you decided on your own. \`{ what, options[] (2+, each { label, pros, cons }, the chosen one included), chosen { label, reason } }\`. The chosen label must be one of the options. Pass \`[]\` when you decided nothing; it cannot be left out | R8, R9 |
 
 ### Optional
 
@@ -105,7 +107,9 @@ ${criteriaTable()}
 ## Page order
 
 title, conclusion and background, asks, corrections, decisions, claims with
-their evidence, changes, remaining, asides.
+their evidence, changes, remaining, asides. The options of a decision, in asks
+and in decisions, are shown as a table of pros and cons with the picked one
+marked and its reason under the table.
 
 ## Example
 

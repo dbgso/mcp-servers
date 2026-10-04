@@ -18,14 +18,27 @@ const claimSchema = z
   })
   .strict();
 
+/** A comparison needs something to compare against, and each row says what speaks for and against it (R9). */
+const optionsSchema = z
+  .array(z.object({ label: text, pros: text, cons: text }).strict())
+  .min(2, "at least two options are required; a comparison needs an alternative");
+
+const pickSchema = z.object({ label: text, reason: text }).strict();
+
+/** The picked label names a row of the comparison, or the reader cannot tell which one it is. */
+function picksAnOption(params: { options: { label: string }[]; picked: { label: string } }): boolean {
+  const { options, picked } = params;
+  return options.some((option) => option.label === picked.label);
+}
+
+const PICK_MISSES = "must be the label of one of the options";
+
 const decisionSchema = z
   .object({
     kind: z.literal("decision"),
     what: text,
-    options: z
-      .array(z.object({ label: text, consequence: text }).strict())
-      .min(2, "a decision needs at least two options"),
-    recommendation: z.object({ label: text, reason: text }).strict(),
+    options: optionsSchema,
+    recommendation: pickSchema,
   })
   .strict();
 
@@ -39,13 +52,14 @@ const actionSchema = z
 const decisionMadeSchema = z
   .object({
     what: text,
-    chosen: text,
-    why: text,
-    rejected: z
-      .array(z.object({ option: text, why: text }).strict())
-      .min(1, "at least one rejected option is required; a choice with no alternative is not a decision"),
+    options: optionsSchema,
+    chosen: pickSchema,
   })
-  .strict();
+  .strict()
+  .refine((decision) => picksAnOption({ options: decision.options, picked: decision.chosen }), {
+    path: ["chosen", "label"],
+    message: PICK_MISSES,
+  });
 
 /**
  * Refined per element rather than on the whole report, so that it runs even
@@ -54,10 +68,10 @@ const decisionMadeSchema = z
 const askSchema = z
   .discriminatedUnion("kind", [decisionSchema, actionSchema])
   // A recommendation naming no option cannot be picked.
-  .refine(
-    (ask) => ask.kind === "action" || ask.options.some((option) => option.label === ask.recommendation.label),
-    { path: ["recommendation", "label"], message: "must be the label of one of the options" },
-  );
+  .refine((ask) => ask.kind === "action" || picksAnOption({ options: ask.options, picked: ask.recommendation }), {
+    path: ["recommendation", "label"],
+    message: PICK_MISSES,
+  });
 
 /**
  * Every object is strict. A field the structure does not have would be dropped
@@ -87,6 +101,8 @@ const reportSchema = z
 const CRITERION_BY_PATH: readonly { pattern: RegExp; criterion: string }[] = [
   { pattern: /^conclusion/, criterion: "R1" },
   { pattern: /^background/, criterion: "R7" },
+  { pattern: /^decisions\[\d+\]\.options/, criterion: "R9" },
+  { pattern: /^asks\[\d+\]\.options/, criterion: "R9" },
   { pattern: /^decisions/, criterion: "R8" },
   { pattern: /^claims\[\d+\]\.evidence/, criterion: "R3" },
   { pattern: /^claims/, criterion: "R2" },
