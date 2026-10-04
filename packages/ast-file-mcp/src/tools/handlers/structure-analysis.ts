@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { jsonResponse, errorResponse } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
-import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
+import { MarkdownHandler, AsciidocHandler, getSupportedExtensions } from "../../handlers/index.js";
 import type {
   FileMetrics,
   SectionBreakdown,
@@ -80,7 +80,10 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
     const adocHandler = new AsciidocHandler();
 
     if (pathStat.isDirectory()) {
-      // Directory analysis
+      // A pattern no handler reads is refused, as read_directory and topic_index do
+      if (pattern && !getSupportedExtensions().includes(pattern.replace("*.", "").toLowerCase())) {
+        return errorResponse(`Unsupported file pattern: ${pattern}`);
+      }
       const result = await this.analyzeDirectory({
         directory: file_path,
         pattern,
