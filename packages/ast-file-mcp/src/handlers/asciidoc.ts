@@ -1,15 +1,16 @@
-import { readFile, writeFile, readdir } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { resolve, dirname, join, extname } from "node:path";
+import { resolve, dirname } from "node:path";
 import Asciidoctor from "@asciidoctor/core";
-import { BaseHandler } from "./base.js";
+import { BaseHandler, type DocumentSummary } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
-import { anchorMatchesHeading, headingAnchor } from "./anchor.js";
+import { headingAnchor } from "./anchor.js";
 import { groupSections } from "./sections.js";
+import { isExternalUrl, SameFileAnchorTarget, type LinkCheckContext, type LinkOutcome, type LinkTarget } from "./links.js";
 import { convertBlocks } from "./asciidoc-convert.js";
 import { serializeBlocks } from "./asciidoc-serialize.js";
 import { generateContent, type ContentGenerator } from "./content-format.js";
-import { diffStructures, displayText, type GoToDefinitionResult, getErrorMessage } from "mcp-shared";
+import { diffStructures, displayText, type GoToDefinitionResult } from "mcp-shared";
 import type {
   AstReadResult,
   AsciidocDocument,
@@ -17,12 +18,6 @@ import type {
   HeadingSummary,
   LinkSummary,
   CodeBlockSummary,
-  HeadingOverview,
-  LinkOverview,
-  FileSummary,
-  CrawlResult,
-  LinkCheckResult,
-  LinkCheckItem,
   DiffStructureParams,
   DiffStructureResult,
   QueryType,
@@ -32,6 +27,9 @@ import type {
 } from "../types/index.js";
 
 const asciidoctor = Asciidoctor();
+
+/** A section title line: `= Title` (depth 1) to `====== Title` (depth 6). */
+const HEADING_LINE = /^(={1,6})\s+(.+)$/;
 
 // Markers for preserving elements that asciidoctor.js doesn't retain
 // Note: Document attributes are extracted separately and don't need markers
@@ -164,6 +162,34 @@ function findSectionBlock(params: { blocks: AsciidocBlock[]; heading: string }):
 export class AsciidocHandler extends BaseHandler implements ContentGenerator {
   readonly extensions = ["adoc", "asciidoc", "asc"];
   readonly fileType = "asciidoc";
+  readonly anchorNoun = "anchor";
+  protected readonly headingLine = HEADING_LINE;
+
+  protected summarize(content: string): DocumentSummary {
+    const doc = asciidoctor.load(content);
+    return { headings: this.getHeadings({ doc }), links: this.getLinks(doc) };
+  }
+
+  /**
+   * `<<anchor>>` and `<<other-file>>` carry no `#`, no `/` and no `.`: a bare
+   * id, which names a place in this document or a sibling page.
+   */
+  protected linkTarget(url: string): LinkTarget {
+    if (!isExternalUrl(url) && !url.includes("/") && !url.includes(".")) {
+      return new SameFileAnchorTarget(url);
+    }
+    return super.linkTarget(url);
+  }
+
+  /** A bare id may also be a heading's own text, or the name of a sibling `.adoc` page. */
+  checkSameFileAnchor(params: { anchor: string; context: LinkCheckContext }): LinkOutcome {
+    const { anchor, context } = params;
+    const namesHeadingText = context.headings.some((h) => h.text === anchor);
+    if (namesHeadingText || existsSync(resolve(dirname(context.filePath), `${anchor}.adoc`))) {
+      return { status: "valid" };
+    }
+    return super.checkSameFileAnchor(params);
+  }
 
   async read(filePath: string): Promise<AstReadResult> {
     const content = await readFile(filePath, "utf-8");
@@ -444,13 +470,10 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
     const lines = content.split("\n");
     const headings: HeadingSummary[] = [];
 
-    // Regex to match AsciiDoc section headings: = Title, == Section, etc.
-    // Must be at start of line, followed by space and title text
-    const headingRegex = /^(=+)\s+(.+)$/;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const match = line.match(headingRegex);
+      const match = line.match(HEADING_LINE);
 
       if (match) {
         const equalSigns = match[1];
@@ -470,45 +493,6 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
     }
 
     return headings;
-  }
-
-  /**
-   * Get section content as plain text (for AI-friendly output).
-   */
-  async getSectionText(params: { filePath: string; headingText: string }): Promise<string> {
-    const { filePath, headingText } = params;
-    const content = await readFile(filePath, "utf-8");
-    const lines = content.split("\n");
-
-    let startLine = -1;
-    let endLine = lines.length;
-    let targetDepth = 0;
-
-    // Find section boundaries by line
-    // AsciiDoc: = Title (level 0), == Section (level 1), === Subsection (level 2), etc.
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const headingMatch = line.match(/^(={1,6})\s+(.+)$/);
-
-      if (headingMatch) {
-        const depth = headingMatch[1].length;
-        const text = headingMatch[2].trim();
-
-        if (startLine === -1 && text === headingText) {
-          startLine = i;
-          targetDepth = depth;
-        } else if (startLine !== -1 && depth <= targetDepth) {
-          endLine = i;
-          break;
-        }
-      }
-    }
-
-    if (startLine === -1) {
-      return "";
-    }
-
-    return lines.slice(startLine, endLine).join("\n").trim();
   }
 
   /**
@@ -616,340 +600,6 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
     });
 
     return lines.join("\n");
-  }
-
-  /**
-   * Convert HeadingSummary to HeadingOverview (strip line numbers).
-   */
-  private toHeadingOverview(headings: HeadingSummary[]): HeadingOverview[] {
-    return headings.map(({ depth, text }) => ({ depth, text }));
-  }
-
-  /**
-   * Convert LinkSummary to LinkOverview (strip line numbers and title).
-   */
-  private toLinkOverview(links: LinkSummary[]): LinkOverview[] {
-    return links.map(({ url, text }) => ({ url, text }));
-  }
-
-  /**
-   * Crawl from a starting file, following links recursively.
-   */
-  async crawl(params: { startFile: string; maxDepth?: number }): Promise<CrawlResult> {
-    const { startFile: startFilePath, maxDepth = 10 } = params;
-    const visited = new Set<string>();
-    const files: FileSummary[] = [];
-    const errors: Array<{ filePath: string; error: string }> = [];
-
-    const crawlFile = async (params: {
-      filePath: string;
-      depth: number;
-    }): Promise<void> => {
-      const { filePath, depth } = params;
-      if (depth > maxDepth) return;
-
-      const normalizedPath = resolve(filePath);
-      if (visited.has(normalizedPath)) return;
-      visited.add(normalizedPath);
-
-      if (!existsSync(normalizedPath)) {
-        errors.push({ filePath: normalizedPath, error: "File not found" });
-        return;
-      }
-
-      try {
-        const content = await readFile(normalizedPath, "utf-8");
-        const doc = asciidoctor.load(content);
-
-        const headings = this.getHeadings({ doc });
-        const links = this.getLinks(doc);
-
-        files.push({
-          filePath: normalizedPath,
-          fileType: "asciidoc",
-          headings: this.toHeadingOverview(headings),
-          links: this.toLinkOverview(links),
-        });
-
-        // Follow internal links
-        for (const link of links) {
-          if (link.url.startsWith("http://") || link.url.startsWith("https://")) {
-            continue; // Skip external links
-          }
-          if (link.url.startsWith("#")) {
-            continue; // Skip same-file anchors
-          }
-
-          const [pathPart] = link.url.split("#");
-          if (!pathPart) continue;
-
-          const targetPath = resolve(dirname(normalizedPath), pathPart);
-          const ext = extname(targetPath).toLowerCase();
-
-          if (this.extensions.includes(ext.slice(1))) {
-            await crawlFile({ filePath: targetPath, depth: depth + 1 });
-          }
-        }
-      } catch (error) {
-        errors.push({
-          filePath: normalizedPath,
-          error: getErrorMessage(error),
-        });
-      }
-    };
-
-    await crawlFile({ filePath: startFilePath, depth: 0 });
-
-    return {
-      startFile: resolve(startFilePath),
-      files,
-      errors,
-    };
-  }
-
-  /**
-   * Find all matching files in a directory.
-   */
-  async findFiles(params: { directory: string; pattern?: string }): Promise<string[]> {
-    const { directory, pattern } = params;
-    const results: string[] = [];
-    const extensions = pattern
-      ? [pattern.replace("*.", "")]
-      : this.extensions;
-
-    const searchDir = async (dir: string): Promise<void> => {
-      try {
-        const entries = await readdir(dir, { withFileTypes: true });
-
-        for (const entry of entries) {
-          const fullPath = join(dir, entry.name);
-
-          if (entry.isDirectory()) {
-            // Skip common non-doc directories
-            if (entry.name === "node_modules" || entry.name === ".git") {
-              continue;
-            }
-            await searchDir(fullPath);
-          } else if (entry.isFile()) {
-            const ext = extname(entry.name).toLowerCase().slice(1);
-            if (extensions.includes(ext)) {
-              results.push(fullPath);
-            }
-          }
-        }
-      } catch {
-        // Ignore permission errors etc.
-      }
-    };
-
-    await searchDir(directory);
-    return results.sort();
-  }
-
-  /**
-   * Read all files in a directory and return summaries.
-   */
-  async readDirectory(params: {
-    directory: string;
-    pattern?: string;
-  }): Promise<{ files: FileSummary[]; errors: Array<{ filePath: string; error: string }> }> {
-    const { directory, pattern } = params;
-    const filePaths = await this.findFiles({ directory, pattern });
-    const files: FileSummary[] = [];
-    const errors: Array<{ filePath: string; error: string }> = [];
-
-    for (const filePath of filePaths) {
-      try {
-        const content = await readFile(filePath, "utf-8");
-        const doc = asciidoctor.load(content);
-
-        files.push({
-          filePath,
-          fileType: "asciidoc",
-          headings: this.toHeadingOverview(this.getHeadings({ doc })),
-          links: this.toLinkOverview(this.getLinks(doc)),
-        });
-      } catch (error) {
-        errors.push({
-          filePath,
-          error: getErrorMessage(error),
-        });
-      }
-    }
-
-    return { files, errors };
-  }
-
-  /**
-   * Check links in an AsciiDoc file.
-   */
-  async checkLinks(params: {
-    filePath: string;
-    checkExternal?: boolean;
-    timeout?: number;
-  }): Promise<LinkCheckResult> {
-    const { filePath, checkExternal = false, timeout = 5000 } = params;
-    const content = await readFile(filePath, "utf-8");
-    const doc = asciidoctor.load(content);
-    const links = this.getLinks(doc);
-    const headings = this.getHeadings({ doc });
-
-    const valid: LinkCheckItem[] = [];
-    const broken: LinkCheckItem[] = [];
-    const skipped: LinkCheckItem[] = [];
-
-    for (const link of links) {
-      const item: LinkCheckItem = {
-        url: link.url,
-        text: link.text,
-        line: link.line,
-      };
-
-      const checkResult = await this.checkSingleLink({
-        link,
-        filePath,
-        headings,
-        checkExternal,
-        timeout,
-      });
-
-      if (checkResult.status === "valid") {
-        valid.push(item);
-      } else if (checkResult.status === "broken") {
-        broken.push({ ...item, reason: checkResult.reason });
-      } else {
-        skipped.push({ ...item, reason: checkResult.reason });
-      }
-    }
-
-    return {
-      filePath,
-      valid,
-      broken,
-      skipped,
-    };
-  }
-
-  /**
-   * Check a single link and return its status.
-   */
-  private async checkSingleLink(params: {
-    link: LinkSummary;
-    filePath: string;
-    headings: HeadingSummary[];
-    checkExternal: boolean;
-    timeout: number;
-  }): Promise<{ status: "valid" | "broken" | "skipped"; reason?: string }> {
-    const { link, filePath, headings, checkExternal, timeout } = params;
-    const url = link.url;
-
-    // External URL (link: macro)
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      if (!checkExternal) {
-        return { status: "skipped", reason: "external link (check_external=false)" };
-      }
-      return this.checkExternalUrl({ url, timeout });
-    }
-
-    // Anchor or cross-file reference (inline xref without file extension: <<anchor>> or <<other-file>>)
-    // These don't start with #, they're just IDs
-    if (!url.includes("/") && !url.includes(".")) {
-      const anchorId = url;
-
-      // 1. An anchor in the same file, by id or by the heading text itself
-      if (headings.some((h) => h.text === anchorId || this.isAnchorOf({ anchor: anchorId, heading: h }))) {
-        return { status: "valid" };
-      }
-
-      // 2. Check if it's a cross-file reference (<<other-file>> -> other-file.adoc)
-      const sourceDir = dirname(filePath);
-      const potentialFile = resolve(sourceDir, anchorId + ".adoc");
-      if (existsSync(potentialFile)) {
-        return { status: "valid" };
-      }
-
-      return { status: "broken", reason: `anchor "${anchorId}" not found` };
-    }
-
-    // File reference (xref:file.adoc[] or include::file.adoc[])
-    const [pathPart, anchor] = url.split("#");
-    const targetPath = pathPart ? resolve(dirname(filePath), pathPart) : filePath;
-
-    if (!existsSync(targetPath)) {
-      return { status: "broken", reason: "file not found" };
-    }
-
-    // File exists, check anchor if present
-    if (!anchor) {
-      return { status: "valid" };
-    }
-
-    // Check anchor in target file
-    try {
-      const targetContent = await readFile(targetPath, "utf-8");
-      const targetDoc = asciidoctor.load(targetContent);
-      const targetHeadings = this.getHeadings({ doc: targetDoc });
-      if (targetHeadings.some((h) => this.isAnchorOf({ anchor, heading: h }))) {
-        return { status: "valid" };
-      }
-      return { status: "broken", reason: `anchor "${anchor}" not found in ${pathPart}` };
-    } catch {
-      return { status: "broken", reason: `failed to read ${pathPart}` };
-    }
-  }
-
-  private isAnchorOf(params: { anchor: string; heading: HeadingSummary }): boolean {
-    return anchorMatchesHeading({ anchor: params.anchor, headingText: params.heading.text, fileType: "asciidoc" });
-  }
-
-  /**
-   * Check an external URL using HTTP HEAD request.
-   */
-  private async checkExternalUrl(params: {
-    url: string;
-    timeout: number;
-  }): Promise<{ status: "valid" | "broken" | "skipped"; reason?: string }> {
-    const { url, timeout } = params;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      try {
-        const response = await fetch(url, {
-          method: "HEAD",
-          signal: controller.signal,
-          redirect: "follow",
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          return { status: "valid" };
-        }
-
-        // Some servers don't support HEAD, try GET
-        if (response.status === 405) {
-          const getResponse = await fetch(url, {
-            method: "GET",
-            signal: controller.signal,
-            redirect: "follow",
-          });
-          if (getResponse.ok) {
-            return { status: "valid" };
-          }
-          return { status: "broken", reason: `HTTP ${getResponse.status}` };
-        }
-
-        return { status: "broken", reason: `HTTP ${response.status}` };
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return { status: "broken", reason: "timeout" };
-      }
-      return { status: "broken", reason: getErrorMessage(error) };
-    }
   }
 
   /**

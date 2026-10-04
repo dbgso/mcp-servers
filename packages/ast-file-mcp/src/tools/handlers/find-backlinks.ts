@@ -7,6 +7,7 @@ import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
 import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
 import { headingAnchor, normalizeAnchor } from "../../handlers/anchor.js";
+import { FileTarget, parseLinkTarget } from "../../handlers/links.js";
 import type { Backlink, FindBacklinksResult, LinkSummary } from "../../types/index.js";
 
 const FindBacklinksSchema = z.object({
@@ -162,18 +163,12 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
     const { link, sourceFile, targetPath, expectedAnchor, includeAnchors } = params;
     const url = link.url;
 
-    // Skip external URLs
-    if (url.startsWith("http://") || url.startsWith("https://")) {
+    // Only a link to another file can be a backlink: not an external URL, not #section
+    const target = parseLinkTarget(url);
+    if (!(target instanceof FileTarget)) {
       return { matches: false };
     }
-
-    // Skip same-file anchor references (e.g., #section)
-    if (url.startsWith("#")) {
-      return { matches: false };
-    }
-
-    // Parse the URL into path and anchor parts
-    const [pathPart, anchor] = url.split("#");
+    const { pathPart, anchor } = target;
 
     // If include_anchors is false, skip links with anchors
     if (!includeAnchors && anchor) {
