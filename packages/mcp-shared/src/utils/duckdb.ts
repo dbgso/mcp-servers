@@ -197,20 +197,17 @@ function countOf(rows: Record<string, unknown>[]): number {
   return Number(rows[0]?.cnt ?? 0);
 }
 
+/** COPY options per output extension; anything else is written as CSV. */
+const COPY_OPTIONS: Record<string, string> = {
+  ".csv": "(FORMAT CSV, HEADER)",
+  ".tsv": "(FORMAT CSV, HEADER, DELIMITER '\t')",
+  ".json": "(FORMAT JSON)",
+  ".parquet": "(FORMAT PARQUET)",
+};
+
 function buildCopyOptions(outputPath: string): string {
   const ext = path.extname(outputPath).toLowerCase();
-  switch (ext) {
-    case ".csv":
-      return "(FORMAT CSV, HEADER)";
-    case ".tsv":
-      return "(FORMAT CSV, HEADER, DELIMITER '\t')";
-    case ".json":
-      return "(FORMAT JSON)";
-    case ".parquet":
-      return "(FORMAT PARQUET)";
-    default:
-      return "(FORMAT CSV, HEADER)";
-  }
+  return Object.hasOwn(COPY_OPTIONS, ext) ? COPY_OPTIONS[ext] : COPY_OPTIONS[".csv"];
 }
 
 /** A query needs something to read: a single path, or at least one aliased file. */

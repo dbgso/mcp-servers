@@ -1,5 +1,6 @@
 import { minimatch } from "minimatch";
 import type { RuleStore } from "./rule-store.js";
+import { testCondition } from "./condition-operators.js";
 import type { Condition, EvaluationResult, Rule } from "./types.js";
 
 /**
@@ -77,53 +78,7 @@ export class RuleEngine {
     const { condition, args } = params;
     const value = this.getNestedValue({ obj: args, path: condition.param });
 
-    switch (condition.operator) {
-      case "exists":
-        return value !== undefined;
-
-      case "equals":
-        return value === condition.value;
-
-      case "contains": {
-        const searchValue = condition.value;
-        if (typeof searchValue === "string") {
-          if (typeof value === "string") {
-            return value.includes(searchValue);
-          }
-          if (Array.isArray(value)) {
-            // Check if any element contains the value
-            return value.some((item) =>
-              typeof item === "string" && item.includes(searchValue)
-            );
-          }
-        }
-        return false;
-      }
-
-      case "matches": {
-        const pattern = condition.value;
-        if (typeof pattern === "string") {
-          try {
-            const regex = new RegExp(pattern);
-            if (typeof value === "string") {
-              return regex.test(value);
-            }
-            if (Array.isArray(value)) {
-              // Check if any element matches the regex
-              return value.some((item) =>
-                typeof item === "string" && regex.test(item)
-              );
-            }
-          } catch {
-            return false;
-          }
-        }
-        return false;
-      }
-
-      default:
-        return false;
-    }
+    return testCondition({ condition, value });
   }
 
   /**
@@ -145,11 +100,8 @@ export class RuleEngine {
     const regex = /([^.\[\]]+)|\[(\d+)\]/g;
     let match;
     while ((match = regex.exec(path)) !== null) {
-      if (match[1] !== undefined) {
-        segments.push(match[1]);
-      } else if (match[2] !== undefined) {
-        segments.push(parseInt(match[2], 10));
-      }
+      // The pattern matches one group or the other: a name, or a bracketed index.
+      segments.push(match[1] ?? parseInt(match[2], 10));
     }
 
     let current: unknown = obj;
