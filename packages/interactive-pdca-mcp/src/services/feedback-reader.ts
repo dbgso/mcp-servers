@@ -4,6 +4,9 @@ import type { FeedbackEntry, FeedbackDecision, FeedbackStatus } from "../types/i
 import { getErrorMessage } from "mcp-shared";
 import { withStringFields } from "../utils/metadata.js";
 
+/** The last id handed out in this process, shared by every reader. */
+let lastIssuedId = 0;
+
 export class FeedbackReader {
   private readonly baseDir: string;
 
@@ -20,9 +23,14 @@ export class FeedbackReader {
     return path.join(this.getTaskFeedbackDir(taskId), `${feedbackId}.md`);
   }
 
+  /**
+   * `fb-<milliseconds>`, but never the same number twice: two feedback entries
+   * created within one millisecond used to get the same id, and the second
+   * file overwrote the first.
+   */
   private generateFeedbackId(): string {
-    const timestamp = Date.now();
-    return `fb-${timestamp}`;
+    lastIssuedId = Math.max(Date.now(), lastIssuedId + 1);
+    return `fb-${lastIssuedId}`;
   }
 
   private parseYamlValue(value: string): string | boolean | null {
