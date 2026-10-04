@@ -52,9 +52,13 @@ export type { DatabaseCoreContext, CoreOperation } from "./types.js";
 export { listTablesOp } from "./operations/list-tables.js";
 export { describeTableOp } from "./operations/describe-table.js";
 
-// Native-type classifier (used by validator heuristics)
-export type { NativeTypeClass } from "./native-type-classifier.js";
-export { classifyNativeType, looksLikeForeignKeyName } from "./native-type-classifier.js";
+// Native-type table: generic type for codegen, coarse class for validator heuristics
+export type { NativeTypeClass, NativeTypeEngine } from "./native-type-classifier.js";
+export {
+  classifyNativeType,
+  looksLikeForeignKeyName,
+  mapNativeType,
+} from "./native-type-classifier.js";
 
 // Pure validator for selectable-fields coverage
 export type {
