@@ -84,19 +84,6 @@ describe("structure_analysis over a directory", () => {
     expect(text(result)).not.toContain(unexpected);
   });
 
-  it("finds nothing for a pattern neither handler claims", async () => {
-    // `*.txt` is not a mistake worth an error -- the directory genuinely holds
-    // no such documents -- but it must not silently fall back to everything.
-    const result = await structure.execute({
-      file_path: dir,
-      pattern: "*.txt",
-      output_format: "json",
-      include_warnings: true,
-    });
-
-    expect(JSON.parse(text(result)).fileCount).toBe(0);
-  });
-
   it("drops the warnings when it is told to", async () => {
     const withWarnings = await structure.execute({
       file_path: dir,

@@ -15,6 +15,7 @@ import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { MarkdownHandler } from "../handlers/markdown.js";
 import { AsciidocHandler } from "../handlers/asciidoc.js";
 import { TopicIndexHandler } from "../tools/handlers/topic-index.js";
+import { StructureAnalysisHandler } from "../tools/handlers/structure-analysis.js";
 import type { AsciidocDocument } from "../types/index.js";
 
 let dir: string;
@@ -160,5 +161,21 @@ describe("AsciiDoc reorder with a section at another level", () => {
 
     expect(out.indexOf("== A")).toBeLessThan(out.indexOf("== B"));
     expect(out.indexOf("== B")).toBeLessThan(out.indexOf("= Appendix"));
+  });
+});
+
+describe("structure_analysis over a directory", () => {
+  it("refuses a pattern no handler reads, as read_directory and topic_index do", async () => {
+    await file({ name: "one.md", content: "# One\n" });
+
+    const result = await new StructureAnalysisHandler().execute({
+      file_path: dir,
+      pattern: "*.txt",
+      output_format: "json",
+      include_warnings: true,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("Unsupported file pattern");
   });
 });
