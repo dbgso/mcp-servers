@@ -170,6 +170,39 @@ describe("PlanReporter", () => {
     });
   });
 
+  describe("renderPendingReview", () => {
+    it("says there is nothing to review when both lists are empty", () => {
+      expect(planReporter.renderPendingReview({ reviews: [], feedbackOnly: [] })).toBe(
+        "# Pending Review Tasks\n\n_No tasks pending review._\n",
+      );
+    });
+
+    it("shows reviews before feedback-only tasks", () => {
+      const task = (id: string) =>
+        ({ id, title: id.toUpperCase(), content: "", task_output: null, completion_criteria: "" }) as never;
+      const feedback = {
+        id: "fb-1",
+        task_id: "b",
+        original: "o",
+        interpretation: "i",
+        decision: "adopted",
+        status: "draft",
+        timestamp: "t",
+        addressed_by: null,
+      } as never;
+
+      const text = planReporter.renderPendingReview({
+        reviews: [{ task: task("a"), feedbackList: [] }],
+        feedbackOnly: [{ task: task("b"), feedbackList: [feedback] }],
+      });
+
+      expect(text.startsWith("# Pending Review Tasks\n\n## a: A")).toBe(true);
+      expect(text.indexOf("## a: A")).toBeLessThan(text.indexOf("## b: B"));
+      expect(text).toContain("_Task is not pending review, but has pending feedback._");
+      expect(text).not.toContain("_No tasks pending review._");
+    });
+  });
+
   describe("updateGraphFile", () => {
     it("should create GRAPH.md with mermaid diagram", async () => {
       await planReader.addTask({
@@ -1179,6 +1212,8 @@ Content`;
       // The task should NOT be in the file because getTask returned null
       expect(content).not.toContain("race-task");
       expect(callCount).toBe(1);
+      // With nothing left to show, the file says so rather than ending at the heading.
+      expect(content).toContain("_No tasks pending review._");
 
       // Restore original
       planReader.getTask = originalGetTask;
