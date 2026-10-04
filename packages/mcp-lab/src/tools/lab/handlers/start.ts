@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { errorResponse, textResponse, type LabContext } from "../types.js";
+import { errorResponse, textResponse, toolListLines, type LabContext } from "../types.js";
 import { expandVars, resolveLaunch } from "../../../launch.js";
 import { LabSession, makeScratch, messageOf } from "../../../session.js";
 
@@ -84,7 +84,7 @@ export class StartHandler extends BaseActionHandler<Args, LabContext> {
         : [`- **env**: ${Object.entries(session.env).map(([k, v]) => `${k}=${v}`).join(", ")}`]),
       "",
       "## Tools",
-      ...tools.map((tool) => `- **${tool.name}** — ${tool.description ?? ""}`),
+      ...toolListLines(tools),
       "",
       `Call one with \`execute(action: "call", session: "${id}", tool: "<name>", params: { ... })\`.`,
     ];

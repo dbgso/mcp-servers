@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { errorResponse, textResponse, type LabContext } from "../types.js";
+import { errorResponse, textResponse, toolListLines, type LabContext } from "../types.js";
 import { unknownSession } from "./call.js";
 
 const schema = z.object({
@@ -29,7 +29,7 @@ export class ToolsHandler extends BaseActionHandler<Args, LabContext> {
 
     if (tool === undefined) {
       return textResponse(
-        [`# Tools on ${id}`, "", ...tools.map((t) => `- **${t.name}** — ${t.description ?? ""}`)].join("\n")
+        [`# Tools on ${id}`, "", ...toolListLines(tools)].join("\n")
       );
     }
 
