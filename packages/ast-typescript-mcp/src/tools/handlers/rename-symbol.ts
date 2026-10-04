@@ -1,15 +1,15 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseBoolean, looseNumber } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 
 const RenameSymbolSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file containing the symbol"),
-  line: z.number().describe("Line number of the symbol (1-based)"),
-  column: z.number().describe("Column number of the symbol (1-based)"),
+  line: looseNumber(z.number().describe("Line number of the symbol (1-based)")),
+  column: looseNumber(z.number().describe("Column number of the symbol (1-based)")),
   new_name: z.string().describe("New name for the symbol"),
-  dry_run: z.boolean().optional().default(true).describe("Preview changes without modifying files (default: true)"),
+  dry_run: looseBoolean(z.boolean().optional().default(true).describe("Preview changes without modifying files (default: true)")),
 });
 
 type RenameSymbolArgs = z.infer<typeof RenameSymbolSchema>;

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseBoolean, looseNumber } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { Project, Node, SyntaxKind } from "ts-morph";
 import type { CallExpression, SourceFile } from "ts-morph";
@@ -9,32 +9,41 @@ import { glob } from "glob";
 
 const FindBlocksSchema = z.object({
   file_path: z
-    .union([z.string(), z.array(z.string())])
+    // The array comes first so that a JSON array sent as a string is read as the array, not as one path.
+    .union([looseArray(z.array(z.string())), z.string()])
     .describe("File path(s) or glob pattern to search"),
-  block_types: z
-    .array(z.string())
-    .optional()
-    .default(["describe", "it", "test", "beforeAll", "afterAll", "beforeEach", "afterEach"])
-    .describe("Block types to find (default: describe, it, test, before/after hooks)"),
+  block_types: looseArray(
+    z
+      .array(z.string())
+      .optional()
+      .default(["describe", "it", "test", "beforeAll", "afterAll", "beforeEach", "afterEach"])
+      .describe("Block types to find (default: describe, it, test, before/after hooks)"),
+  ),
   name_pattern: z
     .string()
     .optional()
     .describe("Regex pattern to filter block names"),
-  include_nested: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Include nested blocks in tree structure (default: true)"),
-  max_depth: z
-    .number()
-    .optional()
-    .default(10)
-    .describe("Maximum nesting depth (default: 10)"),
-  include_source: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("Include block source code (default: false)"),
+  include_nested: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Include nested blocks in tree structure (default: true)"),
+  ),
+  max_depth: looseNumber(
+    z
+      .number()
+      .optional()
+      .default(10)
+      .describe("Maximum nesting depth (default: 10)"),
+  ),
+  include_source: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Include block source code (default: false)"),
+  ),
 });
 
 type FindBlocksArgs = z.infer<typeof FindBlocksSchema>;

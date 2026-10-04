@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseBoolean } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler } from "../../handlers/index.js";
 
 const DependencyGraphSchema = z.object({
   directory: z.string().describe("Absolute path to the directory to analyze"),
   pattern: z.string().optional().default("**/*.{ts,tsx,mts,cts}").describe("Glob pattern to filter files (default: **/*.{ts,tsx,mts,cts})"),
-  include_external: z.boolean().optional().default(false).describe("Include external dependencies from node_modules (default: false)"),
+  include_external: looseBoolean(z.boolean().optional().default(false).describe("Include external dependencies from node_modules (default: false)")),
 });
 
 type DependencyGraphArgs = z.infer<typeof DependencyGraphSchema>;

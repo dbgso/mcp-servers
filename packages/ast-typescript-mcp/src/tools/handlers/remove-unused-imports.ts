@@ -1,22 +1,26 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseBoolean } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { Project, Node } from "ts-morph";
 import type { SourceFile, ImportDeclaration } from "ts-morph";
 
 const TsRemoveUnusedImportsSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file"),
-  dry_run: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Preview changes without modifying file (default: true)"),
-  organize: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("Also organize/sort remaining imports (default: false)"),
+  dry_run: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Preview changes without modifying file (default: true)"),
+  ),
+  organize: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Also organize/sort remaining imports (default: false)"),
+  ),
 });
 
 type TsRemoveUnusedImportsArgs = z.infer<typeof TsRemoveUnusedImportsSchema>;

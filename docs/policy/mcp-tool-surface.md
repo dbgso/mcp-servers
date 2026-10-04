@@ -84,7 +84,10 @@ required, could not be called from Claude Code at all.
 `z.number()` or `z.array()`. It is enabled per directory, for the handlers of
 tools with an untyped schema; a server moving to this policy adds its handler
 directory to that entry in `.oxlintrc.json`. `ast-typescript-mcp`'s `ts_ast`
-already publishes a passthrough schema and is not yet wrapped or checked.
+already publishes a passthrough schema; its actions' top-level booleans,
+numbers and arrays are wrapped, but its handler directory is not yet in the lint
+override, and its object arguments (`query`, `additions`, `structure`) are not
+converted.
 
 ## Conformance
 

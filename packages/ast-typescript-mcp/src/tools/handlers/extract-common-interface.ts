@@ -1,35 +1,42 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseBoolean, looseNumber } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 
 const ExtractCommonInterfaceSchema = z.object({
   source_files: z
-    .union([z.string(), z.array(z.string())])
+    // The array comes first so that a JSON array sent as a string is read as the array, not as one path.
+    .union([looseArray(z.array(z.string())), z.string()])
     .describe("Source files containing classes (glob pattern or paths)"),
   interface_name: z.string().describe("Name for the generated interface"),
   class_pattern: z
     .string()
     .optional()
     .describe("Regex pattern to match class names"),
-  include_methods: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Include methods in the interface (default: true)"),
-  include_properties: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Include properties in the interface (default: true)"),
-  min_occurrence: z
-    .number()
-    .optional()
-    .default(0.5)
-    .describe(
-      "Minimum occurrence ratio for a member to be included (0-1, default: 0.5 = present in at least 50% of classes)"
-    ),
+  include_methods: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Include methods in the interface (default: true)"),
+  ),
+  include_properties: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Include properties in the interface (default: true)"),
+  ),
+  min_occurrence: looseNumber(
+    z
+      .number()
+      .optional()
+      .default(0.5)
+      .describe(
+        "Minimum occurrence ratio for a member to be included (0-1, default: 0.5 = present in at least 50% of classes)"
+      ),
+  ),
 });
 
 type ExtractCommonInterfaceArgs = z.infer<typeof ExtractCommonInterfaceSchema>;

@@ -1,13 +1,14 @@
 import { z } from "zod";
 import type { FileResult } from "mcp-shared";
 import { formatMultiFileResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 import type { TsQueryType, TsQueryResult, DeclarationKind } from "../../types/index.js";
 
 const ReadSchema = z.object({
-  file_path: z.union([z.string(), z.array(z.string())]).describe("Absolute path(s) to the TypeScript file(s) to read. Can be a single path or array of paths."),
+  // The array comes first so that a JSON array sent as a string is read as the array, not as one path.
+  file_path: z.union([looseArray(z.array(z.string())), z.string()]).describe("Absolute path(s) to the TypeScript file(s) to read. Can be a single path or array of paths."),
   query: z.enum(["full", "summary", "imports", "exports"]).optional().default("full").describe("Query type: full (default), summary, imports, exports"),
   name: z.string().optional().describe("Get specific declaration by name"),
   kind: z.enum(["class", "function", "interface", "type", "variable", "enum"]).optional().describe("Filter by declaration kind (for summary query)"),
