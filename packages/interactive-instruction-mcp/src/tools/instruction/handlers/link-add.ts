@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
+import { looseArray } from "../schema-coerce.js";
 import { errorResponse, formatNextActions } from "../types.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
 import {
@@ -19,7 +20,7 @@ import {
 const schema = z.object({
   action: z.literal("link_add"),
   id: z.string().describe("Document ID to add links to"),
-  relatedDocs: z.array(z.string()).describe("Document IDs to add as related"),
+  relatedDocs: looseArray(z.array(z.string()).describe("Document IDs to add as related")),
   explanation: z
     .string()
     .min(1)

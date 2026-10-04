@@ -2,6 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { TriggerResult } from "mcp-shared/workflow";
 import type { InstructionContext } from "../types.js";
+import { looseArray } from "../schema-coerce.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
 import {
@@ -28,8 +29,8 @@ const schema = z.object({
   id: z.string().describe("Document ID for the new draft"),
   content: z.string().describe("Document content (markdown)"),
   description: z.string().describe("Short description of the document"),
-  whenToUse: z.array(z.string()).describe("Usage scenarios for this document"),
-  relatedDocs: z.array(z.string()).optional().describe("Related document IDs"),
+  whenToUse: looseArray(z.array(z.string()).describe("Usage scenarios for this document")),
+  relatedDocs: looseArray(z.array(z.string()).optional().describe("Related document IDs")),
   // Nullable to match `update`'s declaration of the same name. The tool merges
   // every handler's fields into one schema and the first declaration of a name
   // wins, so a stricter one here would have been what callers were validated

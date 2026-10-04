@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
+import { looseArray } from "../schema-coerce.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
 import type { DocumentFrontmatter } from "../../../types/index.js";
@@ -35,13 +36,15 @@ const schema = z.object({
       "New document content (markdown). Omit to change only the metadata below, keeping the body as it is."
     ),
   description: z.string().optional().describe("Updated description"),
-  whenToUse: z.array(z.string()).optional().describe("Updated usage scenarios"),
-  relatedDocs: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Replaces the document's relatedDocs. Pass the whole list, not an addition -- `link_add` / `link_remove` are the incremental pair."
-    ),
+  whenToUse: looseArray(z.array(z.string()).optional().describe("Updated usage scenarios")),
+  relatedDocs: looseArray(
+    z
+      .array(z.string())
+      .optional()
+      .describe(
+        "Replaces the document's relatedDocs. Pass the whole list, not an addition -- `link_add` / `link_remove` are the incremental pair."
+      ),
+  ),
   // Nullable, because three states have to be expressible and `optional` alone
   // gives two. `lint` asks for this field to be set *and* asks for it to be
   // removed once the document is back within the limit, so a write that could
