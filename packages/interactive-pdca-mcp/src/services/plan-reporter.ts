@@ -6,6 +6,16 @@ import type { FeedbackReader } from "./feedback-reader.js";
 import { blockersAndRisks, phaseSections, renderSections, reviewCommands } from "./task-presentation.js";
 import { renderTaskGraph } from "./task-graph.js";
 
+interface TaskWithFeedback {
+  task: Task;
+  feedbackList: FeedbackEntry[];
+}
+
+export interface PendingReview {
+  reviews: TaskWithFeedback[];
+  feedbackOnly: TaskWithFeedback[];
+}
+
 export class PlanReporter {
   private readonly directory: string;
   private readonly planReader: PlanReader;
@@ -18,39 +28,50 @@ export class PlanReporter {
   }
 
   async updatePendingReviewFile(): Promise<void> {
+    const content = this.renderPendingReview(await this.fetchPendingReview());
+    const filePath = path.join(this.directory, "PENDING_REVIEW.md");
+    await fs.writeFile(filePath, content, "utf-8");
+  }
+
+  /**
+   * What PENDING_REVIEW.md shows: the pending_review tasks with their feedback,
+   * then the tasks that are not pending review but have feedback ready for
+   * approval. A task listed but no longer readable is left out.
+   */
+  private async fetchPendingReview(): Promise<PendingReview> {
     const tasks = await this.planReader.listTasks();
-    const pendingReview = tasks.filter((t) => t.status === "pending_review");
+    const feedbackByTask = await this.getFeedbackByTask(tasks.map((t) => t.id));
 
-    // Get all pending feedback grouped by task
-    const feedbackByTask = await this.getFeedbackByTask(tasks.map(t => t.id));
-
-    const contentParts: string[] = ["# Pending Review Tasks\n"];
-
-    if (pendingReview.length === 0 && feedbackByTask.size === 0) {
-      contentParts.push("_No tasks pending review._\n");
-    } else {
-      // First, show pending_review tasks with their feedback
-      for (const summary of pendingReview) {
-        const task = await this.planReader.getTask(summary.id);
-        if (task) {
-          const taskFeedback = feedbackByTask.get(task.id) ?? [];
-          contentParts.push(this.formatTaskReport({ task: task, feedbackList: taskFeedback }));
-          feedbackByTask.delete(task.id); // Remove so we don't show it again
-        }
-      }
-
-      // Then, show tasks that have pending feedback but are not pending_review
-      // Note: feedback.length is always > 0 because getFeedbackByTask only adds entries with feedback
-      for (const [taskId, feedback] of feedbackByTask) {
-        const task = await this.planReader.getTask(taskId);
-        if (task) {
-          contentParts.push(this.formatTaskWithFeedbackOnly({ task: task, feedbackList: feedback }));
-        }
+    const reviews: TaskWithFeedback[] = [];
+    for (const summary of tasks.filter((t) => t.status === "pending_review")) {
+      const task = await this.planReader.getTask(summary.id);
+      if (task) {
+        reviews.push({ task, feedbackList: feedbackByTask.get(task.id) ?? [] });
+        feedbackByTask.delete(task.id); // Shown with the review, so not again below
       }
     }
 
-    const filePath = path.join(this.directory, "PENDING_REVIEW.md");
-    await fs.writeFile(filePath, contentParts.join("\n"), "utf-8");
+    // feedback.length is always > 0 because getFeedbackByTask only adds entries with feedback
+    const feedbackOnly: TaskWithFeedback[] = [];
+    for (const [taskId, feedbackList] of feedbackByTask) {
+      const task = await this.planReader.getTask(taskId);
+      if (task) {
+        feedbackOnly.push({ task, feedbackList });
+      }
+    }
+
+    return { reviews, feedbackOnly };
+  }
+
+  /** PENDING_REVIEW.md's text. No I/O. */
+  renderPendingReview(params: PendingReview): string {
+    const { reviews, feedbackOnly } = params;
+    const parts = [
+      ...reviews.map((entry) => this.formatTaskReport(entry)),
+      ...feedbackOnly.map((entry) => this.formatTaskWithFeedbackOnly(entry)),
+    ];
+    const body = parts.length > 0 ? parts : ["_No tasks pending review._\n"];
+    return ["# Pending Review Tasks\n", ...body].join("\n");
   }
 
   private async getFeedbackByTask(taskIds: string[]): Promise<Map<string, FeedbackEntry[]>> {
