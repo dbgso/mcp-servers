@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BaseActionHandler } from "mcp-shared";
 import type { PlanActionContext } from "../../../types/index.js";
+import { listOrNone } from "../../../services/task-presentation.js";
 
 const addSchema = z.object({
   id: z.string().describe("Unique task identifier"),
@@ -127,11 +128,8 @@ Please explain why this task depends on: ${dependencies.join(", ")}`,
     // Update markdown files
     await planReporter.updateAll();
 
-    const depsInfo =
-      dependencies.length > 0 ? dependencies.join(", ") : "none";
-
-    const delivsInfo =
-      deliverables.length > 0 ? deliverables.join(", ") : "none";
+    const depsInfo = listOrNone(dependencies);
+    const delivsInfo = listOrNone(deliverables);
 
     const parentInfo = parent ? `\nParent: ${parent}` : "";
 

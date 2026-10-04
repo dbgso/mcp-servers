@@ -1,12 +1,28 @@
 import { z } from "zod";
 import { BaseActionHandler } from "mcp-shared";
-import type { PlanActionContext } from "../../../types/index.js";
+import type { PlanActionContext, Task } from "../../../types/index.js";
+import { listOrNone } from "../../../services/task-presentation.js";
 import { formatParallel } from "./format-utils.js";
 
 const readSchema = z.object({
   id: z.string().describe("Task ID to read"),
 });
 type ReadArgs = z.infer<typeof readSchema>;
+
+/**
+ * The task's feedback as a "Feedback History" section, or "" when it has none.
+ * The leading blank lines separate it from the task body it is appended to.
+ */
+export function formatFeedbackHistory(feedback: Task["feedback"]): string {
+  if (!feedback || feedback.length === 0) {
+    return "";
+  }
+  const entries = feedback.map((fb) => {
+    const icon = fb.decision === "adopted" ? "✅" : "❌";
+    return `${icon} **${fb.decision}** (${fb.timestamp})\n> ${fb.comment}\n\n`;
+  });
+  return `\n\n## Feedback History\n\n${entries.join("")}`;
+}
 
 /**
  * ReadHandler: Read task details
@@ -49,22 +65,7 @@ plan(action: "read", id: "<task-id>")
       };
     }
 
-    const deps =
-      task.dependencies.length > 0 ? task.dependencies.join(", ") : "none";
-    const refs = task.references.length > 0 ? task.references.join(", ") : "none";
-    const delivs =
-      task.deliverables.length > 0 ? task.deliverables.join(", ") : "none";
-
-    let feedbackSection = "";
-    if (task.feedback && task.feedback.length > 0) {
-      feedbackSection = "\n\n## Feedback History\n\n";
-      for (const fb of task.feedback) {
-        const icon = fb.decision === "adopted" ? "✅" : "❌";
-        feedbackSection += `${icon} **${fb.decision}** (${fb.timestamp})\n`;
-        feedbackSection += `> ${fb.comment}\n\n`;
-      }
-    }
-
+    const feedbackSection = formatFeedbackHistory(task.feedback);
     const parallelInfo = formatParallel({ task, options: { style: "info" } });
 
     const output = `# Task: ${task.title}
@@ -72,14 +73,14 @@ plan(action: "read", id: "<task-id>")
 **ID:** ${task.id}
 **Status:** ${task.status}
 **Parent:** ${task.parent || "(root)"}
-**Dependencies:** ${deps}
+**Dependencies:** ${listOrNone(task.dependencies)}
 **Dependency Reason:** ${task.dependency_reason || "N/A"}
 **Prerequisites:** ${task.prerequisites || "N/A"}
 **Completion Criteria:** ${task.completion_criteria || "N/A"}
-**Deliverables:** ${delivs}
+**Deliverables:** ${listOrNone(task.deliverables)}
 **Output:** ${task.output || "(not completed)"}
 **Parallelizable:** ${parallelInfo}
-**References:** ${refs}
+**References:** ${listOrNone(task.references)}
 **Created:** ${task.created}
 **Updated:** ${task.updated}
 
