@@ -39,6 +39,13 @@ const ReadDirectorySchema = z.object({
 
 type ReadDirectoryArgs = z.infer<typeof ReadDirectorySchema>;
 
+/** What each `detail` level adds to a file's path and type. */
+const DETAIL_FIELDS: Record<ReadDirectoryArgs["detail"], { headings: boolean; links: boolean }> = {
+  files: { headings: false, links: false },
+  outline: { headings: true, links: false },
+  full: { headings: true, links: true },
+};
+
 export class ReadDirectoryHandler extends BaseToolHandler<ReadDirectoryArgs> {
   readonly name = "read_directory";
   readonly schema = ReadDirectorySchema;
@@ -126,27 +133,13 @@ export class ReadDirectoryHandler extends BaseToolHandler<ReadDirectoryArgs> {
         ? file.headings.filter((h) => h.depth <= maxHeadingDepth)
         : file.headings;
 
-      switch (detail) {
-        case "files":
-          return {
-            filePath: file.filePath,
-            fileType: file.fileType,
-          };
-        case "outline":
-          return {
-            filePath: file.filePath,
-            fileType: file.fileType,
-            headings: filteredHeadings,
-          };
-        case "full":
-        default:
-          return {
-            filePath: file.filePath,
-            fileType: file.fileType,
-            headings: filteredHeadings,
-            links: file.links,
-          };
-      }
+      const include = DETAIL_FIELDS[detail];
+      return {
+        filePath: file.filePath,
+        fileType: file.fileType,
+        ...(include.headings ? { headings: filteredHeadings } : {}),
+        ...(include.links ? { links: file.links } : {}),
+      };
     });
 
     // Apply pagination

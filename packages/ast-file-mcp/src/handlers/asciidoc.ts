@@ -5,6 +5,8 @@ import Asciidoctor from "@asciidoctor/core";
 import { BaseHandler } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
 import { convertBlocks } from "./asciidoc-convert.js";
+import { serializeBlocks } from "./asciidoc-serialize.js";
+import { generateContent, type ContentGenerator } from "./content-format.js";
 import { diffStructures, displayText, type GoToDefinitionResult, getErrorMessage } from "mcp-shared";
 import type {
   AstReadResult,
@@ -90,7 +92,57 @@ interface AsciidocSection {
   getSections(): AsciidocSection[];
 }
 
-export class AsciidocHandler extends BaseHandler {
+/**
+ * What one `query` type reads from an AsciiDoc file. `lists` is Markdown's
+ * alone and is refused before the lookup.
+ */
+interface AsciidocQuery {
+  data(params: { handler: AsciidocHandler; filePath: string; depth?: number }): Promise<QueryResult["data"]>;
+}
+
+class FullQuery implements AsciidocQuery {
+  async data(params: { handler: AsciidocHandler; filePath: string }): Promise<QueryResult["data"]> {
+    const { handler, filePath } = params;
+    const { ast } = await handler.read(filePath);
+    return ast as AsciidocDocument;
+  }
+}
+
+class HeadingsQuery implements AsciidocQuery {
+  data(params: { handler: AsciidocHandler; filePath: string; depth?: number }): Promise<QueryResult["data"]> {
+    const { handler, filePath, depth } = params;
+    return handler.getHeadingsFromFile({ filePath, maxDepth: depth });
+  }
+}
+
+class CodeBlocksQuery implements AsciidocQuery {
+  data(params: { handler: AsciidocHandler; filePath: string }): Promise<QueryResult["data"]> {
+    const { handler, filePath } = params;
+    return handler.getCodeBlocksFromFile(filePath);
+  }
+}
+
+class LinksQuery implements AsciidocQuery {
+  data(params: { handler: AsciidocHandler; filePath: string }): Promise<QueryResult["data"]> {
+    const { handler, filePath } = params;
+    return handler.getLinksFromFile(filePath);
+  }
+}
+
+const ASCIIDOC_QUERIES: Record<Exclude<QueryType, "lists">, AsciidocQuery> = {
+  full: new FullQuery(),
+  headings: new HeadingsQuery(),
+  code_blocks: new CodeBlocksQuery(),
+  links: new LinksQuery(),
+};
+
+/** As for Markdown: a query type outside the schema reads the whole document. */
+function asciidocQueryFor(queryType: string): { query: Exclude<QueryType, "lists">; reader: AsciidocQuery } {
+  const query = Object.hasOwn(ASCIIDOC_QUERIES, queryType) ? (queryType as Exclude<QueryType, "lists">) : "full";
+  return { query, reader: ASCIIDOC_QUERIES[query] };
+}
+
+export class AsciidocHandler extends BaseHandler implements ContentGenerator {
   readonly extensions = ["adoc", "asciidoc", "asc"];
   readonly fileType = "asciidoc";
 
@@ -154,44 +206,13 @@ export class AsciidocHandler extends BaseHandler {
       };
     }
 
-    switch (queryType) {
-      case "headings": {
-        const headings = await this.getHeadingsFromFile({ filePath, maxDepth: options?.depth });
-        return {
-          filePath,
-          fileType: "asciidoc",
-          query: "headings",
-          data: headings,
-        };
-      }
-      case "links": {
-        const links = await this.getLinksFromFile(filePath);
-        return {
-          filePath,
-          fileType: "asciidoc",
-          query: "links",
-          data: links,
-        };
-      }
-      case "code_blocks": {
-        const codeBlocks = await this.getCodeBlocksFromFile(filePath);
-        return {
-          filePath,
-          fileType: "asciidoc",
-          query: "code_blocks",
-          data: codeBlocks,
-        };
-      }
-      default: {
-        const { ast } = await this.read(filePath);
-        return {
-          filePath,
-          fileType: "asciidoc",
-          query: "full",
-          data: ast,
-        };
-      }
-    }
+    const { query, reader } = asciidocQueryFor(queryType);
+    return {
+      filePath,
+      fileType: "asciidoc",
+      query,
+      data: await reader.data({ handler: this, filePath, depth: options?.depth }),
+    };
   }
 
   /**
@@ -258,216 +279,9 @@ export class AsciidocHandler extends BaseHandler {
     }
 
     // Serialize blocks
-    this.serializeBlocks({ blocks: doc.blocks, lines, depth: 0 });
+    serializeBlocks({ blocks: doc.blocks, lines, depth: 0 });
 
     return lines.join("\n");
-  }
-
-  private serializeBlocks(params: {
-    blocks: AsciidocBlock[];
-    lines: string[];
-    depth: number;
-  }): void {
-    const { blocks, lines, depth } = params;
-
-    for (const block of blocks) {
-      this.serializeBlock({ block, lines, depth });
-    }
-  }
-
-  private serializeBlock(params: {
-    block: AsciidocBlock;
-    lines: string[];
-    depth: number;
-  }): void {
-    const { block, lines, depth } = params;
-    const context = block.context;
-
-    switch (context) {
-      case "preamble":
-        // Preamble contains nested blocks
-        if (block.blocks) {
-          this.serializeBlocks({ blocks: block.blocks, lines, depth });
-        }
-        break;
-
-      case "section":
-        // Section heading: == Title (level 1 = ==, level 2 = ===, etc.)
-        if (block.title) {
-          const level = block.level ?? 1;
-          const prefix = "=".repeat(level + 1);
-          lines.push(`${prefix} ${block.title}`);
-          lines.push("");
-        }
-        // Serialize nested blocks
-        if (block.blocks) {
-          this.serializeBlocks({ blocks: block.blocks, lines, depth: depth + 1 });
-        }
-        break;
-
-      case "paragraph":
-        // Paragraph: prefer source (preserves markers), fallback to lines or text
-        if (block.source) {
-          lines.push(block.source);
-          lines.push("");
-        } else if (block.lines && block.lines.length > 0) {
-          lines.push(block.lines.join("\n"));
-          lines.push("");
-        } else if (block.text) {
-          lines.push(block.text);
-          lines.push("");
-        }
-        break;
-
-      case "listing":
-        // Code block: [source,lang]\n----\ncode\n----
-        if (block.style === "source" && block.attributes?.language) {
-          lines.push(`[source,${block.attributes.language}]`);
-        }
-        lines.push("----");
-        // Support both lines array and source string (from read)
-        if (block.lines) {
-          lines.push(block.lines.join("\n"));
-        } else if (block.source) {
-          lines.push(block.source);
-        }
-        lines.push("----");
-        lines.push("");
-        break;
-
-      case "literal":
-        // Literal block: ....\ntext\n....
-        lines.push("....");
-        // Support both lines array and source string (from read)
-        if (block.lines) {
-          lines.push(block.lines.join("\n"));
-        } else if (block.source) {
-          lines.push(block.source);
-        }
-        lines.push("....");
-        lines.push("");
-        break;
-
-      case "ulist":
-        this.serializeListItems({ block, lines, depth, defaultMarker: "*" });
-        break;
-
-      case "olist":
-        this.serializeListItems({ block, lines, depth, defaultMarker: "." });
-        break;
-
-      case "quote":
-        // Quote block: [quote]\n____\ntext\n____
-        if (block.style) {
-          lines.push(`[${block.style}]`);
-        }
-        lines.push("____");
-        if (block.lines) {
-          lines.push(block.lines.join("\n"));
-        }
-        if (block.blocks) {
-          this.serializeBlocks({ blocks: block.blocks, lines, depth: depth + 1 });
-        }
-        lines.push("____");
-        lines.push("");
-        break;
-
-      case "sidebar":
-        // Sidebar: ****\ntext\n****
-        lines.push("****");
-        if (block.lines) {
-          lines.push(block.lines.join("\n"));
-        }
-        if (block.blocks) {
-          this.serializeBlocks({ blocks: block.blocks, lines, depth: depth + 1 });
-        }
-        lines.push("****");
-        lines.push("");
-        break;
-
-      case "example":
-        // Example block: ====\ntext\n====
-        lines.push("====");
-        if (block.lines) {
-          lines.push(block.lines.join("\n"));
-        }
-        if (block.blocks) {
-          this.serializeBlocks({ blocks: block.blocks, lines, depth: depth + 1 });
-        }
-        lines.push("====");
-        lines.push("");
-        break;
-
-      case "admonition":
-        // Admonition: NOTE: text or [NOTE]\n====\ntext\n====
-        const admonitionType = block.style?.toUpperCase() ?? "NOTE";
-        if (block.lines && block.lines.length === 1) {
-          lines.push(`${admonitionType}: ${block.lines[0]}`);
-        } else {
-          lines.push(`[${admonitionType}]`);
-          lines.push("====");
-          if (block.lines) {
-            lines.push(block.lines.join("\n"));
-          }
-          // A multi-line admonition is parsed as a delimited block with its
-          // prose in nested blocks rather than in `lines`, so an arm that read
-          // only `lines` wrote `[WARNING]` and an empty `====` pair -- the body
-          // gone, and nothing said about it.
-          if (block.blocks) {
-            this.serializeBlocks({ blocks: block.blocks, lines, depth: depth + 1 });
-          }
-          lines.push("====");
-        }
-        lines.push("");
-        break;
-
-      default:
-        // Fallback: output lines if present
-        if (block.lines && block.lines.length > 0) {
-          lines.push(block.lines.join("\n"));
-          lines.push("");
-        }
-        // Handle nested blocks
-        if (block.blocks) {
-          this.serializeBlocks({ blocks: block.blocks, lines, depth: depth + 1 });
-        }
-    }
-  }
-
-
-  /**
-   * The items of a list, and whatever hangs off them.
-   *
-   * Ordered and unordered lists differ only in the marker to fall back on, so
-   * they share this. An item's nested blocks are serialised after its own line:
-   * a sub-list under a bullet is ordinary AsciiDoc, and the arm this replaces
-   * wrote the item text and stopped, so `ast_write` dropped every nested list
-   * without reporting anything. Each item carries the marker it was parsed
-   * with, so writing the nested list straight after its parent item reproduces
-   * the nesting the parser found.
-   */
-  private serializeListItems(params: {
-    block: AsciidocBlock;
-    lines: string[];
-    depth: number;
-    defaultMarker: string;
-  }): void {
-    const { block, lines, depth, defaultMarker } = params;
-    if (!block.blocks) return;
-
-    for (const item of block.blocks) {
-      if (item.context !== "list_item") continue;
-
-      const marker = item.marker ?? defaultMarker;
-      // Prefer source (raw AsciiDoc) over text (rendered HTML)
-      const text = item.source ?? item.text ?? item.lines?.join(" ") ?? "";
-      lines.push(`${marker} ${text}`);
-
-      if (item.blocks) {
-        this.serializeBlocks({ blocks: item.blocks, lines, depth: depth + 1 });
-      }
-    }
-    lines.push("");
   }
 
   /**
@@ -1323,21 +1137,6 @@ export class AsciidocHandler extends BaseHandler {
    */
   generate(params: { format: string; data: unknown }): string {
     const { format, data } = params;
-    switch (format) {
-      case "table":
-        return this.generateTable(data as Record<string, unknown>[]);
-      case "section":
-        return this.generateSection(data as { heading: string; depth?: number; content?: string });
-      case "list": {
-        const listData = data as { items: string[]; ordered?: boolean };
-        return this.generateList({ items: listData.items, options: { ordered: listData.ordered } });
-      }
-      case "code": {
-        const codeData = data as { content: string; lang?: string };
-        return this.generateCode({ content: codeData.content, lang: codeData.lang });
-      }
-      default:
-        throw new Error(`Unknown format: ${format}`);
-    }
+    return generateContent({ generator: this, format, data });
   }
 }
