@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  blockersAndRisks,
+  bulletSection,
   isTaskPhase,
   phaseSections,
   renderSections,
@@ -65,5 +67,26 @@ describe("statusLookup", () => {
 
   it.each(["ready", "toString", ""])("shows an unknown status %j as pending", (status) => {
     expect(statusLookup({ table: STATUS_STYLE, status })).toBe(STATUS_STYLE.pending);
+  });
+});
+
+describe("bulletSection", () => {
+  it("lists each item as a bullet", () => {
+    expect(bulletSection({ title: "Risks", items: ["a", "b"] })).toEqual({
+      heading: "Risks",
+      body: "- a\n- b",
+    });
+  });
+
+  it.each([
+    ["an empty list", []],
+    ["a missing list", undefined],
+  ])("says - None for %s", (_label, items) => {
+    expect(bulletSection({ title: "Risks", items })).toEqual({ heading: "Risks", body: "- None" });
+  });
+
+  it("renders Blockers then Risks at the level asked", () => {
+    const text = renderSections({ sections: blockersAndRisks({ blockers: ["x"], risks: [] }), level: 3 });
+    expect(text).toBe("### Blockers\n- x\n\n### Risks\n- None");
   });
 });

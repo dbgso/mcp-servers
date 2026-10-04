@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BaseActionHandler } from "mcp-shared";
 import type { PlanActionContext } from "../../../types/index.js";
-import { phaseSections, renderSections } from "../../../services/task-presentation.js";
+import { blockersAndRisks, phaseSections, renderSections } from "../../../services/task-presentation.js";
 
 const readOutputSchema = z.object({
   id: z.string().describe("Task ID"),
@@ -86,19 +86,7 @@ plan(action: "read_output", id: "<task-id>")
       lines.push("", renderSections({ sections, level: 2 }));
     }
 
-    // Add blockers and risks
-    if (output.blockers.length > 0) {
-      lines.push("", `## Blockers`);
-      for (const blocker of output.blockers) {
-        lines.push(`- ${blocker}`);
-      }
-    }
-    if (output.risks.length > 0) {
-      lines.push("", `## Risks`);
-      for (const risk of output.risks) {
-        lines.push(`- ${risk}`);
-      }
-    }
+    lines.push("", renderSections({ sections: blockersAndRisks(output), level: 2 }));
 
     // Add references
     lines.push("", `## References Used`, output.references_used.join(", ") || "(none)");

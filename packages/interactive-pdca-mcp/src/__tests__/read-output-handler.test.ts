@@ -125,6 +125,8 @@ describe("ReadOutputHandler", () => {
       const text = result.content[0].text;
       expect(text).toContain("# Task Output: Research Task");
       expect(text).toContain("**Phase:** plan");
+      // Empty blockers and risks still show their sections, as PENDING_REVIEW.md does.
+      expect(text).toContain("## Blockers\n- None\n\n## Risks\n- None");
       expect(text).toContain("## What");
       expect(text).toContain("Investigated the issue");
       expect(text).toContain("## Why");

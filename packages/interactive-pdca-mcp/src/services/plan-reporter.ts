@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type { Task, TaskOutput, FeedbackEntry } from "../types/index.js";
 import type { PlanReader } from "./plan-reader.js";
 import type { FeedbackReader } from "./feedback-reader.js";
-import { phaseSections, renderSections, reviewCommands } from "./task-presentation.js";
+import { blockersAndRisks, phaseSections, renderSections, reviewCommands } from "./task-presentation.js";
 import { renderTaskGraph } from "./task-graph.js";
 
 export class PlanReporter {
@@ -183,18 +183,7 @@ Approve: \`${reviewCommands(task.id).approve}\`
   }
 
   private formatBlockersRisks(output: TaskOutput): string {
-    const blockers = output.blockers?.length
-      ? output.blockers.map((b) => `- ${b}`).join("\n")
-      : "- None";
-    const risks = output.risks?.length
-      ? output.risks.map((r) => `- ${r}`).join("\n")
-      : "- None";
-
-    return `### Blockers
-${blockers}
-
-### Risks
-${risks}`;
+    return renderSections({ sections: blockersAndRisks(output), level: 3 });
   }
 
   async updateGraphFile(): Promise<void> {

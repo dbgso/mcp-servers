@@ -99,6 +99,28 @@ export function renderSections(params: { sections: Section[]; level: number }): 
   return sections.map((s) => `${hashes} ${s.heading}\n${s.body}`).join("\n\n");
 }
 
+/**
+ * A heading over a bulleted list, as a Section for renderSections. An empty
+ * list reads "- None" rather than dropping the section, so a reader can tell
+ * "there were none" from "this view does not show them".
+ */
+export function bulletSection(params: { title: string; items: readonly string[] | undefined }): Section {
+  const { title, items } = params;
+  const body = items?.length ? items.map((item) => `- ${item}`).join("\n") : "- None";
+  return { heading: title, body };
+}
+
+/** The Blockers and Risks sections every view of an output shows. */
+export function blockersAndRisks(params: {
+  blockers: readonly string[] | undefined;
+  risks: readonly string[] | undefined;
+}): Section[] {
+  return [
+    bulletSection({ title: "Blockers", items: params.blockers }),
+    bulletSection({ title: "Risks", items: params.risks }),
+  ];
+}
+
 /** Mermaid `style` for a task node, shared by GRAPH.md and `plan(action: "graph")`. */
 export const STATUS_STYLE: Record<TaskStatus, string> = {
   completed: "fill:#90EE90,stroke:#228B22",

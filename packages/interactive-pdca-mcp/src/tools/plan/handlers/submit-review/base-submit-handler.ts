@@ -7,6 +7,7 @@ import type {
   TaskPhase,
 } from "../../../../types/index.js";
 import { TASK_PHASES } from "../../../../types/index.js";
+import { blockersAndRisks, renderSections } from "../../../../services/task-presentation.js";
 
 /**
  * Base schema for all submit_review actions
@@ -218,11 +219,7 @@ ${output_why}
 ### How
 ${output_how}
 
-### Blockers
-${blockers.length > 0 ? blockers.map((b) => `- ${b}`).join("\n") : "None"}
-
-### Risks
-${risks.length > 0 ? risks.map((r) => `- ${r}`).join("\n") : "None"}
+${renderSections({ sections: blockersAndRisks({ blockers, risks }), level: 3 })}
 
 ### References
 ${references_used.map((r) => `- ${r}`).join("\n")}
