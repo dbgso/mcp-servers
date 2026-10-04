@@ -161,6 +161,12 @@ describe("FeedbackHandler (plan)", () => {
         expect(text).toContain("fb-002");
         expect(text).toContain("## ✅ Addressed");
         expect(text).toContain("fb-003");
+        // Sections come in a fixed order: draft, unaddressed, addressed.
+        const draftAt = text.indexOf("## 📝 Draft");
+        const unaddressedAt = text.indexOf("## ⚠️ Unaddressed");
+        const addressedAt = text.indexOf("## ✅ Addressed");
+        expect(draftAt).toBeLessThan(unaddressedAt);
+        expect(unaddressedAt).toBeLessThan(addressedAt);
       });
 
       it("should truncate long original feedback", async () => {
@@ -204,6 +210,9 @@ describe("FeedbackHandler (plan)", () => {
 
         const text = result.content[0].text;
         expect(text).toContain("A".repeat(80) + "...");
+        // Only the draft section has entries; the empty ones are left out.
+        expect(text).not.toContain("## ⚠️ Unaddressed");
+        expect(text).not.toContain("## ✅ Addressed");
       });
     });
 
