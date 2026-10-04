@@ -175,6 +175,26 @@ async function loadFromModule<T>(params: LoadModuleParams<T>): Promise<T> {
 }
 
 /**
+ * Load the map exported as `named` from a JSON or TS/JS module path. Both
+ * config files follow the same rules; only the export name differs.
+ */
+async function loadNamedMap<T extends object>(
+  params: LoadConfigParams & { named: string },
+): Promise<T> {
+  const { filePath, named } = params;
+  if (isJsonExt(filePath)) {
+    return loadJson<T>({ filePath, jsonReader: params.jsonReader ?? defaultJsonReader, what: named });
+  }
+  return loadFromModule<T>({
+    filePath,
+    importer: params.importer ?? defaultImporter,
+    named,
+    what: named,
+    fallback: {} as T,
+  });
+}
+
+/**
  * Load `tableMetadata` from a JSON or TS/JS module path.
  *
  * - `.json`: parsed directly. The file's contents must be the
@@ -183,21 +203,8 @@ async function loadFromModule<T>(params: LoadModuleParams<T>): Promise<T> {
  * - `.ts` / `.js`: dynamic-imported, must export a `tableMetadata` named
  *   export (or a default whose `.tableMetadata` is the map).
  */
-export async function loadMetadata(params: LoadConfigParams): Promise<TableMetadataMap> {
-  if (isJsonExt(params.filePath)) {
-    return loadJson<TableMetadataMap>({
-      filePath: params.filePath,
-      jsonReader: params.jsonReader ?? defaultJsonReader,
-      what: "tableMetadata",
-    });
-  }
-  return loadFromModule<TableMetadataMap>({
-    filePath: params.filePath,
-    importer: params.importer ?? defaultImporter,
-    named: "tableMetadata",
-    what: "tableMetadata",
-    fallback: {},
-  });
+export function loadMetadata(params: LoadConfigParams): Promise<TableMetadataMap> {
+  return loadNamedMap<TableMetadataMap>({ ...params, named: "tableMetadata" });
 }
 
 /**
@@ -205,21 +212,6 @@ export async function loadMetadata(params: LoadConfigParams): Promise<TableMetad
  *
  * Same shape rules as `loadMetadata` — JSON files contain the map directly.
  */
-export async function loadSelectableFields(
-  params: LoadConfigParams,
-): Promise<SelectableFieldsMap> {
-  if (isJsonExt(params.filePath)) {
-    return loadJson<SelectableFieldsMap>({
-      filePath: params.filePath,
-      jsonReader: params.jsonReader ?? defaultJsonReader,
-      what: "selectableFields",
-    });
-  }
-  return loadFromModule<SelectableFieldsMap>({
-    filePath: params.filePath,
-    importer: params.importer ?? defaultImporter,
-    named: "selectableFields",
-    what: "selectableFields",
-    fallback: {},
-  });
+export function loadSelectableFields(params: LoadConfigParams): Promise<SelectableFieldsMap> {
+  return loadNamedMap<SelectableFieldsMap>({ ...params, named: "selectableFields" });
 }
