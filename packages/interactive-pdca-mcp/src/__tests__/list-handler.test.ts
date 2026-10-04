@@ -150,6 +150,9 @@ describe("ListHandler", () => {
       expect(text).toContain("All tests pass");
       expect(text).toContain("PENDING_REVIEW.md");
       expect(text).toContain("GRAPH.md");
+      // The calls offered must be ones the tools accept
+      expect(text).toContain('approve(target: "task", task_id: "review-task")');
+      expect(text).toContain('plan(action: "request_changes", id: "review-task", comment: "<feedback>")');
     });
 
     it("should show in_progress tasks", async () => {

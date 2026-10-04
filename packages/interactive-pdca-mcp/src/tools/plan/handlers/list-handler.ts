@@ -5,6 +5,7 @@ import type {
   TaskSummary,
 } from "../../../types/index.js";
 import { formatParallel } from "./format-utils.js";
+import { reviewCommands } from "../../../services/task-presentation.js";
 
 const listSchema = z.object({});
 type ListArgs = z.infer<typeof listSchema>;
@@ -94,8 +95,8 @@ None required.
           output += `**Why**\n`;
           output += `- Completion criteria: ${task.completion_criteria || "(not set)"}\n\n`;
           output += `**How**\n`;
-          output += `- Approve: \`plan(action: "approve", id: "${t.id}")\`\n`;
-          output += `- Request changes: \`plan(action: "status", id: "${t.id}", status: "in_progress")\`\n\n`;
+          output += `- Approve: \`${reviewCommands(t.id).approve}\`\n`;
+          output += `- Request changes: \`${reviewCommands(t.id).requestChanges}\`\n\n`;
         }
       }
     }

@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type { Task, TaskOutput, TaskStatus, FeedbackEntry } from "../types/index.js";
 import type { PlanReader } from "./plan-reader.js";
 import type { FeedbackReader } from "./feedback-reader.js";
-import { phaseSections, renderSections, STATUS_STYLE, statusLookup } from "./task-presentation.js";
+import { phaseSections, renderSections, reviewCommands, STATUS_STYLE, statusLookup } from "./task-presentation.js";
 
 const STATUS_ICON: Record<TaskStatus, string> = {
   completed: "[done]",
@@ -133,7 +133,7 @@ ${contentSection}
 ${feedbackPart}
 ---
 
-Approve: \`approve(target: "task", id: "${task.id}")\`
+Approve: \`${reviewCommands(task.id).approve}\`
 
 ---
 
@@ -184,7 +184,7 @@ ${feedbackPart}
 
 **Completion criteria**: ${task.completion_criteria || "(not set)"}
 
-Approve: \`approve(target: "task", id: "${task.id}")\`
+Approve: \`${reviewCommands(task.id).approve}\`
 
 ---
 

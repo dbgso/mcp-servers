@@ -2,6 +2,7 @@ import { z } from "zod";
 import { BaseActionHandler } from "mcp-shared";
 import type { PlanActionContext } from "../../../types/index.js";
 import { getTaskPhase } from "./submit-review/base-submit-handler.js";
+import { reviewCommands } from "../../../services/task-presentation.js";
 
 const confirmSchema = z.object({
   id: z.string().describe("Task ID to confirm"),
@@ -127,8 +128,8 @@ ${evidence.map((e) => `- ${e}`).join("\n")}
 ---
 
 **Waiting for user approval.** User can:
-- \`approve(target: "task", task_id: "${id}")\` - Approve and complete
-- \`plan(action: "request_changes", id: "${id}", comment: "<feedback>")\` - Request changes
+- \`${reviewCommands(id).approve}\` - Approve and complete
+- \`${reviewCommands(id).requestChanges}\` - Request changes
 
 **Output summary:**
 ${updatedTask?.output || "(no output)"}`,
