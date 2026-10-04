@@ -1,29 +1,44 @@
 import { z } from "zod";
 import type { Problem, Report, ValidationResult } from "./types.js";
 
-/** A string that says something: whitespace alone does not count. */
-const text = z.string().trim().min(1, "must not be empty");
+/**
+ * A string that says something: whitespace alone does not count.
+ *
+ * A new schema per field, here and for the shared shapes below: the published
+ * JSON Schema turns a schema used twice into a `$ref` to its first use, which
+ * a caller reading the tool list then has to chase.
+ */
+const text = () => z.string().trim().min(1, "must not be empty");
 
 const evidenceSchema = z
   .object({
-    source: text.describe("What was run: a command, a file, a URL"),
-    output: text.describe("What it printed, verbatim -- never a summary"),
+    source: text().describe("What was run: a command, a file, a URL"),
+    output: text().describe("What it printed, verbatim -- never a summary"),
   })
   .strict();
 
 const claimSchema = z
   .object({
-    statement: text,
+    statement: text(),
     evidence: z.array(evidenceSchema).min(1, "at least one evidence is required"),
   })
   .strict();
 
 /** A comparison needs something to compare against, and each row says what speaks for and against it (R9). */
-const optionsSchema = z
-  .array(z.object({ label: text, pros: text.describe("What speaks for it"), cons: text.describe("What speaks against it") }).strict())
-  .min(2, "at least two options are required; a comparison needs an alternative");
+const optionsSchema = () =>
+  z
+    .array(
+      z
+        .object({
+          label: text(),
+          pros: text().describe("What speaks for it"),
+          cons: text().describe("What speaks against it"),
+        })
+        .strict(),
+    )
+    .min(2, "at least two options are required; a comparison needs an alternative");
 
-const pickSchema = z.object({ label: text, reason: text }).strict();
+const pickSchema = () => z.object({ label: text(), reason: text() }).strict();
 
 /** The picked label names a row of the comparison, or the reader cannot tell which one it is. */
 function picksAnOption(params: { options: { label: string }[]; picked: { label: string } }): boolean {
@@ -36,24 +51,24 @@ const PICK_MISSES = "must be the label of one of the options";
 const decisionSchema = z
   .object({
     kind: z.literal("decision"),
-    what: text,
-    options: optionsSchema,
-    recommendation: pickSchema,
+    what: text(),
+    options: optionsSchema(),
+    recommendation: pickSchema(),
   })
   .strict();
 
 const actionSchema = z
   .object({
     kind: z.literal("action"),
-    what: text,
+    what: text(),
   })
   .strict();
 
 const decisionMadeSchema = z
   .object({
-    what: text,
-    options: optionsSchema,
-    chosen: pickSchema,
+    what: text(),
+    options: optionsSchema(),
+    chosen: pickSchema(),
   })
   .strict()
   .refine((decision) => picksAnOption({ options: decision.options, picked: decision.chosen }), {
@@ -79,22 +94,22 @@ const askSchema = z
  */
 export const reportSchema = z
   .object({
-    title: text.describe("What the report is about"),
-    conclusion: text.describe("R1: what is finished, or what the reader has to decide"),
-    background: text.describe("R7: why the work was done -- who asked for what, or what you noticed"),
+    title: text().describe("What the report is about"),
+    conclusion: text().describe("R1: what is finished, or what the reader has to decide"),
+    background: text().describe("R7: why the work was done -- who asked for what, or what you noticed"),
     impact: z
       .object({
-        ifLeft: text.describe("R10: what happens if the work is not done"),
+        ifLeft: text().describe("R10: what happens if the work is not done"),
         scope: z
           .array(
             z
               .object({
-                who: text.describe("Who is affected"),
-                what: text.describe("What changes for them"),
-                when: text.describe("From when, e.g. after the PR is merged"),
-                where: text.describe("Where: a file, a tool, a screen"),
-                why: text.describe("Why it changes"),
-                how: text.describe("What the affected party has to do"),
+                who: text().describe("Who is affected"),
+                what: text().describe("What changes for them"),
+                when: text().describe("From when, e.g. after the PR is merged"),
+                where: text().describe("Where: a file, a tool, a screen"),
+                why: text().describe("Why it changes"),
+                how: text().describe("What the affected party has to do"),
               })
               .strict(),
           )
@@ -106,13 +121,13 @@ export const reportSchema = z
     asks: z.array(askSchema).describe("R4: what the reader has to decide or do; [] when nothing"),
     decisions: z.array(decisionMadeSchema).describe("R8, R9: what you decided on your own, with every option weighed; [] when nothing"),
     corrections: z
-      .array(z.object({ said: text, actually: text, why: text }).strict())
+      .array(z.object({ said: text(), actually: text(), why: text() }).strict())
       .optional()
       .describe("R6: something said earlier that was wrong"),
-    changes: z.array(z.object({ what: text, before: text, after: text }).strict()).optional(),
-    remaining: z.array(z.object({ item: text, why: text }).strict()).optional().describe("Work still on your side"),
+    changes: z.array(z.object({ what: text(), before: text(), after: text() }).strict()).optional(),
+    remaining: z.array(z.object({ item: text(), why: text() }).strict()).optional().describe("Work still on your side"),
     asides: z
-      .array(z.object({ note: text, cost: text }).strict())
+      .array(z.object({ note: text(), cost: text() }).strict())
       .optional()
       .describe("R5: findings that are not the subject; cost is what leaving them costs"),
   })
