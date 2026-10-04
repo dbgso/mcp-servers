@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseBoolean, looseNumber } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { Project, Node, SyntaxKind } from "ts-morph";
 import type {
@@ -26,13 +26,15 @@ interface TextEdit {
 
 const ParamsToObjectSchema = z.object({
   file_path: z.string().describe("File containing the function"),
-  line: z.number().describe("Line number of the function (1-based)"),
-  column: z.number().describe("Column number (1-based)"),
-  dry_run: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Preview without modifying (default: true)"),
+  line: looseNumber(z.number().describe("Line number of the function (1-based)")),
+  column: looseNumber(z.number().describe("Column number (1-based)")),
+  dry_run: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Preview without modifying (default: true)"),
+  ),
 });
 
 type ParamsToObjectArgs = z.infer<typeof ParamsToObjectSchema>;

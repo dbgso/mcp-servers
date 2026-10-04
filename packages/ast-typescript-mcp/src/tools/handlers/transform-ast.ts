@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseBoolean } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { QueryEngine, QUERY_PRESETS } from "../../query/engine.js";
 import type { AstQuery, AstQueryBase, QueryMatch, CapturedNode } from "../../query/engine.js";
@@ -59,7 +59,7 @@ const AstQuerySchema: z.ZodType<AstQuery> = AstQueryBaseSchema.refine(
 
 const ImportSpecSchema = z.object({
   from: z.string().describe("Module path (e.g., 'mcp-shared')"),
-  named: z.array(z.string()).optional().describe("Named exports to import"),
+  named: looseArray(z.array(z.string()).optional().describe("Named exports to import")),
   default: z.string().optional().describe("Default import name"),
 });
 
@@ -71,7 +71,7 @@ const PropertyMappingSchema = z.object({
 const MethodMappingSchema = z.object({
   from: z.string(),
   to: z.string(),
-  add_params: z.array(z.string()).optional(),
+  add_params: looseArray(z.array(z.string()).optional()),
 });
 
 const TransformAstSchema = z.object({
@@ -89,21 +89,21 @@ const TransformAstSchema = z.object({
     "instanceof_error_ternary",
   ]).optional().describe("Use a preset query"),
   replacement: z.string().optional().describe("Replacement template using ${capture} syntax"),
-  add_imports: z.array(ImportSpecSchema).optional().describe("Imports to add when replacement is applied"),
+  add_imports: looseArray(z.array(ImportSpecSchema).optional().describe("Imports to add when replacement is applied")),
 
   // Preset-based transformation (class_to_object)
   preset: z.enum(["class_to_object"]).optional().describe("Predefined transformation"),
   class_pattern: z.string().optional().describe("Regex for class names (class_to_object)"),
-  property_mappings: z.array(PropertyMappingSchema).optional(),
-  method_mappings: z.array(MethodMappingSchema).optional(),
-  remove_properties: z.array(z.string()).optional(),
+  property_mappings: looseArray(z.array(PropertyMappingSchema).optional()),
+  method_mappings: looseArray(z.array(MethodMappingSchema).optional()),
+  remove_properties: looseArray(z.array(z.string()).optional()),
   additions: z.record(z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]))).optional(),
   target_type: z.string().optional(),
 
   // Common options
-  include: z.array(z.string()).optional().default(["**/*.ts", "**/*.tsx"]),
-  exclude: z.array(z.string()).optional().default(["**/node_modules/**", "**/*.d.ts", "**/__tests__/**"]),
-  dry_run: z.boolean().optional().default(true).describe("Preview without modifying (default: true)"),
+  include: looseArray(z.array(z.string()).optional().default(["**/*.ts", "**/*.tsx"])),
+  exclude: looseArray(z.array(z.string()).optional().default(["**/node_modules/**", "**/*.d.ts", "**/__tests__/**"])),
+  dry_run: looseBoolean(z.boolean().optional().default(true).describe("Preview without modifying (default: true)")),
 }).refine(
   (data) => data.query !== undefined || data.query_preset !== undefined || data.preset !== undefined,
   { message: "Either 'query', 'query_preset', or 'preset' must be provided" }

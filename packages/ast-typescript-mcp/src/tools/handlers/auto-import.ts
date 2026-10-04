@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseBoolean } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 
@@ -8,11 +8,13 @@ const AutoImportSchema = z.object({
   file_path: z
     .string()
     .describe("Absolute path to the TypeScript file to fix missing imports"),
-  dry_run: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Preview changes without modifying files (default: true)"),
+  dry_run: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Preview changes without modifying files (default: true)"),
+  ),
 });
 
 type AutoImportArgs = z.infer<typeof AutoImportSchema>;

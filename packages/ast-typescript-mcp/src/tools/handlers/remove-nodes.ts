@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseBoolean, looseNumber } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { Project, Node, SyntaxKind } from "ts-morph";
 import type { SourceFile } from "ts-morph";
@@ -25,7 +25,7 @@ const RemoveCallBlockTargetSchema = z.object({
 
 const RemoveStatementAtLineTargetSchema = z.object({
   type: z.literal("statement_at_line"),
-  line: z.number().describe("Line number (1-based) - use as fallback"),
+  line: looseNumber(z.number().describe("Line number (1-based) - use as fallback")),
 });
 
 const RemoveTargetSchema = z.discriminatedUnion("type", [
@@ -36,12 +36,14 @@ const RemoveTargetSchema = z.discriminatedUnion("type", [
 
 const TsRemoveNodesSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file"),
-  targets: z.array(RemoveTargetSchema).min(1).describe("Nodes to remove"),
-  dry_run: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Preview changes without modifying file (default: true)"),
+  targets: looseArray(z.array(RemoveTargetSchema).min(1).describe("Nodes to remove")),
+  dry_run: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Preview changes without modifying file (default: true)"),
+  ),
 });
 
 type TsRemoveNodesArgs = z.infer<typeof TsRemoveNodesSchema>;

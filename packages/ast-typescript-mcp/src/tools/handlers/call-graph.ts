@@ -1,15 +1,15 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseBoolean, looseNumber } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 
 const CallGraphSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file"),
-  line: z.number().describe("Line number of the function/method (1-based)"),
-  column: z.number().describe("Column number (1-based)"),
-  max_depth: z.number().optional().default(5).describe("Maximum depth to traverse (default: 5)"),
-  include_external: z.boolean().optional().default(false).describe("Include calls to node_modules (default: false)"),
+  line: looseNumber(z.number().describe("Line number of the function/method (1-based)")),
+  column: looseNumber(z.number().describe("Column number (1-based)")),
+  max_depth: looseNumber(z.number().optional().default(5).describe("Maximum depth to traverse (default: 5)")),
+  include_external: looseBoolean(z.boolean().optional().default(false).describe("Include calls to node_modules (default: false)")),
 });
 
 type CallGraphArgs = z.infer<typeof CallGraphSchema>;

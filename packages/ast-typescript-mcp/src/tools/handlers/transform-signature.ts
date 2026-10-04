@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseBoolean, looseNumber } from "mcp-shared";
 import type { ToolResponse, BatchContext, BatchChange } from "../types.js";
 import { Project, Node } from "ts-morph";
 import { acquireFileLock, releaseFileLock } from "../../utils/file-lock.js";
@@ -19,22 +19,26 @@ import type {
 
 const TransformSignatureSchema = z.object({
   file_path: z.string().describe("File containing the function"),
-  line: z.number().describe("Line number of the function (1-based)"),
-  column: z.number().describe("Column number (1-based)"),
-  new_params: z
-    .array(
-      z.object({
-        name: z.string(),
-        type: z.string(),
-        optional: z.boolean().optional().default(false),
-      })
-    )
-    .describe("New parameter definitions as object properties"),
-  dry_run: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Preview without modifying (default: true)"),
+  line: looseNumber(z.number().describe("Line number of the function (1-based)")),
+  column: looseNumber(z.number().describe("Column number (1-based)")),
+  new_params: looseArray(
+    z
+      .array(
+        z.object({
+          name: z.string(),
+          type: z.string(),
+          optional: looseBoolean(z.boolean().optional().default(false)),
+        })
+      )
+      .describe("New parameter definitions as object properties"),
+  ),
+  dry_run: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Preview without modifying (default: true)"),
+  ),
 });
 
 type TransformSignatureArgs = z.infer<typeof TransformSignatureSchema>;

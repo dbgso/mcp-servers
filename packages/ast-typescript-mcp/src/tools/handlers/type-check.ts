@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseBoolean } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 
@@ -8,11 +8,13 @@ const TypeCheckSchema = z.object({
   file_path: z
     .string()
     .describe("Absolute path to the TypeScript file to type check"),
-  include_suggestions: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("Include suggestion diagnostics (default: false)"),
+  include_suggestions: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Include suggestion diagnostics (default: false)"),
+  ),
 });
 
 type TypeCheckArgs = z.infer<typeof TypeCheckSchema>;

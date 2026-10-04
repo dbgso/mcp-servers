@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseBoolean, looseNumber } from "mcp-shared";
 import type { ToolResponse, BatchContext, BatchChange } from "../types.js";
 import { Project, Node } from "ts-morph";
 import type { SourceFile, CallExpression } from "ts-morph";
@@ -8,16 +8,20 @@ import { acquireFileLock, releaseFileLock } from "../../utils/file-lock.js";
 
 const TransformCallSiteSchema = z.object({
   file_path: z.string().describe("File containing the call site"),
-  line: z.number().describe("Line number of the call (1-based)"),
-  column: z.number().describe("Column number (1-based)"),
-  param_names: z
-    .array(z.string())
-    .describe("Parameter names in order (e.g., ['name', 'age', 'country'])"),
-  dry_run: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Preview without modifying (default: true)"),
+  line: looseNumber(z.number().describe("Line number of the call (1-based)")),
+  column: looseNumber(z.number().describe("Column number (1-based)")),
+  param_names: looseArray(
+    z
+      .array(z.string())
+      .describe("Parameter names in order (e.g., ['name', 'age', 'country'])"),
+  ),
+  dry_run: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Preview without modifying (default: true)"),
+  ),
 });
 
 type TransformCallSiteArgs = z.infer<typeof TransformCallSiteSchema>;

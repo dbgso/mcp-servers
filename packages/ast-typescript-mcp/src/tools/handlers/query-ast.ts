@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseNumber } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { Project, Node, SyntaxKind } from "ts-morph";
 import type { SourceFile } from "ts-morph";
@@ -187,12 +187,12 @@ const QueryAstSchema = z.object({
     "dynamic_import",
     "require",
   ]).optional().describe("Use a preset query instead of custom query"),
-  limit: z.number().optional().default(100).describe("Maximum matches to return (default: 100)"),
+  limit: looseNumber(z.number().optional().default(100).describe("Maximum matches to return (default: 100)")),
   output: z.enum(["full", "compact", "summary"]).optional().default("full").describe(
     "Output mode: full (default, max 200 chars), compact (first line only), summary (file+line+kind only)"
   ),
-  include: z.array(z.string()).optional().default(["**/*.ts", "**/*.tsx"]).describe("Glob patterns to include"),
-  exclude: z.array(z.string()).optional().default(["**/node_modules/**", "**/*.d.ts"]).describe("Glob patterns to exclude"),
+  include: looseArray(z.array(z.string()).optional().default(["**/*.ts", "**/*.tsx"]).describe("Glob patterns to include")),
+  exclude: looseArray(z.array(z.string()).optional().default(["**/node_modules/**", "**/*.d.ts"]).describe("Glob patterns to exclude")),
 }).refine(
   (data) => data.query !== undefined || data.preset !== undefined,
   { message: "Either 'query' or 'preset' must be provided" }

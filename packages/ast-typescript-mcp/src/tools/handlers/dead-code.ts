@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseBoolean } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler } from "../../handlers/index.js";
 
 const DeadCodeSchema = z.object({
   path: z.string().optional().describe("Single path to analyze (alternative to paths)"),
-  paths: z.array(z.string()).optional().describe("Absolute path(s) to files or directories to analyze"),
-  include_tests: z.boolean().optional().default(false).describe("Include test files in analysis (default: false)"),
-  entry_points: z.array(z.string()).optional().default([]).describe("Glob patterns for entry points (exports from these files are considered used)"),
+  paths: looseArray(z.array(z.string()).optional().describe("Absolute path(s) to files or directories to analyze")),
+  include_tests: looseBoolean(z.boolean().optional().default(false).describe("Include test files in analysis (default: false)")),
+  entry_points: looseArray(z.array(z.string()).optional().default([]).describe("Glob patterns for entry points (exports from these files are considered used)")),
   scope: z.enum(["all", "exports", "private_members"]).optional().default("all").describe("Scope of analysis: 'all' (default), 'exports' only, or 'private_members' only"),
   reference_scope: z.enum(["paths", "project"]).optional().default("project").describe(
     "Where to check for references: 'project' (default, check entire project - avoids false positives), 'paths' (only check within given paths)"

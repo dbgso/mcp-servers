@@ -1,20 +1,22 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseBoolean, looseNumber } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 
 const FindReferencesSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file containing the symbol definition"),
-  line: z.number().describe("Line number of the symbol (1-based)"),
-  column: z.number().describe("Column number of the symbol (1-based)"),
+  line: looseNumber(z.number().describe("Line number of the symbol (1-based)")),
+  column: looseNumber(z.number().describe("Column number of the symbol (1-based)")),
   scope: z.enum(["all", "dependents", "same_package"]).optional().default("all").describe(
     "Search scope: 'all' (everywhere), 'dependents' (only dependent packages), 'same_package' (only current package)"
   ),
-  scope_to_dependents: z
-    .boolean()
-    .optional()
-    .describe("[Deprecated: use scope='dependents'] Only search in packages that depend on the target package"),
+  scope_to_dependents: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .describe("[Deprecated: use scope='dependents'] Only search in packages that depend on the target package"),
+  ),
 });
 
 type FindReferencesArgs = z.infer<typeof FindReferencesSchema>;

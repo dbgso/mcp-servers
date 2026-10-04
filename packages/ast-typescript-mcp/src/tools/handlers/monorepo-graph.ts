@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseBoolean } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import {
   detectWorkspace,
@@ -12,11 +12,13 @@ const MonorepoGraphSchema = z.object({
   root_dir: z
     .string()
     .describe("Monorepo root directory (or any directory within the monorepo)"),
-  include_dev: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Include devDependencies edges (default: true)"),
+  include_dev: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Include devDependencies edges (default: true)"),
+  ),
 });
 
 type MonorepoGraphArgs = z.infer<typeof MonorepoGraphSchema>;

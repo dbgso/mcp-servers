@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseArray, looseBoolean } from "mcp-shared";
 import type { ToolResponse, BatchChange, BatchOperationResult } from "../types.js";
 import { Project } from "ts-morph";
 import type { SourceFile } from "ts-morph";
@@ -19,19 +19,23 @@ const OperationSchema = z.object({
 });
 
 const BatchExecuteSchema = z.object({
-  operations: z
-    .array(OperationSchema)
-    .min(1)
-    .describe("List of operations to execute in order"),
+  operations: looseArray(
+    z
+      .array(OperationSchema)
+      .min(1)
+      .describe("List of operations to execute in order"),
+  ),
   mode: z
     .enum(["preview", "execute"])
     .default("preview")
     .describe("preview: dry run all operations, execute: apply changes"),
-  stop_on_error: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe("Stop execution on first error (default: true)"),
+  stop_on_error: looseBoolean(
+    z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Stop execution on first error (default: true)"),
+  ),
 });
 
 type BatchExecuteArgs = z.infer<typeof BatchExecuteSchema>;

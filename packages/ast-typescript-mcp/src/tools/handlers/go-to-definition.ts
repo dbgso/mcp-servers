@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseNumber } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 
 const GoToDefinitionSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file"),
-  line: z.number().describe("Line number (1-based)"),
-  column: z.number().describe("Column number (1-based)"),
+  line: looseNumber(z.number().describe("Line number (1-based)")),
+  column: looseNumber(z.number().describe("Column number (1-based)")),
 });
 
 type GoToDefinitionArgs = z.infer<typeof GoToDefinitionSchema>;
