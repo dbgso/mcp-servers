@@ -8,6 +8,7 @@ import type { Root as MdastRoot, Heading, Code, List, Link, Text, ListItem } fro
 import type { GoToDefinitionResult, DefinitionLocation } from "mcp-shared";
 import { BaseHandler } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
+import { generateContent, type ContentGenerator } from "./content-format.js";
 import { diffStructures, displayText, getErrorMessage } from "mcp-shared";
 import type {
   AstReadResult,
@@ -31,7 +32,63 @@ import type {
 } from "../types/index.js";
 import type { RootContent } from "mdast";
 
-export class MarkdownHandler extends BaseHandler {
+/** What one `query` type reads from a parsed Markdown tree. */
+interface MarkdownQuery {
+  data(params: { handler: MarkdownHandler; ast: MdastRoot; depth?: number }): QueryResult["data"];
+}
+
+class FullQuery implements MarkdownQuery {
+  data(params: { ast: MdastRoot }): QueryResult["data"] {
+    return params.ast;
+  }
+}
+
+class HeadingsQuery implements MarkdownQuery {
+  data(params: { handler: MarkdownHandler; ast: MdastRoot; depth?: number }): QueryResult["data"] {
+    const { handler, ast, depth } = params;
+    return handler.getHeadings({ ast, maxDepth: depth });
+  }
+}
+
+class CodeBlocksQuery implements MarkdownQuery {
+  data(params: { handler: MarkdownHandler; ast: MdastRoot }): QueryResult["data"] {
+    const { handler, ast } = params;
+    return handler.getCodeBlocks(ast);
+  }
+}
+
+class ListsQuery implements MarkdownQuery {
+  data(params: { handler: MarkdownHandler; ast: MdastRoot }): QueryResult["data"] {
+    const { handler, ast } = params;
+    return handler.getLists(ast);
+  }
+}
+
+class LinksQuery implements MarkdownQuery {
+  data(params: { handler: MarkdownHandler; ast: MdastRoot }): QueryResult["data"] {
+    const { handler, ast } = params;
+    return handler.getLinks(ast);
+  }
+}
+
+const MARKDOWN_QUERIES: Record<QueryType, MarkdownQuery> = {
+  full: new FullQuery(),
+  headings: new HeadingsQuery(),
+  code_blocks: new CodeBlocksQuery(),
+  lists: new ListsQuery(),
+  links: new LinksQuery(),
+};
+
+/**
+ * The schema admits only the keys above. Anything else can only come from
+ * inside the process, and the whole tree is the answer that loses nothing.
+ */
+function markdownQueryFor(queryType: string): { query: QueryType; reader: MarkdownQuery } {
+  const query = Object.hasOwn(MARKDOWN_QUERIES, queryType) ? (queryType as QueryType) : "full";
+  return { query, reader: MARKDOWN_QUERIES[query] };
+}
+
+export class MarkdownHandler extends BaseHandler implements ContentGenerator {
   readonly extensions = ["md", "markdown"];
   readonly fileType = "markdown";
 
@@ -67,43 +124,13 @@ export class MarkdownHandler extends BaseHandler {
       };
     }
 
-    switch (queryType) {
-      case "headings":
-        return {
-          filePath,
-          fileType: "markdown",
-          query: "headings",
-          data: this.getHeadings({ ast, maxDepth: options?.depth }),
-        };
-      case "code_blocks":
-        return {
-          filePath,
-          fileType: "markdown",
-          query: "code_blocks",
-          data: this.getCodeBlocks(ast),
-        };
-      case "lists":
-        return {
-          filePath,
-          fileType: "markdown",
-          query: "lists",
-          data: this.getLists(ast),
-        };
-      case "links":
-        return {
-          filePath,
-          fileType: "markdown",
-          query: "links",
-          data: this.getLinks(ast),
-        };
-      default:
-        return {
-          filePath,
-          fileType: "markdown",
-          query: "full",
-          data: ast,
-        };
-    }
+    const { query, reader } = markdownQueryFor(queryType);
+    return {
+      filePath,
+      fileType: "markdown",
+      query,
+      data: reader.data({ handler: this, ast, depth: options?.depth }),
+    };
   }
 
   getHeadings(params: { ast: MdastRoot; maxDepth?: number }): HeadingSummary[] {
@@ -1028,21 +1055,6 @@ export class MarkdownHandler extends BaseHandler {
    */
   generate(params: { format: string; data: unknown }): string {
     const { format, data } = params;
-    switch (format) {
-      case "table":
-        return this.generateTable(data as Record<string, unknown>[]);
-      case "section":
-        return this.generateSection(data as { heading: string; depth?: number; content?: string });
-      case "list": {
-        const listData = data as { items: string[]; ordered?: boolean };
-        return this.generateList({ items: listData.items, options: { ordered: listData.ordered } });
-      }
-      case "code": {
-        const codeData = data as { content: string; lang?: string };
-        return this.generateCode({ content: codeData.content, lang: codeData.lang });
-      }
-      default:
-        throw new Error(`Unknown format: ${format}`);
-    }
+    return generateContent({ generator: this, format, data });
   }
 }

@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, symlink } from "node:fs/promises";
 import { MarkdownHandler } from "../handlers/markdown.js";
 import { AsciidocHandler } from "../handlers/asciidoc.js";
 import { AstReadHandler } from "../tools/handlers/ast-read.js";
@@ -62,6 +62,15 @@ describe("a query type outside the schema", () => {
 
     expect(result.query).toBe("full");
     expect((result.data as { type: string }).type).toBe("root");
+  });
+
+  it("does the same for AsciiDoc", async () => {
+    const path = await file({ name: "a.adoc", content: "= A\n\ntext\n" });
+
+    const result = await adoc.query({ filePath: path, queryType: "unknown" as QueryType });
+
+    expect(result.query).toBe("full");
+    expect((result.data as { type: string }).type).toBe("asciidoc");
   });
 });
 
@@ -170,5 +179,21 @@ describe("a cross-reference written with the other format's extension", () => {
     const parsed = JSON.parse(text(result)) as FindBacklinksResult;
 
     expect(parsed.backlinks).toHaveLength(1);
+  });
+});
+
+describe("a symbolic link in a searched directory", () => {
+  // `Dirent.isFile()` is false for a link, so neither handler follows one:
+  // a linked document is listed where it lives, not again under the link.
+  it.each([
+    ["Markdown", md, "a.md", "link.md"],
+    ["AsciiDoc", adoc, "a.adoc", "link.adoc"],
+  ] as const)("is not listed by %s", async (_name, handler, target, link) => {
+    const path = await file({ name: target, content: "# A\n" });
+    await symlink(path, join(dir, link));
+
+    const found = await handler.findFiles({ directory: dir });
+
+    expect(found).toEqual([path]);
   });
 });
