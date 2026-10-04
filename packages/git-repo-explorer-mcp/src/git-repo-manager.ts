@@ -132,8 +132,11 @@ export async function ensureRepo(repoUrl: string): Promise<string> {
 }
 
 /**
- * Parse git grep output into structured matches.
- * Expected format: "<ref>:<file>:<line>:<content>"
+ * Parse `git grep -n -z` output into structured matches.
+ * Expected format: "<ref>:<file>\0<line>\0<content>"
+ *
+ * `-z` ends the file name and the line number with NUL instead of `:`, so a
+ * file name that contains a colon is not split in the wrong place.
  */
 export function parseGitGrepOutput(params: { output: string; ref: string }): GrepMatch[] {
   const { output, ref } = params;
@@ -146,27 +149,18 @@ export function parseGitGrepOutput(params: { output: string; ref: string }): Gre
   const refPrefix = `${ref}:`;
 
   for (const line of lines) {
-    // Format: ref:file:lineNumber:content
     if (!line.startsWith(refPrefix)) {
       continue;
     }
 
-    const afterRef = line.slice(refPrefix.length);
-    // Find the first colon-separated number to split file:line:content
-    const firstColon = afterRef.indexOf(":");
-    if (firstColon === -1) continue;
+    const [file, lineNumber, ...content] = line.slice(refPrefix.length).split("\0");
+    // A line without both separators is not a match line this parser can place
+    if (content.length === 0) continue;
 
-    const remaining = afterRef.slice(firstColon + 1);
-    const secondColon = remaining.indexOf(":");
-    if (secondColon === -1) continue;
-
-    const file = afterRef.slice(0, firstColon);
-    const lineNum = Number.parseInt(remaining.slice(0, secondColon), 10);
-    const content = remaining.slice(secondColon + 1);
-
+    const lineNum = Number.parseInt(lineNumber, 10);
     if (Number.isNaN(lineNum)) continue;
 
-    matches.push({ file, line: lineNum, content });
+    matches.push({ file, line: lineNum, content: content.join("\0") });
   }
 
   return matches;
@@ -185,7 +179,8 @@ export async function gitGrep(params: {
   const ref = options.ref ?? "HEAD";
   const maxCount = Math.min(options.max_count ?? 100, 500);
 
-  const args = ["grep", "-n"];
+  // -z: NUL after the file name and line number, see parseGitGrepOutput
+  const args = ["grep", "-n", "-z"];
   if (options.ignore_case) {
     args.push("-i");
   }
