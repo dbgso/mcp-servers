@@ -394,6 +394,12 @@ describe("db-codegen-mcp server", () => {
       expect(load).not.toHaveBeenCalled();
     });
 
+    it("fails on an empty --env-file instead of ignoring it", async () => {
+      // Matches db-read-mcp: a named env file is loaded, and an empty name is
+      // not a file. Before the shared bootstrap this was silently skipped.
+      await expect(startServer(["--env-file", ""])).rejects.toThrow(/Env file not found/);
+    });
+
     it("accepts argv array form and parses --env-file", async () => {
       vi.spyOn(console, "error").mockImplementation(() => {});
       const { Server } = await import(
