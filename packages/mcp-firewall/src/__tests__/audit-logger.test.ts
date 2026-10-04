@@ -78,7 +78,7 @@ describe("AuditLogger", () => {
     });
   });
 
-  describe("logAllow", () => {
+  describe("logExecuted", () => {
     test("should log allow action with rule", () => {
       const logger = new AuditLogger(logFile);
       const rule: Rule = {
@@ -88,7 +88,14 @@ describe("AuditLogger", () => {
         toolPattern: "browser_*",
       };
 
-      logger.logAllow({ toolName: "browser_click", args: { ref: "btn-1" }, rule: rule, reason: "Matched rule-1" });
+      logger.logExecuted({
+        toolName: "browser_click",
+        args: { ref: "btn-1" },
+        action: "allow",
+        rule: rule,
+        reason: "Matched rule-1",
+        dryRun: false,
+      });
 
       const content = readFileSync(logFile, "utf-8");
       const entry = JSON.parse(content.trim());
@@ -99,12 +106,20 @@ describe("AuditLogger", () => {
       expect(entry.ruleId).toBe("rule-1");
       expect(entry.reason).toBe("Matched rule-1");
       expect(entry.result).toBe("executed");
+      expect(entry).not.toHaveProperty("dryRun");
     });
 
     test("should log allow action without rule (default action)", () => {
       const logger = new AuditLogger(logFile);
 
-      logger.logAllow({ toolName: "browser_click", args: { ref: "btn-1" }, rule: undefined, reason: "Default action" });
+      logger.logExecuted({
+        toolName: "browser_click",
+        args: { ref: "btn-1" },
+        action: "allow",
+        rule: undefined,
+        reason: "Default action",
+        dryRun: false,
+      });
 
       const content = readFileSync(logFile, "utf-8");
       const entry = JSON.parse(content.trim());
@@ -112,6 +127,23 @@ describe("AuditLogger", () => {
       expect(entry.action).toBe("allow");
       expect(entry.ruleId).toBeUndefined();
       expect(entry.reason).toBe("Default action");
+    });
+
+    test("should keep the rules' decision for a call forwarded in a dry run, and mark it", () => {
+      const logger = new AuditLogger(logFile);
+
+      logger.logExecuted({
+        toolName: "browser_click",
+        args: {},
+        action: "deny",
+        rule: { id: "block", priority: 1, action: "deny", toolPattern: "*" },
+        reason: "Matched rule: block",
+        dryRun: true,
+      });
+
+      const entry = JSON.parse(readFileSync(logFile, "utf-8").trim());
+
+      expect(entry).toMatchObject({ action: "deny", ruleId: "block", result: "executed", dryRun: true });
     });
   });
 

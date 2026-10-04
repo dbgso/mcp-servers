@@ -272,4 +272,44 @@ describe("the audit log", () => {
       "always_throws",
     ]);
   });
+
+  it("records what the rules decided in a dry run, marked as executed in a dry run", async () => {
+    // A dry run lets every call through, but the log is how a rule set is
+    // judged: a call the rules deny must not show up as allowed.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const auditLog = join(dir, "audit.jsonl");
+    await start({
+      rules: [
+        rule({ id: "allow-reads", priority: 300, action: "allow", toolPattern: "safe_*" }),
+        rule({ id: "ask-writes", priority: 200, action: "ask", toolPattern: "dangerous_*" }),
+        rule({ id: "deny-rest", priority: 100, action: "deny", toolPattern: "*" }),
+      ],
+      dryRun: true,
+      auditLog,
+    });
+
+    await execute({ toolName: "safe_read" });
+    await execute({ toolName: "dangerous_write" });
+    await execute({ toolName: "undocumented" });
+
+    const lines = (await readFile(auditLog, "utf-8")).trim().split("\n");
+    const entries = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(entries.map(({ toolName, action, ruleId, result, dryRun }) => ({ toolName, action, ruleId, result, dryRun })))
+      .toEqual([
+        { toolName: "safe_read", action: "allow", ruleId: "allow-reads", result: "executed", dryRun: true },
+        { toolName: "dangerous_write", action: "ask", ruleId: "ask-writes", result: "executed", dryRun: true },
+        { toolName: "undocumented", action: "deny", ruleId: "deny-rest", result: "executed", dryRun: true },
+      ]);
+  });
+
+  it("does not mark entries outside a dry run", async () => {
+    const auditLog = join(dir, "audit.jsonl");
+    await start({ rules: [rule({ id: "allow-all", action: "allow" })], auditLog });
+
+    await execute({ toolName: "safe_read" });
+
+    const entry = JSON.parse((await readFile(auditLog, "utf-8")).trim()) as Record<string, unknown>;
+    expect(entry).toMatchObject({ action: "allow", result: "executed" });
+    expect(entry).not.toHaveProperty("dryRun");
+  });
 });

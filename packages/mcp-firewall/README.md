@@ -348,6 +348,7 @@ In dry-run mode:
 - Blocked calls are logged (stderr)
 - Tools are executed anyway
 - Results include `[DRY-RUN NOTE]`
+- Audit log entries keep the rules' decision (`action: "deny"` / `"ask"`) with `result: "executed"` and `dryRun: true`
 
 ## Audit Log
 
@@ -395,6 +396,7 @@ Each line is a JSON object:
 | `reason` | Human-readable reason for the decision |
 | `result` | Outcome: `executed`, `blocked`, `pending`, or `error` |
 | `error` | Error message (only for `error` action) |
+| `dryRun` | `true` when the call was made in dry-run mode. The call was executed, and `action` still says what the rules decided (`deny` / `ask` included) |
 
 ## Claude Code Configuration
 
