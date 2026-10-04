@@ -28,6 +28,36 @@ import type {
 
 const asciidoctor = Asciidoctor();
 
+const LISTING_DELIMITER = "----";
+
+/**
+ * The lines of a listing block whose opening `----` is at index `open`, up to
+ * its closing delimiter. `close` is that delimiter's index, or `lines.length`
+ * when the block is never closed.
+ */
+function listingBody(params: { lines: string[]; open: number }): { value: string; close: number } {
+  const { lines, open } = params;
+  const after = lines.slice(open + 1);
+  const length = after.findIndex((line) => line.trim() === LISTING_DELIMITER);
+  const body = length === -1 ? after : after.slice(0, length);
+  return { value: body.join("\n"), close: open + 1 + body.length };
+}
+
+/**
+ * The link forms read from source, in the order they are reported on a line.
+ * These were four copies of the same regex loop.
+ */
+const LINK_PATTERNS: Array<{ pattern: RegExp; text: (match: RegExpMatchArray) => string }> = [
+  // xref:path[text] - cross-references
+  { pattern: /xref:([^[]+)\[([^\]]*)\]/g, text: (m) => m[2] || m[1] },
+  // link:url[text] - external links
+  { pattern: /link:([^[]+)\[([^\]]*)\]/g, text: (m) => m[2] || m[1] },
+  // <<reference>> or <<reference,text>> - inline cross-references
+  { pattern: /<<([^,>\]]+)(?:,([^>]+))?>>+/g, text: (m) => m[2] || m[1] },
+  // include::path[] - includes
+  { pattern: /include::([^[]+)\[([^\]]*)\]/g, text: (m) => `include: ${m[1]}` },
+];
+
 /** A section title line: `= Title` (depth 1) to `====== Title` (depth 6). */
 const HEADING_LINE = /^(={1,6})\s+(.+)$/;
 
@@ -176,7 +206,7 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
    * id, which names a place in this document or a sibling page.
    */
   protected linkTarget(url: string): LinkTarget {
-    if (!isExternalUrl(url) && !url.includes("/") && !url.includes(".")) {
+    if (!isExternalUrl(url) && !/[/.]/.test(url)) {
       return new SameFileAnchorTarget(url);
     }
     return super.linkTarget(url);
@@ -263,12 +293,10 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
    * Attributes are lines starting with :name: at the beginning of the document.
    */
   private extractDocAttributes(source: string): string[] {
-    const lines = source.split("\n");
     const attributes: string[] = [];
-    let inHeader = true;
     let foundTitle = false;
 
-    for (const line of lines) {
+    for (const line of source.split("\n")) {
       const trimmed = line.trim();
 
       // Document title
@@ -278,21 +306,15 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
       }
 
       // Skip empty lines in header
-      if (inHeader && trimmed === "") {
-        continue;
-      }
-
-      // Document attribute line
-      if (inHeader && /^:[a-zA-Z_][\w-]*:/.test(trimmed)) {
-        attributes.push(trimmed);
+      if (trimmed === "") {
         continue;
       }
 
       // Any other content ends the header section
-      if (trimmed !== "") {
-        inHeader = false;
+      if (!/^:[a-zA-Z_][\w-]*:/.test(trimmed)) {
         break;
       }
+      attributes.push(trimmed);
     }
 
     return attributes;
@@ -310,14 +332,11 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
     }
 
     // Document attributes (must come after title, before content)
-    if (doc.docAttributes && doc.docAttributes.length > 0) {
-      for (const attr of doc.docAttributes) {
-        lines.push(attr);
-      }
-    }
+    const attributes = doc.docAttributes ?? [];
+    lines.push(...attributes);
 
     // Empty line after header
-    if (doc.title || (doc.docAttributes && doc.docAttributes.length > 0)) {
+    if (doc.title || attributes.length > 0) {
       lines.push("");
     }
 
@@ -390,64 +409,14 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
    * Includes xref (cross-references) and link macros.
    */
   getLinks(doc: AsciidocDoc): LinkSummary[] {
-    const links: LinkSummary[] = [];
-    const content = doc.getSource() as string;
+    const content = doc.getSource();
+    if (!content) return [];
 
-    if (!content) return links;
-
-    const lines = content.split("\n");
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
-
-      // Match xref:path[text] - cross-references
-      const xrefPattern = /xref:([^\[]+)\[([^\]]*)\]/g;
-      let match: RegExpExecArray | null;
-      while ((match = xrefPattern.exec(line)) !== null) {
-        links.push({
-          url: match[1],
-          title: null,
-          text: match[2] || match[1],
-          line: lineNum,
-        });
-      }
-
-      // Match link:url[text] - external links
-      const linkPattern = /link:([^\[]+)\[([^\]]*)\]/g;
-      while ((match = linkPattern.exec(line)) !== null) {
-        links.push({
-          url: match[1],
-          title: null,
-          text: match[2] || match[1],
-          line: lineNum,
-        });
-      }
-
-      // Match <<reference>> or <<reference,text>> - inline cross-references
-      const inlineXrefPattern = /<<([^,>\]]+)(?:,([^>]+))?>>+/g;
-      while ((match = inlineXrefPattern.exec(line)) !== null) {
-        links.push({
-          url: match[1],
-          title: null,
-          text: match[2] || match[1],
-          line: lineNum,
-        });
-      }
-
-      // Match include::path[] - includes
-      const includePattern = /include::([^\[]+)\[([^\]]*)\]/g;
-      while ((match = includePattern.exec(line)) !== null) {
-        links.push({
-          url: match[1],
-          title: null,
-          text: `include: ${match[1]}`,
-          line: lineNum,
-        });
-      }
-    }
-
-    return links;
+    return content.split("\n").flatMap((line, i) =>
+      LINK_PATTERNS.flatMap(({ pattern, text }) =>
+        [...line.matchAll(pattern)].map((match) => ({ url: match[1], title: null, text: text(match), line: i + 1 })),
+      ),
+    );
   }
 
   /**
@@ -520,56 +489,22 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
     while (i < lines.length) {
       const line = lines[i];
 
-      // Check for [source,lang] or [source] attribute
+      // [source,lang] or [source] directly above an opening ----
       const sourceMatch = line.match(/^\[source(?:,\s*(\w+))?\]/);
-      if (sourceMatch) {
-        const lang = sourceMatch[1] ?? null;
-
-        // Look for ---- on the next line
-        if (i + 1 < lines.length && lines[i + 1].trim() === "----") {
-          const startLine = i + 1; // Line number of ----
-          const contentLines: string[] = [];
-          let j = i + 2;
-
-          // Collect content until closing ----
-          while (j < lines.length && lines[j].trim() !== "----") {
-            contentLines.push(lines[j]);
-            j++;
-          }
-
-          codeBlocks.push({
-            lang,
-            value: contentLines.join("\n"),
-            line: startLine + 1, // 1-based line number
-          });
-
-          i = j + 1; // Skip past closing ----
-          continue;
-        }
+      if (sourceMatch && lines[i + 1]?.trim() === LISTING_DELIMITER) {
+        const body = listingBody({ lines, open: i + 1 });
+        codeBlocks.push({ lang: sourceMatch[1] ?? null, value: body.value, line: i + 2 });
+        i = body.close + 1;
+        continue;
       }
 
-      // Also check for bare ---- blocks (listing without [source])
-      if (line.trim() === "----" && (i === 0 || !lines[i - 1].match(/^\[source/))) {
-        const startLine = i;
-        const contentLines: string[] = [];
-        let j = i + 1;
-
-        // Collect content until closing ----
-        while (j < lines.length && lines[j].trim() !== "----") {
-          contentLines.push(lines[j]);
-          j++;
+      // A bare ---- block (listing without [source]); only a closed one counts
+      if (line.trim() === LISTING_DELIMITER && !lines[i - 1]?.match(/^\[source/)) {
+        const body = listingBody({ lines, open: i });
+        if (body.close < lines.length) {
+          codeBlocks.push({ lang: null, value: body.value, line: i + 1 });
         }
-
-        // Only add if we found a closing delimiter
-        if (j < lines.length) {
-          codeBlocks.push({
-            lang: null,
-            value: contentLines.join("\n"),
-            line: startLine + 1, // 1-based line number
-          });
-        }
-
-        i = j + 1;
+        i = body.close + 1;
         continue;
       }
 
