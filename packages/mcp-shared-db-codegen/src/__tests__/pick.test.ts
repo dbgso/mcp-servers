@@ -45,6 +45,11 @@ describe("pickIntrospector", () => {
     await expect(pickIntrospector({ url: "redis://h" })).rejects.toThrow(
       /Unsupported scheme/,
     );
+    // No scheme at all, and a known engine name that is not a scheme.
+    await expect(pickIntrospector({ url: "localhost:3306/d" })).rejects.toThrow(
+      /Unsupported scheme/,
+    );
+    await expect(pickIntrospector({ url: "mysql" })).rejects.toThrow(/Unsupported scheme/);
   });
 
   it("uses the default createPgClient when no factory is given", async () => {

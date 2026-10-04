@@ -31,19 +31,35 @@ export interface PickIntrospectorParams {
   mysqlClientFactory?: (url: string) => Promise<MysqlQueryClient>;
 }
 
+type OpenIntrospector = (params: PickIntrospectorParams) => Promise<Introspector>;
+
+const openPostgres: OpenIntrospector = async (params) => {
+  const factory = params.pgClientFactory ?? createPgClient;
+  return new PostgresIntrospector(await factory(params.url));
+};
+
+const openMysql: OpenIntrospector = async (params) => {
+  const factory = params.mysqlClientFactory ?? createMysqlClient;
+  return new MysqlIntrospector(await factory(params.url));
+};
+
+/** Introspector per URL scheme (lower case, without `://`). */
+const OPEN_BY_SCHEME: ReadonlyMap<string, OpenIntrospector> = new Map([
+  ["postgres", openPostgres],
+  ["postgresql", openPostgres],
+  ["mysql", openMysql],
+]);
+
+/** The URL's scheme in lower case (`MYSQL://h` -> `mysql`), or "" when it has none. */
+function schemeOf(url: string): string {
+  const match = /^([a-z][a-z0-9+.-]*):\/\//i.exec(url);
+  return match ? String(match[1]).toLowerCase() : "";
+}
+
 export async function pickIntrospector(
   params: PickIntrospectorParams,
 ): Promise<Introspector> {
-  const { url } = params;
-  if (/^postgres(ql)?:\/\//i.test(url)) {
-    const factory = params.pgClientFactory ?? createPgClient;
-    const client = await factory(url);
-    return new PostgresIntrospector(client);
-  }
-  if (/^mysql:\/\//i.test(url)) {
-    const factory = params.mysqlClientFactory ?? createMysqlClient;
-    const client = await factory(url);
-    return new MysqlIntrospector(client);
-  }
-  throw new Error(`Unsupported scheme for codegen: ${url}`);
+  const open = OPEN_BY_SCHEME.get(schemeOf(params.url));
+  if (!open) throw new Error(`Unsupported scheme for codegen: ${params.url}`);
+  return open(params);
 }
