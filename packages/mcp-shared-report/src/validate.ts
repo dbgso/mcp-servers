@@ -4,29 +4,37 @@ import type { Problem, Report, ValidationResult } from "./types.js";
 /** A string that says something: whitespace alone does not count. */
 const text = z.string().trim().min(1, "must not be empty");
 
-const evidenceSchema = z.object({
-  source: text,
-  output: text,
-});
+const evidenceSchema = z
+  .object({
+    source: text,
+    output: text,
+  })
+  .strict();
 
-const claimSchema = z.object({
-  statement: text,
-  evidence: z.array(evidenceSchema).min(1, "at least one evidence is required"),
-});
+const claimSchema = z
+  .object({
+    statement: text,
+    evidence: z.array(evidenceSchema).min(1, "at least one evidence is required"),
+  })
+  .strict();
 
-const decisionSchema = z.object({
-  kind: z.literal("decision"),
-  what: text,
-  options: z
-    .array(z.object({ label: text, consequence: text }))
-    .min(2, "a decision needs at least two options"),
-  recommendation: z.object({ label: text, reason: text }),
-});
+const decisionSchema = z
+  .object({
+    kind: z.literal("decision"),
+    what: text,
+    options: z
+      .array(z.object({ label: text, consequence: text }).strict())
+      .min(2, "a decision needs at least two options"),
+    recommendation: z.object({ label: text, reason: text }).strict(),
+  })
+  .strict();
 
-const actionSchema = z.object({
-  kind: z.literal("action"),
-  what: text,
-});
+const actionSchema = z
+  .object({
+    kind: z.literal("action"),
+    what: text,
+  })
+  .strict();
 
 /**
  * Refined per element rather than on the whole report, so that it runs even
@@ -40,16 +48,22 @@ const askSchema = z
     { path: ["recommendation", "label"], message: "must be the label of one of the options" },
   );
 
-const reportSchema = z.object({
-  title: text,
-  conclusion: text,
-  claims: z.array(claimSchema).min(1, "at least one claim is required"),
-  asks: z.array(askSchema),
-  corrections: z.array(z.object({ said: text, actually: text, why: text })).optional(),
-  changes: z.array(z.object({ what: text, before: text, after: text })).optional(),
-  remaining: z.array(z.object({ item: text, why: text })).optional(),
-  asides: z.array(z.object({ note: text, cost: text })).optional(),
-});
+/**
+ * Every object is strict. A field the structure does not have would be dropped
+ * from the page without a word, so the caller would believe the reader saw it.
+ */
+const reportSchema = z
+  .object({
+    title: text,
+    conclusion: text,
+    claims: z.array(claimSchema).min(1, "at least one claim is required"),
+    asks: z.array(askSchema),
+    corrections: z.array(z.object({ said: text, actually: text, why: text }).strict()).optional(),
+    changes: z.array(z.object({ what: text, before: text, after: text }).strict()).optional(),
+    remaining: z.array(z.object({ item: text, why: text }).strict()).optional(),
+    asides: z.array(z.object({ note: text, cost: text }).strict()).optional(),
+  })
+  .strict();
 
 /**
  * Which criterion a field serves, by the path to it.
@@ -78,13 +92,22 @@ function formatPath(params: { path: (string | number)[] }): string {
   }, "");
 }
 
+/** Where zod's own message names the problem less plainly than this. */
+const MESSAGE_BY_CODE: Partial<Record<z.ZodIssueCode, string>> = {
+  // zod's lists the values with its own wording; this says them as fields would.
+  [z.ZodIssueCode.invalid_union_discriminator]: 'must be "decision" or "action"',
+};
+
+function isAbsent(params: { issue: z.ZodIssue }): boolean {
+  const { issue } = params;
+  return issue.code === z.ZodIssueCode.invalid_type && issue.received === "undefined";
+}
+
 /** An absent field reads better as "required" than as zod's type mismatch. */
 function messageFor(params: { issue: z.ZodIssue }): string {
   const { issue } = params;
-  if (issue.code === z.ZodIssueCode.invalid_type && issue.received === "undefined") {
-    return "required";
-  }
-  return issue.message;
+  if (isAbsent({ issue })) return "required";
+  return MESSAGE_BY_CODE[issue.code] ?? issue.message;
 }
 
 /** `asks` may be empty but not omitted, and the message says how to say "nothing". */
@@ -96,12 +119,25 @@ function adviceFor(params: { path: string; message: string }): string {
   return message;
 }
 
-function toProblem(params: { issue: z.ZodIssue }): Problem {
-  const { issue } = params;
-  const path = formatPath({ path: issue.path });
-  const message = adviceFor({ path, message: messageFor({ issue }) });
+function problemAt(params: { path: (string | number)[]; message: string }): Problem {
+  const path = formatPath({ path: params.path });
+  const message = adviceFor({ path, message: params.message });
   const criterion = CRITERION_BY_PATH.find((entry) => entry.pattern.test(path))?.criterion;
   return criterion === undefined ? { path, message } : { path, message, criterion };
+}
+
+/**
+ * One problem per issue, except that each unknown field is its own problem,
+ * at its own path, so the caller sees which key to move or remove.
+ */
+function toProblems(params: { issue: z.ZodIssue }): Problem[] {
+  const { issue } = params;
+  if (issue.code === z.ZodIssueCode.unrecognized_keys) {
+    return issue.keys.map((key) =>
+      problemAt({ path: [...issue.path, key], message: "not a field of the report; it would not reach the page" }),
+    );
+  }
+  return [problemAt({ path: issue.path, message: messageFor({ issue }) })];
 }
 
 /**
@@ -116,7 +152,7 @@ export function validateReport(params: { input: unknown }): ValidationResult {
   if (parsed.success) {
     return { ok: true, report: parsed.data as Report };
   }
-  return { ok: false, problems: parsed.error.issues.map((issue) => toProblem({ issue })) };
+  return { ok: false, problems: parsed.error.issues.flatMap((issue) => toProblems({ issue })) };
 }
 
 /** Problems as the lines a caller reads, one per problem. */

@@ -42,6 +42,8 @@ h2 { font-size: 1.15rem; margin: 32px 0 8px; padding-bottom: 4px; border-bottom:
 .conclusion { font-size: 1.15rem; font-weight: 600; margin: 0; }
 .asks { background: var(--ask-bg); border: 1px solid var(--ask-line); border-radius: 8px; padding: 4px 16px 12px; margin-top: 24px; }
 .asks h2 { border-bottom-color: var(--ask-line); margin-top: 12px; }
+.asks.none { background: var(--panel); border-color: var(--line); }
+.asks.none h2 { border-bottom-color: var(--line); }
 .kind { display: inline-block; font-size: .8rem; padding: 0 8px; border-radius: 999px; border: 1px solid var(--ask-line); }
 .options { margin: 8px 0; }
 .is-recommended { font-weight: 500; }
@@ -51,7 +53,7 @@ h2 { font-size: 1.15rem; margin: 32px 0 8px; padding-bottom: 4px; border-bottom:
 .statement { font-weight: 600; margin-bottom: 4px; }
 figure { margin: 0 0 12px; }
 figcaption { font-size: .85rem; color: var(--muted); }
-pre { margin: 4px 0 0; padding: 12px; overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font-size: .85rem; line-height: 1.5; }
+pre { margin: 4px 0 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font-size: .85rem; line-height: 1.5; }
 code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 table { width: 100%; border-collapse: collapse; display: block; overflow-x: auto; }
 th, td { text-align: left; vertical-align: top; padding: 6px 8px; border: 1px solid var(--line); }

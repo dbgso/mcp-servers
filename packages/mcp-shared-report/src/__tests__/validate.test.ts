@@ -84,9 +84,25 @@ describe("validateReport", () => {
     ]);
   });
 
-  it("rejects an unknown ask kind", () => {
-    const [problem] = problemsOf({ ...minimalReport(), asks: [{ kind: "wish", what: "w" }] });
-    expect(problem).toMatchObject({ path: "asks[0].kind", criterion: "R4" });
+  it.each([["wish"], [undefined]])("rejects an ask whose kind is %j", (kind) => {
+    expect(problemsOf({ ...minimalReport(), asks: [{ kind, what: "w" }] })).toEqual([
+      { path: "asks[0].kind", message: 'must be "decision" or "action"', criterion: "R4" },
+    ]);
+  });
+
+  it("names each unknown field at its own path", () => {
+    const report = minimalReport();
+    const input = {
+      ...report,
+      summary: "s",
+      claims: [{ ...report.claims[0], note: "n", details: "d" }],
+    };
+    const message = "not a field of the report; it would not reach the page";
+    expect(problemsOf(input)).toEqual([
+      { path: "claims[0].note", message, criterion: "R2" },
+      { path: "claims[0].details", message, criterion: "R2" },
+      { path: "summary", message },
+    ]);
   });
 
   it.each([

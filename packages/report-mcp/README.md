@@ -5,8 +5,9 @@ person to read.
 
 The caller fills fields -- conclusion, claims with the raw output that supports
 them, what the reader has to decide or do -- and the server lays them out in a
-fixed order. A report missing a required field is not written; every problem
-comes back at once, each naming the readability criterion its field is for.
+fixed order. A report missing a required field, or carrying a field the
+structure does not have, is not written; every problem comes back at once, each
+naming the readability criterion its field is for.
 
 ## Tools
 

@@ -1,7 +1,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { looseArray } from "mcp-shared";
-import { formatProblems, renderHtml, validateReport } from "mcp-shared-report";
+import { formatProblems, renderHtml, validateReport, type Problem } from "mcp-shared-report";
 import { reportFileName, writeNewFile } from "../output.js";
 import type { Op } from "./types.js";
 
@@ -26,6 +26,17 @@ const listFields = z
   .partial()
   .passthrough();
 
+/**
+ * A list field still a string after decoding was JSON text that did not parse.
+ * The validator only sees "a string where a list goes", which reads as though
+ * JSON text were not accepted at all; this says what actually went wrong.
+ */
+function explainUndecoded(params: { problem: Problem; input: Record<string, unknown> }): Problem {
+  const { problem, input } = params;
+  const undecoded = problem.path in listFields.shape && typeof input[problem.path] === "string";
+  return undecoded ? { ...problem, message: "a list, or its JSON text; this text is not valid JSON" } : problem;
+}
+
 /** `op` selects this operation and is not part of the report. */
 function reportInput(params: { args: Record<string, unknown> }): Record<string, unknown> {
   const { args } = params;
@@ -47,16 +58,18 @@ export class ReportOp implements Op {
   ) {}
 
   async execute(args: Record<string, unknown>): Promise<CallToolResult> {
-    const result = validateReport({ input: reportInput({ args }) });
+    const input = reportInput({ args });
+    const result = validateReport({ input });
     if (!result.ok) {
-      const count = result.problems.length;
+      const problems = result.problems.map((problem) => explainUndecoded({ problem, input }));
+      const count = problems.length;
       return {
         content: [
           {
             type: "text",
             text:
               `The report was not written. ${count} ${count === 1 ? "problem" : "problems"}:\n` +
-              `${formatProblems({ problems: result.problems })}\n\n` +
+              `${formatProblems({ problems })}\n\n` +
               "Call `describe` for the structure and what each field is for.",
           },
         ],

@@ -1,21 +1,26 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 
+/** At most this many characters of the title go into the file name. */
+const SLUG_LENGTH = 40;
+
 /**
  * A file name a person can recognise in a directory listing: when, then what.
  *
- * Only ASCII letters and digits survive into the slug, so a title in Japanese
- * falls back to `report` rather than producing a name some tool will mangle.
+ * Letters and digits of any script survive, so a Japanese title stays
+ * readable. Everything else, including the characters a file system forbids,
+ * becomes `-`. NFKC folds full-width letters to their ASCII forms first.
  */
 export function reportFileName(params: { title: string; now: Date }): string {
   const { title, now } = params;
   const stamp = now.toISOString().replace(/\.\d{3}Z$/, "").replace(/:/g, "-");
-  const slug = title
+  const words = title
+    .normalize("NFKC")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40)
-    .replace(/-+$/, "");
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+  // By code point, so a character outside the BMP is never cut in half.
+  const slug = Array.from(words).slice(0, SLUG_LENGTH).join("").replace(/-+$/, "");
   return `${stamp}-${slug === "" ? "report" : slug}`;
 }
 

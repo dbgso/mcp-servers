@@ -52,8 +52,9 @@ Turns a report into a single HTML page for a person to read. Use it when you
 are asked to report with this tool. You fill the fields below; you do not write
 prose paragraphs or markup, and you do not choose the order -- the page does.
 
-A report missing a required field is not written. Every problem comes back at
-once, each naming the criterion its field is for.
+A report missing a required field, or carrying a field not listed below, is not
+written. Every problem comes back at once, each naming the criterion its field
+is for.
 
 ## Call
 

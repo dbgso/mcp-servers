@@ -90,6 +90,25 @@ describe("exec(op: report)", () => {
     await client.close();
   });
 
+  it("says when a list field's JSON text does not parse", async () => {
+    const client = await connected();
+    const args = { op: "report", title: "t", conclusion: "c", claims: '[{"statement": "s"', asks: "[]" };
+    const result = await client.callTool({ name: "exec", arguments: args });
+    expect(textOf(result)).toContain("- claims: a list, or its JSON text; this text is not valid JSON (R2)\n");
+    await client.close();
+  });
+
+  it("rejects a field the structure does not have", async () => {
+    const client = await connected();
+    const result = await client.callTool({
+      name: "exec",
+      arguments: { op: "report", ...EXAMPLE_REPORT, summary: "s" },
+    });
+    expect(textOf(result)).toContain("- summary: not a field of the report; it would not reach the page\n");
+    expect(await readdir(dir)).toEqual([]);
+    await client.close();
+  });
+
   it("writes nothing when a required field is missing, and lists every problem", async () => {
     const client = await connected();
     const result = await client.callTool({
