@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { jsonResponse, errorResponse } from "mcp-shared";
+import { jsonResponse } from "mcp-shared";
 import type { GitOperation } from "./types.js";
-import { ghCachedExec, isGhAvailable, parseJsonLines } from "../gh-cache.js";
+import { ghCachedExec, parseJsonLines } from "../gh-cache.js";
+import { ghUnavailableResponse } from "./gh-guard.js";
 
 interface GhComment {
   author: { login: string };
@@ -119,11 +120,8 @@ Examples:
   readonly category = "GitHub";
   readonly argsSchema = prCommentsArgsSchema;
   async execute(args: PrCommentsArgs): Promise<CallToolResult> {
-    if (!(await isGhAvailable())) {
-      return errorResponse(
-        "gh CLI is not installed or not authenticated. Run `gh auth login` first.",
-      );
-    }
+    const unavailable = await ghUnavailableResponse();
+    if (unavailable) return unavailable;
 
     const ttlMs = (args.ttl_minutes ?? 3) * 60 * 1000;
     const limit = args.limit ?? 50;
