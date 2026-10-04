@@ -14,31 +14,16 @@ export function buildReminderBlock(params: {
   config: ReminderConfig;
 }): string | null {
   const { config } = params;
-  const hasReminders =
-    config.remindMcp ||
-    config.remindOrganize ||
-    config.customReminders.length > 0 ||
-    config.topicForEveryTask !== null;
+  const reminders = [
+    config.topicForEveryTask
+      ? buildEveryTaskReminder({ docId: config.topicForEveryTask, seconds: config.infoValidSeconds })
+      : null,
+    config.remindMcp ? MCP_REMINDER : null,
+    config.remindOrganize ? ORGANIZE_REMINDER : null,
+    ...config.customReminders.map((customReminder) => `[Reminder] ${customReminder}`),
+  ].filter((reminder): reminder is string => reminder !== null);
 
-  if (!hasReminders) {
-    return null;
-  }
-
-  const reminders: string[] = [];
-  if (config.topicForEveryTask) {
-    reminders.push(buildEveryTaskReminder({ docId: config.topicForEveryTask, seconds: config.infoValidSeconds }));
-  }
-  if (config.remindMcp) {
-    reminders.push(MCP_REMINDER);
-  }
-  if (config.remindOrganize) {
-    reminders.push(ORGANIZE_REMINDER);
-  }
-  for (const customReminder of config.customReminders) {
-    reminders.push(`[Reminder] ${customReminder}`);
-  }
-
-  return `\n\n---\n\n${reminders.join("\n\n")}`;
+  return reminders.length > 0 ? `\n\n---\n\n${reminders.join("\n\n")}` : null;
 }
 
 export function wrapResponse(params: {
