@@ -65,7 +65,9 @@
     "typescript/no-redundant-type-constituents": "error",
     "typescript/restrict-template-expressions": "error",
     "typescript/no-misused-spread": "error",
-    "custom/no-arrow-class-method": "error"
+    "custom/no-arrow-class-method": "error",
+    "custom/no-discriminant-chain": "warn",
+    "custom/no-repeated-comparison": "warn"
   },
   "overrides": [
     {
@@ -81,7 +83,9 @@
         "complexity": "off",
         "custom/no-branching-literal": "off",
         "typescript/unbound-method": "off",
-        "custom/no-arrow-class-method": "off"
+        "custom/no-arrow-class-method": "off",
+        "custom/no-discriminant-chain": "off",
+        "custom/no-repeated-comparison": "off"
       }
     },
     {
