@@ -563,7 +563,7 @@ addressed_by: null
       expect(feedback).not.toBeNull();
     });
 
-    it("should parse boolean true value correctly", async () => {
+    it("reads a bare true as text, since no feedback field is boolean", async () => {
       const taskFeedbackDir = path.join(testDir, "feedback", "task-true");
       await fs.mkdir(taskFeedbackDir, { recursive: true });
       // Use a file where we can test true value parsing
@@ -583,13 +583,11 @@ addressed_by: null
         "utf-8"
       );
 
-      // Since original must be a string for validation, this should fail
       const feedback = await feedbackReader.getFeedback({ taskId: "task-true", feedbackId: "bool-true" });
-      // The file will be invalid because original is not a string
-      expect(feedback).toBeNull();
+      expect(feedback?.original).toBe("true");
     });
 
-    it("should parse boolean false value correctly", async () => {
+    it("reads a bare false as text, since no feedback field is boolean", async () => {
       const taskFeedbackDir = path.join(testDir, "feedback", "task-false-val");
       await fs.mkdir(taskFeedbackDir, { recursive: true });
       // Create a file where false is used as a value
@@ -611,8 +609,7 @@ addressed_by: null
 
       const feedback = await feedbackReader.getFeedback({ taskId: "task-false-val", feedbackId: "bool-false-val" });
       expect(feedback).not.toBeNull();
-      // interpretation parsed as boolean false, but cast to string | null
-      expect(feedback?.interpretation).toBe(false);
+      expect(feedback?.interpretation).toBe("false");
     });
 
     it("should handle unquoted string values", async () => {

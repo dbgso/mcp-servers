@@ -10,7 +10,51 @@ import type {
   PlanReader as IPlanReader,
 } from "../types/index.js";
 import { getErrorMessage } from "mcp-shared";
-import { withStringFields } from "../utils/metadata.js";
+import { z } from "zod";
+import { parseBoolean, parseFrontmatter, parseInlineArray, unquote } from "../utils/frontmatter.js";
+
+/**
+ * A JSON value stored as a front matter string with its quotes escaped, or
+ * undefined when the field is absent, empty or not valid JSON.
+ */
+function parseEscapedJson<T>(value: unknown): T | undefined {
+  if (typeof value !== "string" || !value) return undefined;
+  try {
+    return JSON.parse(value.replace(/\\"/g, '"')) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+const text = z.string().catch("");
+const list = z.array(z.string()).catch([]);
+const timestamp = z.string().min(1).catch(() => new Date().toISOString());
+
+/**
+ * A task file's plain fields. `id`, `title` and `status` make it a task; the
+ * rest fall back to empty when a file lacks them or holds something else.
+ */
+const TaskFrontmatter = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.string(),
+  parent: text,
+  dependencies: list,
+  dependency_reason: text,
+  prerequisites: text,
+  completion_criteria: text,
+  deliverables: list,
+  output: text,
+  is_parallelizable: z.boolean().catch(false),
+  references: list,
+  created: timestamp,
+  updated: timestamp,
+});
+
+/** An array as an inline YAML list of quoted strings. */
+function yamlList(items: string[]): string {
+  return `[${items.map((item) => `"${item}"`).join(", ")}]`;
+}
 
 export class PlanReader implements IPlanReader {
   private readonly directory: string;
@@ -35,139 +79,33 @@ export class PlanReader implements IPlanReader {
   }
 
   private parseYamlValue(value: string): string | boolean | string[] {
-    value = value.trim();
-
-    // Boolean
-    if (value === "true") return true;
-    if (value === "false") return false;
-
-    // Array
-    if (value.startsWith("[") && value.endsWith("]")) {
-      const inner = value.slice(1, -1).trim();
-      if (!inner) return [];
-      return inner.split(",").map((item) => {
-        const trimmed = item.trim();
-        // Remove quotes if present
-        if (
-          (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-          (trimmed.startsWith("'") && trimmed.endsWith("'"))
-        ) {
-          return trimmed.slice(1, -1);
-        }
-        return trimmed;
-      });
-    }
-
-    // String (remove quotes if present)
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      return value.slice(1, -1);
-    }
-
-    return value;
+    return parseBoolean(value) ?? parseInlineArray(value) ?? unquote(value) ?? value;
   }
 
   private parseTaskFile(fileContent: string): Task | null {
-    const frontmatterMatch = fileContent.match(
-      /^---\n([\s\S]*?)\n---\n([\s\S]*)$/
-    );
-    if (!frontmatterMatch) return null;
+    const parsed = parseFrontmatter({ text: fileContent, parseValue: (raw) => this.parseYamlValue(raw) });
+    if (!parsed) return null;
+    const { metadata, body: content } = parsed;
 
-    const [, yaml, content] = frontmatterMatch;
-    const metadata: Record<string, unknown> = {};
+    const fields = TaskFrontmatter.safeParse(metadata);
+    if (!fields.success) return null;
 
-    for (const line of yaml.split("\n")) {
-      const colonIndex = line.indexOf(":");
-      if (colonIndex === -1) continue;
-
-      const key = line.slice(0, colonIndex).trim();
-      const value = line.slice(colonIndex + 1).trim();
-      metadata[key] = this.parseYamlValue(value);
-    }
-
-    const required = withStringFields({ metadata, keys: ["id", "title", "status"] as const });
-    if (required === null) return null;
-
-    // Parse feedback from JSON string if present (unescape quotes first)
-    const feedback: Feedback[] = (() => {
-      if (typeof metadata.feedback === "string" && metadata.feedback) {
-        try {
-          const unescaped = metadata.feedback.replace(/\\"/g, '"');
-          return JSON.parse(unescaped);
-        } catch {
-          return [];
-        }
-      }
-      return [];
-    })();
-
-    // Parse task_output from JSON string if present (unescape quotes first)
-    const task_output: TaskOutput | null = (() => {
-      if (typeof metadata.task_output === "string" && metadata.task_output) {
-        try {
-          const unescaped = metadata.task_output.replace(/\\"/g, '"');
-          return JSON.parse(unescaped);
-        } catch {
-          return null;
-        }
-      }
-      return null;
-    })();
-
-    // Parse parallelizable_units - can be JSON string or already parsed array
-    const parallelizable_units: string[] | undefined = (() => {
-      if (typeof metadata.parallelizable_units === "string" && metadata.parallelizable_units) {
-        try {
-          const unescaped = metadata.parallelizable_units.replace(/\\"/g, '"');
-          return JSON.parse(unescaped);
-        } catch {
-          return undefined;
-        }
-      }
-      // If it was already parsed as an array by parseYamlValue
-      if (Array.isArray(metadata.parallelizable_units)) {
-        return metadata.parallelizable_units as string[];
-      }
-      return undefined;
-    })();
+    // Written as an escaped JSON string; an older file may hold an inline array
+    const parallelizable_units = Array.isArray(metadata.parallelizable_units)
+      ? (metadata.parallelizable_units as string[])
+      : parseEscapedJson<string[]>(metadata.parallelizable_units);
 
     return {
-      id: required.id,
-      title: required.title,
-      status: required.status as TaskStatus,
-      parent: (metadata.parent as string) || "",
-      dependencies: (metadata.dependencies as string[]) || [],
-      dependency_reason: (metadata.dependency_reason as string) || "",
-      prerequisites: (metadata.prerequisites as string) || "",
-      completion_criteria: (metadata.completion_criteria as string) || "",
-      deliverables: (metadata.deliverables as string[]) || [],
-      output: (metadata.output as string) || "",
-      task_output,
-      is_parallelizable: (metadata.is_parallelizable as boolean) || false,
+      ...fields.data,
+      status: fields.data.status as TaskStatus,
+      task_output: parseEscapedJson<TaskOutput>(metadata.task_output) ?? null,
       parallelizable_units,
-      references: (metadata.references as string[]) || [],
-      feedback,
-      created: (metadata.created as string) || new Date().toISOString(),
-      updated: (metadata.updated as string) || new Date().toISOString(),
+      feedback: parseEscapedJson<Feedback[]>(metadata.feedback) ?? [],
       content: content.trim(),
     };
   }
 
   private serializeTask(task: Task): string {
-    const deps =
-      task.dependencies.length > 0
-        ? `[${task.dependencies.map((d) => `"${d}"`).join(", ")}]`
-        : "[]";
-    const refs =
-      task.references.length > 0
-        ? `[${task.references.map((r) => `"${r}"`).join(", ")}]`
-        : "[]";
-    const delivs =
-      task.deliverables.length > 0
-        ? `[${task.deliverables.map((d) => `"${d}"`).join(", ")}]`
-        : "[]";
     // Escape double quotes in JSON for YAML string
     const feedbackJson = JSON.stringify(task.feedback || []).replace(/"/g, '\\"');
     const taskOutputJson = JSON.stringify(task.task_output).replace(/"/g, '\\"');
@@ -181,16 +119,16 @@ id: ${task.id}
 title: "${task.title}"
 status: ${task.status}
 parent: "${task.parent}"
-dependencies: ${deps}
+dependencies: ${yamlList(task.dependencies)}
 dependency_reason: "${task.dependency_reason}"
 prerequisites: "${task.prerequisites}"
 completion_criteria: "${task.completion_criteria}"
-deliverables: ${delivs}
+deliverables: ${yamlList(task.deliverables)}
 output: "${task.output}"
 task_output: "${taskOutputJson}"
 is_parallelizable: ${task.is_parallelizable}
 parallelizable_units: "${parallelizableUnitsJson}"
-references: ${refs}
+references: ${yamlList(task.references)}
 feedback: "${feedbackJson}"
 created: ${task.created}
 updated: ${task.updated}
