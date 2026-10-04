@@ -2,7 +2,7 @@ import { z } from "zod";
 import { jsonResponse } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
-import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
+import { HANDLERS } from "../../handlers/index.js";
 
 const StructuredWriteSchema = z.object({
   output_format: z
@@ -51,11 +51,7 @@ export class StructuredWriteHandler extends BaseToolHandler<StructuredWriteArgs>
   protected async doExecute(args: StructuredWriteArgs): Promise<ToolResponse> {
     const { output_format, format, data } = args;
 
-    const handler =
-      output_format === "markdown"
-        ? new MarkdownHandler()
-        : new AsciidocHandler();
-    const result = handler.generate({ format, data });
+    const result = HANDLERS[output_format].generate({ format, data });
 
     return jsonResponse({ output_format, format, content: result });
   }

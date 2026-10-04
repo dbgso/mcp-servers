@@ -37,6 +37,8 @@ export abstract class BaseHandler implements FileHandler, LinkedDocument {
   abstract readonly extensions: string[];
   abstract readonly fileType: DocumentType;
   abstract readonly anchorNoun: string;
+  /** The section level reordering works at by default: the level below the title. */
+  abstract readonly defaultSectionLevel: number;
 
   /** A heading line in source: depth markers in group 1, text in group 2. */
   protected abstract readonly headingLine: RegExp;
@@ -275,10 +277,5 @@ export abstract class BaseHandler implements FileHandler, LinkedDocument {
       title,
       docAttributes,
     });
-  }
-
-  canHandle(filePath: string): boolean {
-    const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
-    return this.extensions.includes(ext);
   }
 }

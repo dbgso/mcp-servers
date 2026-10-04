@@ -7,7 +7,6 @@ export default defineConfig({
       exclude: [
         "src/index.ts",              // Entry point
         "src/server.ts",             // MCP server setup
-        "src/handlers/index.ts",     // Handler registry
         "src/tools/base-handler.ts", // Abstract tool handler
         "src/tools/index.ts",        // Re-exports
         "src/tools/registry.ts",     // Tool registry setup

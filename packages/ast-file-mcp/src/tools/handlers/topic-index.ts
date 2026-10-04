@@ -2,7 +2,7 @@ import { z } from "zod";
 import { jsonResponse, errorResponse, paginate } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
-import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
+import { readDocuments } from "../../handlers/index.js";
 import { headingAnchor } from "../../handlers/anchor.js";
 
 const TopicIndexSchema = z.object({
@@ -91,34 +91,11 @@ export class TopicIndexHandler extends BaseToolHandler<TopicIndexArgs> {
   protected async doExecute(args: TopicIndexArgs): Promise<ToolResponse> {
     const { directory, pattern, query, maxDepth, cursor, limit } = args;
 
-    const mdHandler = new MarkdownHandler();
-    const adocHandler = new AsciidocHandler();
-
-    let files;
-    let errors: Array<{ filePath: string; error: string }> = [];
-
-    // Read files based on pattern
-    if (pattern) {
-      const ext = pattern.replace("*.", "").toLowerCase();
-      if (mdHandler.extensions.includes(ext)) {
-        const result = await mdHandler.readDirectory({ directory, pattern });
-        files = result.files;
-        errors = result.errors;
-      } else if (adocHandler.extensions.includes(ext)) {
-        const result = await adocHandler.readDirectory({ directory, pattern });
-        files = result.files;
-        errors = result.errors;
-      } else {
-        return errorResponse(`Unsupported file pattern: ${pattern}`);
-      }
-    } else {
-      const [mdResult, adocResult] = await Promise.all([
-        mdHandler.readDirectory({ directory }),
-        adocHandler.readDirectory({ directory }),
-      ]);
-      files = [...mdResult.files, ...adocResult.files];
-      errors = [...mdResult.errors, ...adocResult.errors];
+    const read = await readDocuments({ directory, pattern });
+    if ("error" in read) {
+      return errorResponse(read.error);
     }
+    const { files, errors } = read;
 
     // Build topic index
     const topics: TopicEntry[] = [];

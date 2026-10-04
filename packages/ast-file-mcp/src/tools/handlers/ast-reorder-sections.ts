@@ -58,9 +58,7 @@ export class AstReorderSectionsHandler extends BaseToolHandler<ReorderSectionsAr
     }
 
     try {
-      // Default level: 1 for AsciiDoc (==), 2 for Markdown (##)
-      const defaultLevel = handler.fileType === "asciidoc" ? 1 : 2;
-      const sectionLevel = level ?? defaultLevel;
+      const sectionLevel = level ?? handler.defaultSectionLevel;
 
       await handler.reorderSections({
         filePath: file_path,

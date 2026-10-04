@@ -24,6 +24,7 @@ import {
 import { findFilesByExtension } from "../handlers/file-walk.js";
 import { findSectionRange, groupSections } from "../handlers/sections.js";
 import { MarkdownHandler } from "../handlers/markdown.js";
+import { getHandler, HANDLERS, readDocuments } from "../handlers/index.js";
 
 let dir: string;
 
@@ -209,5 +210,27 @@ describe("reordering by titles one of which is not there", () => {
     const out = await readFile(path, "utf-8");
 
     expect(out.indexOf("## B")).toBeLessThan(out.indexOf("## A"));
+  });
+});
+
+describe("the handler registry", () => {
+  it("picks a handler by extension, case aside, and none for an unknown one", () => {
+    expect(getHandler("/a/B.MD")).toBe(HANDLERS.markdown);
+    expect(getHandler("/a/b.asc")).toBe(HANDLERS.asciidoc);
+    expect(getHandler("/a/README")).toBeUndefined();
+  });
+
+  it("reads every document type sorted by path, or the one a pattern names", async () => {
+    await file({ name: "b.md", content: "# B\n" });
+    await file({ name: "a.adoc", content: "= A\n" });
+
+    const all = await readDocuments({ directory: dir });
+    const adoc = await readDocuments({ directory: dir, pattern: "*.adoc" });
+
+    expect("files" in all && all.files.map((f) => f.fileType)).toEqual(["asciidoc", "markdown"]);
+    expect("files" in adoc && adoc.files.map((f) => f.fileType)).toEqual(["asciidoc"]);
+    expect(await readDocuments({ directory: dir, pattern: "*.txt" })).toEqual({
+      error: "Unsupported file pattern: *.txt",
+    });
   });
 });

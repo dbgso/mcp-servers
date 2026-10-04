@@ -117,9 +117,7 @@ async function processFile(params: {
 
     // Sections query: lightweight section info for reordering
     if (query === "sections") {
-      // Default level: 1 for AsciiDoc (==), 2 for Markdown (##)
-      const defaultLevel = handler.fileType === "asciidoc" ? 1 : 2;
-      const level = options.level ?? defaultLevel;
+      const level = options.level ?? handler.defaultSectionLevel;
       const { sections } = await handler.getSections({ filePath, level });
       return {
         filePath,

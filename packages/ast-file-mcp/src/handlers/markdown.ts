@@ -154,6 +154,7 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
   readonly extensions = ["md", "markdown"];
   readonly fileType = "markdown";
   readonly anchorNoun = "heading";
+  readonly defaultSectionLevel = 2; // ##
   protected readonly headingLine = /^(#{1,6})\s+(.+)$/;
 
   async read(filePath: string): Promise<AstReadResult> {
