@@ -13,7 +13,8 @@ guidance on which diagram type to reach for.
   a sequence diagram over a flowchart when the subject is an interaction, and
   gets the syntax right on the first attempt rather than the third
 - **Renders to a file or into the conversation** – SVG comes back as text, PNG
-  and PDF as an image, and passing `output_path` writes to disk instead
+  as an image, PDF as an embedded resource, and passing `output_path` writes to
+  disk instead
 
 ## Installation
 

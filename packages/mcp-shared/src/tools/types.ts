@@ -3,7 +3,12 @@
  */
 export type TextContent = { type: "text"; text: string };
 export type ImageContent = { type: "image"; data: string; mimeType: string };
-export type ToolContent = TextContent | ImageContent;
+/** Binary content that is not an image (a PDF, say), base64 in `blob`. */
+export type BlobResourceContent = {
+  type: "resource";
+  resource: { uri: string; mimeType: string; blob: string };
+};
+export type ToolContent = TextContent | ImageContent | BlobResourceContent;
 
 /**
  * MCP tool response format.

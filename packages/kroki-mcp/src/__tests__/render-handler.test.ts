@@ -120,22 +120,40 @@ describe("an SVG response", () => {
 });
 
 describe("a binary response", () => {
-  it.each([
-    { format: "png" as const, mimeType: "image/png" },
-    { format: "pdf" as const, mimeType: "application/pdf" },
-  ])("comes back as base64 $format with its own mime type", async ({ format, mimeType }) => {
+  it("comes back as a base64 PNG image", async () => {
     respondWith({ bytes: new Uint8Array([1, 2, 3, 4]) });
 
     const result = await handler.execute({
       tool: "mermaid",
       diagram: "graph TD; a-->b",
-      format,
+      format: "png",
     });
 
     expect(result.content[0]).toEqual({
       type: "image",
       data: Buffer.from([1, 2, 3, 4]).toString("base64"),
-      mimeType,
+      mimeType: "image/png",
+    });
+  });
+
+  it("comes back as an embedded PDF resource, not as an image", async () => {
+    // An image block is for images: a client hands `application/pdf` in one
+    // to an image decoder, and the Claude API rejects it outright.
+    respondWith({ bytes: new Uint8Array([1, 2, 3, 4]) });
+
+    const result = await handler.execute({
+      tool: "mermaid",
+      diagram: "graph TD; a-->b",
+      format: "pdf",
+    });
+
+    expect(result.content[0]).toEqual({
+      type: "resource",
+      resource: {
+        uri: "kroki://mermaid/diagram.pdf",
+        mimeType: "application/pdf",
+        blob: Buffer.from([1, 2, 3, 4]).toString("base64"),
+      },
     });
   });
 
