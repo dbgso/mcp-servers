@@ -140,15 +140,23 @@ export async function ghCachedExec<T>(params: {
 }
 
 /**
+ * Paths of the regular files in the cache directory.
+ * Anything else (a directory someone made there) is not a cache entry.
+ */
+function listCacheFiles(): string[] {
+  if (!existsSync(cacheConfig.dir)) return [];
+  return readdirSync(cacheConfig.dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(cacheConfig.dir, entry.name));
+}
+
+/**
  * Clear all expired cache entries.
  */
 export function cleanExpiredCache(): number {
-  if (!existsSync(cacheConfig.dir)) return 0;
-  const files = readdirSync(cacheConfig.dir);
   const now = Date.now();
   let removedCount = 0;
-  for (const file of files) {
-    const filePath = path.join(cacheConfig.dir, file);
+  for (const filePath of listCacheFiles()) {
     try {
       const raw = readFileSync(filePath, "utf-8");
       const entry = JSON.parse(raw) as CacheEntry<unknown>;
@@ -168,10 +176,9 @@ export function cleanExpiredCache(): number {
  * Clear all cache entries.
  */
 export function clearAllCache(): number {
-  if (!existsSync(cacheConfig.dir)) return 0;
-  const files = readdirSync(cacheConfig.dir);
-  for (const file of files) {
-    unlinkSync(path.join(cacheConfig.dir, file));
+  const files = listCacheFiles();
+  for (const filePath of files) {
+    unlinkSync(filePath);
   }
   return files.length;
 }

@@ -92,6 +92,19 @@ describe("gh-cache file operations", () => {
     const removed = clearAllCache();
     expect(removed).toBe(2);
   });
+
+  it("cleanExpiredCache and clearAllCache leave a directory in the cache dir alone", () => {
+    // Reading a directory failed, and the unlinkSync in the catch then threw
+    // out of the function instead of counting it as a corrupted entry.
+    const subdir = join(testCacheDir, "not-an-entry");
+    mkdirSync(subdir, { recursive: true });
+    writeFileSync(join(testCacheDir, "corrupted.json"), "{not-json");
+
+    expect(cleanExpiredCache()).toBe(1);
+    expect(clearAllCache()).toBe(0);
+    expect(existsSync(subdir)).toBe(true);
+    rmSync(subdir, { recursive: true });
+  });
 });
 
 describe("isGhAvailable", () => {
