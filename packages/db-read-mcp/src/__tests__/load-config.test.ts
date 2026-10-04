@@ -147,6 +147,22 @@ describe("loadMetadata / loadSelectableFields — TS / JS module path", () => {
       mod: { somethingElse: 1 },
       match: /does not export 'selectableFields'/,
     },
+    // Regression: a named export that exists but is undefined used to be
+    // returned as-is (the server then crashed on the first table lookup),
+    // while an undefined `default.<named>` silently became an empty map.
+    // Both are a missing export.
+    {
+      name: "loadMetadata throws when the named export is undefined",
+      load: loadMetadata,
+      mod: { tableMetadata: undefined },
+      match: /does not export 'tableMetadata'/,
+    },
+    {
+      name: "loadSelectableFields throws when default.<named> is undefined",
+      load: loadSelectableFields,
+      mod: { default: { selectableFields: undefined } },
+      match: /does not export 'selectableFields'/,
+    },
     {
       name: "loadMetadata throws when module is null",
       load: loadMetadata,

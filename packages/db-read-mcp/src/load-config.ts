@@ -84,15 +84,14 @@ interface ModuleWithExport<TKey extends string, TValue> {
   default?: { [k in TKey]?: TValue } | TValue;
 }
 
-interface PickExportParams<T> {
+interface PickExportParams {
   mod: unknown;
   named: string;
   importPath: string;
   what: string;
-  fallback: T;
 }
 
-function pickExport<T>(params: PickExportParams<T>): T {
+function pickExport<T>(params: PickExportParams): T {
   const { mod, named, importPath, what } = params;
   if (mod === null || typeof mod !== "object") {
     throw new Error(
@@ -102,16 +101,18 @@ function pickExport<T>(params: PickExportParams<T>): T {
   const m = mod as ModuleWithExport<string, T>;
   // Prefer the named export. Fall back to `default.<named>` (default-export
   // wrapping is common when authors use `export default { tableMetadata }`).
-  if (named in m) {
-    return m[named] as T;
+  // An export that is present but undefined counts as missing in both places.
+  const fromDefault =
+    m.default && typeof m.default === "object"
+      ? (m.default as { [k: string]: unknown })[named]
+      : undefined;
+  const value = m[named] ?? fromDefault;
+  if (value === undefined || value === null) {
+    throw new Error(
+      `Module ${importPath} does not export '${named}' — required for ${what}`,
+    );
   }
-  if (m.default && typeof m.default === "object" && named in m.default) {
-    const fromDefault = (m.default as { [k: string]: T })[named];
-    return fromDefault ?? params.fallback;
-  }
-  throw new Error(
-    `Module ${importPath} does not export '${named}' — required for ${what}`,
-  );
+  return value as T;
 }
 
 export interface LoadConfigParams {
@@ -153,16 +154,15 @@ async function loadJson<T>(params: LoadJsonParams): Promise<T> {
   }
 }
 
-interface LoadModuleParams<T> {
+interface LoadModuleParams {
   filePath: string;
   importer: DynamicImport;
   named: string;
   what: string;
-  fallback: T;
 }
 
-async function loadFromModule<T>(params: LoadModuleParams<T>): Promise<T> {
-  const { filePath, importer, named, what, fallback } = params;
+async function loadFromModule<T>(params: LoadModuleParams): Promise<T> {
+  const { filePath, importer, named, what } = params;
   // Whoever can swap this path can run code in the MCP process. Surface
   // it on stderr so a misconfigured `--metadata path/to/foo.ts` doesn't
   // slip past quietly. Production deployments should use `.json` instead.
@@ -171,7 +171,7 @@ async function loadFromModule<T>(params: LoadModuleParams<T>): Promise<T> {
   );
   const spec = toImportSpecifier(filePath);
   const mod = await importer(spec);
-  return pickExport<T>({ mod, named, importPath: filePath, what, fallback });
+  return pickExport<T>({ mod, named, importPath: filePath, what });
 }
 
 /**
@@ -190,7 +190,6 @@ async function loadNamedMap<T extends object>(
     importer: params.importer ?? defaultImporter,
     named,
     what: named,
-    fallback: {} as T,
   });
 }
 
