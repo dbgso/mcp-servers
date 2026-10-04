@@ -195,13 +195,37 @@ describe("grep", () => {
   });
 
   it("can be limited to a path, and says when it stopped early", async () => {
+    // src/app.ts has two lines with "export"; a limit of one leaves one out.
+    const result = await gitGrep({
+      repoPath: workTree,
+      pattern: "export",
+      options: { path: "src", max_count: 1 },
+    });
+
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches.every((m) => m.file.startsWith("src/"))).toBe(true);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("does not claim to have stopped early when every match fits the limit", async () => {
+    // Exactly one NEEDLE under src on main: a limit of one returns all of it.
     const result = await gitGrep({
       repoPath: workTree,
       pattern: "NEEDLE",
       options: { path: "src", max_count: 1 },
     });
 
-    expect(result.matches.every((m) => m.file.startsWith("src/"))).toBe(true);
+    expect(result.matches).toHaveLength(1);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("applies the limit to the total, not to each file", async () => {
+    // git grep's --max-count counts per file. README.md and src/app.ts have
+    // two lines with an "e" each, so a per-file limit of two returned four.
+    const result = await gitGrep({ repoPath: workTree, pattern: "e", options: { max_count: 2 } });
+
+    expect(result.matches).toHaveLength(2);
+    expect(result.total_matches).toBe(2);
     expect(result.truncated).toBe(true);
   });
 
