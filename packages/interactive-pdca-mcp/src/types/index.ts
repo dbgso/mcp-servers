@@ -11,6 +11,10 @@ export type TaskStatus =
   | "blocked"
   | "skipped";
 
+/** The PDCA phases a started task is split into, as task id suffixes: `x__plan`. */
+export const TASK_PHASES = ["plan", "do", "check", "act"] as const;
+export type TaskPhase = (typeof TASK_PHASES)[number];
+
 export type FeedbackDecision = "adopted" | "rejected";
 export type FeedbackStatus = "draft" | "confirmed";
 
@@ -47,7 +51,7 @@ export interface TaskOutput {
   how: string;         // How it was done/investigated
   blockers: string[];  // Encountered blockers
   risks: string[];     // Risks and concerns
-  phase: string;       // plan | do | check | act (PDCA)
+  phase: string;       // a TaskPhase when written; read back unchecked from disk
   // Phase-specific fields (optional)
   findings?: string;           // plan: Research findings
   sources?: string[];          // plan: Research sources

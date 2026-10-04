@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BaseActionHandler } from "mcp-shared";
 import type { PlanActionContext } from "../../../types/index.js";
+import { phaseSections, renderSections } from "../../../services/task-presentation.js";
 
 const readOutputSchema = z.object({
   id: z.string().describe("Task ID"),
@@ -80,27 +81,9 @@ plan(action: "read_output", id: "<task-id>")
       output.how,
     ];
 
-    // Add phase-specific sections
-    if (output.phase === "research") {
-      lines.push("", `## Findings`, output.findings ?? "(none)");
-      lines.push("", `## Sources`, output.sources?.join(", ") ?? "(none)");
-    } else if (output.phase === "implement" || output.phase === "fix") {
-      if (output.changes && output.changes.length > 0) {
-        lines.push("", `## Changes`);
-        for (const change of output.changes) {
-          lines.push(`- ${change.file}:${change.lines} - ${change.description}`);
-        }
-      }
-      if (output.phase === "implement" && output.design_decisions) {
-        lines.push("", `## Design Decisions`, output.design_decisions);
-      }
-      if (output.phase === "fix" && output.feedback_addressed) {
-        lines.push("", `## Feedback Addressed`, output.feedback_addressed);
-      }
-    } else if (output.phase === "verify") {
-      lines.push("", `## Test Target`, output.test_target ?? "(none)");
-      lines.push("", `## Test Results`, output.test_results ?? "(none)");
-      lines.push("", `## Coverage`, output.coverage ?? "(none)");
+    const sections = phaseSections(output);
+    if (sections.length > 0) {
+      lines.push("", renderSections({ sections, level: 2 }));
     }
 
     // Add blockers and risks

@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { FeedbackEntry, FeedbackDecision, FeedbackStatus } from "../types/index.js";
 import { getErrorMessage } from "mcp-shared";
+import { withStringFields } from "../utils/metadata.js";
 
 export class FeedbackReader {
   private readonly baseDir: string;
@@ -64,19 +65,13 @@ export class FeedbackReader {
       metadata[key] = this.parseYamlValue(value);
     }
 
-    // Validate required fields
-    if (
-      typeof metadata.id !== "string" ||
-      typeof metadata.task_id !== "string" ||
-      typeof metadata.original !== "string"
-    ) {
-      return null;
-    }
+    const required = withStringFields({ metadata, keys: ["id", "task_id", "original"] as const });
+    if (required === null) return null;
 
     return {
-      id: metadata.id,
-      task_id: metadata.task_id,
-      original: metadata.original,
+      id: required.id,
+      task_id: required.task_id,
+      original: required.original,
       interpretation: metadata.interpretation as string | null,
       decision: (metadata.decision as FeedbackDecision) || "rejected",
       status: (metadata.status as FeedbackStatus) || "draft",
