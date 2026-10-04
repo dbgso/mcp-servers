@@ -237,6 +237,22 @@ describe("grep", () => {
     expect(result.matches).toEqual([{ file: "src/app.ts", line: 1, content: "export const NEEDLE = 2;" }]);
   });
 
+  it("reports the whole name of a file that has a colon in it", async () => {
+    // Output was split at the first colon after the ref, so "a:1:b.txt"
+    // came back as file "a", line 1.
+    const dir = join(root, "colon-repo");
+    await mkdir(dir, { recursive: true });
+    const git = (...args: string[]) => run("git", args, { cwd: dir });
+    await git("init", "-b", "main");
+    await writeFile(join(dir, "a:1:b.txt"), "x\nfind me\n", "utf-8");
+    await git("add", ".");
+    await git("-c", "user.name=T", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-m", "c");
+
+    const result = await gitGrep({ repoPath: dir, pattern: "find me" });
+
+    expect(result.matches).toEqual([{ file: "a:1:b.txt", line: 2, content: "find me" }]);
+  });
+
   it("searches the ref it is given", async () => {
     const result = await gitGrep({
       repoPath: workTree,
@@ -254,23 +270,24 @@ describe("parsing grep output", () => {
     expect(parseGitGrepOutput({ output: "   \n", ref: "HEAD" })).toEqual([]);
   });
 
-  it("keeps a colon that belongs to the matched line", () => {
-    // Source lines contain colons constantly. Splitting on every one would
-    // truncate the match at the first of them.
+  it("keeps a colon that belongs to the matched line or to the file name", () => {
+    // Source lines contain colons constantly, and file names can too. With -z
+    // the file and line number end in NUL, so neither is split on a colon.
     const matches = parseGitGrepOutput({
-      output: "HEAD:src/app.ts:12:const url = 'https://example.com';",
+      output: "HEAD:src/a:b.ts\u000012\u0000const url = 'https://example.com';",
       ref: "HEAD",
     });
 
     expect(matches).toEqual([
-      { file: "src/app.ts", line: 12, content: "const url = 'https://example.com';" },
+      { file: "src/a:b.ts", line: 12, content: "const url = 'https://example.com';" },
     ]);
   });
 
   it.each([
-    { name: "no colon at all", line: "not a grep line" },
+    { name: "no separator at all", line: "not a grep line" },
     { name: "a file but no line number", line: "HEAD:src/app.ts" },
-    { name: "a line number that is not a number", line: "HEAD:src/app.ts:xx:content" },
+    { name: "a line number but no content separator", line: "HEAD:src/app.ts\u000012" },
+    { name: "a line number that is not a number", line: "HEAD:src/app.ts\u0000xx\u0000content" },
   ])("skips a line with $name", ({ line }) => {
     // git grep's output is parsed by position, and a line that does not fit
     // is a line this parser cannot place. Guessing would put a match at the

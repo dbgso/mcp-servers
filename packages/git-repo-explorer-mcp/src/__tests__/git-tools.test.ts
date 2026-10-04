@@ -54,10 +54,10 @@ describe("extractRepoName", () => {
 });
 
 describe("parseGitGrepOutput", () => {
-  test("should parse standard git grep output", () => {
+  test("should parse git grep -n -z output", () => {
     const output = [
-      "main:src/utils.ts:42:  const searchPattern = 'test';",
-      "main:src/index.ts:10:  import { searchPattern } from './utils';",
+      "main:src/utils.ts\u000042\u0000  const searchPattern = 'test';",
+      "main:src/index.ts\u000010\u0000  import { searchPattern } from './utils';",
     ].join("\n");
 
     const result = parseGitGrepOutput({ output, ref: "main" });
@@ -73,7 +73,7 @@ describe("parseGitGrepOutput", () => {
   });
 
   test("should handle output with colons in content", () => {
-    const output = "HEAD:config.ts:5:  url: 'https://example.com:8080/api';";
+    const output = "HEAD:config.ts\u00005\u0000  url: 'https://example.com:8080/api';";
     const result = parseGitGrepOutput({ output, ref: "HEAD" });
     expect(result).toEqual([
       { file: "config.ts", line: 5, content: "  url: 'https://example.com:8080/api';" },
@@ -81,18 +81,18 @@ describe("parseGitGrepOutput", () => {
   });
 
   test("should skip lines with non-matching ref prefix", () => {
-    expect(parseGitGrepOutput({ output: "other-branch:file.ts:1:content", ref: "main" })).toEqual([]);
+    expect(parseGitGrepOutput({ output: "other-branch:file.ts\u00001\u0000content", ref: "main" })).toEqual([]);
   });
 
   test("should handle commit hash as ref", () => {
-    const output = "abc1234:src/file.ts:99:  return true;";
+    const output = "abc1234:src/file.ts\u000099\u0000  return true;";
     expect(parseGitGrepOutput({ output, ref: "abc1234" })).toEqual([
       { file: "src/file.ts", line: 99, content: "  return true;" },
     ]);
   });
 
   test("should skip malformed lines", () => {
-    const output = ["main:valid.ts:1:good line", "main:invalid-no-line-number", "main:valid2.ts:2:another good line"].join("\n");
+    const output = ["main:valid.ts\u00001\u0000good line", "main:invalid-no-line-number", "main:valid2.ts\u00002\u0000another good line"].join("\n");
     const result = parseGitGrepOutput({ output, ref: "main" });
     expect(result).toHaveLength(2);
     expect(result[0].file).toBe("valid.ts");
