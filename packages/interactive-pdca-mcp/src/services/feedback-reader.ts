@@ -56,7 +56,7 @@ export class FeedbackReader {
     if (value === "null") return null;
     const quoted = unquote(value);
     // Undo what serializeFeedback escapes
-    if (quoted !== null) return quoted.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+    if (quoted !== null) return quoted.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"');
     return value;
   }
 

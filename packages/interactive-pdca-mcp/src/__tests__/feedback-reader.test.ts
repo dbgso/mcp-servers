@@ -22,6 +22,19 @@ describe("FeedbackReader", () => {
     }
   });
 
+  describe("round trip", () => {
+    // serializeFeedback escapes quotes, and reading used to leave the
+    // backslashes in: `say "hi"` came back as `say \\"hi\\"`.
+    it("reads back a comment with quotes and newlines as it was written", async () => {
+      const original = 'Rename it to "fooBar"\nand update the docs';
+      const result = await feedbackReader.createDraftFeedback({ taskId: "task-1", original, decision: "adopted" });
+
+      const feedback = await feedbackReader.getFeedback({ taskId: "task-1", feedbackId: result.feedbackId! });
+
+      expect(feedback?.original).toBe(original);
+    });
+  });
+
   describe("createDraftFeedback", () => {
     type CreateDraftFeedbackTestCase = {
       name: string;
