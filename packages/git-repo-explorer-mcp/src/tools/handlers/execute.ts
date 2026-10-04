@@ -2,7 +2,8 @@ import { z } from "zod";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
 import { getErrorMessage } from "mcp-shared";
-import { allOperations, getOperation } from "../../operations/registry.js";
+import { getOperation } from "../../operations/registry.js";
+import { unknownOperationResponse } from "./unknown-operation.js";
 import { resolveRepo } from "../../git-repo-manager.js";
 
 const ExecuteSchema = z.object({
@@ -37,11 +38,7 @@ export class GitExecuteHandler extends BaseToolHandler<ExecuteArgs> {
     // 1. Lookup operation
     const op = getOperation(operation);
     if (!op) {
-      const available = allOperations.map(o => o.id).join(", ");
-      return {
-        content: [{ type: "text", text: `Unknown operation: "${operation}"\n\nAvailable operations: ${available}` }],
-        isError: true,
-      };
+      return unknownOperationResponse(operation);
     }
 
     // 2. Validate params with Zod
