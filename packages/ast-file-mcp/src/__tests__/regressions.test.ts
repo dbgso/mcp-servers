@@ -143,3 +143,22 @@ describe("AsciiDoc query with a heading", () => {
     expect((missing.data as AsciidocDocument).blocks).toEqual([]);
   });
 });
+
+describe("AsciiDoc reorder with a section at another level", () => {
+  it("leaves a section that comes after the others where it was", async () => {
+    // A level-0 section after level-1 ones was put in the preamble, which is
+    // written first, so even a reorder that changes nothing moved it to the top
+    // of the document. It now belongs to the section before it, as any other
+    // block there does -- and as it would in Markdown.
+    const path = await file({
+      name: "doc.adoc",
+      content: "= Doc\n\n== A\n\na\n\n== B\n\nb\n\n= Appendix\n\nz\n",
+    });
+
+    await adoc.reorderSections({ filePath: path, order: ["A", "B"], level: 1 });
+    const out = await readFile(path, "utf-8");
+
+    expect(out.indexOf("== A")).toBeLessThan(out.indexOf("== B"));
+    expect(out.indexOf("== B")).toBeLessThan(out.indexOf("= Appendix"));
+  });
+});
