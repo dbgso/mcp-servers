@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { writeFile } from "node:fs/promises";
 import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import type { ToolContent, ToolResponse } from "mcp-shared";
 import { getErrorMessage } from "mcp-shared";
 import { getAllTools, getTool } from "../../diagrams/registry.js";
 
@@ -13,6 +13,42 @@ const RenderSchema = z.object({
 });
 
 type RenderArgs = z.infer<typeof RenderSchema>;
+type Format = RenderArgs["format"];
+
+/** How a rendered diagram of one format is handed back in the conversation. */
+interface OutputFormat {
+  toContent(params: { data: Buffer; tool: string }): ToolContent;
+}
+
+/** SVG is text. */
+class SvgOutput implements OutputFormat {
+  toContent({ data }: { data: Buffer }): ToolContent {
+    return { type: "text", text: data.toString("utf-8") };
+  }
+}
+
+/** PNG is an image block. */
+class PngOutput implements OutputFormat {
+  toContent({ data }: { data: Buffer }): ToolContent {
+    return { type: "image", data: data.toString("base64"), mimeType: "image/png" };
+  }
+}
+
+/** A PDF is not an image: it goes back as an embedded resource. */
+class PdfOutput implements OutputFormat {
+  toContent({ data, tool }: { data: Buffer; tool: string }): ToolContent {
+    return {
+      type: "resource",
+      resource: { uri: `kroki://${tool}/diagram.pdf`, mimeType: "application/pdf", blob: data.toString("base64") },
+    };
+  }
+}
+
+const OUTPUT_FORMATS: Record<Format, OutputFormat> = {
+  svg: new SvgOutput(),
+  png: new PngOutput(),
+  pdf: new PdfOutput(),
+};
 
 export class KrokiRenderHandler extends BaseToolHandler<RenderArgs> {
   readonly name = "kroki_render";
@@ -74,46 +110,17 @@ export class KrokiRenderHandler extends BaseToolHandler<RenderArgs> {
         };
       }
 
-      if (format === "svg") {
-        const svg = await response.text();
+      // Kept as bytes for every format, so a file is written exactly as Kroki sent it
+      const data = Buffer.from(await response.arrayBuffer());
 
-        // Save to file if output_path specified
-        if (output_path) {
-          await writeFile(output_path, svg, "utf-8");
-          return {
-            content: [{ type: "text", text: `Saved to ${output_path}` }],
-          };
-        }
-
+      if (output_path) {
+        await writeFile(output_path, data);
         return {
-          content: [{ type: "text", text: svg }],
-        };
-      } else {
-        // PNG/PDF - return as base64 or save to file
-        const buffer = await response.arrayBuffer();
-
-        // Save to file if output_path specified
-        if (output_path) {
-          await writeFile(output_path, Buffer.from(buffer));
-          return {
-            content: [{ type: "text", text: `Saved to ${output_path}` }],
-          };
-        }
-
-        const base64 = Buffer.from(buffer).toString("base64");
-        if (format === "png") {
-          return { content: [{ type: "image", data: base64, mimeType: "image/png" }] };
-        }
-        // A PDF is not an image: it goes back as an embedded resource
-        return {
-          content: [
-            {
-              type: "resource",
-              resource: { uri: `kroki://${tool}/diagram.pdf`, mimeType: "application/pdf", blob: base64 },
-            },
-          ],
+          content: [{ type: "text", text: `Saved to ${output_path}` }],
         };
       }
+
+      return { content: [OUTPUT_FORMATS[format].toContent({ data, tool })] };
     } catch (error) {
       return {
         content: [{ type: "text", text: `Failed to render diagram: ${getErrorMessage(error)}` }],
