@@ -14,51 +14,75 @@ const PRESETS_DIR = resolve(__dirname, "..", "presets");
 // Store cleanup function for signal handling
 let cleanup: (() => Promise<void>) | null = null;
 
+/** What a flag does, and how many arguments it uses up, itself included. */
+type FlagHandler = (params: { result: CliArgs; args: string[]; index: number }) => number;
+
+/** A flag with one value after it. */
+function valueFlag(set: (params: { result: CliArgs; value: string | undefined }) => void): FlagHandler {
+  return ({ result, args, index }) => {
+    set({ result, value: args[index + 1] });
+    return 2;
+  };
+}
+
+/** `--args a b c`: everything up to the next `--` flag. */
+const collectArgs: FlagHandler = ({ result, args, index }) => {
+  let end = index + 1;
+  while (args[end] && !args[end].startsWith("--")) end++;
+  result.args = args.slice(index + 1, end);
+  return end - index;
+};
+
+const setDryRun: FlagHandler = ({ result }) => {
+  result.dryRun = true;
+  return 1;
+};
+
+const setListPresets: FlagHandler = ({ result }) => {
+  result.listPresets = true;
+  return 1;
+};
+
+const showHelp: FlagHandler = () => {
+  printHelp();
+  process.exit(0);
+};
+
+const FLAGS: Record<string, FlagHandler> = {
+  "--command": valueFlag(({ result, value }) => {
+    result.command = value;
+  }),
+  "--args": collectArgs,
+  "--rules-file": valueFlag(({ result, value }) => {
+    result.rulesFile = value;
+  }),
+  "--config": valueFlag(({ result, value }) => {
+    result.config = value;
+  }),
+  "--dry-run": setDryRun,
+  "--audit-log": valueFlag(({ result, value }) => {
+    result.auditLog = value;
+  }),
+  "--preset": valueFlag(({ result, value }) => {
+    result.preset = value;
+  }),
+  "--list-presets": setListPresets,
+  "--help": showHelp,
+};
+
+/** An argument that is not a flag, or a flag this version does not know, is skipped. */
+const skip: FlagHandler = () => 1;
+
+function flagFor(arg: string): FlagHandler {
+  return Object.hasOwn(FLAGS, arg) ? FLAGS[arg] : skip;
+}
+
 function parseArgs(args: string[]): CliArgs {
   const result: CliArgs = {};
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    const nextArg = args[i + 1];
-
-    switch (arg) {
-      case "--command":
-        result.command = nextArg;
-        i++;
-        break;
-      case "--args":
-        // Collect all args until next flag
-        result.args = [];
-        while (args[i + 1] && !args[i + 1].startsWith("--")) {
-          result.args.push(args[++i]);
-        }
-        break;
-      case "--rules-file":
-        result.rulesFile = nextArg;
-        i++;
-        break;
-      case "--config":
-        result.config = nextArg;
-        i++;
-        break;
-      case "--dry-run":
-        result.dryRun = true;
-        break;
-      case "--audit-log":
-        result.auditLog = nextArg;
-        i++;
-        break;
-      case "--preset":
-        result.preset = nextArg;
-        i++;
-        break;
-      case "--list-presets":
-        result.listPresets = true;
-        break;
-      case "--help":
-        printHelp();
-        process.exit(0);
-    }
+  let index = 0;
+  while (index < args.length) {
+    index += flagFor(args[index])({ result, args, index });
   }
 
   return result;

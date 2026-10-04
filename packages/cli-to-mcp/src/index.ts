@@ -6,31 +6,50 @@ import { createServer } from "./server.js";
 import type { CliArgs, ServerConfig } from "./types.js";
 import { ServerConfigSchema } from "./types.js";
 
+/** What a flag does, and how many arguments it uses up, itself included. */
+type FlagHandler = (params: { result: CliArgs; value: string | undefined }) => number;
+
+const setConfig: FlagHandler = ({ result, value }) => {
+  result.config = value;
+  return 2;
+};
+
+const setCwd: FlagHandler = ({ result, value }) => {
+  result.cwd = value;
+  return 2;
+};
+
+const setCommandTimeout: FlagHandler = ({ result, value }) => {
+  result.timeout = parseInt(value ?? "", 10);
+  return 2;
+};
+
+const showHelp: FlagHandler = () => {
+  printHelp();
+  process.exit(0);
+};
+
+const FLAGS: Record<string, FlagHandler> = {
+  "--config": setConfig,
+  "--cwd": setCwd,
+  "--timeout": setCommandTimeout,
+  "--help": showHelp,
+  "-h": showHelp,
+};
+
+/** An argument that is not a flag, or a flag this version does not know, is skipped. */
+const skip: FlagHandler = () => 1;
+
+function flagFor(arg: string): FlagHandler {
+  return Object.hasOwn(FLAGS, arg) ? FLAGS[arg] : skip;
+}
+
 function parseArgs(args: string[]): CliArgs {
   const result: CliArgs = {};
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    const nextArg = args[i + 1];
-
-    switch (arg) {
-      case "--config":
-        result.config = nextArg;
-        i++;
-        break;
-      case "--cwd":
-        result.cwd = nextArg;
-        i++;
-        break;
-      case "--timeout":
-        result.timeout = parseInt(nextArg, 10);
-        i++;
-        break;
-      case "--help":
-      case "-h":
-        printHelp();
-        process.exit(0);
-    }
+  let i = 0;
+  while (i < args.length) {
+    i += flagFor(args[i])({ result, value: args[i + 1] });
   }
 
   return result;
