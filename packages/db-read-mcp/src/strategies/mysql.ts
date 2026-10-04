@@ -13,7 +13,6 @@
  * Multi-statement defence is on the connection options
  * (`multipleStatements: false`) — see `mcp-shared-db-mysql/src/client.ts`.
  */
-import { resolveTunneledUrl } from "mcp-shared/tunnel";
 import { createMysqlClient, createMysqlDataSource } from "mcp-shared-db-mysql";
 import type { MysqlQueryClient } from "mcp-shared-db-mysql";
 import type {
@@ -22,7 +21,7 @@ import type {
   EngineStrategy,
   OpenStrategyArgs,
 } from "./types.js";
-import { SqlEngineConnection } from "./engine-connection.js";
+import { openSqlConnection, type SqlEngineSteps } from "./engine-connection.js";
 
 const URL_SCHEME = /^mysql:\/\//i;
 
@@ -80,42 +79,31 @@ export class MysqlStrategy implements EngineStrategy {
     return buildInsecureWarning();
   }
 
-  async open(args: OpenStrategyArgs): Promise<EngineConnection> {
-    const { url: tunneledUrl, tunnel } = await resolveTunneledUrl({
-      url: args.url,
-      ...(args.tunnel && { tunnel: args.tunnel }),
-    });
-    let client: MysqlQueryClient | null = null;
-    try {
-      client = await createMysqlClient(tunneledUrl);
-      await client.connect();
-      client.onError((err) => {
-        console.error("[db-read-mcp] mysql client error:", err.message);
-      });
-      const env = args.env ?? process.env;
-      const timeoutMs = parseTimeoutMs(env.DBREAD_STATEMENT_TIMEOUT);
-      // max_execution_time is integer ms; bind it parametrically so the
-      // `SET` statement stays a single token (multi-statement is already
-      // wire-rejected, but this keeps the SQL boring).
-      await client.query({
-        text: "SET SESSION max_execution_time = ?",
-        values: [timeoutMs],
-      });
-      await client.query({
-        text: "SET SESSION transaction_read_only = 1",
-      });
-    } catch (err) {
-      if (client) await client.end().catch(() => undefined);
-      if (tunnel) await tunnel.close().catch(() => undefined);
-      throw err;
-    }
-    const connectedClient = client;
-    const dataSource = createMysqlDataSource({
-      client: connectedClient,
-      tableMetadata: args.tableMetadata,
-    });
-    return new SqlEngineConnection({ dataSource, client: connectedClient, tunnel });
+  open(args: OpenStrategyArgs): Promise<EngineConnection> {
+    return openSqlConnection({ args, steps: MYSQL_STEPS });
   }
 }
+
+const MYSQL_STEPS: SqlEngineSteps<MysqlQueryClient> = {
+  createClient: createMysqlClient,
+  async startSession({ client, env }) {
+    await client.connect();
+    client.onError((err) => {
+      console.error("[db-read-mcp] mysql client error:", err.message);
+    });
+    const timeoutMs = parseTimeoutMs(env.DBREAD_STATEMENT_TIMEOUT);
+    // max_execution_time is integer ms; bind it parametrically so the
+    // `SET` statement stays a single token (multi-statement is already
+    // wire-rejected, but this keeps the SQL boring).
+    await client.query({
+      text: "SET SESSION max_execution_time = ?",
+      values: [timeoutMs],
+    });
+    await client.query({
+      text: "SET SESSION transaction_read_only = 1",
+    });
+  },
+  createDataSource: createMysqlDataSource,
+};
 
 export const mysqlStrategy = new MysqlStrategy();
