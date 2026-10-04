@@ -174,11 +174,13 @@ function registerProxyExecuteTool(params: {
       // Forward to target MCP
       try {
         const result = await proxyClient.callTool({ name: toolName, args });
-        auditLogger?.logAllow({
+        auditLogger?.logExecuted({
           toolName,
           args,
+          action: evaluation.action,
           rule: evaluation.matchedRule,
           reason: evaluation.reason,
+          dryRun,
         });
 
         if ("content" in result && Array.isArray(result.content)) {

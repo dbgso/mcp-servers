@@ -11,6 +11,8 @@ export interface AuditLogEntry {
   reason: string;
   result?: "executed" | "blocked" | "pending" | "error";
   error?: string;
+  // Set when the call was made in dry-run mode, where nothing is blocked or held
+  dryRun?: true;
 }
 
 export class AuditLogger {
@@ -32,20 +34,28 @@ export class AuditLogger {
     appendFileSync(this.logPath, line);
   }
 
-  logAllow(params: {
+  /**
+   * A call that reached the target. `action` is what the rules decided: only
+   * `allow` outside a dry run, but in a dry run a denied or held call is
+   * forwarded too, and the entry has to say what the rules would have done.
+   */
+  logExecuted(params: {
     toolName: string;
     args: Record<string, unknown>;
+    action: RuleAction;
     rule: Rule | undefined;
     reason: string;
+    dryRun: boolean;
   }): void {
-    const { toolName, args, rule, reason } = params;
+    const { toolName, args, action, rule, reason, dryRun } = params;
     this.log({
       toolName,
       args,
-      action: "allow",
+      action,
       ruleId: rule?.id,
       reason,
       result: "executed",
+      ...(dryRun && { dryRun: true }),
     });
   }
 
