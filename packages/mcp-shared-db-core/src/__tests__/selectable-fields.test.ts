@@ -220,6 +220,17 @@ describe("redactPii — leak-prevention safety matrix", () => {
     expect(out.field).not.toBe(SECRET);
   });
 
+  it.each(["constructor", "toString", "__proto__"])(
+    "a policy string that names an Object.prototype member (%s) still fails safe to redact",
+    (policy) => {
+      const table: TableConfig = {
+        fields: { field: { select: policy as unknown as "expose" } },
+      };
+      const out = redactPii({ row: { field: SECRET }, table });
+      expect(out.field).toBe("[REDACTED]");
+    },
+  );
+
   it("a row containing fields not declared in the table config is passed through unchanged (caller's responsibility)", () => {
     // Documented behavior: redactPii only walks declared fields. The
     // access-control layer is responsible for ensuring queries don't

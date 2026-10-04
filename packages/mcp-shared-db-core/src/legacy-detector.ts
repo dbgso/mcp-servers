@@ -16,6 +16,9 @@ export type LegacyUsageKind =
   /** Field has `piiReason: "..."` (replace with `note: "..."`). */
   | "piiReason";
 
+/** The legacy field keys, in the order they are reported per field. */
+const LEGACY_KEYS: readonly LegacyUsageKind[] = ["pii", "piiReason"];
+
 export interface LegacyUsageEntry {
   table: string;
   field: string;
@@ -39,9 +42,8 @@ export function detectLegacySelectableFieldsUsage(
   const entries: LegacyUsageEntry[] = [];
   for (const [table, config] of Object.entries(map)) {
     for (const [field, info] of Object.entries(config.fields)) {
-      if (info.pii !== undefined) entries.push({ table, field, kind: "pii" });
-      if (info.piiReason !== undefined) {
-        entries.push({ table, field, kind: "piiReason" });
+      for (const kind of LEGACY_KEYS) {
+        if (info[kind] !== undefined) entries.push({ table, field, kind });
       }
     }
   }
