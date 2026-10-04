@@ -65,8 +65,8 @@ describe("GraphHandler", () => {
       expect(text).toContain("# Task Graph");
       expect(text).toContain("```mermaid");
       expect(text).toContain("flowchart TD");
-      expect(text).toContain("task_1[Task One");
-      expect(text).toContain("task_2[Task Two");
+      expect(text).toContain('task_1["Task One');
+      expect(text).toContain('task_2["Task Two');
       expect(text).toContain("task_1 --> task_2");
       expect(text).toContain("## Legend");
     });
@@ -82,7 +82,7 @@ describe("GraphHandler", () => {
       const result = await handler.execute({ rawParams, context: mockContext });
 
       const text = result.content[0].text;
-      expect(text).toContain("parallel_task([Parallel Task");
+      expect(text).toContain('parallel_task(["Parallel Task');
     });
 
     it("should show correct icon for completed status", async () => {
