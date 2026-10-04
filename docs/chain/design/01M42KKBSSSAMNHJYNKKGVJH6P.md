@@ -4,7 +4,7 @@ type: design
 title: 報告 MCP の実装設計
 requires: 01M42J5FD0DVHH7DFJETNJ18GS
 created: 2026-10-04T04:43:48.000Z
-updated: 2026-10-04T10:20:00.000Z
+updated: 2026-10-04T11:35:00.000Z
 ---
 
 # 報告 MCP の実装設計
@@ -77,7 +77,8 @@ interface Problem {
 
 呼び出しは `exec(op: "report", title: ..., conclusion: ..., claims: [...], asks: [...])` になる。
 
-- どちらも `inputSchema` は `z.object({}).passthrough()`。検証はハンドラ内で行う
+- 登録する `inputSchema` はどちらも `z.object({}).passthrough()`。検証はハンドラ内で行う
+- `exec` の op は `report` だけなので、ツール一覧には報告の全フィールドを載せたスキーマを公開する（`policy__mcp-tool-surface` の1 op の例外）。呼び出す AI は describe を読む前に必須フィールドが分かる
 - 配列の引数（`claims` など）はクライアントから文字列で届く。ハンドラのスキーマで `looseArray` を使う（`policy__mcp-tool-surface`「Arguments arrive as strings」）
 - `approve` は持たない（下記「承認ゲートは置かない」）
 - **基準は `describe` に載せる。** リポジトリの `docs/` はパッケージに同梱されないので、利用者が基準を読める場所は `describe` だけになる（#83 で学んだこと）

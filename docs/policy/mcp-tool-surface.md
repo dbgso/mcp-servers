@@ -73,6 +73,23 @@ tool that looks like it takes nothing and then does not take anything.
 `passthrough` publishes `additionalProperties: true`, which says "arbitrary
 arguments", and hands them all over.
 
+## One op: the schema may list its fields
+
+Everything above comes from one schema having to serve many ops. **A tool with
+exactly one op has one contract, and may publish it**, so a caller sees the
+required fields in the tool list without reading `describe` first. `report-mcp`
+does this: what a report must contain is the point of the server, and a caller
+that has to discover it by failing once has been told too late.
+
+- Publish it from the `tools/list` handler, and register the tool `passthrough`
+  as usual. A registered schema is validated by the SDK before the handler runs,
+  and the SDK answers with its own error, so the handler's own problems (every
+  one at once, each with its reason) never reach the caller.
+- The published schema is the handler's schema, imported, not a copy. A test
+  reads `tools/list` and checks the required fields.
+- `describe` still exists and still says why each field is there.
+- The moment a second op is added, the tool is back under rule 1.
+
 ## Arguments arrive as strings
 
 **The price of an empty schema is that the handler, not the client, restores the
