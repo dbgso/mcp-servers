@@ -41,6 +41,22 @@ export function getTaskPhase(taskId: string): TaskPhase | null {
   return null;
 }
 
+/** The self-review document a phase's submit and confirm must name. */
+export function selfReviewRef(phase: TaskPhase): string {
+  return `_mcp-interactive-instruction__plan__self-review__${phase}`;
+}
+
+/** A failed base-schema parse as one message: missing fields first, then the rest. */
+export function formatSchemaErrors(errors: z.ZodIssue[]): string {
+  const missing = errors.filter((e) => e.message === "Required").map((e) => e.path.join("."));
+  const others = errors.filter((e) => e.message !== "Required").map((e) => `${e.path.join(".")}: ${e.message}`);
+  const parts = [
+    ...(missing.length > 0 ? [`Missing required fields: ${missing.join(", ")}`] : []),
+    ...(others.length > 0 ? [others.join(", ")] : []),
+  ];
+  return parts.join("\n");
+}
+
 /**
  * Abstract base class for submit review handlers
  */
@@ -72,26 +88,11 @@ export abstract class BaseSubmitHandler implements PlanActionHandler {
     // Validate base params
     const baseResult = baseParamsSchema.safeParse(params);
     if (!baseResult.success) {
-      const missingFields = baseResult.error.errors
-        .filter((e) => e.message === "Required")
-        .map((e) => e.path.join("."));
-      const otherErrors = baseResult.error.errors
-        .filter((e) => e.message !== "Required")
-        .map((e) => `${e.path.join(".")}: ${e.message}`);
-
-      const errorParts: string[] = [];
-      if (missingFields.length > 0) {
-        errorParts.push(`Missing required fields: ${missingFields.join(", ")}`);
-      }
-      if (otherErrors.length > 0) {
-        errorParts.push(otherErrors.join(", "));
-      }
-
       return {
         content: [
           {
             type: "text" as const,
-            text: `Error: ${errorParts.join("\n")}\n\n${this.help}`,
+            text: `Error: ${formatSchemaErrors(baseResult.error.errors)}\n\n${this.help}`,
           },
         ],
         isError: true,
@@ -99,7 +100,7 @@ export abstract class BaseSubmitHandler implements PlanActionHandler {
     }
 
     // Validate self_review_ref matches expected pattern
-    const expectedRef = `_mcp-interactive-instruction__plan__self-review__${this.phase}`;
+    const expectedRef = selfReviewRef(this.phase);
     if (baseResult.data.self_review_ref !== expectedRef) {
       return {
         content: [

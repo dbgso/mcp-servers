@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BaseActionHandler } from "mcp-shared";
 import type { PlanActionContext } from "../../../types/index.js";
-import { getTaskPhase } from "./submit-review/base-submit-handler.js";
+import { getTaskPhase, selfReviewRef } from "./submit-review/base-submit-handler.js";
 import { reviewCommands } from "../../../services/task-presentation.js";
 
 const confirmSchema = z.object({
@@ -77,7 +77,7 @@ plan(action: "confirm", id: "feature__do",
     // Validate self_review_ref matches expected phase
     const taskPhase = getTaskPhase(id);
     if (taskPhase) {
-      const expectedRef = `_mcp-interactive-instruction__plan__self-review__${taskPhase}`;
+      const expectedRef = selfReviewRef(taskPhase);
       if (self_review_ref !== expectedRef) {
         return {
           content: [

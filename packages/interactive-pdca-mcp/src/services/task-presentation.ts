@@ -127,3 +127,8 @@ export function reviewCommands(id: string): { approve: string; requestChanges: s
     requestChanges: `plan(action: "request_changes", id: "${id}", comment: "<feedback>")`,
   };
 }
+
+/** Items joined with commas, or "none" for an empty list. */
+export function listOrNone(items: readonly string[]): string {
+  return items.length > 0 ? items.join(", ") : "none";
+}
