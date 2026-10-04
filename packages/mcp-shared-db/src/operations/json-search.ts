@@ -1,15 +1,9 @@
 import { z } from "zod";
 import { jsonResponse } from "mcp-shared";
-import {
-  hasLeadingIndex,
-  listAvailableTables,
-  redactPiiMany,
-  unindexedColumnWarning,
-} from "mcp-shared-db-core";
+import { redactPiiMany } from "mcp-shared-db-core";
+import { resolveColumn, withUnindexedWarning } from "./column-guard.js";
+import { DEFAULT_LIMIT, MAX_LIMIT } from "./find-by-eq.js";
 import type { DatabaseOperation } from "./types.js";
-
-const DEFAULT_LIMIT = 100;
-const MAX_LIMIT = 1000;
 
 const argsSchema = z.object({
   table: z.string(),
@@ -51,35 +45,14 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
   async execute({ args, ctx }: Parameters<DatabaseOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
-    const config = ctx.selectableFields[args.table];
-    const meta = ctx.tableMetadata[args.table];
-    // Unknown / non-whitelisted table.
-    if (!config || !meta) {
-      return jsonResponse({
-        error: `Table '${args.table}' is not selectable.`,
-        availableTables: listAvailableTables(ctx.selectableFields),
-      });
-    }
-    // Column must be in the whitelist.
-    if (!config.fields[args.column]) {
-      return jsonResponse({
-        error: `Column '${args.column}' is not selectable on '${args.table}'.`,
-        allowedColumns: Object.keys(config.fields),
-      });
-    }
-    const fieldMeta = meta.fields[args.column];
-    // Need Layer-1 metadata to know the column type.
-    if (!fieldMeta) {
-      return jsonResponse({
-        error: `Column '${args.column}' has no metadata on '${args.table}'.`,
-      });
-    }
-    // Type guard: this op is only meaningful on JSON columns.
-    if (fieldMeta.type !== "json") {
-      return jsonResponse({
-        error: `Column '${args.column}' on '${args.table}' is not a JSON column (type: ${fieldMeta.type}).`,
-      });
-    }
+    const resolved = resolveColumn({
+      ctx,
+      table: args.table,
+      column: args.column,
+      requiredType: "json",
+    });
+    if ("refusal" in resolved) return resolved.refusal;
+    const { config, meta } = resolved;
 
     const path = normalizeJsonPath(args.path);
     const limit = args.limit ?? DEFAULT_LIMIT;
@@ -94,21 +67,24 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
     });
 
     const redacted = redactPiiMany({ rows, table: config });
-    const response: Record<string, unknown> = {
-      table: args.table,
-      column: args.column,
-      path,
-      value: args.value,
-      count: redacted.length,
-      rows: redacted,
-    };
     // GIN/expression indexes on JSON columns can't be detected from
     // `indexes[].fields[0]` alone, so this only flags the truly bare case
     // where the JSON column has no index at all.
-    if (!hasLeadingIndex({ meta, column: args.column })) {
-      response.warning = unindexedColumnWarning({ table: args.table, column: args.column });
-    }
-    return jsonResponse(response);
+    return jsonResponse(
+      withUnindexedWarning({
+        response: {
+          table: args.table,
+          column: args.column,
+          path,
+          value: args.value,
+          count: redacted.length,
+          rows: redacted,
+        },
+        meta,
+        table: args.table,
+        column: args.column,
+      }),
+    );
   }
 }
 

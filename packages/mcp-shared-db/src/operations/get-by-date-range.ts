@@ -1,15 +1,9 @@
 import { z } from "zod";
 import { jsonResponse } from "mcp-shared";
-import {
-  hasLeadingIndex,
-  listAvailableTables,
-  redactPiiMany,
-  unindexedColumnWarning,
-} from "mcp-shared-db-core";
+import { redactPiiMany } from "mcp-shared-db-core";
+import { resolveColumn, withUnindexedWarning } from "./column-guard.js";
+import { DEFAULT_LIMIT, MAX_LIMIT } from "./find-by-eq.js";
 import type { DatabaseOperation } from "./types.js";
-
-const DEFAULT_LIMIT = 100;
-const MAX_LIMIT = 1000;
 
 /**
  * Default upper bound on the planner's row-count estimate. Anything above
@@ -59,35 +53,15 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
   async execute({ args, ctx }: Parameters<DatabaseOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
-    const config = ctx.selectableFields[args.table];
-    const meta = ctx.tableMetadata[args.table];
-    // Unknown / non-whitelisted table.
-    if (!config || !meta) {
-      return jsonResponse({
-        error: `Table '${args.table}' is not selectable.`,
-        availableTables: listAvailableTables(ctx.selectableFields),
-      });
-    }
-    // Column must be in the whitelist.
-    if (!config.fields[args.column]) {
-      return jsonResponse({
-        error: `Column '${args.column}' is not selectable on '${args.table}'.`,
-        allowedColumns: Object.keys(config.fields),
-      });
-    }
-    const fieldMeta = meta.fields[args.column];
-    // Need Layer-1 metadata to know the column type.
-    if (!fieldMeta) {
-      return jsonResponse({
-        error: `Column '${args.column}' has no metadata on '${args.table}'.`,
-      });
-    }
-    // Type guard: this op is only meaningful on datetime columns.
-    if (fieldMeta.type !== "datetime") {
-      return jsonResponse({
-        error: `Column '${args.column}' on '${args.table}' is not a datetime column (type: ${fieldMeta.type}).`,
-      });
-    }
+    const resolved = resolveColumn({
+      ctx,
+      table: args.table,
+      column: args.column,
+      requiredType: "datetime",
+    });
+    if ("refusal" in resolved) return resolved.refusal;
+    const { config, meta } = resolved;
+    const indexCheck = { meta, table: args.table, column: args.column };
 
     const from = new Date(args.from);
     const to = new Date(args.to);
@@ -118,21 +92,22 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
       explain.estimatedRows !== null &&
       explain.estimatedRows > threshold
     ) {
-      const blocked: Record<string, unknown> = {
-        error: `Estimated ${explain.estimatedRows} rows exceeds the safety threshold ${threshold}. Narrow the date range, or set confirmExpensive: true to bypass.`,
-        estimatedRows: explain.estimatedRows,
-        totalCost: explain.totalCost,
-        planSummary: explain.planSummary,
-        threshold,
-      };
       // Surface the un-indexed warning on the blocked path too — when the
       // estimate balloons, the cause is almost always "no leading index on
       // the date column", so the LLM gets a concrete next step (pick a
       // different column / ask for an index) rather than just retrying.
-      if (!hasLeadingIndex({ meta, column: args.column })) {
-        blocked.warning = unindexedColumnWarning({ table: args.table, column: args.column });
-      }
-      return jsonResponse(blocked);
+      return jsonResponse(
+        withUnindexedWarning({
+          response: {
+            error: `Estimated ${explain.estimatedRows} rows exceeds the safety threshold ${threshold}. Narrow the date range, or set confirmExpensive: true to bypass.`,
+            estimatedRows: explain.estimatedRows,
+            totalCost: explain.totalCost,
+            planSummary: explain.planSummary,
+            threshold,
+          },
+          ...indexCheck,
+        }),
+      );
     }
 
     const rows = await ctx.dataSource.findByRange({
@@ -145,20 +120,21 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
     });
 
     const redacted = redactPiiMany({ rows, table: config });
-    const response: Record<string, unknown> = {
-      table: args.table,
-      column: args.column,
-      from: args.from,
-      to: args.to,
-      count: redacted.length,
-      rows: redacted,
-      estimatedRows: explain.estimatedRows,
-      planSummary: explain.planSummary,
-    };
-    if (!hasLeadingIndex({ meta, column: args.column })) {
-      response.warning = unindexedColumnWarning({ table: args.table, column: args.column });
-    }
-    return jsonResponse(response);
+    return jsonResponse(
+      withUnindexedWarning({
+        response: {
+          table: args.table,
+          column: args.column,
+          from: args.from,
+          to: args.to,
+          count: redacted.length,
+          rows: redacted,
+          estimatedRows: explain.estimatedRows,
+          planSummary: explain.planSummary,
+        },
+        ...indexCheck,
+      }),
+    );
   }
 }
 

@@ -1,11 +1,47 @@
+import { jsonResponse } from "mcp-shared";
 import {
   getEffectivePolicy,
   type SelectableFieldsMap,
+  type TableConfig,
 } from "./selectable-fields.js";
 
 /** Sorted list of selectable table names (for error messages). */
 export function listAvailableTables(selectableFields: SelectableFieldsMap): string[] {
   return Object.keys(selectableFields).sort((a, b) => a.localeCompare(b));
+}
+
+/** A table an operation may read: its whitelist entry and its metadata. */
+export interface ResolvedTable<TMeta> {
+  config: TableConfig;
+  meta: TMeta;
+}
+
+/** Why an operation refuses a request: the tool response to return. */
+export interface Refusal {
+  refusal: ReturnType<typeof jsonResponse>;
+}
+
+/**
+ * Look up `table` in both layers. A table missing from either one is "not
+ * selectable", answered with the list of tables that are. Every table-scoped
+ * operation starts with this guard.
+ */
+export function resolveTable<TMeta>(params: {
+  ctx: { selectableFields: SelectableFieldsMap; tableMetadata: Record<string, TMeta> };
+  table: string;
+}): ResolvedTable<TMeta> | Refusal {
+  const { ctx, table } = params;
+  const config = ctx.selectableFields[table];
+  const meta = ctx.tableMetadata[table];
+  if (!config || !meta) {
+    return {
+      refusal: jsonResponse({
+        error: `Table '${table}' is not selectable.`,
+        availableTables: listAvailableTables(ctx.selectableFields),
+      }),
+    };
+  }
+  return { config, meta };
 }
 
 /**
