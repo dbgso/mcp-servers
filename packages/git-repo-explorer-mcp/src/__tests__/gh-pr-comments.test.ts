@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isBot, reviewBodies } from "../operations/gh-pr-comments-ops.js";
+import { isBot, reviewBodies, inlineComment, mergeComments, FILTERS } from "../operations/gh-pr-comments-ops.js";
 
 describe("isBot", () => {
   it.each([
@@ -93,5 +93,57 @@ describe("reviewBodies", () => {
         review_state: "CHANGES_REQUESTED",
       },
     ]);
+  });
+});
+
+const inline = {
+  author: { login: "dependabot[bot]" },
+  body: "bump",
+  createdAt: "2026-01-01T00:00:00Z",
+  path: "package.json",
+  line: 3,
+  startLine: 2,
+  diffHunk: "@@",
+};
+
+describe("inlineComment", () => {
+  it("maps an inline comment, with no review state", () => {
+    expect(inlineComment(inline)).toEqual({
+      author: "dependabot[bot]",
+      is_bot: true,
+      body: "bump",
+      path: "package.json",
+      line: 3,
+      start_line: 2,
+      diff_hunk: "@@",
+      created_at: "2026-01-01T00:00:00Z",
+      review_state: null,
+    });
+  });
+});
+
+describe("mergeComments", () => {
+  it("puts review bodies and inline comments in time order and drops repeats", () => {
+    const merged = mergeComments({
+      reviews: [{ author: { login: "alice" }, body: "LGTM", state: "APPROVED", createdAt: "2026-01-02T00:00:00Z" }],
+      reviewComments: [inline, { ...inline, createdAt: "2026-01-03T00:00:00Z" }],
+    });
+    expect(merged.map((c) => [c.author, c.created_at])).toEqual([
+      ["dependabot[bot]", "2026-01-01T00:00:00Z"],
+      ["alice", "2026-01-02T00:00:00Z"],
+    ]);
+  });
+});
+
+describe("FILTERS", () => {
+  const bot = inlineComment(inline);
+  const human = { ...bot, is_bot: false };
+
+  it.each([
+    { filter: "all" as const, keeps: [bot, human] },
+    { filter: "human" as const, keeps: [human] },
+    { filter: "bot" as const, keeps: [bot] },
+  ])("$filter keeps the right comments", ({ filter, keeps }) => {
+    expect([bot, human].filter(FILTERS[filter])).toEqual(keeps);
   });
 });
