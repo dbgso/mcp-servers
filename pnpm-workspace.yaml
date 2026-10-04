@@ -18,6 +18,7 @@ catalog:
   '@vitest/coverage-v8': 4.0.18
   'node-notifier': 10.0.1
   oxlint: 1.63.0
+  oxlint-tsgolint: 7.0.2003
   tsup: 8.5.0
   tsx: 4.19.4
   typescript: 5.8.3

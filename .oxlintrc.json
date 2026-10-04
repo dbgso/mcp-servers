@@ -57,7 +57,14 @@
     "complexity": [
       "warn",
       3
-    ]
+    ],
+    "typescript/unbound-method": "error",
+    "typescript/no-base-to-string": "warn",
+    "typescript/await-thenable": "warn",
+    "typescript/no-useless-default-assignment": "warn",
+    "typescript/no-redundant-type-constituents": "warn",
+    "typescript/restrict-template-expressions": "warn",
+    "typescript/no-misused-spread": "warn"
   },
   "overrides": [
     {
@@ -71,7 +78,8 @@
         "custom/implement-interface-with-class": "off",
         "typescript/no-non-null-assertion": "off",
         "complexity": "off",
-        "custom/no-branching-literal": "off"
+        "custom/no-branching-literal": "off",
+        "typescript/unbound-method": "off"
       }
     }
   ]
