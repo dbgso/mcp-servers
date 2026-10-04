@@ -17,7 +17,7 @@
  *   that mysql2 returns and walks the plan tree to find the worst-case scan
  *   width across all leaves.
  */
-import type { Dialect, DialectExplainResult } from "mcp-shared-db-sql";
+import { noExplainPlan, type Dialect, type DialectExplainResult } from "mcp-shared-db-sql";
 
 type JsonPathEqualsInput = Parameters<Dialect["jsonPathEquals"]>[0];
 
@@ -153,25 +153,13 @@ export class MysqlDialect implements Dialect {
     return "EXPLAIN FORMAT=JSON";
   }
   parseExplainResult(rows: unknown[]): DialectExplainResult {
-    if (!Array.isArray(rows)) {
-      return {
-        estimatedRows: null,
-        totalCost: null,
-        planSummary: "(no plan returned)",
-        raw: rows,
-      };
-    }
-    const first = rows[0] as MysqlExplainRow | undefined;
+    // Defensive: a non-array from the driver is treated like an empty result.
+    const first = (Array.isArray(rows) ? rows[0] : undefined) as
+      | MysqlExplainRow
+      | undefined;
     const plan = parseExplainPayload(first?.EXPLAIN);
     const block = plan?.query_block;
-    if (!plan || !block) {
-      return {
-        estimatedRows: null,
-        totalCost: null,
-        planSummary: "(no plan returned)",
-        raw: rows,
-      };
-    }
+    if (!plan || !block) return noExplainPlan(rows);
     // Pick the leaf with the largest scan width. The auto-EXPLAIN guard's
     // intent is "is any scan too wide?" — taking the max protects against
     // joins where the driving table is small but a follow-up scan is huge.

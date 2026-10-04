@@ -11,7 +11,7 @@
  * - `parseExplainResult` walks the JSON plan tree and pulls out the leading
  *   node's row / cost estimate plus a one-line summary.
  */
-import type { Dialect, DialectExplainResult } from "mcp-shared-db-sql";
+import { noExplainPlan, type Dialect, type DialectExplainResult } from "mcp-shared-db-sql";
 
 type JsonPathEqualsInput = Parameters<Dialect["jsonPathEquals"]>[0];
 
@@ -93,27 +93,14 @@ export class PostgresDialect implements Dialect {
   parseExplainResult(rows: unknown[]): DialectExplainResult {
     // Defensive: the QueryFn contract is `unknown[]`, but real-world driver
     // mishaps (a badly-formed query result, an unexpected adapter return
-    // shape) can hand us non-array. Don't let those crash the parser.
-    if (!Array.isArray(rows)) {
-      return {
-        estimatedRows: null,
-        totalCost: null,
-        planSummary: "(no plan returned)",
-        raw: rows,
-      };
-    }
+    // shape) can hand us non-array. Treat those like an empty result.
     // pg returns a single row whose `QUERY PLAN` column is a JSON array
     // wrapping one root `Plan` node.
-    const first = rows[0] as PgExplainRow | undefined;
+    const first = (Array.isArray(rows) ? rows[0] : undefined) as
+      | PgExplainRow
+      | undefined;
     const plan = first?.["QUERY PLAN"]?.[0]?.Plan;
-    if (!plan) {
-      return {
-        estimatedRows: null,
-        totalCost: null,
-        planSummary: "(no plan returned)",
-        raw: rows,
-      };
-    }
+    if (!plan) return noExplainPlan(rows);
     // Walk past Limit/Sort/Aggregate-style wrappers — their Plan Rows
     // reflects the LIMIT-capped output, not the underlying scan width.
     const scan = findScanNode(plan);

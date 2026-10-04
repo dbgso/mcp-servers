@@ -48,6 +48,20 @@ export interface DialectExplainResult {
 }
 
 /**
+ * The result a dialect returns when the EXPLAIN rows carry no plan it can
+ * read (the driver handed back a non-array, an empty result, or an
+ * unparseable payload). Shared so every engine reports the same marker.
+ */
+export function noExplainPlan(raw: unknown): DialectExplainResult {
+  return {
+    estimatedRows: null,
+    totalCost: null,
+    planSummary: "(no plan returned)",
+    raw,
+  };
+}
+
+/**
  * Pure dialect interface. Implementations must be deterministic and free of
  * side effects so the builder layer stays trivially unit-testable.
  */
