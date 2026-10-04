@@ -45,17 +45,25 @@ interface CacheEntry<T> {
   command: string;
 }
 
-function readCache<T>(cachePath: string): CacheEntry<T> | null {
-  if (!existsSync(cachePath)) return null;
+/** Read a cache file; null when it is missing or not JSON. */
+function readEntry<T>(filePath: string): CacheEntry<T> | null {
   try {
-    const raw = readFileSync(cachePath, "utf-8");
-    const entry = JSON.parse(raw) as CacheEntry<T>;
-    const age = Date.now() - entry.createdAt;
-    if (age > entry.ttlMs) return null;
-    return entry;
+    return JSON.parse(readFileSync(filePath, "utf-8")) as CacheEntry<T>;
   } catch {
     return null;
   }
+}
+
+function isExpired(params: { entry: CacheEntry<unknown>; now: number }): boolean {
+  const { entry, now } = params;
+  return now - entry.createdAt > entry.ttlMs;
+}
+
+/** A cache entry that is still fresh, or null. */
+function readCache<T>(cachePath: string): CacheEntry<T> | null {
+  const entry = readEntry<T>(cachePath);
+  if (!entry || isExpired({ entry, now: Date.now() })) return null;
+  return entry;
 }
 
 function writeCache<T>(params: {
@@ -157,17 +165,11 @@ export function cleanExpiredCache(): number {
   const now = Date.now();
   let removedCount = 0;
   for (const filePath of listCacheFiles()) {
-    try {
-      const raw = readFileSync(filePath, "utf-8");
-      const entry = JSON.parse(raw) as CacheEntry<unknown>;
-      if (now - entry.createdAt > entry.ttlMs) {
-        unlinkSync(filePath);
-        removedCount++;
-      }
-    } catch {
-      unlinkSync(filePath);
-      removedCount++;
-    }
+    // An unreadable entry is removed along with the expired ones
+    const entry = readEntry(filePath);
+    if (entry && !isExpired({ entry, now })) continue;
+    unlinkSync(filePath);
+    removedCount++;
   }
   return removedCount;
 }
