@@ -2,7 +2,25 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { FeedbackEntry, FeedbackDecision, FeedbackStatus } from "../types/index.js";
 import { getErrorMessage } from "mcp-shared";
-import { withStringFields } from "../utils/metadata.js";
+import { z } from "zod";
+import { parseFrontmatter, unquote } from "../utils/frontmatter.js";
+
+const optionalText = z.string().nullable().catch(null);
+
+/**
+ * A feedback file's fields. `id`, `task_id` and `original` make it feedback;
+ * the rest fall back to a fresh draft's values when absent or unreadable.
+ */
+const FeedbackFrontmatter = z.object({
+  id: z.string(),
+  task_id: z.string(),
+  original: z.string(),
+  interpretation: optionalText,
+  decision: z.enum(["adopted", "rejected"]).catch("rejected"),
+  status: z.enum(["draft", "confirmed"]).catch("draft"),
+  timestamp: z.string().min(1).catch(() => new Date().toISOString()),
+  addressed_by: optionalText,
+}) satisfies z.ZodType<FeedbackEntry, z.ZodTypeDef, unknown>;
 
 /** The last id handed out in this process, shared by every reader. */
 let lastIssuedId = 0;
@@ -33,59 +51,22 @@ export class FeedbackReader {
     return `fb-${lastIssuedId}`;
   }
 
-  private parseYamlValue(value: string): string | boolean | null {
-    value = value.trim();
-
-    if (value === "true") return true;
-    if (value === "false") return false;
+  /** Feedback has no boolean or list fields: a value is null, quoted text, or bare text. */
+  private parseYamlValue(value: string): string | null {
     if (value === "null") return null;
-
-    // Remove quotes if present
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      // Unescape common escape sequences
-      return value.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t");
-    }
-
+    const quoted = unquote(value);
+    // Undo what serializeFeedback escapes
+    if (quoted !== null) return quoted.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
     return value;
   }
 
   private parseFeedbackFile(content: string): FeedbackEntry | null {
-    const frontmatterMatch = content.match(
-      /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/
-    );
+    const parsed = parseFrontmatter({ text: content, parseValue: (raw) => this.parseYamlValue(raw) });
+    if (!parsed) return null;
+    const { metadata } = parsed;
 
-    if (!frontmatterMatch) {
-      return null;
-    }
-
-    const [, yaml] = frontmatterMatch;
-    const metadata: Record<string, unknown> = {};
-
-    for (const line of yaml.split("\n")) {
-      const colonIndex = line.indexOf(":");
-      if (colonIndex === -1) continue;
-
-      const key = line.slice(0, colonIndex).trim();
-      const value = line.slice(colonIndex + 1).trim();
-      metadata[key] = this.parseYamlValue(value);
-    }
-
-    const required = withStringFields({ metadata, keys: ["id", "task_id", "original"] as const });
-    if (required === null) return null;
-
-    return {
-      id: required.id,
-      task_id: required.task_id,
-      original: required.original,
-      interpretation: metadata.interpretation as string | null,
-      decision: (metadata.decision as FeedbackDecision) || "rejected",
-      status: (metadata.status as FeedbackStatus) || "draft",
-      timestamp: (metadata.timestamp as string) || new Date().toISOString(),
-      addressed_by: metadata.addressed_by as string | null,
-    };
+    const fields = FeedbackFrontmatter.safeParse(metadata);
+    return fields.success ? fields.data : null;
   }
 
   private serializeFeedback(entry: FeedbackEntry): string {
