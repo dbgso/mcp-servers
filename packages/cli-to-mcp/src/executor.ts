@@ -54,53 +54,72 @@ export async function executeCommand(params: {
   });
 }
 
+type Quote = '"' | "'";
+/** The quote the parser is inside, or "" when unquoted. */
+type QuoteState = Quote | "";
+
+const QUOTES: ReadonlySet<string> = new Set<Quote>(['"', "'"]);
+const isQuote = (char: string): char is Quote => QUOTES.has(char);
+const WHITESPACE = /\s/;
+
 /**
- * Parse command string into args array
- * Handles quoted strings and escapes
+ * The characters a backslash escapes inside each kind of quote, as in a POSIX
+ * shell. Outside quotes it escapes any character.
+ */
+const ESCAPABLE_INSIDE: Record<Quote, ReadonlySet<string>> = {
+  '"': new Set(['"', "\\"]),
+  "'": new Set(),
+};
+
+/**
+ * Parse command string into args array, the way a POSIX shell splits words:
+ * whitespace separates arguments, single quotes keep everything literally,
+ * double quotes keep everything but `\"` and `\\`, and outside quotes a
+ * backslash makes the next character literal. An empty quoted string is an
+ * empty argument.
  */
 export function parseCommandArgs(argsString: string): string[] {
   const args: string[] = [];
   let current = "";
-  let inQuote = false;
-  let quoteChar = "";
+  // Tracked apart from `current` so that `""` still yields an argument
+  let inWord = false;
+  let quote: QuoteState = "";
 
   for (let i = 0; i < argsString.length; i++) {
     const char = argsString[i];
-    const prevChar = argsString[i - 1];
+    const next = argsString[i + 1];
 
-    // Handle escape
-    if (prevChar === "\\" && !inQuote) {
-      current += char;
+    if (char === "\\" && next !== undefined && (!quote || ESCAPABLE_INSIDE[quote].has(next))) {
+      current += next;
+      inWord = true;
+      i++;
       continue;
     }
 
-    // Handle quotes
-    if ((char === '"' || char === "'") && prevChar !== "\\") {
-      if (!inQuote) {
-        inQuote = true;
-        quoteChar = char;
-      } else if (char === quoteChar) {
-        inQuote = false;
-        quoteChar = "";
-      } else {
-        current += char;
-      }
+    if (quote) {
+      if (char === quote) quote = "";
+      else current += char;
       continue;
     }
 
-    // Handle space
-    if (char === " " && !inQuote) {
-      if (current) {
-        args.push(current);
-        current = "";
-      }
+    if (isQuote(char)) {
+      quote = char;
+      inWord = true;
+      continue;
+    }
+
+    if (WHITESPACE.test(char)) {
+      if (inWord) args.push(current);
+      current = "";
+      inWord = false;
       continue;
     }
 
     current += char;
+    inWord = true;
   }
 
-  if (current) {
+  if (inWord) {
     args.push(current);
   }
 
