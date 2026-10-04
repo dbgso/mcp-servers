@@ -360,6 +360,16 @@ describe("serialising each block from a hand-built AST", () => {
       expected: "[CAUTION]\n====\nthe body",
     },
     {
+      name: "a parsed paragraph admonition, whose body is in its source",
+      block: { context: "admonition", style: "WARNING", source: "careful" },
+      expected: "WARNING: careful",
+    },
+    {
+      name: "an admonition with no body anywhere",
+      block: { context: "admonition", style: "tip" },
+      expected: "[TIP]\n====\n====",
+    },
+    {
       name: "an admonition with no style at all",
       block: { context: "admonition", lines: [] },
       expected: "[NOTE]",

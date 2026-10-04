@@ -153,7 +153,20 @@ class DelimitedSerializer implements BlockSerializer {
 }
 
 /**
- * `NOTE: text` for one line, otherwise `[NOTE]` over a `====` block. A
+ * The body of an admonition that can be written as `NOTE: body`, if it has one.
+ *
+ * A hand-built block carries a one-line body in `lines`. A parsed paragraph
+ * admonition (`WARNING: careful`) carries it in `source` and has no `lines` at
+ * all, so reading only `lines` wrote it back as an empty `====` pair.
+ */
+function inlineAdmonitionBody(block: AsciidocBlock): string | undefined {
+  if (block.lines) return block.lines.length === 1 ? block.lines[0] : undefined;
+  if (block.blocks) return undefined;
+  return block.source || undefined;
+}
+
+/**
+ * `NOTE: text` for a paragraph body, otherwise `[NOTE]` over a `====` block. A
  * multi-line admonition is parsed with its prose in nested blocks rather than
  * in `lines`, so writing only `lines` left an empty `====` pair -- the body
  * gone, and nothing said about it.
@@ -162,8 +175,9 @@ class AdmonitionSerializer implements BlockSerializer {
   serialize(params: SerializeParams): void {
     const { block, lines } = params;
     const type = block.style?.toUpperCase() ?? "NOTE";
-    if (block.lines && block.lines.length === 1) {
-      lines.push(`${type}: ${block.lines[0]}`);
+    const body = inlineAdmonitionBody(block);
+    if (body !== undefined) {
+      lines.push(`${type}: ${body}`);
     } else {
       lines.push(`[${type}]`);
       writeDelimited({ ...params, delimiter: "====" });
