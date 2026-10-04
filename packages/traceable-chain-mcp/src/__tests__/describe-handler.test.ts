@@ -51,6 +51,14 @@ describe("ChainDescribeHandler", () => {
       expect(text).toContain("adr");
     });
 
+    test("shows what each type requires, whatever form its config takes", async () => {
+      const text = (await handler.execute({})).content[0].text as string;
+
+      expect(text).toContain("- **requirement**: requires (root) - Business requirement");
+      expect(text).toContain("- **spec**: requires requirement - Technical specification");
+      expect(text).toContain("- **proposal**: requires requirement | spec - Decision proposal");
+    });
+
     test("shows query and mutate operations", async () => {
       const result = await handler.execute({});
 
@@ -137,6 +145,15 @@ describe("ChainDescribeHandler", () => {
       const text = result.content[0].text as string;
       expect(text).toContain("create");
       expect(text).toContain("Parameters");
+    });
+
+    test.each([
+      { operation: "read", tool: "chain_query" },
+      { operation: "create", tool: "chain_mutate" },
+    ])("names the tool that runs $operation", async ({ operation, tool }) => {
+      const text = (await handler.execute({ operation })).content[0].text as string;
+
+      expect(text).toContain(`\`${tool}({ operation: "${operation}"`);
     });
 
     test("includes guide in available operations when unknown", async () => {

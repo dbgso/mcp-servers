@@ -2,10 +2,19 @@ import type {
   ChainConfig,
   Document,
   TraceNode,
+  TypeConfig,
   ValidationError,
   ValidationResult,
 } from "./types.js";
 import { MarkdownStorage } from "./storage/markdown-storage.js";
+
+/**
+ * A type's `requires` as a list of the parent types it accepts, or null for a
+ * root type. The config allows one type or a list of them.
+ */
+export function parentTypes(requires: TypeConfig["requires"]): string[] | null {
+  return requires === null ? null : [requires].flat();
+}
 
 /**
  * Chain manager - handles document operations with dependency enforcement
@@ -57,10 +66,10 @@ export class ChainManager {
     parentId?: string;
   }): Promise<{ valid: true } | { valid: false; error: string }> {
     const { type, parentId } = params;
-    const requires = this.getRequiredParent(type);
+    const allowedTypes = parentTypes(this.getRequiredParent(type));
 
     // Root type - should not have parent
-    if (requires === null) {
+    if (allowedTypes === null) {
       if (parentId) {
         return { valid: false, error: `Type "${type}" is a root type and should not have a parent` };
       }
@@ -69,8 +78,7 @@ export class ChainManager {
 
     // Non-root type - must have parent
     if (!parentId) {
-      const requiredTypes = Array.isArray(requires) ? requires.join(" or ") : requires;
-      return { valid: false, error: `Type "${type}" requires a parent of type: ${requiredTypes}` };
+      return { valid: false, error: `Type "${type}" requires a parent of type: ${allowedTypes.join(" or ")}` };
     }
 
     // Validate parent exists and has correct type
@@ -79,7 +87,6 @@ export class ChainManager {
       return { valid: false, error: `Parent document "${parentId}" not found` };
     }
 
-    const allowedTypes = Array.isArray(requires) ? requires : [requires];
     if (!allowedTypes.includes(parent.type)) {
       return {
         valid: false,
