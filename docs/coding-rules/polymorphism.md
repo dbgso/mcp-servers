@@ -34,7 +34,7 @@ export class MysqlDialect implements Dialect {
 
 export class SsmSource implements SecretSource {
   constructor(private readonly config: SsmConfig) {}
-  fetch = async (path: string): Promise<string | undefined> => { ... };
+  async fetch(path: string): Promise<string | undefined> { ... }
 }
 ```
 
@@ -54,9 +54,21 @@ Beyond that:
 - `implements` states the contract at the declaration site, so a missing member is an error where the implementation is written, not where it is used
 - It is mechanically checkable — see `custom/implement-interface-with-class`
 
+### Methods, not arrow properties, in the class
+
+The class declares its behaviour as methods (`async fetch(path) { ... }`), not as
+arrow-function properties (`fetch = async (path) => { ... }`).
+`custom/no-arrow-class-method` reports the latter.
+
+An arrow property keeps `this` when the method is taken off its instance
+(`const { fetch } = source`), which is why some classes used them. Taking a
+method off its instance is the irregular use, and `typescript/unbound-method`
+reports that call site instead. One way to write a method, checked where the
+hazard actually is.
+
 ### Declaring the operation
 
-Prefer an arrow property over a method when the implementation is held behind its interface:
+Prefer property syntax over method syntax when **declaring** an operation in the interface:
 
 ```typescript
 // ❌ Method syntax — TypeScript checks parameters bivariantly
@@ -66,7 +78,7 @@ render(params: RenderParams): string;
 render: (params: RenderParams) => string;
 ```
 
-With method syntax, an implementation demanding more than the interface declares slips into a `Record<string, TheInterface>` unnoticed and fails at runtime. Property syntax rejects it at compile time.
+With method syntax, an implementation demanding more than the interface declares slips into a `Record<string, TheInterface>` unnoticed and fails at runtime. Property syntax rejects it at compile time. This is about the interface's declaration; the class still implements it with a method.
 
 ### What this rule does not cover
 

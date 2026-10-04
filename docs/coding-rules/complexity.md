@@ -10,8 +10,7 @@ relatedDocs:
   - coding-rules__polymorphism
   - coding-rules__early-return
   - coding-rules__ternary-testability
-status: user_reviewing
-selfReviewNotes: "One topic: how to treat branching by kind, and which kinds lint reports. Every claim is grounded in the 163-function survey of the 269 complexity warnings and in rules that exist on this branch (custom/no-discriminant-chain, custom/no-repeated-comparison, both off in tests). Cross-references point at existing docs (polymorphism, early-return, general, ternary-testability). The pdca phase-name bug and the drifted getStatusIcon copies were checked against the source. It states what lint cannot see (cross-file duplication) and leaves the complexity error threshold explicitly undecided, rather than inventing a number."
+approvedAt: 2026-10-04T07:43:52.616Z
 ---
 
 # Branching and complexity
