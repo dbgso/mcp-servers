@@ -27,6 +27,12 @@ describe("the reminder block", () => {
     expect(buildReminderBlock({ config: off })).toBeNull();
   });
 
+  it("is absent when the every-task topic is set to an empty name", () => {
+    // `--topic-for-every-task ""` names no document, so there is nothing to
+    // remind of -- not a separator with nothing under it.
+    expect(buildReminderBlock({ config: { ...off, topicForEveryTask: "" } })).toBeNull();
+  });
+
   it.each([
     { name: "the MCP reminder", config: { ...off, remindMcp: true }, expected: "help" },
     {
