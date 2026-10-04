@@ -205,6 +205,14 @@ describe("grep", () => {
     expect(result.truncated).toBe(true);
   });
 
+  it("searches for a pattern that starts with a dash instead of reading it as an option", async () => {
+    // "-*NEEDLE" (any dashes, then NEEDLE) passed positionally made git grep
+    // fail with "unknown switch".
+    const result = await gitGrep({ repoPath: workTree, pattern: "-*NEEDLE", options: { path: "src" } });
+
+    expect(result.matches).toEqual([{ file: "src/app.ts", line: 1, content: "export const NEEDLE = 2;" }]);
+  });
+
   it("searches the ref it is given", async () => {
     const result = await gitGrep({
       repoPath: workTree,
