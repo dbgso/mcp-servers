@@ -72,7 +72,7 @@ interface Problem {
 
 | ツール | `op` | 内容 |
 |---|---|---|
-| `describe` | — | 報告の構造、必須項目、読みやすさの基準 R1〜R10、例を返す |
+| `describe` | — | 報告の構造、必須項目、読みやすさの基準 R1〜R11、例を返す |
 | `exec` | `report` | 報告を受けて検証し、HTML を書いてパスを返す |
 
 呼び出しは `exec(op: "report", title: ..., conclusion: ..., claims: [...], asks: [...])` になる。
