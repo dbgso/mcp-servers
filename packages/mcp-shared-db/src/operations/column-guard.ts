@@ -9,7 +9,9 @@
  */
 import { jsonResponse } from "mcp-shared";
 import {
+  getQueryableFieldNames,
   hasLeadingIndex,
+  isColumnAllowed,
   resolveTable,
   unindexedColumnWarning,
   type Refusal,
@@ -43,11 +45,13 @@ export function resolveColumn(params: {
   const { ctx, table, column, requiredType } = params;
   const resolved = resolveTable({ ctx, table });
   if ("refusal" in resolved) return resolved;
-  // Column must be in the whitelist; PII redaction depends on the field config.
-  if (!resolved.config.fields[column]) {
+  // Column must be in the whitelist and not `select: "exclude"` -- an
+  // excluded column must not be filtered on either, or the result tells the
+  // caller whether a row with that hidden value exists.
+  if (!isColumnAllowed({ selectableFields: ctx.selectableFields, tableName: table, column })) {
     return refuse({
       error: `Column '${column}' is not selectable on '${table}'.`,
-      allowedColumns: Object.keys(resolved.config.fields),
+      allowedColumns: getQueryableFieldNames(resolved.config),
     });
   }
   if (requiredType === undefined) return resolved;

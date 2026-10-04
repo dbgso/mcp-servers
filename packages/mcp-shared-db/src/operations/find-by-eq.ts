@@ -6,7 +6,7 @@
  * schemas accept; what they run is the same.
  */
 import { jsonResponse } from "mcp-shared";
-import { redactPiiMany } from "mcp-shared-db-core";
+import { getQueryableFieldNames, redactPiiMany } from "mcp-shared-db-core";
 import { resolveColumn, withUnindexedWarning } from "./column-guard.js";
 import type { DatabaseOperationContext } from "./types.js";
 
@@ -33,7 +33,7 @@ export async function executeFindByEq(params: {
     table: args.table,
     field: args.column,
     value: args.value,
-    columns: Object.keys(config.fields),
+    columns: getQueryableFieldNames(config),
     limit: args.limit ?? DEFAULT_LIMIT,
   });
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse } from "mcp-shared";
-import { redactPiiMany } from "mcp-shared-db-core";
+import { getQueryableFieldNames, redactPiiMany } from "mcp-shared-db-core";
 import { resolveColumn, withUnindexedWarning } from "./column-guard.js";
 import { DEFAULT_LIMIT, MAX_LIMIT } from "./find-by-eq.js";
 import type { DatabaseOperation } from "./types.js";
@@ -75,7 +75,7 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
     }
 
     const limit = args.limit ?? DEFAULT_LIMIT;
-    const columns = Object.keys(config.fields);
+    const columns = getQueryableFieldNames(config);
 
     // Auto-EXPLAIN guard. Bypassed when caller confirms or engine returns null.
     const explain = await ctx.dataSource.explainFindByRange({
