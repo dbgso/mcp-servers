@@ -6,6 +6,7 @@ import { jsonResponse, errorResponse } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
 import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
+import { headingAnchor, normalizeAnchor } from "../../handlers/anchor.js";
 import type { Backlink, FindBacklinksResult, LinkSummary } from "../../types/index.js";
 
 const FindBacklinksSchema = z.object({
@@ -86,7 +87,7 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
 
     // Generate expected anchor from section heading
     const expectedAnchor = section_heading
-      ? this.generateAnchor({ text: section_heading, fileType: this.getFileType(targetPath) })
+      ? headingAnchor({ text: section_heading, fileType: this.getFileType(targetPath) })
       : null;
 
     for (const sourceFile of allFiles) {
@@ -190,11 +191,7 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
         return { matches: false };
       }
 
-      // Normalize anchors for comparison (case-insensitive)
-      const normalizedAnchor = anchor.toLowerCase().replace(/^_/, "").replace(/_/g, "-");
-      const normalizedExpected = expectedAnchor.toLowerCase().replace(/^_/, "").replace(/_/g, "-");
-
-      if (normalizedAnchor !== normalizedExpected) {
+      if (normalizeAnchor(anchor) !== normalizeAnchor(expectedAnchor)) {
         return { matches: false };
       }
     }
@@ -301,30 +298,6 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
     }
 
     return context;
-  }
-
-  /**
-   * Generate anchor from heading text (matches topic-index pattern)
-   */
-  private generateAnchor(params: { text: string; fileType: "markdown" | "asciidoc" }): string {
-    const { text, fileType } = params;
-    if (fileType === "markdown") {
-      // GitHub-flavored markdown anchor generation
-      return text
-        .toLowerCase()
-        .replace(/[^\w\s\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf-]/g, "")
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "");
-    } else {
-      // AsciiDoc anchor: _text_with_underscores
-      return "_" + text
-        .toLowerCase()
-        .replace(/[^\w\s\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/g, "")
-        .replace(/\s+/g, "_")
-        .replace(/_+/g, "_")
-        .replace(/^_|_$/g, "");
-    }
   }
 
   /**

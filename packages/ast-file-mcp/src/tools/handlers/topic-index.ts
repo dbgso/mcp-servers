@@ -3,6 +3,7 @@ import { jsonResponse, errorResponse, paginate } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
 import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
+import { headingAnchor } from "../../handlers/anchor.js";
 
 const TopicIndexSchema = z.object({
   directory: z.string().describe("Directory path to search"),
@@ -130,7 +131,7 @@ export class TopicIndexHandler extends BaseToolHandler<TopicIndexArgs> {
         }
 
         // Generate anchor from heading text
-        const anchor = this.generateAnchor({ text: heading.text, fileType: file.fileType });
+        const anchor = headingAnchor({ text: heading.text, fileType: file.fileType });
 
         topics.push({
           text: heading.text,
@@ -166,26 +167,5 @@ export class TopicIndexHandler extends BaseToolHandler<TopicIndexArgs> {
       hasMore: paginatedTopics.hasMore,
       errors,
     });
-  }
-
-  private generateAnchor(params: { text: string; fileType: "markdown" | "asciidoc" }): string {
-    const { text, fileType } = params;
-    if (fileType === "markdown") {
-      // GitHub-flavored markdown anchor generation
-      return text
-        .toLowerCase()
-        .replace(/[^\w\s\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf-]/g, "") // Keep alphanumeric, CJK, hyphens
-        .replace(/\s+/g, "-") // Spaces to hyphens
-        .replace(/-+/g, "-") // Collapse multiple hyphens
-        .replace(/^-|-$/g, ""); // Trim hyphens
-    } else {
-      // AsciiDoc anchor: _text_with_underscores
-      return "_" + text
-        .toLowerCase()
-        .replace(/[^\w\s\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/g, "")
-        .replace(/\s+/g, "_")
-        .replace(/_+/g, "_")
-        .replace(/^_|_$/g, "");
-    }
   }
 }

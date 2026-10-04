@@ -4,6 +4,7 @@ import { resolve, dirname, join, extname } from "node:path";
 import Asciidoctor from "@asciidoctor/core";
 import { BaseHandler } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
+import { anchorMatchesHeading, headingAnchor } from "./anchor.js";
 import { convertBlocks } from "./asciidoc-convert.js";
 import { serializeBlocks } from "./asciidoc-serialize.js";
 import { generateContent, type ContentGenerator } from "./content-format.js";
@@ -595,23 +596,11 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
 
     const lines = headings.map((heading) => {
       const stars = "*".repeat(heading.depth - minDepth + 1);
-      const id = this.toSlug(heading.text);
+      const id = headingAnchor({ text: heading.text, fileType: "asciidoc" });
       return `${stars} <<${id},${heading.text}>>`;
     });
 
     return lines.join("\n");
-  }
-
-  /**
-   * Convert heading text to slug (AsciiDoc-style ID).
-   */
-  private toSlug(text: string): string {
-    return text
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .trim();
   }
 
   /**
@@ -852,14 +841,8 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
     if (!url.includes("/") && !url.includes(".")) {
       const anchorId = url;
 
-      // 1. Check if it's an anchor in the same file
-      const headingSlug = headings.find((h) => this.toSlug(h.text) === anchorId);
-      if (headingSlug) {
-        return { status: "valid" };
-      }
-      // Also check if it matches heading text directly
-      const headingMatch = headings.find((h) => h.text === anchorId);
-      if (headingMatch) {
+      // 1. An anchor in the same file, by id or by the heading text itself
+      if (headings.some((h) => h.text === anchorId || this.isAnchorOf({ anchor: anchorId, heading: h }))) {
         return { status: "valid" };
       }
 
@@ -891,15 +874,17 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
       const targetContent = await readFile(targetPath, "utf-8");
       const targetDoc = asciidoctor.load(targetContent);
       const targetHeadings = this.getHeadings({ doc: targetDoc });
-      const targetSlug = targetHeadings.find((h) => this.toSlug(h.text) === anchor);
-
-      if (targetSlug) {
+      if (targetHeadings.some((h) => this.isAnchorOf({ anchor, heading: h }))) {
         return { status: "valid" };
       }
       return { status: "broken", reason: `anchor "${anchor}" not found in ${pathPart}` };
     } catch {
       return { status: "broken", reason: `failed to read ${pathPart}` };
     }
+  }
+
+  private isAnchorOf(params: { anchor: string; heading: HeadingSummary }): boolean {
+    return anchorMatchesHeading({ anchor: params.anchor, headingText: params.heading.text, fileType: "asciidoc" });
   }
 
   /**
