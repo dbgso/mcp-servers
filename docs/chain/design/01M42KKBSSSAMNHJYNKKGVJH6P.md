@@ -4,7 +4,7 @@ type: design
 title: 報告 MCP の実装設計
 requires: 01M42J5FD0DVHH7DFJETNJ18GS
 created: 2026-10-04T04:43:48.000Z
-updated: 2026-10-04T11:35:00.000Z
+updated: 2026-10-04T15:00:00.000Z
 ---
 
 # 報告 MCP の実装設計
@@ -72,7 +72,7 @@ interface Problem {
 
 | ツール | `op` | 内容 |
 |---|---|---|
-| `describe` | — | 報告の構造、必須項目、読みやすさの基準 R1〜R11、例を返す |
+| `describe` | — | 報告の構造、必須項目、読みやすさの基準 R1〜R13、例を返す |
 | `exec` | `report` | 報告を受けて検証し、HTML を書いてパスを返す |
 
 呼び出しは `exec(op: "report", title: ..., conclusion: ..., claims: [...], asks: [...])` になる。
