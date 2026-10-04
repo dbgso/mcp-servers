@@ -5,6 +5,7 @@ import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
 import { getHandler, HANDLERS, readDocuments, type DocumentHandler } from "../../handlers/index.js";
 import { findHeadingSkips } from "../heading-skips.js";
+import { formatAnalysis } from "../structure-format.js";
 import type {
   FileMetrics,
   SectionBreakdown,
@@ -36,6 +37,42 @@ type StructureAnalysisArgs = z.infer<typeof StructureAnalysisSchema>;
 
 // Threshold for large sections (in words)
 const LARGE_SECTION_THRESHOLD = 1500;
+
+function sectionLocation(section: SectionBreakdown): StructureWarning["location"] {
+  return { line: section.line, section: section.title };
+}
+
+function largeSectionWarnings(sections: SectionBreakdown[]): StructureWarning[] {
+  return sections
+    .filter((section) => section.wordCount > LARGE_SECTION_THRESHOLD)
+    .map((section) => ({
+      type: "large_section",
+      message: `Section "${section.title}" has ${section.wordCount} words (threshold: ${LARGE_SECTION_THRESHOLD})`,
+      location: sectionLocation(section),
+    }));
+}
+
+function emptySectionWarnings(sections: SectionBreakdown[]): StructureWarning[] {
+  return sections
+    .filter((section) => section.wordCount === 0)
+    .map((section) => ({
+      type: "empty_section",
+      message: `Section "${section.title}" is empty`,
+      location: sectionLocation(section),
+    }));
+}
+
+/** Heading hierarchy skips (e.g., h1 -> h3). */
+function headingSkipWarnings(headings: HeadingSummary[]): StructureWarning[] {
+  return findHeadingSkips(headings).map(({ previous, current }) => ({
+    type: "heading_skip",
+    message: `Heading hierarchy skip: h${previous.depth} "${previous.text}" -> h${current.depth} "${current.text}"`,
+    location: { line: current.line, section: current.text },
+  }));
+}
+
+/** Markdown (`#`) and AsciiDoc (`=`) heading lines. */
+const HEADING_LINE_PATTERNS = [/^#+\s/, /^=+\s/];
 
 export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisArgs> {
   readonly name = "structure_analysis";
@@ -87,7 +124,7 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
         files: read.files,
         includeWarnings: include_warnings,
       });
-      return this.formatOutput({ result, format: output_format, isDirectory: true });
+      return this.formatOutput({ result, format: output_format });
     }
 
     // Single file analysis
@@ -102,7 +139,7 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
       includeWarnings: include_warnings,
     });
 
-    return this.formatOutput({ result, format: output_format, isDirectory: false });
+    return this.formatOutput({ result, format: output_format });
   }
 
   /**
@@ -179,10 +216,8 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
       aggregateMetrics.linkCount += file.metrics.linkCount;
     }
 
-    // Aggregate warnings
-    const allWarnings: StructureWarning[] = includeWarnings
-      ? fileAnalyses.flatMap((f) => f.warnings)
-      : [];
+    // Aggregate warnings (each file's list is already empty when warnings are off)
+    const allWarnings = fileAnalyses.flatMap((f) => f.warnings);
 
     return {
       directory,
@@ -254,23 +289,12 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
     headingText: string;
   }): string {
     const { sectionText, headingText } = params;
-    const lines = sectionText.split("\n");
+    const [first, ...rest] = sectionText.split("\n");
 
-    // Skip the first line if it's the heading
-    // Markdown: starts with # or =
-    // AsciiDoc: starts with = or matches the heading text
-    if (lines.length > 0) {
-      const firstLine = lines[0].trim();
-      // Check for Markdown heading (# or ## etc.)
-      const isMarkdownHeading = /^#+\s/.test(firstLine);
-      // Check for AsciiDoc heading (= or == etc.)
-      const isAsciidocHeading = /^=+\s/.test(firstLine);
-      // Or if the first line is exactly the heading text
-      const isPlainHeading = firstLine === headingText;
-
-      if (isMarkdownHeading || isAsciidocHeading || isPlainHeading) {
-        return lines.slice(1).join("\n");
-      }
+    // Skip the first line if it is the heading: a heading line, or the heading text itself
+    const firstLine = first.trim();
+    if (firstLine === headingText || HEADING_LINE_PATTERNS.some((pattern) => pattern.test(firstLine))) {
+      return rest.join("\n");
     }
 
     return sectionText;
@@ -294,49 +318,7 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
     sections: SectionBreakdown[];
   }): StructureWarning[] {
     const { headings, sections } = params;
-    const warnings: StructureWarning[] = [];
-
-    // Check for large sections
-    for (const section of sections) {
-      if (section.wordCount > LARGE_SECTION_THRESHOLD) {
-        warnings.push({
-          type: "large_section",
-          message: `Section "${section.title}" has ${section.wordCount} words (threshold: ${LARGE_SECTION_THRESHOLD})`,
-          location: {
-            line: section.line,
-            section: section.title,
-          },
-        });
-      }
-    }
-
-    // Check for empty sections
-    for (const section of sections) {
-      if (section.wordCount === 0) {
-        warnings.push({
-          type: "empty_section",
-          message: `Section "${section.title}" is empty`,
-          location: {
-            line: section.line,
-            section: section.title,
-          },
-        });
-      }
-    }
-
-    // Check for heading hierarchy skips (e.g., h1 -> h3)
-    for (const { previous, current } of findHeadingSkips(headings)) {
-      warnings.push({
-        type: "heading_skip",
-        message: `Heading hierarchy skip: h${previous.depth} "${previous.text}" -> h${current.depth} "${current.text}"`,
-        location: {
-          line: current.line,
-          section: current.text,
-        },
-      });
-    }
-
-    return warnings;
+    return [...largeSectionWarnings(sections), ...emptySectionWarnings(sections), ...headingSkipWarnings(headings)];
   }
 
   /**
@@ -345,172 +327,11 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
   private formatOutput(params: {
     result: FileAnalysis | DirectoryAnalysis;
     format: "json" | "tree" | "table";
-    isDirectory: boolean;
   }): ToolResponse {
     const { result, format } = params;
-
     if (format === "json") {
       return jsonResponse(result);
     }
-
-    if (format === "tree") {
-      const text = this.formatAsTree(result);
-      return {
-        content: [{ type: "text", text }],
-      };
-    }
-
-    // format === "table"
-    const text = this.formatAsTable(result);
-    return {
-      content: [{ type: "text", text }],
-    };
-  }
-
-  /**
-   * Format result as indented tree structure.
-   */
-  private formatAsTree(result: FileAnalysis | DirectoryAnalysis): string {
-    const lines: string[] = [];
-
-    // Check if directory analysis
-    if ("directory" in result) {
-      lines.push(`Directory: ${result.directory}`);
-      lines.push(`Files: ${result.fileCount}`);
-      lines.push(`Total words: ${result.aggregateMetrics.wordCount}`);
-      lines.push(`Total headings: ${result.aggregateMetrics.headingCount}`);
-      lines.push(`Total links: ${result.aggregateMetrics.linkCount}`);
-      lines.push(`Max depth: ${result.aggregateMetrics.maxDepth}`);
-      lines.push("");
-
-      for (const file of result.files) {
-        lines.push(this.formatFileAsTree({ file, indent: 2 }));
-        lines.push("");
-      }
-
-      if (result.warnings.length > 0) {
-        lines.push("Warnings:");
-        for (const warning of result.warnings) {
-          lines.push(`  - [${warning.type}] ${warning.message}`);
-        }
-      }
-    } else {
-      lines.push(this.formatFileAsTree({ file: result, indent: 0 }));
-    }
-
-    return lines.join("\n");
-  }
-
-  /**
-   * Format a single file analysis as tree.
-   */
-  private formatFileAsTree(params: { file: FileAnalysis; indent: number }): string {
-    const { file, indent } = params;
-    const prefix = " ".repeat(indent);
-    const lines: string[] = [];
-
-    lines.push(`${prefix}${file.filePath}`);
-    lines.push(`${prefix}  Words: ${file.metrics.wordCount}`);
-    lines.push(`${prefix}  Headings: ${file.metrics.headingCount}`);
-    lines.push(`${prefix}  Links: ${file.metrics.linkCount}`);
-    lines.push(`${prefix}  Max depth: ${file.metrics.maxDepth}`);
-
-    if (file.sections.length > 0) {
-      lines.push(`${prefix}  Sections:`);
-      for (const section of file.sections) {
-        const sectionIndent = " ".repeat(section.level * 2);
-        lines.push(`${prefix}    ${sectionIndent}${section.title} (${section.wordCount} words)`);
-      }
-    }
-
-    if (file.warnings.length > 0) {
-      lines.push(`${prefix}  Warnings:`);
-      for (const warning of file.warnings) {
-        lines.push(`${prefix}    - [${warning.type}] ${warning.message}`);
-      }
-    }
-
-    return lines.join("\n");
-  }
-
-  /**
-   * Format result as markdown table.
-   */
-  private formatAsTable(result: FileAnalysis | DirectoryAnalysis): string {
-    const lines: string[] = [];
-
-    // Check if directory analysis
-    if ("directory" in result) {
-      lines.push("## Directory Summary");
-      lines.push("");
-      lines.push(`- **Path**: ${result.directory}`);
-      lines.push(`- **Files**: ${result.fileCount}`);
-      lines.push(`- **Total Words**: ${result.aggregateMetrics.wordCount}`);
-      lines.push(`- **Total Headings**: ${result.aggregateMetrics.headingCount}`);
-      lines.push(`- **Total Links**: ${result.aggregateMetrics.linkCount}`);
-      lines.push(`- **Max Depth**: ${result.aggregateMetrics.maxDepth}`);
-      lines.push("");
-
-      // Files table
-      lines.push("## Files");
-      lines.push("");
-      lines.push("| File | Words | Headings | Links | Warnings |");
-      lines.push("| --- | ---: | ---: | ---: | ---: |");
-      for (const file of result.files) {
-        const fileName = file.filePath.split("/").pop() ?? file.filePath;
-        lines.push(
-          `| ${fileName} | ${file.metrics.wordCount} | ${file.metrics.headingCount} | ${file.metrics.linkCount} | ${file.warnings.length} |`
-        );
-      }
-      lines.push("");
-
-      // Warnings table
-      if (result.warnings.length > 0) {
-        lines.push("## Warnings");
-        lines.push("");
-        lines.push("| Type | Message | Location |");
-        lines.push("| --- | --- | --- |");
-        for (const warning of result.warnings) {
-          const location = warning.location?.section ?? "";
-          lines.push(`| ${warning.type} | ${warning.message} | ${location} |`);
-        }
-      }
-    } else {
-      lines.push("## File Summary");
-      lines.push("");
-      lines.push(`- **Path**: ${result.filePath}`);
-      lines.push(`- **Type**: ${result.fileType}`);
-      lines.push(`- **Words**: ${result.metrics.wordCount}`);
-      lines.push(`- **Headings**: ${result.metrics.headingCount}`);
-      lines.push(`- **Links**: ${result.metrics.linkCount}`);
-      lines.push(`- **Max Depth**: ${result.metrics.maxDepth}`);
-      lines.push("");
-
-      // Sections table
-      if (result.sections.length > 0) {
-        lines.push("## Sections");
-        lines.push("");
-        lines.push("| Section | Level | Words |");
-        lines.push("| --- | ---: | ---: |");
-        for (const section of result.sections) {
-          const indent = "  ".repeat(section.level - 1);
-          lines.push(`| ${indent}${section.title} | ${section.level} | ${section.wordCount} |`);
-        }
-        lines.push("");
-      }
-
-      // Warnings table
-      if (result.warnings.length > 0) {
-        lines.push("## Warnings");
-        lines.push("");
-        lines.push("| Type | Message |");
-        lines.push("| --- | --- |");
-        for (const warning of result.warnings) {
-          lines.push(`| ${warning.type} | ${warning.message} |`);
-        }
-      }
-    }
-
-    return lines.join("\n");
+    return { content: [{ type: "text", text: formatAnalysis({ result, format }) }] };
   }
 }
