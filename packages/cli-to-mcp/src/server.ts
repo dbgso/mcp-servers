@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { executeCommand, parseCommandArgs } from "./executor.js";
+import { errorResult, formatExecution, optionsToArgs, toArgsArray } from "./command-line.js";
+import { executeCommand } from "./executor.js";
 import type { ServerConfig } from "./types.js";
 import { VERSION } from "./version.js";
 
@@ -34,32 +35,7 @@ export function createServer(params: CreateServerParams = {}): McpServer {
       }),
     },
     async (input) => {
-      const argsArray = input.args
-        ? typeof input.args === "string"
-          ? parseCommandArgs(input.args)
-          : input.args
-        : [];
-
-      // Convert options to CLI arguments
-      const optionsArgs: string[] = [];
-      if (input.options) {
-        for (const [key, value] of Object.entries(input.options)) {
-          const optionName = key.length === 1 ? `-${key}` : `--${key}`;
-          if (typeof value === "boolean") {
-            if (value) {
-              optionsArgs.push(optionName);
-            }
-          } else if (Array.isArray(value)) {
-            for (const v of value) {
-              optionsArgs.push(optionName, v);
-            }
-          } else {
-            optionsArgs.push(optionName, value);
-          }
-        }
-      }
-
-      const fullArgs = [...argsArray, ...optionsArgs];
+      const fullArgs = [...toArgsArray(input.args), ...optionsToArgs(input.options)];
 
       try {
         const result = await executeCommand({
@@ -67,38 +43,9 @@ export function createServer(params: CreateServerParams = {}): McpServer {
           args: fullArgs,
           config,
         });
-
-        const output = [
-          `$ ${input.command} ${fullArgs.join(" ")}`,
-          "",
-          result.stdout,
-        ];
-
-        if (result.stderr) {
-          output.push("", "--- stderr ---", result.stderr);
-        }
-
-        output.push("", `[Exit code: ${result.exitCode}, Duration: ${result.duration}ms]`);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: output.join("\n"),
-            },
-          ],
-          isError: result.exitCode !== 0 ? true : undefined,
-        };
+        return formatExecution(result);
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `[ERROR] ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(error);
       }
     }
   );
@@ -137,15 +84,7 @@ export function createServer(params: CreateServerParams = {}): McpServer {
           ],
         };
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `[ERROR] ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-        };
+        return errorResult(error);
       }
     }
   );
