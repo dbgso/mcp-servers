@@ -35,7 +35,8 @@ function respondWith(response: Partial<Response> & { okText?: string; bytes?: Ui
     ok: response.ok ?? true,
     status: response.status ?? 200,
     text: async () => response.okText ?? "",
-    arrayBuffer: async () => (response.bytes ?? new Uint8Array()).buffer,
+    // A real response hands back its text as bytes too
+    arrayBuffer: async () => (response.bytes ?? new TextEncoder().encode(response.okText ?? "")).buffer,
     url,
   }));
   vi.stubGlobal("fetch", fetchMock);
