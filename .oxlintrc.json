@@ -64,7 +64,8 @@
     "typescript/no-useless-default-assignment": "warn",
     "typescript/no-redundant-type-constituents": "warn",
     "typescript/restrict-template-expressions": "warn",
-    "typescript/no-misused-spread": "warn"
+    "typescript/no-misused-spread": "warn",
+    "custom/no-arrow-class-method": "error"
   },
   "overrides": [
     {
@@ -79,7 +80,8 @@
         "typescript/no-non-null-assertion": "off",
         "complexity": "off",
         "custom/no-branching-literal": "off",
-        "typescript/unbound-method": "off"
+        "typescript/unbound-method": "off",
+        "custom/no-arrow-class-method": "off"
       }
     }
   ]
