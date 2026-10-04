@@ -68,7 +68,7 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
   };
 
   protected async doExecute(args: StructureAnalysisArgs): Promise<ToolResponse> {
-    const { file_path, pattern, output_format = "json", include_warnings = true } = args;
+    const { file_path, pattern, output_format, include_warnings } = args;
 
     // Check if path is file or directory
     const pathStat = await stat(file_path).catch(() => null);

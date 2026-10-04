@@ -3,8 +3,9 @@ import { existsSync } from "node:fs";
 import { resolve, dirname, join, extname } from "node:path";
 import Asciidoctor from "@asciidoctor/core";
 import { BaseHandler } from "./base.js";
+import { headingToDiffable } from "./heading-diff.js";
 import { convertBlocks } from "./asciidoc-convert.js";
-import { diffStructures, type DiffableItem, type GoToDefinitionResult, getErrorMessage } from "mcp-shared";
+import { diffStructures, displayText, type GoToDefinitionResult, getErrorMessage } from "mcp-shared";
 import type {
   AstReadResult,
   AsciidocDocument,
@@ -1148,27 +1149,9 @@ export class AsciidocHandler extends BaseHandler {
     const headingsA = await this.getHeadingsFromFile({ filePath: filePathA });
     const headingsB = await this.getHeadingsFromFile({ filePath: filePathB });
 
-    // Convert HeadingSummary to DiffableItem
-    // Use depth + text as key for matching (allows same text at different depths)
-    const itemsA: DiffableItem[] = headingsA.map((h) => ({
-      key: `${h.depth}:${h.text}`,
-      kind: `h${h.depth}`,
-      line: h.line,
-      properties: level === "detailed" ? {
-        depth: h.depth,
-        text: h.text,
-      } : undefined,
-    }));
-
-    const itemsB: DiffableItem[] = headingsB.map((h) => ({
-      key: `${h.depth}:${h.text}`,
-      kind: `h${h.depth}`,
-      line: h.line,
-      properties: level === "detailed" ? {
-        depth: h.depth,
-        text: h.text,
-      } : undefined,
-    }));
+    const detailed = level === "detailed";
+    const itemsA = headingsA.map((heading) => headingToDiffable({ heading, detailed }));
+    const itemsB = headingsB.map((heading) => headingToDiffable({ heading, detailed }));
 
     // Perform diff
     const diffResult = diffStructures({ itemsA, itemsB, options: { level } });
@@ -1291,7 +1274,7 @@ export class AsciidocHandler extends BaseHandler {
     ];
 
     for (const row of data) {
-      lines.push(headers.map((h) => `| ${String(row[h] ?? "")}`).join(" "));
+      lines.push(headers.map((h) => `| ${displayText(row[h])}`).join(" "));
     }
     lines.push("|===");
 

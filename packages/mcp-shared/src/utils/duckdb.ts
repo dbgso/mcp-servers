@@ -5,6 +5,7 @@
 import { DuckDBInstance } from "@duckdb/node-api";
 import type { DuckDBConnection } from "@duckdb/node-api";
 import path from "node:path";
+import { displayText } from "./display-text.js";
 
 export interface CountByFieldResult {
   value: string;
@@ -24,8 +25,7 @@ function inferColumnType(value: unknown): string {
  */
 function escapeSqlValue(v: unknown): string {
   if (typeof v === "number") return String(v);
-  const s = String(v ?? "");
-  return `'${s.replace(/'/g, "''")}'`;
+  return `'${displayText(v).replace(/'/g, "''")}'`;
 }
 
 /**

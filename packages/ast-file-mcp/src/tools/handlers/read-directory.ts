@@ -82,7 +82,7 @@ export class ReadDirectoryHandler extends BaseToolHandler<ReadDirectoryArgs> {
   };
 
   protected async doExecute(args: ReadDirectoryArgs): Promise<ToolResponse> {
-    const { directory, pattern, detail = "full", maxHeadingDepth, cursor, limit } = args;
+    const { directory, pattern, detail, maxHeadingDepth, cursor, limit } = args;
 
     // Determine which handler(s) to use based on pattern
     const mdHandler = new MarkdownHandler();

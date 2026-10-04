@@ -5,7 +5,7 @@ import type { PendingStore } from "../pending-store.js";
 import type { ProxyClient } from "../proxy-client.js";
 import type { RuleEngine } from "../rule-engine.js";
 import type { RuleStore } from "../rule-store.js";
-import { ConditionSchema, RuleActionSchema } from "../types.js";
+import { ConditionSchema, RuleActionSchema, type Rule } from "../types.js";
 
 export interface RegisterRuleToolsParams {
   server: McpServer;
@@ -14,6 +14,11 @@ export interface RegisterRuleToolsParams {
   proxyClient: ProxyClient;
   pendingStore: PendingStore;
   dryRun?: boolean;
+}
+
+/** The fields of the rule that decided a tested call, as `proxy_rule_test` reports them. */
+function ruleSummary(rule: Rule): Pick<Rule, "id" | "priority" | "description"> {
+  return { id: rule.id, priority: rule.priority, description: rule.description };
 }
 
 export function registerRuleTools(params: RegisterRuleToolsParams): void {
@@ -185,13 +190,7 @@ export function registerRuleTools(params: RegisterRuleToolsParams): void {
         result: {
           action: finalAction.action,
           reason: finalAction.reason,
-          matchedRule: finalAction.matchedRule
-            ? {
-                id: finalAction.matchedRule.id,
-                priority: finalAction.matchedRule.priority,
-                description: finalAction.matchedRule.description,
-              }
-            : null,
+          matchedRule: finalAction.matchedRule ? ruleSummary(finalAction.matchedRule) : null,
         },
         evaluationDetails: evaluatedRules.map((er) => ({
           order: er.order,

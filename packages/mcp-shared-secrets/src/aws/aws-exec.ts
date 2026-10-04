@@ -156,7 +156,7 @@ export function translateAwsError(err: unknown): Error {
 function readField(params: { err: Error; key: "stdout" | "stderr" }): string {
   if (!(params.key in params.err)) return "";
   const v = (params.err as unknown as Record<string, unknown>)[params.key];
-  return v === undefined || v === null ? "" : String(v);
+  return typeof v === "string" || Buffer.isBuffer(v) ? bufferToString(v) : "";
 }
 
 /**

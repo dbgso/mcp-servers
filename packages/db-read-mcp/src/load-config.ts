@@ -80,7 +80,7 @@ export function toFsPath(input: string): string {
 
 interface ModuleWithExport<TKey extends string, TValue> {
   // Index signature so we can type-narrow without casting through any.
-  [key: string]: TValue | unknown;
+  [key: string]: unknown;
   default?: { [k in TKey]?: TValue } | TValue;
 }
 

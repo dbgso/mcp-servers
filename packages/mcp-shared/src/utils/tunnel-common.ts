@@ -145,7 +145,7 @@ export function spawnTunnelProcess(params: {
  */
 function relayStderr(params: { child: ChildProcess; label: string }): void {
   params.child.stderr?.on("data", (chunk: Buffer) => {
-    process.stderr.write(`[${params.label}] ${chunk}`);
+    process.stderr.write(`[${params.label}] ${chunk.toString()}`);
   });
 }
 
