@@ -2,14 +2,62 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { z } from "zod";
 import { BaseActionHandler } from "mcp-shared";
-import type { PlanActionContext } from "../../../types/index.js";
+import type { PlanActionContext, PlanReader } from "../../../types/index.js";
+import { TASK_PHASES } from "../../../types/index.js";
+import { getTaskPhase } from "./submit-review/base-submit-handler.js";
+import { listOrNone } from "../../../services/task-presentation.js";
 
-const PDCA_PHASES = [
-  { suffix: "plan", title: "Plan" },
-  { suffix: "do", title: "Do" },
-  { suffix: "check", title: "Check" },
-  { suffix: "act", title: "Act" },
-] as const;
+/** Fields a subtask must have filled in before it can start. */
+const SUBTASK_REQUIRED_FIELDS = ["content", "completion_criteria"] as const;
+
+/**
+ * Add one subtask per PDCA phase under `id`, each depending on the one before.
+ * Returns the ids that were created.
+ */
+async function createPhaseSubtasks(params: { planReader: PlanReader; id: string }): Promise<string[]> {
+  const { planReader, id } = params;
+  const created: string[] = [];
+  let previous: string | null = null;
+  for (const phase of TASK_PHASES) {
+    const subtaskId = `${id}__${phase}`;
+    const result = await planReader.addTask({
+      id: subtaskId,
+      title: phase.charAt(0).toUpperCase() + phase.slice(1),
+      content: "",
+      parent: id,
+      dependencies: previous ? [previous] : [],
+      dependency_reason: previous ? "Execute after previous phase completes" : "",
+      prerequisites: "",
+      completion_criteria: "",
+      deliverables: [],
+      is_parallelizable: false,
+      references: [],
+    });
+    if (result.success) created.push(subtaskId);
+    previous = subtaskId;
+  }
+  return created;
+}
+
+/** Save the task's instructions to prompts/{task-id}.md, where submit expects to find them. */
+async function savePrompt(params: { planDir: string; id: string; prompt: string }): Promise<void> {
+  const { planDir, id, prompt } = params;
+  const promptsDir = path.join(planDir, "prompts");
+  await fs.mkdir(promptsDir, { recursive: true });
+  await fs.writeFile(
+    path.join(promptsDir, `${id}.md`),
+    `---
+task_id: ${id}
+created: ${new Date().toISOString()}
+---
+
+# Instructions
+
+${prompt}
+`,
+    "utf-8",
+  );
+}
 
 const startSchema = z.object({
   id: z.string().describe("Task ID to start"),
@@ -64,63 +112,21 @@ plan(action: "start", id: "<task-id>", prompt: "<instructions>")
       };
     }
 
-    // For subtasks, check that content and completion_criteria are set
-    if (task.parent) {
-      const missingFields: string[] = [];
-      if (!task.content || task.content.trim() === "") {
-        missingFields.push("content");
-      }
-      if (!task.completion_criteria || task.completion_criteria.trim() === "") {
-        missingFields.push("completion_criteria");
-      }
-
-      if (missingFields.length > 0) {
-        return {
-          content: [{
-            type: "text" as const,
-            text: `Error: Subtask "${id}" must be fleshed out before starting.\n\nMissing: ${missingFields.join(", ")}\n\nUpdate the subtask first:\nplan(action: "update", id: "${id}",\n  content: "<what to do in this phase>",\n  completion_criteria: "<how to know this phase is done>")`,
-          }],
-          isError: true,
-        };
-      }
+    // A subtask is started only once it says what to do and when it is done
+    const missingFields = task.parent ? SUBTASK_REQUIRED_FIELDS.filter((field) => !task[field].trim()) : [];
+    if (missingFields.length > 0) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: `Error: Subtask "${id}" must be fleshed out before starting.\n\nMissing: ${missingFields.join(", ")}\n\nUpdate the subtask first:\nplan(action: "update", id: "${id}",\n  content: "<what to do in this phase>",\n  completion_criteria: "<how to know this phase is done>")`,
+        }],
+        isError: true,
+      };
     }
 
-    // Create PDCA subtasks for non-PDCA-phase tasks
-    // PDCA phase tasks (ending with __plan, __do, __check, __act) should not get nested PDCA subtasks
-    const PDCA_SUFFIXES = ["__plan", "__do", "__check", "__act"];
-    const isPdcaPhaseTask = PDCA_SUFFIXES.some((suffix) => id.endsWith(suffix));
-    const createdSubtasks: string[] = [];
-
-    if (!isPdcaPhaseTask) {
-      let prevSubtaskId: string | null = null;
-
-      for (const phase of PDCA_PHASES) {
-        const subtaskId = `${id}__${phase.suffix}`;
-        const subtaskDeps = prevSubtaskId ? [prevSubtaskId] : [];
-        const subtaskDepReason = prevSubtaskId
-          ? `Execute after previous phase completes`
-          : "";
-
-        const subtaskResult = await planReader.addTask({
-          id: subtaskId,
-          title: phase.title,
-          content: "",
-          parent: id,
-          dependencies: subtaskDeps,
-          dependency_reason: subtaskDepReason,
-          prerequisites: "",
-          completion_criteria: "",
-          deliverables: [],
-          is_parallelizable: false,
-          references: [],
-        });
-
-        if (subtaskResult.success) {
-          createdSubtasks.push(subtaskId);
-        }
-        prevSubtaskId = subtaskId;
-      }
-    }
+    // A PDCA phase task (x__plan, …) does not get phases of its own
+    const isPdcaPhaseTask = getTaskPhase(id) !== null;
+    const createdSubtasks = isPdcaPhaseTask ? [] : await createPhaseSubtasks({ planReader, id });
 
     const result = await planReader.updateStatus({ id, status: "in_progress" });
     if (!result.success) {
@@ -130,20 +136,7 @@ plan(action: "start", id: "<task-id>", prompt: "<instructions>")
       };
     }
 
-    // Save prompt to prompts/{task-id}.md
-    const promptsDir = path.join(planDir, "prompts");
-    await fs.mkdir(promptsDir, { recursive: true });
-    const promptPath = path.join(promptsDir, `${id}.md`);
-    const promptContent = `---
-task_id: ${id}
-created: ${new Date().toISOString()}
----
-
-# Instructions
-
-${prompt}
-`;
-    await fs.writeFile(promptPath, promptContent, "utf-8");
+    await savePrompt({ planDir, id, prompt });
 
     await planReporter.updateAll();
 
@@ -159,7 +152,7 @@ ${prompt}
 Status: pending → in_progress
 
 **Completion criteria:** ${task.completion_criteria}
-**Expected deliverables:** ${task.deliverables.join(", ") || "none"}
+**Expected deliverables:** ${listOrNone(task.deliverables)}
 
 ## PDCA Subtasks Created
 ${createdSubtasks.map((s) => `- ${s}`).join("\n")}
@@ -186,7 +179,7 @@ plan(action: "start", id: "${id}__plan", prompt: "<instructions>")
 Status: pending → in_progress
 
 **Completion criteria:** ${task.completion_criteria}
-**Expected deliverables:** ${task.deliverables.join(", ") || "none"}
+**Expected deliverables:** ${listOrNone(task.deliverables)}
 
 **Prompt saved:** ${promptRef}
 

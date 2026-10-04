@@ -2,13 +2,60 @@ import { z } from "zod";
 import { BaseActionHandler } from "mcp-shared";
 import type {
   PlanActionContext,
+  Task,
+  TaskStatus,
   TaskSummary,
 } from "../../../types/index.js";
+import { listOrNone, reviewCommands } from "../../../services/task-presentation.js";
 import { formatParallel } from "./format-utils.js";
-import { reviewCommands } from "../../../services/task-presentation.js";
 
 const listSchema = z.object({});
 type ListArgs = z.infer<typeof listSchema>;
+
+/** One task's entry in the pending-review section: what was delivered, against what, and the calls to decide it. */
+function reviewEntry(task: Task): string {
+  const commands = reviewCommands(task.id);
+  return `### ${task.id}: ${task.title}
+
+**What**
+- Deliverables: ${listOrNone(task.deliverables)}
+- Result: ${task.output || "(not recorded)"}
+
+**Why**
+- Completion criteria: ${task.completion_criteria || "(not set)"}
+
+**How**
+- Approve: \`${commands.approve}\`
+- Request changes: \`${commands.requestChanges}\`
+
+`;
+}
+
+function pendingReviewSection(params: { tasks: Task[]; planDir: string }): string {
+  const { tasks, planDir } = params;
+  if (tasks.length === 0) return "";
+  return `## Pending Review
+
+The following tasks are waiting for user approval. Review and approve or request changes.
+
+**Review files:**
+- \`${planDir}/PENDING_REVIEW.md\` - Detailed task output for review
+- \`${planDir}/GRAPH.md\` - Task dependency graph
+
+${tasks.map(reviewEntry).join("")}`;
+}
+
+/** A `## heading` with one line per task, or nothing when there are none. */
+function taskListSection(params: {
+  heading: string;
+  tasks: TaskSummary[];
+  describe: (task: TaskSummary) => string;
+}): string {
+  const { heading, tasks, describe } = params;
+  if (tasks.length === 0) return "";
+  const lines = tasks.map((t) => `- **${t.id}**: ${t.title}${describe(t)}\n`);
+  return `## ${heading}\n${lines.join("")}\n`;
+}
 
 /**
  * ListHandler: Display all tasks with status summary
@@ -54,77 +101,26 @@ None required.
       };
     }
 
-    // Group tasks by status (only statuses used in output)
-    const byStatus = {
-      in_progress: tasks.filter((t) => t.status === "in_progress"),
-      pending_review: tasks.filter((t) => t.status === "pending_review"),
-      blocked: [] as TaskSummary[],
-      completed: tasks.filter((t) => t.status === "completed"),
-    };
-
-    // Get blocked and ready tasks
     const blockedTasks: TaskSummary[] = await planReader.getBlockedTasks();
     const readyTasks: TaskSummary[] = await planReader.getReadyTasks();
-
-    byStatus.blocked = blockedTasks;
+    const withStatus = (status: TaskStatus) => tasks.filter((t) => t.status === status);
+    const inProgress = withStatus("in_progress");
+    const pendingReview = withStatus("pending_review");
+    const reviewTasks = (
+      await Promise.all(pendingReview.map((t) => planReader.getTask(t.id)))
+    ).filter((t): t is Task => t !== null);
 
     let output = "# Task Plan\n\n";
     output += `**Summary:** ${tasks.length} total | `;
-    output += `${byStatus.completed.length} completed | `;
-    output += `${byStatus.pending_review.length} pending_review | `;
-    output += `${byStatus.in_progress.length} in progress | `;
+    output += `${withStatus("completed").length} completed | `;
+    output += `${pendingReview.length} pending_review | `;
+    output += `${inProgress.length} in progress | `;
     output += `${readyTasks.length} ready | `;
-    output += `${byStatus.blocked.length} blocked\n\n`;
-
-    // Pending Review section with full details
-    if (byStatus.pending_review.length > 0) {
-      const { planDir } = context;
-      output += "## Pending Review\n\n";
-      output += "The following tasks are waiting for user approval. Review and approve or request changes.\n\n";
-      output += `**Review files:**\n`;
-      output += `- \`${planDir}/PENDING_REVIEW.md\` - Detailed task output for review\n`;
-      output += `- \`${planDir}/GRAPH.md\` - Task dependency graph\n\n`;
-
-      for (const t of byStatus.pending_review) {
-        const task = await planReader.getTask(t.id);
-        if (task) {
-          output += `### ${t.id}: ${t.title}\n\n`;
-          output += `**What**\n`;
-          output += `- Deliverables: ${task.deliverables.length > 0 ? task.deliverables.join(", ") : "none"}\n`;
-          output += `- Result: ${task.output || "(not recorded)"}\n\n`;
-          output += `**Why**\n`;
-          output += `- Completion criteria: ${task.completion_criteria || "(not set)"}\n\n`;
-          output += `**How**\n`;
-          output += `- Approve: \`${reviewCommands(t.id).approve}\`\n`;
-          output += `- Request changes: \`${reviewCommands(t.id).requestChanges}\`\n\n`;
-        }
-      }
-    }
-
-    if (readyTasks.length > 0) {
-      output += "## Ready to Start\n";
-      for (const t of readyTasks) {
-        const parallel = formatParallel({ task: t, options: { style: "tag" } });
-        output += `- **${t.id}**: ${t.title}${parallel}\n`;
-      }
-      output += "\n";
-    }
-
-    if (byStatus.in_progress.length > 0) {
-      output += "## In Progress\n";
-      for (const t of byStatus.in_progress) {
-        output += `- **${t.id}**: ${t.title}\n`;
-      }
-      output += "\n";
-    }
-
-    if (byStatus.blocked.length > 0) {
-      output += "## Blocked\n";
-      for (const t of byStatus.blocked) {
-        output += `- **${t.id}**: ${t.title} (waiting: ${t.dependencies.join(", ")})\n`;
-      }
-      output += "\n";
-    }
+    output += `${blockedTasks.length} blocked\n\n`;
+    output += pendingReviewSection({ tasks: reviewTasks, planDir: context.planDir });
+    output += taskListSection({ heading: "Ready to Start", tasks: readyTasks, describe: (t) => formatParallel({ task: t, options: { style: "tag" } }) });
+    output += taskListSection({ heading: "In Progress", tasks: inProgress, describe: () => "" });
+    output += taskListSection({ heading: "Blocked", tasks: blockedTasks, describe: (t) => ` (waiting: ${t.dependencies.join(", ")})` });
 
     // Full task list
     output += "## All Tasks\n";
