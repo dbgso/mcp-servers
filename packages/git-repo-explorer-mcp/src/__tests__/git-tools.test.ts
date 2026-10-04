@@ -243,6 +243,47 @@ describe("Operation Execution", () => {
       expect(parsed.lines[0].author).toBe("John Doe");
       expect(parsed.lines[0].content).toBe("const x = 1;");
     });
+
+    test("attributes a commit's later hunks to that commit, not to the one parsed before", async () => {
+      // Real porcelain for a file whose middle line Bob inserted into Alice's
+      // file. The third line is Alice's again, and porcelain does not repeat
+      // her author lines for it -- only the header.
+      const blameOutput = [
+        "fc2afc68a690e9d5ed19604d276c3f49610fcb0a 1 1 1",
+        "author Alice",
+        "author-mail <a@x>",
+        "author-time 1704067200",
+        "author-tz +0000",
+        "summary a",
+        "boundary",
+        "filename f.txt",
+        "\tone",
+        "aedfd532fa56e7f30a928f7b5c93d4c808c989de 2 2 1",
+        "author Bob",
+        "author-mail <b@x>",
+        "author-time 1748736000",
+        "author-tz +0000",
+        "summary b",
+        "previous fc2afc68a690e9d5ed19604d276c3f49610fcb0a f.txt",
+        "filename f.txt",
+        "\ttwo",
+        "fc2afc68a690e9d5ed19604d276c3f49610fcb0a 2 3 1",
+        "\tthree",
+      ].join("\n");
+      mockGitBlame.mockResolvedValue(blameOutput);
+
+      const result = await getOperation("blame")!.execute(
+        { path: "f.txt" },
+        { repoPath: "/tmp/git-grep-repos/repo", repoName: "repo" }
+      );
+
+      const parsed = JSON.parse(getText(result));
+      expect(parsed.lines).toEqual([
+        { commit: "fc2afc68", author: "Alice", date: "2024-01-01", line_number: 1, content: "one" },
+        { commit: "aedfd532", author: "Bob", date: "2025-06-01", line_number: 2, content: "two" },
+        { commit: "fc2afc68", author: "Alice", date: "2024-01-01", line_number: 3, content: "three" },
+      ]);
+    });
   });
 
   describe("show operation", () => {
