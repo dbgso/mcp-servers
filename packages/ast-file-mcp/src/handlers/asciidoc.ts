@@ -163,6 +163,7 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
   readonly extensions = ["adoc", "asciidoc", "asc"];
   readonly fileType = "asciidoc";
   readonly anchorNoun = "anchor";
+  readonly defaultSectionLevel = 1; // ==
   protected readonly headingLine = HEADING_LINE;
 
   protected summarize(content: string): DocumentSummary {

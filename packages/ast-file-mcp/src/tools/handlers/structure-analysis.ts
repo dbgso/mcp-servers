@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { jsonResponse, errorResponse } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
-import { MarkdownHandler, AsciidocHandler, getSupportedExtensions } from "../../handlers/index.js";
+import { getHandler, HANDLERS, readDocuments, type DocumentHandler } from "../../handlers/index.js";
 import type {
   FileMetrics,
   SectionBreakdown,
@@ -76,34 +76,23 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
       return errorResponse(`Path not found: ${file_path}`);
     }
 
-    const mdHandler = new MarkdownHandler();
-    const adocHandler = new AsciidocHandler();
-
     if (pathStat.isDirectory()) {
-      // A pattern no handler reads is refused, as read_directory and topic_index do
-      if (pattern && !getSupportedExtensions().includes(pattern.replace("*.", "").toLowerCase())) {
-        return errorResponse(`Unsupported file pattern: ${pattern}`);
+      const read = await readDocuments({ directory: file_path, pattern });
+      if ("error" in read) {
+        return errorResponse(read.error);
       }
       const result = await this.analyzeDirectory({
         directory: file_path,
-        pattern,
-        mdHandler,
-        adocHandler,
+        files: read.files,
         includeWarnings: include_warnings,
       });
       return this.formatOutput({ result, format: output_format, isDirectory: true });
     }
 
     // Single file analysis
-    const ext = file_path.split(".").pop()?.toLowerCase() ?? "";
-    let handler: MarkdownHandler | AsciidocHandler;
-
-    if (mdHandler.extensions.includes(ext)) {
-      handler = mdHandler;
-    } else if (adocHandler.extensions.includes(ext)) {
-      handler = adocHandler;
-    } else {
-      return errorResponse(`Unsupported file type: ${ext}`);
+    const handler = getHandler(file_path);
+    if (!handler) {
+      return errorResponse(`Unsupported file type: ${file_path.split(".").pop()?.toLowerCase()}`);
     }
 
     const result = await this.analyzeFile({
@@ -120,7 +109,7 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
    */
   private async analyzeFile(params: {
     filePath: string;
-    handler: MarkdownHandler | AsciidocHandler;
+    handler: DocumentHandler;
     includeWarnings: boolean;
   }): Promise<FileAnalysis> {
     const { filePath, handler, includeWarnings } = params;
@@ -145,7 +134,7 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
 
     return {
       filePath,
-      fileType: handler.fileType as "markdown" | "asciidoc",
+      fileType: handler.fileType,
       metrics,
       sections,
       warnings,
@@ -157,40 +146,15 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
    */
   private async analyzeDirectory(params: {
     directory: string;
-    pattern?: string;
-    mdHandler: MarkdownHandler;
-    adocHandler: AsciidocHandler;
+    files: Array<{ filePath: string; fileType: "markdown" | "asciidoc" }>;
     includeWarnings: boolean;
   }): Promise<DirectoryAnalysis> {
-    const { directory, pattern, mdHandler, adocHandler, includeWarnings } = params;
-
-    // Read directory using handlers
-    let files: { filePath: string; fileType: "markdown" | "asciidoc" }[] = [];
-
-    if (pattern) {
-      const ext = pattern.replace("*.", "").toLowerCase();
-      if (mdHandler.extensions.includes(ext)) {
-        const result = await mdHandler.readDirectory({ directory, pattern });
-        files = result.files.map((f) => ({ filePath: f.filePath, fileType: f.fileType }));
-      } else if (adocHandler.extensions.includes(ext)) {
-        const result = await adocHandler.readDirectory({ directory, pattern });
-        files = result.files.map((f) => ({ filePath: f.filePath, fileType: f.fileType }));
-      }
-    } else {
-      const [mdResult, adocResult] = await Promise.all([
-        mdHandler.readDirectory({ directory }),
-        adocHandler.readDirectory({ directory }),
-      ]);
-      files = [
-        ...mdResult.files.map((f) => ({ filePath: f.filePath, fileType: f.fileType })),
-        ...adocResult.files.map((f) => ({ filePath: f.filePath, fileType: f.fileType })),
-      ];
-    }
+    const { directory, files, includeWarnings } = params;
 
     // Analyze each file
     const fileAnalyses: FileAnalysis[] = [];
     for (const file of files) {
-      const handler = file.fileType === "markdown" ? mdHandler : adocHandler;
+      const handler = HANDLERS[file.fileType];
       const analysis = await this.analyzeFile({
         filePath: file.filePath,
         handler,
@@ -250,7 +214,7 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
    */
   private async analyzeSections(params: {
     filePath: string;
-    handler: MarkdownHandler | AsciidocHandler;
+    handler: DocumentHandler;
     headings: HeadingSummary[];
   }): Promise<SectionBreakdown[]> {
     const { filePath, handler, headings } = params;

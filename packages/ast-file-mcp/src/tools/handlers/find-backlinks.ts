@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { jsonResponse, errorResponse } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
-import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
+import { getHandler, HANDLERS } from "../../handlers/index.js";
 import { headingAnchor, normalizeAnchor } from "../../handlers/anchor.js";
 import { FileTarget, parseLinkTarget } from "../../handlers/links.js";
 import type { Backlink, FindBacklinksResult, LinkSummary } from "../../types/index.js";
@@ -73,32 +73,21 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
       return errorResponse(`Directory not found: ${directory}`);
     }
 
-    const mdHandler = new MarkdownHandler();
-    const adocHandler = new AsciidocHandler();
-
-    // Get all files in directory
-    const [mdFiles, adocFiles] = await Promise.all([
-      mdHandler.findFiles({ directory }),
-      adocHandler.findFiles({ directory }),
-    ]);
-
-    const allFiles = [...mdFiles, ...adocFiles];
+    // Every document in the directory, with the handler that reads it
+    const handlers = Object.values(HANDLERS);
+    const found = await Promise.all(handlers.map((handler) => handler.findFiles({ directory })));
+    const allFiles = handlers.flatMap((handler, i) => found[i].map((sourceFile) => ({ sourceFile, handler })));
     const backlinks: Backlink[] = [];
     const sourceFilesSet = new Set<string>();
 
     // Generate expected anchor from section heading
     const expectedAnchor = section_heading
-      ? headingAnchor({ text: section_heading, fileType: this.getFileType(targetPath) })
+      ? headingAnchor({ text: section_heading, fileType: getHandler(targetPath)?.fileType ?? "markdown" })
       : null;
 
-    for (const sourceFile of allFiles) {
+    for (const { sourceFile, handler } of allFiles) {
       // Skip self-references
       if (resolve(sourceFile) === targetPath) {
-        continue;
-      }
-
-      const handler = this.getHandlerForFile({ filePath: sourceFile, mdHandler, adocHandler });
-      if (!handler) {
         continue;
       }
 
@@ -293,34 +282,5 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
     }
 
     return context;
-  }
-
-  /**
-   * Determine file type from extension
-   */
-  private getFileType(filePath: string): "markdown" | "asciidoc" {
-    const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
-    if (["adoc", "asciidoc", "asc"].includes(ext)) {
-      return "asciidoc";
-    }
-    return "markdown";
-  }
-
-  /**
-   * Get the appropriate handler for a file
-   */
-  private getHandlerForFile(params: {
-    filePath: string;
-    mdHandler: MarkdownHandler;
-    adocHandler: AsciidocHandler;
-  }): MarkdownHandler | AsciidocHandler | null {
-    const { filePath, mdHandler, adocHandler } = params;
-    if (mdHandler.canHandle(filePath)) {
-      return mdHandler;
-    }
-    if (adocHandler.canHandle(filePath)) {
-      return adocHandler;
-    }
-    return null;
   }
 }

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { jsonResponse, errorResponse, paginate } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
-import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
+import { readDocuments } from "../../handlers/index.js";
 
 const ReadDirectorySchema = z.object({
   directory: z.string().describe("Directory path to search"),
@@ -91,40 +91,11 @@ export class ReadDirectoryHandler extends BaseToolHandler<ReadDirectoryArgs> {
   protected async doExecute(args: ReadDirectoryArgs): Promise<ToolResponse> {
     const { directory, pattern, detail, maxHeadingDepth, cursor, limit } = args;
 
-    // Determine which handler(s) to use based on pattern
-    const mdHandler = new MarkdownHandler();
-    const adocHandler = new AsciidocHandler();
-
-    let files;
-    let errors: Array<{ filePath: string; error: string }> = [];
-
-    if (pattern) {
-      // If pattern specified, use the appropriate handler
-      const ext = pattern.replace("*.", "").toLowerCase();
-      if (mdHandler.extensions.includes(ext)) {
-        const result = await mdHandler.readDirectory({ directory, pattern });
-        files = result.files;
-        errors = result.errors;
-      } else if (adocHandler.extensions.includes(ext)) {
-        const result = await adocHandler.readDirectory({ directory, pattern });
-        files = result.files;
-        errors = result.errors;
-      } else {
-        return errorResponse(`Unsupported file pattern: ${pattern}`);
-      }
-    } else {
-      // No pattern - read both markdown and asciidoc files
-      const [mdResult, adocResult] = await Promise.all([
-        mdHandler.readDirectory({ directory }),
-        adocHandler.readDirectory({ directory }),
-      ]);
-
-       
-      files = [...mdResult.files, ...adocResult.files].sort((a, b) =>
-        a.filePath.localeCompare(b.filePath)
-      );
-      errors = [...mdResult.errors, ...adocResult.errors];
+    const read = await readDocuments({ directory, pattern });
+    if ("error" in read) {
+      return errorResponse(read.error);
     }
+    const { files, errors } = read;
 
     // Transform based on detail level
     const transformedFiles = files.map((file) => {
