@@ -1,0 +1,124 @@
+import { describe, expect, it } from "vitest";
+import { formatProblems, validateReport } from "../validate.js";
+import { fullReport, minimalReport } from "./fixtures.js";
+
+function problemsOf(input: unknown) {
+  const result = validateReport({ input });
+  if (result.ok) throw new Error("expected problems");
+  return result.problems;
+}
+
+describe("validateReport", () => {
+  it.each([
+    ["full", fullReport()],
+    ["minimal", minimalReport()],
+  ])("accepts a %s report", (_name, input) => {
+    const result = validateReport({ input });
+    expect(result).toEqual({ ok: true, report: input });
+  });
+
+  it("returns every missing required field at once, each with its criterion", () => {
+    expect(problemsOf({})).toEqual([
+      { path: "title", message: "required" },
+      { path: "conclusion", message: "required", criterion: "R1" },
+      { path: "claims", message: "required", criterion: "R2" },
+      { path: "asks", message: "required; pass [] if nothing is needed from the reader", criterion: "R4" },
+    ]);
+  });
+
+  it("rejects a claim without evidence as R3", () => {
+    const input = { ...minimalReport(), claims: [{ statement: "s", evidence: [] }] };
+    expect(problemsOf(input)).toEqual([
+      { path: "claims[0].evidence", message: "at least one evidence is required", criterion: "R3" },
+    ]);
+  });
+
+  it("rejects an empty claims list", () => {
+    expect(problemsOf({ ...minimalReport(), claims: [] })).toEqual([
+      { path: "claims", message: "at least one claim is required", criterion: "R2" },
+    ]);
+  });
+
+  it("treats whitespace as empty", () => {
+    expect(problemsOf({ ...minimalReport(), title: "   " })).toEqual([
+      { path: "title", message: "must not be empty" },
+    ]);
+  });
+
+  it("needs two options for a decision", () => {
+    const input = {
+      ...minimalReport(),
+      asks: [
+        {
+          kind: "decision",
+          what: "w",
+          options: [{ label: "a", consequence: "x" }],
+          recommendation: { label: "a", reason: "r" },
+        },
+      ],
+    };
+    expect(problemsOf(input)).toEqual([
+      { path: "asks[0].options", message: "a decision needs at least two options", criterion: "R4" },
+    ]);
+  });
+
+  it("needs the recommendation to name an option, alongside other problems", () => {
+    const input = {
+      ...minimalReport(),
+      conclusion: "",
+      asks: [
+        {
+          kind: "decision",
+          what: "w",
+          options: [
+            { label: "a", consequence: "x" },
+            { label: "b", consequence: "y" },
+          ],
+          recommendation: { label: "c", reason: "r" },
+        },
+      ],
+    };
+    expect(problemsOf(input)).toEqual([
+      { path: "conclusion", message: "must not be empty", criterion: "R1" },
+      { path: "asks[0].recommendation.label", message: "must be the label of one of the options", criterion: "R4" },
+    ]);
+  });
+
+  it("rejects an unknown ask kind", () => {
+    const [problem] = problemsOf({ ...minimalReport(), asks: [{ kind: "wish", what: "w" }] });
+    expect(problem).toMatchObject({ path: "asks[0].kind", criterion: "R4" });
+  });
+
+  it.each([
+    ["corrections", [{ said: "a", actually: "", why: "c" }], "corrections[0].actually", "R6"],
+    ["changes", [{ what: "a", before: "b" }], "changes[0].after", "R2"],
+    ["remaining", [{ item: "a" }], "remaining[0].why", "R4"],
+    ["asides", [{ note: "a" }], "asides[0].cost", "R5"],
+  ])("checks the fields of optional %s", (field, value, path, criterion) => {
+    const [problem] = problemsOf({ ...minimalReport(), [field]: value });
+    expect(problem).toMatchObject({ path, criterion });
+  });
+
+  it("names the input itself when it is not an object", () => {
+    expect(problemsOf("text")).toEqual([{ path: "", message: "Expected object, received string" }]);
+  });
+});
+
+describe("formatProblems", () => {
+  it("writes one line per problem, with the criterion when there is one", () => {
+    const text = formatProblems({
+      problems: [
+        { path: "title", message: "required" },
+        { path: "claims[0].evidence", message: "at least one evidence is required", criterion: "R3" },
+        { path: "", message: "Expected object, received string" },
+      ],
+    });
+    expect(text).toBe(
+      [
+        "- title: required",
+        "- claims[0].evidence: at least one evidence is required (R3)",
+        "- (input): Expected object, received string",
+      ].join("\n"),
+    );
+  });
+});

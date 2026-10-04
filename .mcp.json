@@ -30,6 +30,10 @@
       "command": "./scripts/wait-for-session-setup.sh",
       "args": ["npx", "tsx", "./packages/traceable-chain-mcp/src/index.ts", "./packages/traceable-chain-mcp/docs/chain"]
     },
+    "report-mcp": {
+      "command": "./scripts/wait-for-session-setup.sh",
+      "args": ["npx", "tsx", "./packages/report-mcp/src/index.ts", "--output-dir", "./tmp/reports"]
+    },
     "kroki-mcp": {
       "command": "./scripts/wait-for-session-setup.sh",
       "args": ["npx", "tsx", "./packages/kroki-mcp/src/index.ts"]

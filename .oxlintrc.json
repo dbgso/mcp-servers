@@ -86,7 +86,8 @@
     },
     {
       "files": [
-        "packages/interactive-instruction-mcp/src/tools/instruction/handlers/**"
+        "packages/interactive-instruction-mcp/src/tools/instruction/handlers/**",
+        "packages/report-mcp/src/ops/**"
       ],
       "rules": {
         "custom/no-strict-scalar-in-untyped-args": "error"
