@@ -774,7 +774,7 @@ Content`;
       );
       expect(content).toContain("### Content");
       expect(content).toContain("Content");
-      expect(content).toContain(`approve(target: "task", id: "no-output-task")`);
+      expect(content).toContain(`approve(target: "task", task_id: "no-output-task")`);
     });
   });
 

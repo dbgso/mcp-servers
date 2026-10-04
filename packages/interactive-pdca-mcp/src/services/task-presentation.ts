@@ -115,3 +115,15 @@ export function statusLookup<T>(params: { table: Record<TaskStatus, T>; status: 
   const { table, status } = params;
   return Object.hasOwn(table, status) ? table[status as TaskStatus] : table.pending;
 }
+
+/**
+ * The calls a reviewer makes on a pending_review task. Each view that offered
+ * them spelled them itself, and two had drifted to calls that do not exist:
+ * `approve(target: "task", id: …)` and `plan(action: "status", …)`.
+ */
+export function reviewCommands(id: string): { approve: string; requestChanges: string } {
+  return {
+    approve: `approve(target: "task", task_id: "${id}")`,
+    requestChanges: `plan(action: "request_changes", id: "${id}", comment: "<feedback>")`,
+  };
+}
