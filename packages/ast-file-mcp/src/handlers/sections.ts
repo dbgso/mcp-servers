@@ -1,5 +1,36 @@
 import type { Section } from "../types/index.js";
 
+/** A heading's depth and text, as a section range needs them. */
+export interface HeadingMark {
+  depth: number;
+  text: string;
+}
+
+/**
+ * Where the section headed `headingText` starts and ends in `items`: from the
+ * first heading with that text up to (not including) the next heading at the
+ * same depth or shallower. Undefined when no heading has that text.
+ *
+ * Markdown's getSection (over tree nodes) and both handlers' getSectionText
+ * (over source lines) each had their own copy of this scan.
+ */
+export function findSectionRange<T>(params: {
+  items: T[];
+  headingOf: (item: T) => HeadingMark | undefined;
+  headingText: string;
+}): { start: number; end: number } | undefined {
+  const { items, headingOf, headingText } = params;
+  const start = items.findIndex((item) => headingOf(item)?.text === headingText);
+  if (start === -1) return undefined;
+
+  const targetDepth = (headingOf(items[start]) as HeadingMark).depth;
+  const after = items.slice(start + 1).findIndex((item) => {
+    const heading = headingOf(item);
+    return heading !== undefined && heading.depth <= targetDepth;
+  });
+  return { start, end: after === -1 ? items.length : start + 1 + after };
+}
+
 /**
  * Split a document's top-level items into a preamble and sections.
  *

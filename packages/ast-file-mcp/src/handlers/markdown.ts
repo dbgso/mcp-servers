@@ -1,37 +1,41 @@
-import { readFile, writeFile, readdir } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { resolve, dirname, join, extname } from "node:path";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkStringify from "remark-stringify";
 import type { Root as MdastRoot, Heading, Code, List, Link, Text, ListItem } from "mdast";
 import type { GoToDefinitionResult, DefinitionLocation } from "mcp-shared";
-import { BaseHandler } from "./base.js";
+import { BaseHandler, type DocumentSummary } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
 import { anchorMatchesHeading, headingAnchor } from "./anchor.js";
-import { groupSections } from "./sections.js";
+import { findSectionRange, groupSections } from "./sections.js";
+import {
+  ExternalTarget,
+  FileTarget,
+  parseLinkTarget,
+  SameFileAnchorTarget,
+  type LinkTargetVisitor,
+} from "./links.js";
 import { generateContent, type ContentGenerator } from "./content-format.js";
-import { diffStructures, displayText, getErrorMessage } from "mcp-shared";
+import { diffStructures, displayText } from "mcp-shared";
 import type {
   AstReadResult,
   HeadingSummary,
   CodeBlockSummary,
   ListSummary,
   LinkSummary,
-  HeadingOverview,
-  LinkOverview,
   QueryType,
   QueryResult,
-  FileSummary,
-  CrawlResult,
-  LinkCheckResult,
-  LinkCheckItem,
   DiffStructureParams,
   DiffStructureResult,
   SectionResult,
   WriteSectionsParams,
 } from "../types/index.js";
 import type { RootContent } from "mdast";
+
+function parseMarkdown(content: string): MdastRoot {
+  return unified().use(remarkParse).parse(content) as MdastRoot;
+}
 
 /** What one `query` type reads from a parsed Markdown tree. */
 interface MarkdownQuery {
@@ -89,14 +93,72 @@ function markdownQueryFor(queryType: string): { query: QueryType; reader: Markdo
   return { query, reader: MARKDOWN_QUERIES[query] };
 }
 
+/**
+ * go_to_definition: where each kind of link target lands. Each kind used to be
+ * an arm of one 24-branch method, with the heading definition built twice.
+ */
+class DefinitionFinder implements LinkTargetVisitor<Promise<DefinitionLocation[]>> {
+  private readonly handler: MarkdownHandler;
+  private readonly filePath: string;
+  private readonly ast: MdastRoot;
+
+  constructor(params: { handler: MarkdownHandler; filePath: string; ast: MdastRoot }) {
+    this.handler = params.handler;
+    this.filePath = params.filePath;
+    this.ast = params.ast;
+  }
+
+  external(target: ExternalTarget): Promise<DefinitionLocation[]> {
+    const { url } = target;
+    return Promise.resolve([{ filePath: url, line: 1, column: 1, name: url, kind: "external-link", text: url }]);
+  }
+
+  sameFileAnchor(target: SameFileAnchorTarget): Promise<DefinitionLocation[]> {
+    const heading = this.handler.findHeadingBySlug({ ast: this.ast, slug: target.anchor });
+    return Promise.resolve(heading ? [this.headingDefinition({ filePath: this.filePath, heading })] : []);
+  }
+
+  async file(target: FileTarget): Promise<DefinitionLocation[]> {
+    const { pathPart, anchor } = target;
+    const targetPath = target.resolveFrom(this.filePath);
+    if (!existsSync(targetPath)) {
+      return [{ filePath: targetPath, line: 1, column: 1, name: pathPart, kind: "file", text: "(file not found)" }];
+    }
+    if (!anchor) {
+      return [{ filePath: targetPath, line: 1, column: 1, name: pathPart, kind: "file" }];
+    }
+    const targetAst = parseMarkdown(await readFile(targetPath, "utf-8"));
+    const heading = this.handler.findHeadingBySlug({ ast: targetAst, slug: anchor });
+    if (heading) {
+      return [this.headingDefinition({ filePath: targetPath, heading })];
+    }
+    // Heading not found, point to file start
+    return [{ filePath: targetPath, line: 1, column: 1, name: pathPart, kind: "file", text: `(heading "${anchor}" not found)` }];
+  }
+
+  private headingDefinition(params: { filePath: string; heading: Heading }): DefinitionLocation {
+    const { filePath, heading } = params;
+    const name = this.handler.extractText(heading);
+    return {
+      filePath,
+      line: heading.position?.start?.line ?? 1,
+      column: heading.position?.start?.column ?? 1,
+      name,
+      kind: "heading",
+      text: `${"#".repeat(heading.depth)} ${name}`,
+    };
+  }
+}
+
 export class MarkdownHandler extends BaseHandler implements ContentGenerator {
   readonly extensions = ["md", "markdown"];
   readonly fileType = "markdown";
+  readonly anchorNoun = "heading";
+  protected readonly headingLine = /^(#{1,6})\s+(.+)$/;
 
   async read(filePath: string): Promise<AstReadResult> {
     const content = await readFile(filePath, "utf-8");
-    const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = parseMarkdown(content);
 
     return {
       filePath,
@@ -112,8 +174,7 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
   }): Promise<QueryResult> {
     const { filePath, queryType, options } = params;
     const content = await readFile(filePath, "utf-8");
-    const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = parseMarkdown(content);
 
     if (options?.heading) {
       const sectionAst = this.getSection({ ast, headingText: options.heading });
@@ -132,6 +193,11 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
       query,
       data: reader.data({ handler: this, ast, depth: options?.depth }),
     };
+  }
+
+  protected summarize(content: string): DocumentSummary {
+    const ast = parseMarkdown(content);
+    return { headings: this.getHeadings({ ast }), links: this.getLinks(ast) };
   }
 
   getHeadings(params: { ast: MdastRoot; maxDepth?: number }): HeadingSummary[] {
@@ -236,34 +302,12 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
 
   getSection(params: { ast: MdastRoot; headingText: string }): MdastRoot {
     const { ast, headingText } = params;
-    const children = ast.children;
-    let startIdx = -1;
-    let endIdx = children.length;
-    let targetDepth = 0;
-
-    // Find the heading
-    for (let i = 0; i < children.length; i++) {
-      const node = children[i];
-      if (node.type === "heading") {
-        const text = this.extractText(node as Heading);
-        if (startIdx === -1 && text === headingText) {
-          startIdx = i;
-          targetDepth = (node as Heading).depth;
-        } else if (startIdx !== -1 && (node as Heading).depth <= targetDepth) {
-          endIdx = i;
-          break;
-        }
-      }
-    }
-
-    if (startIdx === -1) {
-      return { type: "root", children: [] };
-    }
-
-    return {
-      type: "root",
-      children: children.slice(startIdx, endIdx),
-    };
+    const range = findSectionRange({
+      items: ast.children,
+      headingOf: (node) => (node.type === "heading" ? { depth: node.depth, text: this.extractText(node) } : undefined),
+      headingText,
+    });
+    return { type: "root", children: range ? ast.children.slice(range.start, range.end) : [] };
   }
 
   /**
@@ -272,8 +316,7 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
   async getHeadingsFromFile(params: { filePath: string; maxDepth?: number }): Promise<HeadingSummary[]> {
     const { filePath, maxDepth } = params;
     const content = await readFile(filePath, "utf-8");
-    const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = parseMarkdown(content);
     return this.getHeadings({ ast, maxDepth });
   }
 
@@ -282,50 +325,11 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
    */
   async getLinksFromFile(filePath: string): Promise<LinkSummary[]> {
     const content = await readFile(filePath, "utf-8");
-    const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = parseMarkdown(content);
     return this.getLinks(ast);
   }
 
-  /**
-   * Get section content as plain text (for AI-friendly output).
-   */
-  async getSectionText(params: { filePath: string; headingText: string }): Promise<string> {
-    const { filePath, headingText } = params;
-    const content = await readFile(filePath, "utf-8");
-    const lines = content.split("\n");
-
-    let startLine = -1;
-    let endLine = lines.length;
-    let targetDepth = 0;
-
-    // Find section boundaries by line
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
-
-      if (headingMatch) {
-        const depth = headingMatch[1].length;
-        const text = headingMatch[2].trim();
-
-        if (startLine === -1 && text === headingText) {
-          startLine = i;
-          targetDepth = depth;
-        } else if (startLine !== -1 && depth <= targetDepth) {
-          endLine = i;
-          break;
-        }
-      }
-    }
-
-    if (startLine === -1) {
-      return "";
-    }
-
-    return lines.slice(startLine, endLine).join("\n").trim();
-  }
-
-  private extractText(node: unknown): string {
+  extractText(node: unknown): string {
     const n = node as { type?: string; value?: string; children?: unknown[] };
     if (n.type === "text") {
       return (node as Text).value;
@@ -350,8 +354,7 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
   }): Promise<GoToDefinitionResult> {
     const { filePath, line, column } = params;
     const content = await readFile(filePath, "utf-8");
-    const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = parseMarkdown(content);
 
     // Find the node at the given position
     const link = this.findLinkAtPosition({ ast, line, column });
@@ -366,91 +369,9 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
       };
     }
 
+    const finder = new DefinitionFinder({ handler: this, filePath, ast });
+    const definitions = await parseLinkTarget(link.url).accept(finder);
     const identifier = this.extractText(link);
-    const definitions: DefinitionLocation[] = [];
-
-    // Parse the URL
-    const url = link.url;
-
-    if (url.startsWith("#")) {
-      // Same file heading reference: #heading-id
-      const headingId = url.slice(1);
-      const targetHeading = this.findHeadingBySlug({ ast, slug: headingId });
-
-      if (targetHeading) {
-        definitions.push({
-          filePath,
-          line: targetHeading.position?.start?.line ?? 1,
-          column: targetHeading.position?.start?.column ?? 1,
-          name: this.extractText(targetHeading),
-          kind: "heading",
-          text: `${"#".repeat(targetHeading.depth)} ${this.extractText(targetHeading)}`,
-        });
-      }
-    } else if (url.startsWith("http://") || url.startsWith("https://")) {
-      // External URL - return as-is
-      definitions.push({
-        filePath: url,
-        line: 1,
-        column: 1,
-        name: url,
-        kind: "external-link",
-        text: url,
-      });
-    } else {
-      // Relative file path, possibly with anchor
-      const [pathPart, anchor] = url.split("#");
-      const targetPath = pathPart ? resolve(dirname(filePath), pathPart) : filePath;
-
-      if (existsSync(targetPath)) {
-        if (anchor) {
-          // File with heading reference
-          const targetContent = await readFile(targetPath, "utf-8");
-          const targetAst = processor.parse(targetContent) as MdastRoot;
-          const targetHeading = this.findHeadingBySlug({ ast: targetAst, slug: anchor });
-
-          if (targetHeading) {
-            definitions.push({
-              filePath: targetPath,
-              line: targetHeading.position?.start?.line ?? 1,
-              column: targetHeading.position?.start?.column ?? 1,
-              name: this.extractText(targetHeading),
-              kind: "heading",
-              text: `${"#".repeat(targetHeading.depth)} ${this.extractText(targetHeading)}`,
-            });
-          } else {
-            // Heading not found, point to file start
-            definitions.push({
-              filePath: targetPath,
-              line: 1,
-              column: 1,
-              name: pathPart,
-              kind: "file",
-              text: `(heading "${anchor}" not found)`,
-            });
-          }
-        } else {
-          // Just file reference
-          definitions.push({
-            filePath: targetPath,
-            line: 1,
-            column: 1,
-            name: pathPart,
-            kind: "file",
-          });
-        }
-      } else {
-        // File doesn't exist
-        definitions.push({
-          filePath: targetPath,
-          line: 1,
-          column: 1,
-          name: pathPart || anchor || url,
-          kind: "file",
-          text: "(file not found)",
-        });
-      }
-    }
 
     return {
       sourceFilePath: filePath,
@@ -508,7 +429,7 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
     return foundLink;
   }
 
-  private findHeadingBySlug(params: { ast: MdastRoot; slug: string }): Heading | null {
+  findHeadingBySlug(params: { ast: MdastRoot; slug: string }): Heading | null {
     const { ast, slug } = params;
     for (const node of ast.children) {
       if (node.type === "heading") {
@@ -523,143 +444,13 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
   }
 
   /**
-   * Convert HeadingSummary to HeadingOverview (strip line numbers).
-   */
-  private toHeadingOverview(headings: HeadingSummary[]): HeadingOverview[] {
-    return headings.map(({ depth, text }) => ({ depth, text }));
-  }
-
-  /**
-   * Convert LinkSummary to LinkOverview (strip line numbers and title).
-   */
-  private toLinkOverview(links: LinkSummary[]): LinkOverview[] {
-    return links.map(({ url, text }) => ({ url, text }));
-  }
-
-  /**
-   * Crawl from a starting file, following links recursively.
-   */
-  async crawl(params: { startFile: string; maxDepth?: number }): Promise<CrawlResult> {
-    const { startFile: startFilePath, maxDepth = 10 } = params;
-    const visited = new Set<string>();
-    const files: FileSummary[] = [];
-    const errors: Array<{ filePath: string; error: string }> = [];
-
-    const crawlFile = async (params: {
-      filePath: string;
-      depth: number;
-    }): Promise<void> => {
-      const { filePath, depth } = params;
-      if (depth > maxDepth) return;
-
-      const normalizedPath = resolve(filePath);
-      if (visited.has(normalizedPath)) return;
-      visited.add(normalizedPath);
-
-      if (!existsSync(normalizedPath)) {
-        errors.push({ filePath: normalizedPath, error: "File not found" });
-        return;
-      }
-
-      try {
-        const content = await readFile(normalizedPath, "utf-8");
-        const processor = unified().use(remarkParse);
-        const ast = processor.parse(content) as MdastRoot;
-
-        const headings = this.getHeadings({ ast });
-        const links = this.getLinks(ast);
-
-        files.push({
-          filePath: normalizedPath,
-          fileType: "markdown",
-          headings: this.toHeadingOverview(headings),
-          links: this.toLinkOverview(links),
-        });
-
-        // Follow internal links
-        for (const link of links) {
-          if (link.url.startsWith("http://") || link.url.startsWith("https://")) {
-            continue; // Skip external links
-          }
-          if (link.url.startsWith("#")) {
-            continue; // Skip same-file anchors
-          }
-
-          const [pathPart] = link.url.split("#");
-          if (!pathPart) continue;
-
-          const targetPath = resolve(dirname(normalizedPath), pathPart);
-          const ext = extname(targetPath).toLowerCase();
-
-          if (this.extensions.includes(ext.slice(1))) {
-            await crawlFile({ filePath: targetPath, depth: depth + 1 });
-          }
-        }
-      } catch (error) {
-        errors.push({
-          filePath: normalizedPath,
-          error: getErrorMessage(error),
-        });
-      }
-    };
-
-    await crawlFile({ filePath: startFilePath, depth: 0 });
-
-    return {
-      startFile: resolve(startFilePath),
-      files,
-      errors,
-    };
-  }
-
-  /**
-   * Find all matching files in a directory.
-   */
-  async findFiles(params: { directory: string; pattern?: string }): Promise<string[]> {
-    const { directory, pattern } = params;
-    const results: string[] = [];
-    const extensions = pattern
-      ? [pattern.replace("*.", "")]
-      : this.extensions;
-
-    const searchDir = async (dir: string): Promise<void> => {
-      try {
-        const entries = await readdir(dir, { withFileTypes: true });
-
-        for (const entry of entries) {
-          const fullPath = join(dir, entry.name);
-
-          if (entry.isDirectory()) {
-            // Skip common non-doc directories
-            if (entry.name === "node_modules" || entry.name === ".git") {
-              continue;
-            }
-            await searchDir(fullPath);
-          } else if (entry.isFile()) {
-            const ext = extname(entry.name).toLowerCase().slice(1);
-            if (extensions.includes(ext)) {
-              results.push(fullPath);
-            }
-          }
-        }
-      } catch {
-        // Ignore permission errors etc.
-      }
-    };
-
-    await searchDir(directory);
-    return results.sort();
-  }
-
-  /**
    * Generate a table of contents from headings.
    * Returns Markdown-formatted TOC string.
    */
   async generateToc(params: { filePath: string; maxDepth?: number }): Promise<string> {
     const { filePath, maxDepth } = params;
     const content = await readFile(filePath, "utf-8");
-    const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = parseMarkdown(content);
 
     const headings = this.getHeadings({ ast, maxDepth });
 
@@ -680,203 +471,6 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
   }
 
   /**
-   * Read all files in a directory and return summaries.
-   */
-  async readDirectory(params: {
-    directory: string;
-    pattern?: string;
-  }): Promise<{ files: FileSummary[]; errors: Array<{ filePath: string; error: string }> }> {
-    const { directory, pattern } = params;
-    const filePaths = await this.findFiles({ directory, pattern });
-    const files: FileSummary[] = [];
-    const errors: Array<{ filePath: string; error: string }> = [];
-
-    for (const filePath of filePaths) {
-      try {
-        const content = await readFile(filePath, "utf-8");
-        const processor = unified().use(remarkParse);
-        const ast = processor.parse(content) as MdastRoot;
-
-        files.push({
-          filePath,
-          fileType: "markdown",
-          headings: this.toHeadingOverview(this.getHeadings({ ast })),
-          links: this.toLinkOverview(this.getLinks(ast)),
-        });
-      } catch (error) {
-        errors.push({
-          filePath,
-          error: getErrorMessage(error),
-        });
-      }
-    }
-
-    return { files, errors };
-  }
-
-  /**
-   * Check links in a Markdown file.
-   */
-  async checkLinks(params: {
-    filePath: string;
-    checkExternal?: boolean;
-    timeout?: number;
-  }): Promise<LinkCheckResult> {
-    const { filePath, checkExternal = false, timeout = 5000 } = params;
-    const content = await readFile(filePath, "utf-8");
-    const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
-    const links = this.getLinks(ast);
-
-    const valid: LinkCheckItem[] = [];
-    const broken: LinkCheckItem[] = [];
-    const skipped: LinkCheckItem[] = [];
-
-    for (const link of links) {
-      const item: LinkCheckItem = {
-        url: link.url,
-        text: link.text,
-        line: link.line,
-      };
-
-      const checkResult = await this.checkSingleLink({
-        link,
-        filePath,
-        ast,
-        processor,
-        checkExternal,
-        timeout,
-      });
-
-      if (checkResult.status === "valid") {
-        valid.push(item);
-      } else if (checkResult.status === "broken") {
-        broken.push({ ...item, reason: checkResult.reason });
-      } else {
-        skipped.push({ ...item, reason: checkResult.reason });
-      }
-    }
-
-    return {
-      filePath,
-      valid,
-      broken,
-      skipped,
-    };
-  }
-
-  /**
-   * Check a single link and return its status.
-   */
-  private async checkSingleLink(params: {
-    link: LinkSummary;
-    filePath: string;
-    ast: MdastRoot;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    processor: any;
-    checkExternal: boolean;
-    timeout: number;
-  }): Promise<{ status: "valid" | "broken" | "skipped"; reason?: string }> {
-    const { link, filePath, ast, processor, checkExternal, timeout } = params;
-    const url = link.url;
-
-    // Same file heading reference: #heading-id
-    if (url.startsWith("#")) {
-      const headingId = url.slice(1);
-      const targetHeading = this.findHeadingBySlug({ ast, slug: headingId });
-      if (targetHeading) {
-        return { status: "valid" };
-      }
-      return { status: "broken", reason: `heading "${headingId}" not found` };
-    }
-
-    // External URL
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      if (!checkExternal) {
-        return { status: "skipped", reason: "external link (check_external=false)" };
-      }
-      return this.checkExternalUrl({ url, timeout });
-    }
-
-    // Relative file path, possibly with anchor
-    const [pathPart, anchor] = url.split("#");
-    const targetPath = pathPart ? resolve(dirname(filePath), pathPart) : filePath;
-
-    if (!existsSync(targetPath)) {
-      return { status: "broken", reason: "file not found" };
-    }
-
-    // File exists, check anchor if present
-    if (!anchor) {
-      return { status: "valid" };
-    }
-
-    // Check anchor in target file
-    try {
-      const targetContent = await readFile(targetPath, "utf-8");
-      const targetAst = processor.parse(targetContent) as MdastRoot;
-      const targetHeading = this.findHeadingBySlug({ ast: targetAst, slug: anchor });
-
-      if (targetHeading) {
-        return { status: "valid" };
-      }
-      return { status: "broken", reason: `heading "${anchor}" not found in ${pathPart}` };
-    } catch {
-      return { status: "broken", reason: `failed to read ${pathPart}` };
-    }
-  }
-
-  /**
-   * Check an external URL using HTTP HEAD request.
-   */
-  private async checkExternalUrl(params: {
-    url: string;
-    timeout: number;
-  }): Promise<{ status: "valid" | "broken" | "skipped"; reason?: string }> {
-    const { url, timeout } = params;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      try {
-        const response = await fetch(url, {
-          method: "HEAD",
-          signal: controller.signal,
-          redirect: "follow",
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          return { status: "valid" };
-        }
-
-        // Some servers don't support HEAD, try GET
-        if (response.status === 405) {
-          const getResponse = await fetch(url, {
-            method: "GET",
-            signal: controller.signal,
-            redirect: "follow",
-          });
-          if (getResponse.ok) {
-            return { status: "valid" };
-          }
-          return { status: "broken", reason: `HTTP ${getResponse.status}` };
-        }
-
-        return { status: "broken", reason: `HTTP ${response.status}` };
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return { status: "broken", reason: "timeout" };
-      }
-      return { status: "broken", reason: getErrorMessage(error) };
-    }
-  }
-
-  /**
    * Compare structure of two Markdown files.
    * Returns added, removed, and modified headings.
    */
@@ -886,9 +480,8 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
     // Get headings for both files
     const contentA = await readFile(filePathA, "utf-8");
     const contentB = await readFile(filePathB, "utf-8");
-    const processor = unified().use(remarkParse);
-    const astA = processor.parse(contentA) as MdastRoot;
-    const astB = processor.parse(contentB) as MdastRoot;
+    const astA = parseMarkdown(contentA);
+    const astB = parseMarkdown(contentB);
 
     const headingsA = this.getHeadings({ ast: astA });
     const headingsB = this.getHeadings({ ast: astB });
@@ -922,8 +515,7 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
   async getSections(params: { filePath: string; level?: number }): Promise<SectionResult<RootContent>> {
     const { filePath, level = 1 } = params;
     const content = await readFile(filePath, "utf-8");
-    const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = parseMarkdown(content);
 
     return groupSections({
       items: ast.children,
