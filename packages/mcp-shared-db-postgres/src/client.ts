@@ -2,9 +2,8 @@
  * Lazy `pg.Client` factory.
  *
  * `pg` is an optional peer dependency, so we import it dynamically — packages
- * that only consume the dialect / SQL builder don't have to install it. The
- * ESM/CJS interop quirk below mirrors the pattern in
- * `mcp-shared-db-codegen/src/introspect/postgres.ts`.
+ * that only consume the dialect / SQL builder don't have to install it.
+ * `mcp-shared-db-codegen` uses this factory for its introspector too.
  */
 
 /**

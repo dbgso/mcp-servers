@@ -3,7 +3,7 @@
  * a real Postgres instance.
  *
  * Usage:
- *   pnpm --filter mcp-shared-db-postgres exec tsx \
+ *   pnpm --filter mcp-shared-db-codegen exec tsx \
  *     scripts/smoke-test-postgres.ts <env-file>
  *
  * The env file must define DBGEN_URL (a `postgres://` URL). Bastion is
@@ -25,13 +25,9 @@
  */
 import { createSecretResolver, envSource, loadEnvFile } from "mcp-shared-secrets";
 import { resolveTunneledUrl, type BastionConfig } from "mcp-shared/tunnel";
-import {
-  PostgresIntrospector,
-  createPgClient as createIntrospectorPgClient,
-} from "mcp-shared-db-codegen";
 import type { RdbTableMetadataMap } from "mcp-shared-db-core";
-import { createPgClient } from "../src/client.js";
-import { createPostgresDataSource } from "../src/factory.js";
+import { createPgClient, createPostgresDataSource } from "mcp-shared-db-postgres";
+import { PostgresIntrospector } from "../src/introspect/postgres.js";
 
 interface Args {
   envFile: string;
@@ -148,8 +144,8 @@ async function main(): Promise<void> {
     console.log("[smoke] opening pg connection (runtime client)");
     const client = await createPgClient(tunneledUrl);
     try {
-      console.log("[smoke] opening introspector connection (codegen client)");
-      const introClient = await createIntrospectorPgClient(tunneledUrl);
+      console.log("[smoke] opening introspector connection");
+      const introClient = await createPgClient(tunneledUrl);
       const introspector = new PostgresIntrospector(introClient);
       try {
         const schemas = await introspector.listSchemas();

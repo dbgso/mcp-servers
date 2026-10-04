@@ -2,10 +2,11 @@
  * MySQL introspector backed by `information_schema`.
  *
  * The class is constructed with a duck-typed `MysqlQueryClient` so tests can
- * inject a fake. The default factory `createMysqlClient(url)` lazy-imports
- * `mysql2/promise` and wires up a real connection — keeping `mysql2` out of
- * the import graph for callers that only use the format / heuristics
- * modules.
+ * inject a fake. The default factory is `createMysqlClient(url)` from
+ * `mcp-shared-db-mysql` -- the same connection setup db-read-mcp uses
+ * (TLS from `?ssl=true` / `?ssl-mode=`, `multipleStatements` forced off). It
+ * lazy-imports `mysql2/promise`, keeping `mysql2` out of the import graph for
+ * callers that only use the format / heuristics modules.
  *
  * NOTE: `information_schema.tables.table_rows` is a **statistics-sampled
  * approximation**, not an exact count. InnoDB can return values off by 30%+
@@ -23,6 +24,8 @@ import type {
 } from "./types.js";
 import { mapMysqlType } from "./mysql-types.js";
 
+export { createMysqlClient } from "mcp-shared-db-mysql";
+
 export interface MysqlQueryResultRow {
   [column: string]: unknown;
 }
@@ -38,9 +41,8 @@ export interface MysqlQueryArgs {
 }
 
 /**
- * Minimal subset of mysql2's `Connection` we depend on. Easy to mock in
- * tests. Args-object `query({ text, values })` matches the runtime shape
- * in `mcp-shared-db-mysql` and keeps the implementation single-param.
+ * Minimal subset of the `mcp-shared-db-mysql` client we depend on. Easy to
+ * mock in tests; the shared client satisfies it.
  */
 export interface MysqlQueryClient {
   connect(): Promise<void>;
@@ -285,89 +287,5 @@ export class MysqlIntrospector implements Introspector {
     if (!this.connected) return;
     await this.client.end();
     this.connected = false;
-  }
-}
-
-/**
- * Decode a URL component, falling back to the raw value on invalid
- * percent-encoding so credentials with raw `%` / `&` / etc. don't break
- * connection setup.
- */
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-interface Mysql2Connection {
-  query(text: string, values?: unknown[]): Promise<[unknown, unknown]>;
-  end(): Promise<void>;
-  // `on` is supported by the driver but the introspector never subscribes;
-  // the runtime adapter (db-read-mcp) is the one that wires error handling.
-}
-
-interface Mysql2Module {
-  createConnection?: (options: object) => Promise<Mysql2Connection>;
-  default?: { createConnection?: (options: object) => Promise<Mysql2Connection> };
-}
-
-/**
- * Lazy factory that builds a real mysql2 connection from a URL.
- *
- * Forces `multipleStatements: false` regardless of URL hints — the codegen
- * path doesn't need multi-statement SQL and disabling it removes one source
- * of footgun if a future "convenience" PR adds raw-SQL emission.
- */
-export async function createMysqlClient(url: string): Promise<MysqlQueryClient> {
-  const parsed = new URL(url);
-  const opts: Record<string, unknown> = { multipleStatements: false };
-  if (parsed.hostname) opts.host = parsed.hostname;
-  if (parsed.port) opts.port = Number(parsed.port);
-  if (parsed.username) opts.user = safeDecode(parsed.username);
-  if (parsed.password) opts.password = safeDecode(parsed.password);
-  const pathDb = parsed.pathname.replace(/^\//, "");
-  if (pathDb) opts.database = safeDecode(pathDb);
-  if (parsed.searchParams.get("ssl") === "true") opts.ssl = {};
-
-  const mod = (await import("mysql2/promise" as string)) as unknown as Mysql2Module;
-  const create = mod.createConnection ?? mod.default?.createConnection;
-  if (!create) {
-    throw new Error(
-      "mysql2/promise.createConnection is not available — is the 'mysql2' package installed?",
-    );
-  }
-  const conn = await create(opts);
-  return wrapConnectionForIntrospect(conn);
-}
-
-/**
- * Adapter: mysql2's `query()` returns `[rows, fields]`; this introspector's
- * `MysqlQueryClient` returns `{ rows }` so the fake-client fixture pattern
- * in tests stays uniform.
- */
-export function wrapConnectionForIntrospect(
-  conn: Mysql2Connection,
-): MysqlQueryClient {
-  return new Mysql2IntrospectClient(conn);
-}
-
-class Mysql2IntrospectClient implements MysqlQueryClient {
-  constructor(private readonly conn: Mysql2Connection) {}
-
-  async connect(): Promise<void> {
-    // No-op — mysql2's createConnection already negotiated the handshake.
-  }
-
-  async query<T extends MysqlQueryResultRow = MysqlQueryResultRow>(
-    args: MysqlQueryArgs,
-  ): Promise<MysqlQueryResult<T>> {
-    const [rows] = await this.conn.query(args.text, args.values ?? []);
-    return { rows: Array.isArray(rows) ? (rows as T[]) : [] };
-  }
-
-  async end(): Promise<void> {
-    await this.conn.end();
   }
 }

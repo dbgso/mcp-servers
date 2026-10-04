@@ -9,6 +9,8 @@
   "exclude": ["node_modules", "dist", "src/__tests__"],
   "references": [
     { "path": "../mcp-shared" },
-    { "path": "../mcp-shared-db-core" }
+    { "path": "../mcp-shared-db-core" },
+    { "path": "../mcp-shared-db-mysql" },
+    { "path": "../mcp-shared-db-postgres" }
   ]
 }

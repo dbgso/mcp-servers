@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   PostgresIntrospector,
   POSTGRES_QUERIES,
@@ -259,38 +259,6 @@ describe("PostgresIntrospector.introspectTable", () => {
     const introspector = new PostgresIntrospector(client);
     const meta = await introspector.introspectTable({ schema: "public", table: "ghost" });
     expect(meta.description).toBeUndefined();
-  });
-});
-
-describe("createPgClient", () => {
-  it("constructs a pg.Client without connecting", async () => {
-    const { createPgClient } = await import("../introspect/postgres.js");
-    const client = await createPgClient("postgres://user:pass@localhost:5432/db");
-    // Real pg.Client exposes connect/query/end methods. Verify the shape
-    // — we never call connect() so no socket is opened.
-    expect(typeof client.connect).toBe("function");
-    expect(typeof client.query).toBe("function");
-    expect(typeof client.end).toBe("function");
-  });
-
-  it("throws when the loaded pg module exposes no Client constructor", async () => {
-    // Use vi.doMock to swap the `pg` module before re-importing the source
-    // under test. The dynamic import inside `createPgClient` resolves to
-    // our stub, exercising the "missing Client" defensive branch.
-    vi.resetModules();
-    // Both default and module-level `Client` are explicitly undefined so
-    // vitest's mock validator is happy and `createPgClient`'s defensive
-    // branch ("ctor missing") is exercised.
-    vi.doMock("pg", () => ({
-      default: { Client: undefined },
-      Client: undefined,
-    }));
-    const { createPgClient } = await import("../introspect/postgres.js");
-    await expect(createPgClient("postgres://h:5432/d")).rejects.toThrow(
-      /pg\.Client is not available/,
-    );
-    vi.doUnmock("pg");
-    vi.resetModules();
   });
 });
 
