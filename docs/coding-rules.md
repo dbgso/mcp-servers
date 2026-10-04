@@ -22,6 +22,7 @@ relatedDocs:
   - coding-rules__test-fixtures
   - coding-rules__combinatorial-testing
   - coding-rules__prefer-git-mcp
+  - coding-rules__complexity
 ---
 
 # Coding Standards
