@@ -17,28 +17,32 @@ export class RuleEngine {
     args: Record<string, unknown>;
   }): EvaluationResult {
     const { toolName, args } = params;
-    const rules = this.ruleStore.getRules();
+    const matched = this.ruleStore.getRules().find((rule) => this.matchesRule({ rule, toolName, args }));
+    return this.resultFor(matched);
+  }
 
-    for (const rule of rules) {
-      if (this.matchesRule({ rule, toolName, args })) {
-        return {
-          action: rule.action,
-          matchedRule: rule,
-          reason: rule.description ?? `Matched rule: ${rule.id}`,
-        };
-      }
+  /**
+   * The decision for the first matching rule, or the default action when no
+   * rule matched.
+   */
+  private resultFor(rule: Rule | undefined): EvaluationResult {
+    if (!rule) {
+      const defaultAction = this.ruleStore.getDefaultAction();
+      return {
+        action: defaultAction,
+        reason: `No matching rule, using default action: ${defaultAction}`,
+      };
     }
-
-    // No rule matched, use default action
-    const defaultAction = this.ruleStore.getDefaultAction();
     return {
-      action: defaultAction,
-      reason: `No matching rule, using default action: ${defaultAction}`,
+      action: rule.action,
+      matchedRule: rule,
+      reason: rule.description ?? `Matched rule: ${rule.id}`,
     };
   }
 
   /**
-   * Check if a rule matches the tool call
+   * Check if a rule matches the tool call: the pattern, then every condition
+   * (a rule without conditions matches on the pattern alone)
    */
   private matchesRule(params: {
     rule: Rule;
@@ -46,19 +50,10 @@ export class RuleEngine {
     args: Record<string, unknown>;
   }): boolean {
     const { rule, toolName, args } = params;
-    // Check tool pattern
-    if (!this.matchesPattern({ pattern: rule.toolPattern, toolName })) {
-      return false;
-    }
-
-    // Check conditions (if any)
-    if (rule.conditions && rule.conditions.length > 0) {
-      return rule.conditions.every((condition) =>
-        this.matchesCondition({ condition, args })
-      );
-    }
-
-    return true;
+    return (
+      this.matchesPattern({ pattern: rule.toolPattern, toolName }) &&
+      (rule.conditions ?? []).every((condition) => this.matchesCondition({ condition, args }))
+    );
   }
 
   /**
@@ -75,10 +70,19 @@ export class RuleEngine {
     condition: Condition;
     args: Record<string, unknown>;
   }): boolean {
-    const { condition, args } = params;
-    const value = this.getNestedValue({ obj: args, path: condition.param });
+    return this.inspectCondition(params).matches;
+  }
 
-    return testCondition({ condition, value });
+  /**
+   * A condition's verdict together with the value it looked at
+   */
+  private inspectCondition(params: {
+    condition: Condition;
+    args: Record<string, unknown>;
+  }): ConditionInspection {
+    const { condition, args } = params;
+    const actualValue = this.getNestedValue({ obj: args, path: condition.param });
+    return { condition, matches: testCondition({ condition, value: actualValue }), actualValue };
   }
 
   /**
@@ -133,20 +137,17 @@ export class RuleEngine {
     rule: Rule;
     toolName: string;
     args: Record<string, unknown>;
-  }): {
-    matches: boolean;
-    patternMatch: boolean;
-    conditionResults: { condition: Condition; matches: boolean }[];
-  } {
+  }): RuleInspection {
     const { rule, toolName, args } = params;
     const patternMatch = this.matchesPattern({ pattern: rule.toolPattern, toolName });
-    const conditionResults = (rule.conditions ?? []).map((condition) => ({
-      condition,
-      matches: this.matchesCondition({ condition, args }),
-    }));
+    // Every condition is inspected, even after a failing pattern, so the
+    // result explains each of them
+    const conditionResults = (rule.conditions ?? []).map((condition) =>
+      this.inspectCondition({ condition, args })
+    );
 
     return {
-      matches: this.matchesRule({ rule, toolName, args }),
+      matches: patternMatch && conditionResults.every((result) => result.matches),
       patternMatch,
       conditionResults,
     };
@@ -161,59 +162,31 @@ export class RuleEngine {
     args: Record<string, unknown>;
   }): {
     finalAction: EvaluationResult;
-    evaluatedRules: Array<{
-      rule: Rule;
-      order: number;
-      matches: boolean;
-      patternMatch: boolean;
-      conditionResults: Array<{
-        condition: Condition;
-        matches: boolean;
-        actualValue: unknown;
-      }>;
-      wouldApply: boolean;
-    }>;
+    evaluatedRules: Array<RuleInspection & { rule: Rule; order: number; wouldApply: boolean }>;
   } {
     const { toolName, args } = params;
-    const rules = this.ruleStore.getRules();
-    let firstMatch: EvaluationResult | null = null;
+    const inspected = this.ruleStore
+      .getRules()
+      .map((rule, index) => ({ rule, order: index + 1, ...this.testRule({ rule, toolName, args }) }));
 
-    const evaluatedRules = rules.map((rule, index) => {
-      const patternMatch = this.matchesPattern({ pattern: rule.toolPattern, toolName });
+    // The first matching rule is the one that would apply
+    const applied = inspected.find((entry) => entry.matches);
+    const evaluatedRules = inspected.map((entry) => ({ ...entry, wouldApply: entry === applied }));
 
-      const conditionResults = (rule.conditions ?? []).map((condition) => ({
-        condition,
-        matches: this.matchesCondition({ condition, args }),
-        actualValue: this.getNestedValue({ obj: args, path: condition.param }),
-      }));
-
-      const matches = this.matchesRule({ rule, toolName, args });
-
-      // Track if this is the first matching rule (the one that would apply)
-      const wouldApply = matches && !firstMatch;
-      if (wouldApply) {
-        firstMatch = {
-          action: rule.action,
-          matchedRule: rule,
-          reason: rule.description ?? `Matched rule: ${rule.id}`,
-        };
-      }
-
-      return {
-        rule,
-        order: index + 1,
-        matches,
-        patternMatch,
-        conditionResults,
-        wouldApply,
-      };
-    });
-
-    const finalAction = firstMatch ?? {
-      action: this.ruleStore.getDefaultAction(),
-      reason: `No matching rule, using default action: ${this.ruleStore.getDefaultAction()}`,
-    };
-
-    return { finalAction, evaluatedRules };
+    return { finalAction: this.resultFor(applied?.rule), evaluatedRules };
   }
+}
+
+/** A condition's verdict and the argument value it was decided on. */
+interface ConditionInspection {
+  condition: Condition;
+  matches: boolean;
+  actualValue: unknown;
+}
+
+/** How a rule fares against a tool call, part by part. */
+interface RuleInspection {
+  matches: boolean;
+  patternMatch: boolean;
+  conditionResults: ConditionInspection[];
 }
