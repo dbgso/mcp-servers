@@ -190,6 +190,7 @@ describe("PlanSubmitHandler", () => {
       expect(result.content[0].text).toContain("ready for self-review");
       expect(result.content[0].text).toContain("Findings");
       expect(result.content[0].text).toContain("Found the issue in line 42");
+      expect(result.content[0].text).toContain("### Blockers\n- None\n\n### Risks\n- None");
       expect(mockPlanReader.updateStatus).toHaveBeenCalled();
       expect(mockPlanReporter.updateAll).toHaveBeenCalled();
     });
