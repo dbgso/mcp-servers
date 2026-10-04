@@ -10,10 +10,10 @@ export class ListSchemasOp implements CodegenOperation<Record<string, never>> {
 tables live, then call \`list_tables\` against a specific schema.`;
   readonly category = "Discovery";
   readonly argsSchema = z.object({});
-  execute: CodegenOperation<Record<string, never>>["execute"] = async ({ ctx }) => {
+  async execute({ ctx }: Parameters<CodegenOperation<Record<string, never>>["execute"]>[0]) {
     const schemas = await ctx.introspector.listSchemas();
     return jsonResponse({ count: schemas.length, schemas });
-  };
+  }
 }
 
 export const listSchemasOp = new ListSchemasOp();

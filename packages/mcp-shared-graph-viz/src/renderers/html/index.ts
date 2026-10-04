@@ -82,7 +82,9 @@ export class HtmlRenderer implements Renderer {
 
   constructor(private readonly options: HtmlRendererOptions = {}) {}
 
-  render = (params: RenderParams): string => renderHtml({ ...params, ...this.options });
+  render(params: RenderParams): string {
+    return renderHtml({ ...params, ...this.options });
+  }
 }
 
 /** The page with default settings. */

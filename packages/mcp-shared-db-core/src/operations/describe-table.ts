@@ -29,7 +29,7 @@ shown here — DB-specific tool factories may extend this op or expose them
 via additional ops.`;
   readonly category = "Discovery";
   readonly argsSchema = argsSchema;
-  execute: CoreOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<CoreOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
     const config = ctx.selectableFields[args.table];
     const metadata = ctx.tableMetadata[args.table];
     if (!config || !metadata) {
@@ -60,7 +60,7 @@ via additional ops.`;
       primaryKey: metadata.primaryKey,
       fields,
     });
-  };
+  }
 }
 
 export const describeTableOp = new DescribeTableOp();

@@ -12,7 +12,7 @@ Use this first to discover what tables you can query, then call \`describe_table
 to inspect a specific table's columns.`;
   readonly category = "Discovery";
   readonly argsSchema = z.object({});
-  execute: CoreOperation<Record<string, never>>["execute"] = async ({ ctx }) => {
+  async execute({ ctx }: Parameters<CoreOperation<Record<string, never>>["execute"]>[0]) {
     const tables = Object.keys(ctx.selectableFields)
       .map((name) => ({
         name,
@@ -21,7 +21,7 @@ to inspect a specific table's columns.`;
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return jsonResponse({ count: tables.length, tables });
-  };
+  }
 }
 
 export const listTablesOp = new ListTablesOp();

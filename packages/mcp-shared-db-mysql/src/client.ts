@@ -168,26 +168,26 @@ export function wrapConnection(conn: Mysql2Connection): MysqlQueryClient {
 export class Mysql2QueryClient implements MysqlQueryClient {
   constructor(private readonly conn: Mysql2Connection) {}
 
-  connect = async (): Promise<void> => {
+  async connect(): Promise<void> {
     // No-op: mysql2's createConnection already negotiated the handshake.
-  };
+  }
 
-  query = async <T extends Record<string, unknown> = Record<string, unknown>>(
+  async query<T extends Record<string, unknown> = Record<string, unknown>>(
     args: MysqlQueryArgs,
-  ): Promise<{ rows: T[] }> => {
+  ): Promise<{ rows: T[] }> {
     const [rows] = await this.conn.query(args.text, args.values ?? []);
     // For SELECT-shaped statements mysql2 returns `RowDataPacket[]`. For
     // SET / DDL it returns an `OkPacket` (object). The op layer only
     // dispatches SELECT, but defensively unwrap to an empty array when we
     // get a non-array.
     return { rows: Array.isArray(rows) ? (rows as T[]) : [] };
-  };
+  }
 
-  end = async (): Promise<void> => {
+  async end(): Promise<void> {
     await this.conn.end();
-  };
+  }
 
-  onError = (listener: (err: Error) => void): void => {
+  onError(listener: (err: Error) => void): void {
     this.conn.on("error", listener);
-  };
+  }
 }

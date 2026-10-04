@@ -25,12 +25,14 @@ class FieldRequired<TContext, TParams>
 {
   constructor(private readonly field: keyof TContext) {}
 
-  validate = (ctx: TContext): boolean => {
+  validate(ctx: TContext): boolean {
     const value = ctx[this.field];
     return value != null && value !== "";
-  };
+  }
 
-  getMessage = (): string => `Field "${String(this.field)}" is required`;
+  getMessage(): string {
+    return `Field "${String(this.field)}" is required`;
+  }
 }
 
 export function fieldRequired<TContext, TParams = unknown>(
@@ -62,7 +64,7 @@ class FieldMinLength<TContext, TParams>
     private readonly options: { field: keyof TContext; min: number }
   ) {}
 
-  validate = (ctx: TContext): boolean => {
+  validate(ctx: TContext): boolean {
     const { field, min } = this.options;
     const value = ctx[field];
     if (typeof value === "string") {
@@ -72,12 +74,12 @@ class FieldMinLength<TContext, TParams>
       return value.length >= min;
     }
     return false;
-  };
+  }
 
-  getMessage = (): string => {
+  getMessage(): string {
     const { field, min } = this.options;
     return `Field "${String(field)}" must have at least ${min} characters/items`;
-  };
+  }
 }
 
 export function fieldMinLength<TContext, TParams = unknown>(params: {
@@ -107,13 +109,15 @@ class StateVisited<TContext, TParams>
 {
   constructor(private readonly state: string) {}
 
-  validate = (ctx: TContext): boolean => {
+  validate(ctx: TContext): boolean {
     // _visitedStates is injected by the workflow engine at runtime
     const visited = (ctx as TContext & { _visitedStates?: string[] })._visitedStates ?? [];
     return visited.includes(this.state);
-  };
+  }
 
-  getMessage = (): string => `State "${this.state}" must have been visited`;
+  getMessage(): string {
+    return `State "${this.state}" must have been visited`;
+  }
 }
 
 export function stateVisited<TContext, TParams = unknown>(
@@ -155,7 +159,9 @@ class CustomValidator<TContext, TParams>
     this.message = options.message;
   }
 
-  getMessage = (): string => this.message;
+  getMessage(): string {
+    return this.message;
+  }
 }
 
 export function customValidator<TContext, TParams = unknown>(params: {

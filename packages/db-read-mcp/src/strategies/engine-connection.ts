@@ -25,8 +25,8 @@ export class SqlEngineConnection implements EngineConnection {
     this.dataSource = config.dataSource;
   }
 
-  close = async (): Promise<void> => {
+  async close(): Promise<void> {
     await this.config.client.end();
     if (this.config.tunnel) await this.config.tunnel.close();
-  };
+  }
 }

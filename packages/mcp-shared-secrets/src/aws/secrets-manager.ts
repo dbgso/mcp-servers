@@ -23,7 +23,7 @@ export function secretsManagerSource(options: AwsExecOptions = {}): SecretSource
 export class SecretsManagerSource implements SecretSource {
   constructor(private readonly options: AwsExecOptions = {}) {}
 
-  fetch = async (path: string): Promise<string | undefined> => {
+  async fetch(path: string): Promise<string | undefined> {
     try {
       return await awsExec({
         args: [
@@ -44,7 +44,7 @@ export class SecretsManagerSource implements SecretSource {
       }
       throw err;
     }
-  };
+  }
 }
 
 function isResourceNotFound(err: unknown): boolean {

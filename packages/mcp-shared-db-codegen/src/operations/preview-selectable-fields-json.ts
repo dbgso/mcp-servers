@@ -29,7 +29,7 @@ Fields that should never appear in query results at all use
 Read-only.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
-  execute: CodegenOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<CodegenOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
     const tables = await introspectAllTables({
       introspector: ctx.introspector,
       schema: args.schema,
@@ -38,7 +38,7 @@ Read-only.`;
     });
     const source = formatSelectableFieldsJson(tables);
     return { content: [{ type: "text" as const, text: source }] };
-  };
+  }
 }
 
 export const previewSelectableFieldsJsonOp = new PreviewSelectableFieldsJsonOp();

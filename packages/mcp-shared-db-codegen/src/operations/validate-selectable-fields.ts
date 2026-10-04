@@ -75,7 +75,7 @@ Live introspection is the source of truth — if your \`metadata.json\` is stale
 the issues will reveal it indirectly.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
-  execute: CodegenOperation<ValidateArgs>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<CodegenOperation<ValidateArgs>["execute"]>[0]) {
     const tables = await introspectAllTables({
       introspector: ctx.introspector,
       schema: args.schema,
@@ -85,7 +85,7 @@ the issues will reveal it indirectly.`;
     const selectableFields = await readSelectableFields(args.selectable_fields_path);
     const result = validateSelectableFieldsCoverage({ metadata, selectableFields });
     return jsonResponse(result);
-  };
+  }
 }
 
 export const validateSelectableFieldsOp = new ValidateSelectableFieldsOp();

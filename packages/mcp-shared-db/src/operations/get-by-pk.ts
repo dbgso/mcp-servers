@@ -19,7 +19,7 @@ The PK is read from Layer 1 metadata. Composite primary keys are not supported b
 PII fields are redacted as \`"[REDACTED]"\`.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
-  execute: DatabaseOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<DatabaseOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
     const config = ctx.selectableFields[args.table];
     const meta = ctx.tableMetadata[args.table];
     // Unknown / non-whitelisted table.
@@ -50,7 +50,7 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
     }
     const redacted = redactPii({ row, table: config });
     return jsonResponse({ table: args.table, pk: args.pk, found: true, row: redacted });
-  };
+  }
 }
 
 export const getByPkOp = new GetByPkOp();

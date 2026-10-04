@@ -319,7 +319,7 @@ export class DescribeOperation implements Operation<DescribeArgs> {
 With tool argument: Returns detailed guidelines for that specific tool.
 With tool and subDiagram: Returns focused guide for that diagram type.`;
   readonly argsSchema = DescribeArgsSchema;
-  execute = async (args: DescribeArgs): Promise<CallToolResult> => {
+  async execute(args: DescribeArgs): Promise<CallToolResult> {
     const { tool, subDiagram } = args;
 
     let text: string;
@@ -332,7 +332,7 @@ With tool and subDiagram: Returns focused guide for that diagram type.`;
     return {
       content: [{ type: "text", text }],
     };
-  };
+  }
 }
 
 export const describeOperation = new DescribeOperation();

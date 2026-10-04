@@ -13,10 +13,10 @@ export class ListTablesOp implements CodegenOperation<z.infer<typeof argsSchema>
 (when the catalog has stats). Views and other relkinds are excluded.`;
   readonly category = "Discovery";
   readonly argsSchema = argsSchema;
-  execute: CodegenOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<CodegenOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
     const tables = await ctx.introspector.listTables(args.schema);
     return jsonResponse({ schema: args.schema, count: tables.length, tables });
-  };
+  }
 }
 
 export const listTablesOp = new ListTablesOp();

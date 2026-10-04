@@ -27,7 +27,7 @@ Caller is responsible for picking a column that actually has an index.
 PII fields are redacted as \`"[REDACTED]"\`.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
-  execute: DatabaseOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
+  async execute({ args, ctx }: Parameters<DatabaseOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
     const config = ctx.selectableFields[args.table];
     const meta = ctx.tableMetadata[args.table];
     // Unknown / non-whitelisted table.
@@ -67,7 +67,7 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
       response.warning = unindexedColumnWarning({ table: args.table, column: args.column });
     }
     return jsonResponse(response);
-  };
+  }
 }
 
 export const getByIndexOp = new GetByIndexOp();

@@ -10,5 +10,7 @@ export function envSource(): SecretSource {
 
 /** {@link SecretSource} that reads another env var — see {@link envSource}. */
 export class EnvSource implements SecretSource {
-  fetch = async (path: string): Promise<string | undefined> => process.env[path];
+  async fetch(path: string): Promise<string | undefined> {
+    return process.env[path];
+  }
 }
