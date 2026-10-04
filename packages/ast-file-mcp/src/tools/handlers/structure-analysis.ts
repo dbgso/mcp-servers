@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse } from "mcp-shared";
 import { BaseToolHandler } from "mcp-shared";
 import type { ToolResponse } from "mcp-shared";
 import { getHandler, HANDLERS, readDocuments, type DocumentHandler } from "../../handlers/index.js";
+import { findHeadingSkips } from "../heading-skips.js";
 import type {
   FileMetrics,
   SectionBreakdown,
@@ -324,21 +325,15 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
     }
 
     // Check for heading hierarchy skips (e.g., h1 -> h3)
-    for (let i = 1; i < headings.length; i++) {
-      const prevDepth = headings[i - 1].depth;
-      const currDepth = headings[i].depth;
-
-      // Skip is when we go deeper by more than 1 level
-      if (currDepth > prevDepth + 1) {
-        warnings.push({
-          type: "heading_skip",
-          message: `Heading hierarchy skip: h${prevDepth} "${headings[i - 1].text}" -> h${currDepth} "${headings[i].text}"`,
-          location: {
-            line: headings[i].line,
-            section: headings[i].text,
-          },
-        });
-      }
+    for (const { previous, current } of findHeadingSkips(headings)) {
+      warnings.push({
+        type: "heading_skip",
+        message: `Heading hierarchy skip: h${previous.depth} "${previous.text}" -> h${current.depth} "${current.text}"`,
+        location: {
+          line: current.line,
+          section: current.text,
+        },
+      });
     }
 
     return warnings;
