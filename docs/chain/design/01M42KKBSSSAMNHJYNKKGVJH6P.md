@@ -4,7 +4,7 @@ type: design
 title: 報告 MCP の実装設計
 requires: 01M42J5FD0DVHH7DFJETNJ18GS
 created: 2026-10-04T04:43:48.000Z
-updated: 2026-10-04T04:43:48.000Z
+updated: 2026-10-04T04:55:00.000Z
 ---
 
 # 報告 MCP の実装設計
@@ -117,12 +117,3 @@ The report was not written. 2 problems:
 - `mcp-shared-report`: 検証（必須項目ごとの欠落、全件返すこと）、エスケープ、表示順
 - `report-mcp`: `describe` の例が `validate` を通ること、失敗時にファイルが書かれないこと、上書きしないこと
 - カバレッジは `coding-rules__test-coverage` の 95% を守る
-
-## 既存の作業ツリーについて
-
-shin さんのローカルに `packages/mcp-shared-report/`（794 行、未コミット）がある。
-
-構成はこの設計とほぼ同じ（`types.ts` / `validate.ts` / `renderers/html.ts`）。ただし型は合意前の v1 案で作られている。
-
-- `renderers/html.ts` は流用できる部分が多い
-- `types.ts` と `validate.ts` は spec に合わせて作り直す
