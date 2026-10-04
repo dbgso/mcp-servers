@@ -42,10 +42,22 @@ export interface DecisionAsk {
   recommendation: Recommendation;
 }
 
-/** Something the reader has to do (R4). */
-export interface ActionAsk {
-  kind: "action";
+/**
+ * Who does what, when, where, why and how: every part of a piece of work or
+ * an effect a reader needs, each its own field so none is left out (R11, R12).
+ */
+export interface FiveW1H {
+  who: string;
   what: string;
+  when: string;
+  where: string;
+  why: string;
+  how: string;
+}
+
+/** Something the reader has to do, in 5W1H (R4, R12). */
+export interface ActionAsk extends FiveW1H {
+  kind: "action";
 }
 
 export type Ask = DecisionAsk | ActionAsk;
@@ -58,21 +70,11 @@ export interface Decision {
   chosen: Recommendation;
 }
 
-/** One thing the work reaches, in 5W1H so nothing about it is left to guess (R11). */
-export interface ImpactTarget {
-  /** Who is affected. */
-  who: string;
-  /** What changes. */
-  what: string;
-  /** From when. */
-  when: string;
-  /** Where: a file, a tool, a screen. */
-  where: string;
-  /** Why it changes. */
-  why: string;
-  /** What the affected party has to do. */
-  how: string;
-}
+/**
+ * One thing the work reaches (R11): who is affected, what changes for them,
+ * from when, where, why, and what they have to do.
+ */
+export type ImpactTarget = FiveW1H;
 
 /** What leaving the work undone costs, and what doing it touches (R10). */
 export interface Impact {
@@ -90,19 +92,23 @@ export interface Correction {
 
 export interface Change {
   what: string;
+  /** Where it changed: a file, a tool, a screen (R13). */
+  where: string;
   before: string;
   after: string;
 }
 
-/** Work still left on the reporter's side. */
-export interface Remaining {
-  item: string;
-  why: string;
-}
+/**
+ * Work still left on the reporter's side (R12): who holds it, what it is,
+ * when it ends or what it waits on, where, why it is left, and how it goes on.
+ */
+export type Remaining = FiveW1H;
 
 /** A finding that is not the subject of the report (R5). */
 export interface Aside {
   note: string;
+  /** Where it was found (R13). */
+  where: string;
   /** What leaving it alone costs. */
   cost: string;
 }

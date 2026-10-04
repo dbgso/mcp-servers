@@ -69,4 +69,14 @@ export const CRITERIA: readonly Criterion[] = [
     rule: "An impact is stated in 5W1H: who, what, when, where, why, how",
     failure: "Wrote the scope as target and effect, so who had to do what and when could not be read",
   },
+  {
+    id: "R12",
+    rule: "Work someone has to do, the reader's or the reporter's, is stated in 5W1H too",
+    failure: "The failure of R11 in another field: work stated as what alone leaves out who does it, by when, where and how",
+  },
+  {
+    id: "R13",
+    rule: "A change and an aside say where they are",
+    failure: "The failure of R11 in another field: a change or finding with no place cannot be checked by the reader",
+  },
 ];

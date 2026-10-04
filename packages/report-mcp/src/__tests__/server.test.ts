@@ -58,6 +58,12 @@ describe("the advertised tools", () => {
       properties: { scope: { items: { required: string[] } } };
     };
     expect(impact.properties.scope.items.required).toEqual(["who", "what", "when", "where", "why", "how"]);
+    const { asks, remaining } = (exec?.inputSchema.properties ?? {}) as {
+      asks: { items: { anyOf: { required: string[] }[] } };
+      remaining: { items: { required: string[] } };
+    };
+    expect(asks.items.anyOf[1].required).toEqual(["kind", "who", "what", "when", "where", "why", "how"]);
+    expect(remaining.items.required).toEqual(["who", "what", "when", "where", "why", "how"]);
     await client.close();
   });
 

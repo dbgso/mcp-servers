@@ -67,7 +67,26 @@ describe("renderHtml", () => {
     );
     expect(html).toContain("<tr><td><strong>README</strong></td><td>書き慣れた場所</td><td>読まれないことがある</td></tr>");
     expect(html).toContain("推奨した理由: 配布物に含まれる唯一の場所なので");
-    expect(html).toContain('<span class="kind">作業</span> PR をマージする');
+  });
+
+  it("tabulates an ask to act and the work left in 5W1H", () => {
+    const html = renderHtml({ report: fullReport() });
+    const headers = "<thead><tr><th>誰が</th><th>何を</th><th>いつまでに</th><th>どこで</th><th>なぜ</th><th>どうやって</th></tr></thead>";
+    expect(html).toContain(`<li class="ask"><span class="kind">作業</span>\n<table class="five-w1h">\n${headers}`);
+    expect(html).toContain(
+      "<tr><td>メンテナ</td><td>PR をマージする</td><td>次のリリース前</td><td>GitHub の PR 画面</td><td>マージしないとルールが配布されない</td><td>CI が緑なのを確かめて Merge を押す</td></tr>",
+    );
+    expect(html).toContain(`<section class="remaining"><h2>残作業</h2>\n<table class="five-w1h">\n${headers}`);
+    expect(html).toContain(
+      "<tr><td>書き手</td><td>CHANGELOG を書く</td><td>リリースの前まで</td><td>CHANGELOG.md</td><td>リリース前に要る</td><td>このPRの変更を1行で足す</td></tr>",
+    );
+  });
+
+  it("says where a change and an aside are", () => {
+    const html = renderHtml({ report: fullReport() });
+    expect(html).toContain("<thead><tr><th>対象</th><th>どこで</th><th>前</th><th>後</th></tr></thead>");
+    expect(html).toContain("<tr><td>files</td><td>package.json</td>");
+    expect(html).toContain('<span class="why">場所: docs/chain</span>');
   });
 
   it("keeps evidence output verbatim in a pre block", () => {

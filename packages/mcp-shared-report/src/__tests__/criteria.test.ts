@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { CRITERIA } from "../criteria.js";
 
 describe("CRITERIA", () => {
-  it("numbers the criteria R1 to R11 in order", () => {
-    expect(CRITERIA.map((criterion) => criterion.id)).toEqual(["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11"]);
+  it("numbers the criteria R1 to R13 in order", () => {
+    expect(CRITERIA.map((criterion) => criterion.id)).toEqual(["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "R12", "R13"]);
   });
 
   it("defines every criterion the validator names", () => {

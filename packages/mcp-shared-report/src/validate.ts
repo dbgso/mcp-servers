@@ -48,6 +48,22 @@ function picksAnOption(params: { options: { label: string }[]; picked: { label: 
 
 const PICK_MISSES = "must be the label of one of the options";
 
+/** What each of the six fields means where it is used. */
+type FiveW1HText = Record<"who" | "what" | "when" | "where" | "why" | "how", string>;
+
+/** Who, what, when, where, why and how, each its own required field (R11, R12). */
+function fiveW1H(params: { says: FiveW1HText }) {
+  const { says } = params;
+  return {
+    who: text().describe(says.who),
+    what: text().describe(says.what),
+    when: text().describe(says.when),
+    where: text().describe(says.where),
+    why: text().describe(says.why),
+    how: text().describe(says.how),
+  };
+}
+
 const decisionSchema = z
   .object({
     kind: z.literal("decision"),
@@ -60,7 +76,16 @@ const decisionSchema = z
 const actionSchema = z
   .object({
     kind: z.literal("action"),
-    what: text(),
+    ...fiveW1H({
+      says: {
+        who: "Who does it",
+        what: "What to do",
+        when: "By when, e.g. before the PR is merged",
+        where: "Where: a file, a tool, a screen",
+        why: "Why it is needed: what stops if it is not done",
+        how: "How to do it: the steps or the command",
+      },
+    }),
   })
   .strict();
 
@@ -103,14 +128,18 @@ export const reportSchema = z
         scope: z
           .array(
             z
-              .object({
-                who: text().describe("Who is affected"),
-                what: text().describe("What changes for them"),
-                when: text().describe("From when, e.g. after the PR is merged"),
-                where: text().describe("Where: a file, a tool, a screen"),
-                why: text().describe("Why it changes"),
-                how: text().describe("What the affected party has to do"),
-              })
+              .object(
+                fiveW1H({
+                  says: {
+                    who: "Who is affected",
+                    what: "What changes for them",
+                    when: "From when, e.g. after the PR is merged",
+                    where: "Where: a file, a tool, a screen",
+                    why: "Why it changes",
+                    how: "What the affected party has to do",
+                  },
+                }),
+              )
               .strict(),
           )
           .min(1, "at least one target is required; say what the work reaches")
@@ -124,10 +153,34 @@ export const reportSchema = z
       .array(z.object({ said: text(), actually: text(), why: text() }).strict())
       .optional()
       .describe("R6: something said earlier that was wrong"),
-    changes: z.array(z.object({ what: text(), before: text(), after: text() }).strict()).optional(),
-    remaining: z.array(z.object({ item: text(), why: text() }).strict()).optional().describe("Work still on your side"),
+    changes: z
+      .array(
+        z
+          .object({ what: text(), where: text().describe("R13: where it changed: a file, a tool, a screen"), before: text(), after: text() })
+          .strict(),
+      )
+      .optional(),
+    remaining: z
+      .array(
+        z
+          .object(
+            fiveW1H({
+              says: {
+                who: "Who holds it",
+                what: "What is left",
+                when: "When it ends, or what it waits on",
+                where: "Where: a file, a PR, a tool",
+                why: "Why it is left",
+                how: "How it goes on",
+              },
+            }),
+          )
+          .strict(),
+      )
+      .optional()
+      .describe("R4, R12: work still on your side, in 5W1H"),
     asides: z
-      .array(z.object({ note: text(), cost: text() }).strict())
+      .array(z.object({ note: text(), where: text().describe("R13: where it was found"), cost: text() }).strict())
       .optional()
       .describe("R5: findings that are not the subject; cost is what leaving them costs"),
   })
@@ -146,6 +199,9 @@ const CRITERION_BY_PATH: readonly { pattern: RegExp; criterion: string }[] = [
   { pattern: /^impact/, criterion: "R10" },
   { pattern: /^decisions\[\d+\]\.options/, criterion: "R9" },
   { pattern: /^asks\[\d+\]\.options/, criterion: "R9" },
+  { pattern: /^asks\[\d+\]\.(who|when|where|why|how)$/, criterion: "R12" },
+  { pattern: /^remaining\[\d+\]\./, criterion: "R12" },
+  { pattern: /^(changes|asides)\[\d+\]\.where$/, criterion: "R13" },
   { pattern: /^decisions/, criterion: "R8" },
   { pattern: /^claims\[\d+\]\.evidence/, criterion: "R3" },
   { pattern: /^claims/, criterion: "R2" },

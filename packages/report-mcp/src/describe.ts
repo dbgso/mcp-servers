@@ -43,6 +43,15 @@ export const EXAMPLE_REPORT: Report = {
       ],
       recommendation: { label: "describe", reason: "It is the one place every caller reads" },
     },
+    {
+      kind: "action",
+      who: "The maintainer",
+      what: "Publish the next release",
+      when: "After the PR is merged",
+      where: "npm",
+      why: "Users get the rules only from a release",
+      how: "Run the release workflow on main",
+    },
   ],
   decisions: [
     {
@@ -61,6 +70,16 @@ export const EXAMPLE_REPORT: Report = {
       why: "Stated before reading the lint config",
     },
   ],
+  remaining: [
+    {
+      who: "Me",
+      what: "Add a changelog entry",
+      when: "Before the release",
+      where: "CHANGELOG.md",
+      why: "The release notes are built from it",
+      how: "One line naming the moved rules",
+    },
+  ],
 };
 
 function criteriaTable(): string {
@@ -68,7 +87,7 @@ function criteriaTable(): string {
   return `| # | A readable report... | The failure it prevents |\n|---|---|---|\n${rows}`;
 }
 
-/** Everything `exec` takes. Its own schema names no argument, so this is the only place they are written down. */
+/** Everything `exec` takes and what each field is for. Its schema lists the fields; this says why each is there. */
 export function buildDescribeText(): string {
   return `# report-mcp
 
@@ -107,7 +126,7 @@ ${criteriaTable()}
 | \`claims[].evidence[]\` | At least one. \`{ source, output }\`: what was run, and its output verbatim -- never a summary of it | R3 |
 | \`asks[]\` | What the reader has to do. Pass \`[]\` when nothing is needed; it cannot be left out | R4 |
 | \`asks[]\` (decision) | \`{ kind: "decision", what, options[] (2+, each { label, pros, cons }), recommendation { label, reason } }\`. The recommendation's label must be one of the options | R4, R9 |
-| \`asks[]\` (action) | \`{ kind: "action", what }\` | R4 |
+| \`asks[]\` (action) | \`{ kind: "action", who, what, when, where, why, how }\`, every field required -- who does it, what, by when, where, why it is needed, and how | R4, R12 |
 | \`decisions[]\` | What you decided on your own. \`{ what, options[] (2+, each { label, pros, cons }, the chosen one included), chosen { label, reason } }\`. The chosen label must be one of the options. Pass \`[]\` when you decided nothing; it cannot be left out | R8, R9 |
 
 ### Optional
@@ -115,16 +134,17 @@ ${criteriaTable()}
 | Field | Content | Criterion |
 |---|---|---|
 | \`corrections[]\` | \`{ said, actually, why }\`: something said earlier that was wrong | R6 |
-| \`changes[]\` | \`{ what, before, after }\` | R2 |
-| \`remaining[]\` | \`{ item, why }\`: work still on your side | R4 |
-| \`asides[]\` | \`{ note, cost }\`: findings that are not the subject; shown collapsed | R5 |
+| \`changes[]\` | \`{ what, where, before, after }\` | R2, R13 |
+| \`remaining[]\` | \`{ who, what, when, where, why, how }\`, every field required: work still on your side -- who holds it, what, when it ends or what it waits on, where, why it is left, and how it goes on | R4, R12 |
+| \`asides[]\` | \`{ note, where, cost }\`: findings that are not the subject; shown collapsed | R5, R13 |
 
 ## Page order
 
 title, conclusion and background, asks, impact, corrections, decisions, claims with
 their evidence, changes, remaining, asides. The options of a decision, in asks
 and in decisions, are shown as a table of pros and cons with the picked one
-marked and its reason under the table.
+marked and its reason under the table. The impact scope, an ask to act and the
+work remaining are shown as tables with one 5W1H column each.
 
 ## Example
 

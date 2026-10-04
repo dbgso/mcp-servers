@@ -35,7 +35,15 @@ export function fullReport(): Report {
         ],
         recommendation: { label: "describe", reason: "配布物に含まれる唯一の場所なので" },
       },
-      { kind: "action", what: "PR をマージする" },
+      {
+        kind: "action",
+        who: "メンテナ",
+        what: "PR をマージする",
+        when: "次のリリース前",
+        where: "GitHub の PR 画面",
+        why: "マージしないとルールが配布されない",
+        how: "CI が緑なのを確かめて Merge を押す",
+      },
     ],
     decisions: [
       {
@@ -48,9 +56,18 @@ export function fullReport(): Report {
       },
     ],
     corrections: [{ said: "lint が強制している", actually: "lint は強制していない", why: "設定を読まずに書いた" }],
-    changes: [{ what: "files", before: "[\"dist\", \"docs\"]", after: "[\"dist\"]" }],
-    remaining: [{ item: "CHANGELOG を書く", why: "リリース前に要る" }],
-    asides: [{ note: "coding family も孤立している", cost: "lint の警告が残る" }],
+    changes: [{ what: "files", where: "package.json", before: "[\"dist\", \"docs\"]", after: "[\"dist\"]" }],
+    remaining: [
+      {
+        who: "書き手",
+        what: "CHANGELOG を書く",
+        when: "リリースの前まで",
+        where: "CHANGELOG.md",
+        why: "リリース前に要る",
+        how: "このPRの変更を1行で足す",
+      },
+    ],
+    asides: [{ note: "coding family も孤立している", where: "docs/chain", cost: "lint の警告が残る" }],
   };
 }
 

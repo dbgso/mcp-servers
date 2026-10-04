@@ -1,4 +1,4 @@
-import type { Ask, DecisionOption, Recommendation, Report } from "../../types.js";
+import type { Ask, DecisionOption, FiveW1H, Recommendation, Report } from "../../types.js";
 import { escapeHtml } from "./escape.js";
 
 /**
@@ -51,10 +51,32 @@ ${rows}
 <p class="reason">${mark}した理由: ${e(picked.reason)}</p>`;
 }
 
+/** The six parts in their fixed order, as table columns. */
+const FIVE_W1H_KEYS: readonly (keyof FiveW1H)[] = ["who", "what", "when", "where", "why", "how"];
+
+/** One 5W1H row per entry, under headers that say what each part means here (R11, R12). */
+function renderFiveW1H(params: { rows: FiveW1H[]; headers: readonly string[] }): string {
+  const { rows, headers } = params;
+  const body = rows
+    .map((row) => `<tr>${FIVE_W1H_KEYS.map((key) => `<td>${e(row[key])}</td>`).join("")}</tr>`)
+    .join("\n");
+  return `<table class="five-w1h">
+<thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+<tbody>
+${body}
+</tbody>
+</table>`;
+}
+
+/** Headers for a piece of work, the reader's or the reporter's. */
+const WORK_HEADERS = ["誰が", "何を", "いつまでに", "どこで", "なぜ", "どうやって"] as const;
+
 function renderAsk(params: { ask: Ask }): string {
   const { ask } = params;
   if (ask.kind === "action") {
-    return `<li class="ask"><span class="kind">作業</span> ${e(ask.what)}</li>`;
+    return `<li class="ask"><span class="kind">作業</span>
+${renderFiveW1H({ rows: [ask], headers: WORK_HEADERS })}
+</li>`;
   }
   return `<li class="ask"><span class="kind">判断</span> ${e(ask.what)}
 ${renderComparison({ options: ask.options, picked: ask.recommendation, mark: "推奨" })}
@@ -79,20 +101,11 @@ ${items}
 class ImpactSection implements Section {
   render(report: Report): string {
     const { ifLeft, scope } = report.impact;
-    const rows = scope
-      .map((t) => [t.who, t.what, t.when, t.where, t.why, t.how].map((cell) => `<td>${e(cell)}</td>`).join(""))
-      .map((cells) => `<tr>${cells}</tr>`)
-      .join("\n");
     return `<section class="impact"><h2>影響</h2>
 <h3>対応しなかった場合</h3>
 <p class="if-left">${e(ifLeft)}</p>
 <h3>対応した場合の影響範囲</h3>
-<table>
-<thead><tr><th>誰が</th><th>何が</th><th>いつ</th><th>どこで</th><th>なぜ</th><th>どうすれば</th></tr></thead>
-<tbody>
-${rows}
-</tbody>
-</table>
+${renderFiveW1H({ rows: scope, headers: ["誰が", "何が", "いつ", "どこで", "なぜ", "どうすれば"] })}
 </section>`;
   }
 }
@@ -161,11 +174,11 @@ class ChangesSection implements Section {
     const changes = report.changes ?? [];
     if (changes.length === 0) return "";
     const rows = changes
-      .map((c) => `<tr><td>${e(c.what)}</td><td>${e(c.before)}</td><td>${e(c.after)}</td></tr>`)
+      .map((c) => `<tr><td>${e(c.what)}</td><td>${e(c.where)}</td><td>${e(c.before)}</td><td>${e(c.after)}</td></tr>`)
       .join("\n");
     return `<section class="changes"><h2>変更</h2>
 <table>
-<thead><tr><th>対象</th><th>前</th><th>後</th></tr></thead>
+<thead><tr><th>対象</th><th>どこで</th><th>前</th><th>後</th></tr></thead>
 <tbody>
 ${rows}
 </tbody>
@@ -174,15 +187,13 @@ ${rows}
   }
 }
 
+/** Work left on the reporter's side, one 5W1H row each (R12). */
 class RemainingSection implements Section {
   render(report: Report): string {
     const remaining = report.remaining ?? [];
     if (remaining.length === 0) return "";
-    const items = remaining.map((r) => `<li>${e(r.item)}<span class="why">${e(r.why)}</span></li>`).join("\n");
     return `<section class="remaining"><h2>残作業</h2>
-<ul>
-${items}
-</ul>
+${renderFiveW1H({ rows: remaining, headers: WORK_HEADERS })}
 </section>`;
   }
 }
@@ -193,7 +204,10 @@ class AsidesSection implements Section {
     const asides = report.asides ?? [];
     if (asides.length === 0) return "";
     const items = asides
-      .map((a) => `<li>${e(a.note)}<span class="why">放置した場合: ${e(a.cost)}</span></li>`)
+      .map(
+        (a) =>
+          `<li>${e(a.note)}<span class="why">場所: ${e(a.where)}</span><span class="why">放置した場合: ${e(a.cost)}</span></li>`,
+      )
       .join("\n");
     return `<details class="asides"><summary>本題以外の発見（${asides.length}）</summary>
 <ul>

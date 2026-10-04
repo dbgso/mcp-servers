@@ -16,6 +16,7 @@ export type {
   Decision,
   DecisionOption,
   Evidence,
+  FiveW1H,
   Impact,
   ImpactTarget,
   Problem,

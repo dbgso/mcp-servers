@@ -123,6 +123,12 @@ describe("validateReport", () => {
     ]);
   });
 
+  it("requires an ask to act in 5W1H", () => {
+    expect(problemsOf({ ...minimalReport(), asks: [{ kind: "action", what: "w" }] })).toEqual(
+      ["who", "when", "where", "why", "how"].map((key) => ({ path: `asks[0].${key}`, message: "required", criterion: "R12" })),
+    );
+  });
+
   it("names each unknown field at its own path", () => {
     const report = minimalReport();
     const input = {
@@ -140,9 +146,11 @@ describe("validateReport", () => {
 
   it.each([
     ["corrections", [{ said: "a", actually: "", why: "c" }], "corrections[0].actually", "R6"],
-    ["changes", [{ what: "a", before: "b" }], "changes[0].after", "R2"],
-    ["remaining", [{ item: "a" }], "remaining[0].why", "R4"],
-    ["asides", [{ note: "a" }], "asides[0].cost", "R5"],
+    ["changes", [{ what: "a", where: "w", before: "b" }], "changes[0].after", "R2"],
+    ["changes", [{ what: "a", before: "b", after: "c" }], "changes[0].where", "R13"],
+    ["remaining", [{ who: "a", what: "b", when: "c", where: "d", why: "e" }], "remaining[0].how", "R12"],
+    ["asides", [{ note: "a", where: "w" }], "asides[0].cost", "R5"],
+    ["asides", [{ note: "a", cost: "c" }], "asides[0].where", "R13"],
   ])("checks the fields of optional %s", (field, value, path, criterion) => {
     const [problem] = problemsOf({ ...minimalReport(), [field]: value });
     expect(problem).toMatchObject({ path, criterion });

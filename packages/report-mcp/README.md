@@ -6,7 +6,9 @@ person to read.
 The caller fills fields -- conclusion, why the work was done, claims with the
 raw output that supports them, what the reader has to decide or do, and what
 the caller decided alone with the options it turned down -- and the server lays
-them out in a fixed order. A report missing a required field, or carrying a field the
+them out in a fixed order. What the work affects, work the reader is asked to do
+and work left on the caller's side are each written in 5W1H: who, what, when,
+where, why and how, every one a required field. A report missing a required field, or carrying a field the
 structure does not have, is not written; every problem comes back at once, each
 naming the readability criterion its field is for.
 
