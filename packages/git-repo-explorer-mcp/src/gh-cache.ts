@@ -89,6 +89,18 @@ export async function isGhAvailable(): Promise<boolean> {
 const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
+ * Parse output that holds one JSON value per line.
+ * `gh api --paginate --jq` applies the filter to each page separately, so a
+ * filter like `.[] | {...}` prints one object per line across all pages.
+ */
+export function parseJsonLines<T>(stdout: string): T[] {
+  return stdout
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as T);
+}
+
+/**
  * Execute a gh CLI command with caching.
  * Returns cached result if within TTL, otherwise fetches fresh data.
  */
@@ -97,6 +109,8 @@ export async function ghCachedExec<T>(params: {
   cacheKey: string;
   ttlMs?: number;
   forceRefresh?: boolean;
+  /** Turns stdout into data; one JSON document by default. */
+  parse?: (stdout: string) => T;
 }): Promise<{ data: T; fromCache: boolean; cacheAge?: number }> {
   const ttlMs = params.ttlMs ?? DEFAULT_TTL_MS;
   const cachePath = cacheKeyToPath(params.cacheKey);
@@ -118,7 +132,8 @@ export async function ghCachedExec<T>(params: {
     maxBuffer: 10 * 1024 * 1024,
   });
 
-  const data = JSON.parse(stdout) as T;
+  const parse = params.parse ?? ((out: string) => JSON.parse(out) as T);
+  const data = parse(stdout);
   writeCache({ cachePath, data, ttlMs, command });
 
   return { data, fromCache: false };
