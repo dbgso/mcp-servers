@@ -10,6 +10,7 @@ describe("renderHtml", () => {
       'class="conclusion"',
       'class="background"',
       'class="asks"',
+      'class="impact"',
       'class="corrections"',
       'class="decisions"',
       'class="claims"',
@@ -38,6 +39,13 @@ describe("renderHtml", () => {
     );
     expect(html).toContain("<tr><td><strong>package.json を読む</strong></td><td>すぐ読める</td><td>.npmignore を見落とす</td></tr>");
     expect(html).toContain('<p class="reason">採用した理由: 見落としが起きない</p>');
+  });
+
+  it("states the cost of leaving it and tabulates what doing it reaches", () => {
+    const html = renderHtml({ report: fullReport() });
+    expect(html).toContain('<h3>対応しなかった場合</h3>\n<p class="if-left">利用者はルールが効いていると思ったまま使い続ける</p>');
+    expect(html).toContain("<thead><tr><th>対象</th><th>影響</th></tr></thead>");
+    expect(html).toContain("<tr><td>describe の出力</td><td>ルールの本文が増える</td></tr>");
   });
 
   it("leaves out optional sections the report does not fill", () => {

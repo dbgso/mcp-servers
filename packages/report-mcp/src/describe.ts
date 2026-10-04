@@ -9,6 +9,13 @@ export const EXAMPLE_REPORT: Report = {
   title: "docs/ is not shipped in the package",
   conclusion: "The rules in docs/ never reach users; only describe does",
   background: "A user reported that the rules in docs/ had no effect after installing the package",
+  impact: {
+    ifLeft: "Users keep believing the rules apply while nothing enforces them",
+    scope: [
+      { target: "describe output", effect: "Grows by the text of the rules" },
+      { target: "docs/", effect: "Stays as the source; no longer the only copy" },
+    ],
+  },
   claims: [
     {
       statement: "The packed tarball holds no file from docs/",
@@ -69,7 +76,7 @@ is for.
 
 ## Call
 
-\`exec(op: "report", title, conclusion, background, claims, asks, decisions, corrections?, changes?, remaining?, asides?)\`
+\`exec(op: "report", title, conclusion, background, impact, claims, asks, decisions, corrections?, changes?, remaining?, asides?)\`
 
 The response is the path of the written file.
 
@@ -88,6 +95,7 @@ ${criteriaTable()}
 | \`title\` | What the report is about | -- |
 | \`conclusion\` | What is finished, or what the reader has to decide | R1 |
 | \`background\` | Why the work was done: who asked for what, or what you noticed | R7 |
+| \`impact\` | \`{ ifLeft, scope[] (1+, each { target, effect }) }\`: what happens if the work is not done, and what doing it reaches | R10 |
 | \`claims[]\` | At least one. \`{ statement, evidence[] }\`, one claim per entry | R2 |
 | \`claims[].evidence[]\` | At least one. \`{ source, output }\`: what was run, and its output verbatim -- never a summary of it | R3 |
 | \`asks[]\` | What the reader has to do. Pass \`[]\` when nothing is needed; it cannot be left out | R4 |
@@ -106,7 +114,7 @@ ${criteriaTable()}
 
 ## Page order
 
-title, conclusion and background, asks, corrections, decisions, claims with
+title, conclusion and background, asks, impact, corrections, decisions, claims with
 their evidence, changes, remaining, asides. The options of a decision, in asks
 and in decisions, are shown as a table of pros and cons with the picked one
 marked and its reason under the table.

@@ -54,6 +54,9 @@ h2 { font-size: 1.15rem; margin: 32px 0 8px; padding-bottom: 4px; border-bottom:
 .why { display: block; font-size: .9rem; }
 .statement { font-weight: 600; margin-bottom: 4px; }
 .background { margin: 12px 0 0; }
+h3 { font-size: .95rem; margin: 12px 0 4px; }
+.if-left { margin: 0; }
+.impact table { display: table; }
 .label { display: inline-block; font-size: .8rem; padding: 0 8px; margin-right: 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
 .decisions .what { font-weight: 600; margin: 0 0 4px; }
 .decisions.none p { color: var(--muted); }

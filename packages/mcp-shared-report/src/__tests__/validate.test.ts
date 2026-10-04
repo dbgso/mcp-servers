@@ -22,9 +22,16 @@ describe("validateReport", () => {
       { path: "title", message: "required" },
       { path: "conclusion", message: "required", criterion: "R1" },
       { path: "background", message: "required", criterion: "R7" },
+      { path: "impact", message: "required", criterion: "R10" },
       { path: "claims", message: "required", criterion: "R2" },
       { path: "asks", message: "required; pass [] if nothing is needed from the reader", criterion: "R4" },
       { path: "decisions", message: "required; pass [] if you decided nothing on your own", criterion: "R8" },
+    ]);
+  });
+
+  it("needs at least one target in the scope of the impact", () => {
+    expect(problemsOf({ ...minimalReport(), impact: { ifLeft: "l", scope: [] } })).toEqual([
+      { path: "impact.scope", message: "at least one target is required; say what the work reaches", criterion: "R10" },
     ]);
   });
 

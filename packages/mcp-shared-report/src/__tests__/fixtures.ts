@@ -6,6 +6,10 @@ export function fullReport(): Report {
     title: "パッケージに docs が入らない",
     conclusion: "docs/ は npm に配布されない",
     background: "利用者からルールが効いていないと言われた",
+    impact: {
+      ifLeft: "利用者はルールが効いていると思ったまま使い続ける",
+      scope: [{ target: "describe の出力", effect: "ルールの本文が増える" }],
+    },
     claims: [
       {
         statement: "pack の出力に docs/ 由来のファイルがない",
@@ -47,6 +51,7 @@ export function minimalReport(): Report {
     title: "t",
     conclusion: "c",
     background: "b",
+    impact: { ifLeft: "l", scope: [{ target: "t", effect: "e" }] },
     claims: [{ statement: "s", evidence: [{ source: "cmd", output: "out" }] }],
     asks: [],
     decisions: [],

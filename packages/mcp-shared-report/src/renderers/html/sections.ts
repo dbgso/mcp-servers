@@ -75,6 +75,25 @@ ${items}
   }
 }
 
+/** The cost of leaving the work undone, then what doing it reaches, as a table (R10). */
+class ImpactSection implements Section {
+  render(report: Report): string {
+    const { ifLeft, scope } = report.impact;
+    const rows = scope.map((s) => `<tr><td>${e(s.target)}</td><td>${e(s.effect)}</td></tr>`).join("\n");
+    return `<section class="impact"><h2>影響</h2>
+<h3>対応しなかった場合</h3>
+<p class="if-left">${e(ifLeft)}</p>
+<h3>対応した場合の影響範囲</h3>
+<table>
+<thead><tr><th>対象</th><th>影響</th></tr></thead>
+<tbody>
+${rows}
+</tbody>
+</table>
+</section>`;
+  }
+}
+
 class CorrectionsSection implements Section {
   render(report: Report): string {
     const corrections = report.corrections ?? [];
@@ -185,6 +204,7 @@ ${items}
 export const SECTIONS: readonly Section[] = [
   new HeaderSection(),
   new AsksSection(),
+  new ImpactSection(),
   new CorrectionsSection(),
   new DecisionsSection(),
   new ClaimsSection(),

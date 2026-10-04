@@ -5,17 +5,33 @@ import { formatProblems, renderHtml, validateReport, type Problem } from "mcp-sh
 import { reportFileName, writeNewFile } from "../output.js";
 import type { Op } from "./types.js";
 
+function parseJson(params: { text: string }): unknown {
+  try {
+    return JSON.parse(params.text);
+  } catch {
+    return params.text;
+  }
+}
+
+/** An object in a string: `'{"a":1}'`. Anything else is left for the validator to judge. */
+function objectFromString(value: unknown): unknown {
+  if (typeof value !== "string" || !value.trimStart().startsWith("{")) return value;
+  return parseJson({ text: value });
+}
+
 /**
- * The report's list fields, restored from the strings a client sends them as.
+ * The report's list and object fields, restored from the strings a client
+ * sends them as.
  *
  * `exec` publishes no argument, so a client has no type to convert to and
- * sends an array as its JSON text (`policy__mcp-tool-surface`, "Arguments
+ * sends an array or object as its JSON text (`policy__mcp-tool-surface`, "Arguments
  * arrive as strings"). Only the decoding happens here; whether the result is
  * a valid report is `validateReport`'s question, so this accepts anything and
  * leaves every problem to be reported in one place.
  */
-const listFields = z
+const encodedFields = z
   .object({
+    impact: z.preprocess(objectFromString, z.unknown()),
     claims: looseArray(z.unknown()),
     asks: looseArray(z.unknown()),
     decisions: looseArray(z.unknown()),
@@ -27,21 +43,30 @@ const listFields = z
   .partial()
   .passthrough();
 
+/** What a field still a string after decoding should have been. Lists unless named here. */
+const EXPECTED: Record<string, string> = { impact: "an object" };
+
 /**
- * A list field still a string after decoding was JSON text that did not parse.
+ * A field still a string after decoding was JSON text that did not parse.
  * The validator only sees "a string where a list goes", which reads as though
  * JSON text were not accepted at all; this says what actually went wrong.
  */
+function isUndecoded(params: { path: string; input: Record<string, unknown> }): boolean {
+  const { path, input } = params;
+  return path in encodedFields.shape && typeof input[path] === "string";
+}
+
 function explainUndecoded(params: { problem: Problem; input: Record<string, unknown> }): Problem {
   const { problem, input } = params;
-  const undecoded = problem.path in listFields.shape && typeof input[problem.path] === "string";
-  return undecoded ? { ...problem, message: "a list, or its JSON text; this text is not valid JSON" } : problem;
+  if (!isUndecoded({ path: problem.path, input })) return problem;
+  const expected = EXPECTED[problem.path] ?? "a list";
+  return { ...problem, message: `${expected}, or its JSON text; this text is not valid JSON` };
 }
 
 /** `op` selects this operation and is not part of the report. */
 function reportInput(params: { args: Record<string, unknown> }): Record<string, unknown> {
   const { args } = params;
-  return Object.fromEntries(Object.entries(listFields.parse(args)).filter(([key]) => key !== "op"));
+  return Object.fromEntries(Object.entries(encodedFields.parse(args)).filter(([key]) => key !== "op"));
 }
 
 /**

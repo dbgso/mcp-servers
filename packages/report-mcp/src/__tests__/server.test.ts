@@ -83,6 +83,7 @@ describe("exec(op: report)", () => {
       title: "t",
       conclusion: "c",
       background: "b",
+      impact: JSON.stringify(EXAMPLE_REPORT.impact),
       claims: JSON.stringify(EXAMPLE_REPORT.claims),
       asks: "[]",
       decisions: JSON.stringify(EXAMPLE_REPORT.decisions),
@@ -94,8 +95,9 @@ describe("exec(op: report)", () => {
 
   it("says when a list field's JSON text does not parse", async () => {
     const client = await connected();
-    const args = { op: "report", title: "t", conclusion: "c", background: "b", claims: '[{"statement": "s"', asks: "[]", decisions: "[]" };
+    const args = { op: "report", title: "t", conclusion: "c", background: "b", impact: '{"ifLeft"', claims: '[{"statement": "s"', asks: "[]", decisions: "[]" };
     const result = await client.callTool({ name: "exec", arguments: args });
+    expect(textOf(result)).toContain("- impact: an object, or its JSON text; this text is not valid JSON (R10)\n");
     expect(textOf(result)).toContain("- claims: a list, or its JSON text; this text is not valid JSON (R2)\n");
     await client.close();
   });
@@ -120,9 +122,10 @@ describe("exec(op: report)", () => {
     expect(result.isError).toBe(true);
     expect(textOf(result)).toBe(
       [
-        "The report was not written. 5 problems:",
+        "The report was not written. 6 problems:",
         "- conclusion: required (R1)",
         "- background: required (R7)",
+        "- impact: required (R10)",
         "- claims[0].evidence: at least one evidence is required (R3)",
         "- asks: required; pass [] if nothing is needed from the reader (R4)",
         "- decisions: required; pass [] if you decided nothing on your own (R8)",

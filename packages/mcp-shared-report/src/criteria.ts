@@ -59,4 +59,9 @@ export const CRITERIA: readonly Criterion[] = [
     rule: "Options are compared in a table of pros and cons",
     failure: "Listed the options as bullets, so their pros and cons could not be set side by side",
   },
+  {
+    id: "R10",
+    rule: "What leaving it costs and what doing it touches are stated",
+    failure: "Said what was fixed, but not the harm of leaving it or what the change reaches",
+  },
 ];

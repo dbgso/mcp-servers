@@ -82,6 +82,14 @@ const reportSchema = z
     title: text,
     conclusion: text,
     background: text,
+    impact: z
+      .object({
+        ifLeft: text,
+        scope: z
+          .array(z.object({ target: text, effect: text }).strict())
+          .min(1, "at least one target is required; say what the work reaches"),
+      })
+      .strict(),
     claims: z.array(claimSchema).min(1, "at least one claim is required"),
     asks: z.array(askSchema),
     decisions: z.array(decisionMadeSchema),
@@ -101,6 +109,7 @@ const reportSchema = z
 const CRITERION_BY_PATH: readonly { pattern: RegExp; criterion: string }[] = [
   { pattern: /^conclusion/, criterion: "R1" },
   { pattern: /^background/, criterion: "R7" },
+  { pattern: /^impact/, criterion: "R10" },
   { pattern: /^decisions\[\d+\]\.options/, criterion: "R9" },
   { pattern: /^asks\[\d+\]\.options/, criterion: "R9" },
   { pattern: /^decisions/, criterion: "R8" },

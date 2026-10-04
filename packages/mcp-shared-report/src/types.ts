@@ -58,6 +58,19 @@ export interface Decision {
   chosen: Recommendation;
 }
 
+/** One thing the work reaches, and how it changes. */
+export interface ImpactTarget {
+  target: string;
+  effect: string;
+}
+
+/** What leaving the work undone costs, and what doing it touches (R10). */
+export interface Impact {
+  ifLeft: string;
+  /** One or more. */
+  scope: ImpactTarget[];
+}
+
 /** A correction to something said earlier (R6). */
 export interface Correction {
   said: string;
@@ -89,6 +102,7 @@ export interface Report {
   conclusion: string;
   /** Why the work was done: who asked for what, or what was noticed (R7). */
   background: string;
+  impact: Impact;
   claims: Claim[];
   /** May be empty, which renders as "nothing needed"; may not be omitted. */
   asks: Ask[];
