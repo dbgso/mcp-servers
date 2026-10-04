@@ -8,7 +8,16 @@ export function fullReport(): Report {
     background: "利用者からルールが効いていないと言われた",
     impact: {
       ifLeft: "利用者はルールが効いていると思ったまま使い続ける",
-      scope: [{ target: "describe の出力", effect: "ルールの本文が増える" }],
+      scope: [
+        {
+          who: "利用者",
+          what: "describe の出力にルールの本文が載る",
+          when: "次のリリースから",
+          where: "describe",
+          why: "docs/ は配布されない",
+          how: "何もしなくてよい",
+        },
+      ],
     },
     claims: [
       {
@@ -51,7 +60,7 @@ export function minimalReport(): Report {
     title: "t",
     conclusion: "c",
     background: "b",
-    impact: { ifLeft: "l", scope: [{ target: "t", effect: "e" }] },
+    impact: { ifLeft: "l", scope: [{ who: "a", what: "b", when: "c", where: "d", why: "e", how: "f" }] },
     claims: [{ statement: "s", evidence: [{ source: "cmd", output: "out" }] }],
     asks: [],
     decisions: [],

@@ -64,4 +64,9 @@ export const CRITERIA: readonly Criterion[] = [
     rule: "What leaving it costs and what doing it touches are stated",
     failure: "Said what was fixed, but not the harm of leaving it or what the change reaches",
   },
+  {
+    id: "R11",
+    rule: "An impact is stated in 5W1H: who, what, when, where, why, how",
+    failure: "Wrote the scope as target and effect, so who had to do what and when could not be read",
+  },
 ];

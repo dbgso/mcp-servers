@@ -12,8 +12,14 @@ export const EXAMPLE_REPORT: Report = {
   impact: {
     ifLeft: "Users keep believing the rules apply while nothing enforces them",
     scope: [
-      { target: "describe output", effect: "Grows by the text of the rules" },
-      { target: "docs/", effect: "Stays as the source; no longer the only copy" },
+      {
+        who: "Users of the package",
+        what: "describe now prints the rules",
+        when: "From the next release",
+        where: "The describe tool",
+        why: "docs/ is not in the published package",
+        how: "Nothing; describe is read on every call",
+      },
     ],
   },
   claims: [
@@ -95,7 +101,8 @@ ${criteriaTable()}
 | \`title\` | What the report is about | -- |
 | \`conclusion\` | What is finished, or what the reader has to decide | R1 |
 | \`background\` | Why the work was done: who asked for what, or what you noticed | R7 |
-| \`impact\` | \`{ ifLeft, scope[] (1+, each { target, effect }) }\`: what happens if the work is not done, and what doing it reaches | R10 |
+| \`impact\` | \`{ ifLeft, scope[] (1+) }\`: what happens if the work is not done, and what doing it reaches | R10 |
+| \`impact.scope[]\` | One entry per affected party, every field required: \`{ who, what, when, where, why, how }\` -- who is affected, what changes, from when, where (file, tool, screen), why, and what they have to do | R11 |
 | \`claims[]\` | At least one. \`{ statement, evidence[] }\`, one claim per entry | R2 |
 | \`claims[].evidence[]\` | At least one. \`{ source, output }\`: what was run, and its output verbatim -- never a summary of it | R3 |
 | \`asks[]\` | What the reader has to do. Pass \`[]\` when nothing is needed; it cannot be left out | R4 |

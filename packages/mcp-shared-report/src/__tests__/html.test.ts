@@ -44,8 +44,12 @@ describe("renderHtml", () => {
   it("states the cost of leaving it and tabulates what doing it reaches", () => {
     const html = renderHtml({ report: fullReport() });
     expect(html).toContain('<h3>対応しなかった場合</h3>\n<p class="if-left">利用者はルールが効いていると思ったまま使い続ける</p>');
-    expect(html).toContain("<thead><tr><th>対象</th><th>影響</th></tr></thead>");
-    expect(html).toContain("<tr><td>describe の出力</td><td>ルールの本文が増える</td></tr>");
+    expect(html).toContain(
+      "<thead><tr><th>誰が</th><th>何が</th><th>いつ</th><th>どこで</th><th>なぜ</th><th>どうすれば</th></tr></thead>",
+    );
+    expect(html).toContain(
+      "<tr><td>利用者</td><td>describe の出力にルールの本文が載る</td><td>次のリリースから</td><td>describe</td><td>docs/ は配布されない</td><td>何もしなくてよい</td></tr>",
+    );
   });
 
   it("leaves out optional sections the report does not fill", () => {

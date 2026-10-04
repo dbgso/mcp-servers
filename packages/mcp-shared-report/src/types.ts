@@ -58,10 +58,20 @@ export interface Decision {
   chosen: Recommendation;
 }
 
-/** One thing the work reaches, and how it changes. */
+/** One thing the work reaches, in 5W1H so nothing about it is left to guess (R11). */
 export interface ImpactTarget {
-  target: string;
-  effect: string;
+  /** Who is affected. */
+  who: string;
+  /** What changes. */
+  what: string;
+  /** From when. */
+  when: string;
+  /** Where: a file, a tool, a screen. */
+  where: string;
+  /** Why it changes. */
+  why: string;
+  /** What the affected party has to do. */
+  how: string;
 }
 
 /** What leaving the work undone costs, and what doing it touches (R10). */

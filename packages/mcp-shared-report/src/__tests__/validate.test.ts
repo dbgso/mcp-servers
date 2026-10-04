@@ -29,6 +29,14 @@ describe("validateReport", () => {
     ]);
   });
 
+  it("names each missing 5W1H field of an impact as R11", () => {
+    const scope = [{ who: "a", what: "b", where: "d", why: "e" }];
+    expect(problemsOf({ ...minimalReport(), impact: { ifLeft: "l", scope } })).toEqual([
+      { path: "impact.scope[0].when", message: "required", criterion: "R11" },
+      { path: "impact.scope[0].how", message: "required", criterion: "R11" },
+    ]);
+  });
+
   it("needs at least one target in the scope of the impact", () => {
     expect(problemsOf({ ...minimalReport(), impact: { ifLeft: "l", scope: [] } })).toEqual([
       { path: "impact.scope", message: "at least one target is required; say what the work reaches", criterion: "R10" },
