@@ -6,6 +6,46 @@ import path from "node:path";
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Run a read-only git command in a repository and return its stdout.
+ * Every query in this module shares the same timeout and output limit.
+ */
+async function runGit(params: { repoPath: string; args: string[] }): Promise<string> {
+  const { stdout } = await execFileAsync("git", params.args, {
+    cwd: params.repoPath,
+    timeout: 30_000,
+    maxBuffer: 10 * 1024 * 1024, // 10MB
+  });
+  return stdout;
+}
+
+/** Split command output into its non-empty lines. */
+function toLines(stdout: string): string[] {
+  return stdout.trim().split("\n").filter(Boolean);
+}
+
+/**
+ * Convert a glob into a regex matched against the whole string.
+ * `*` and `?` stop at `/`; `**` crosses directories.
+ */
+export function globToRegex(glob: string): RegExp {
+  const escaped = glob
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "___GLOBSTAR___")
+    .replace(/\*/g, "[^/]*")
+    .replace(/\?/g, "[^/]")
+    .replace(/___GLOBSTAR___/g, ".*");
+  return new RegExp(`^${escaped}$`);
+}
+
+/** Keep the items matching a glob; all of them when no glob is given. */
+function filterByGlob(params: { items: string[]; pattern?: string | undefined }): string[] {
+  const { items, pattern } = params;
+  if (!pattern) return items;
+  const regex = globToRegex(pattern);
+  return items.filter(item => regex.test(item));
+}
+
 // Default to ~/.cache/git-repo-explorer-mcp (persistent across reboots)
 const DEFAULT_BASE_DIR = path.join(homedir(), ".cache", "git-repo-explorer-mcp");
 
@@ -140,18 +180,11 @@ export async function ensureRepo(repoUrl: string): Promise<string> {
  */
 export function parseGitGrepOutput(params: { output: string; ref: string }): GrepMatch[] {
   const { output, ref } = params;
-  if (!output.trim()) {
-    return [];
-  }
-
-  const lines = output.trim().split("\n");
   const matches: GrepMatch[] = [];
   const refPrefix = `${ref}:`;
 
-  for (const line of lines) {
-    if (!line.startsWith(refPrefix)) {
-      continue;
-    }
+  for (const line of toLines(output)) {
+    if (!line.startsWith(refPrefix)) continue;
 
     const [file, lineNumber, ...content] = line.slice(refPrefix.length).split("\0");
     // A line without both separators is not a match line this parser can place
@@ -167,6 +200,32 @@ export function parseGitGrepOutput(params: { output: string; ref: string }): Gre
 }
 
 /**
+ * Build the argument vector for `git grep`.
+ */
+export function buildGrepArgs(params: {
+  pattern: string;
+  ref: string;
+  maxCount: number;
+  options: GitGrepOptions;
+}): string[] {
+  const { pattern, ref, maxCount, options } = params;
+  // -z: NUL after the file name and line number, see parseGitGrepOutput
+  const args = ["grep", "-n", "-z"];
+  if (options.ignore_case) {
+    args.push("-i");
+  }
+  // --max-count limits matches per file, not in total. One above the limit is
+  // enough to tell that a single file went over it; gitGrep cuts the total.
+  args.push(`--max-count=${maxCount + 1}`);
+  // -e keeps a pattern that starts with "-" from being read as an option
+  args.push("-e", pattern, ref);
+  if (options.path) {
+    args.push("--", options.path);
+  }
+  return args;
+}
+
+/**
  * Execute git grep on a bare repository.
  * Returns at most `max_count` matches in total; `truncated` says whether more were found.
  */
@@ -178,55 +237,25 @@ export async function gitGrep(params: {
   const { repoPath, pattern, options = {} } = params;
   const ref = options.ref ?? "HEAD";
   const maxCount = Math.min(options.max_count ?? 100, 500);
-
-  // -z: NUL after the file name and line number, see parseGitGrepOutput
-  const args = ["grep", "-n", "-z"];
-  if (options.ignore_case) {
-    args.push("-i");
-  }
-  // --max-count limits matches per file, not in total. One above the limit is
-  // enough to tell that a single file went over it; the total is cut below.
-  args.push(`--max-count=${maxCount + 1}`);
-  // -e keeps a pattern that starts with "-" from being read as an option
-  args.push("-e", pattern);
-  args.push(ref);
-
-  if (options.path) {
-    args.push("--", options.path);
-  }
-
-  const repoName = path.basename(repoPath);
-
-  try {
-    const { stdout } = await execFileAsync("git", args, {
-      cwd: repoPath,
-      timeout: 30_000,
-      maxBuffer: 10 * 1024 * 1024, // 10MB
-    });
-
-    const found = parseGitGrepOutput({ output: stdout, ref });
+  const toResult = (found: GrepMatch[]): GrepResult => {
     const matches = found.slice(0, maxCount);
-    const truncated = found.length > maxCount;
-
     return {
-      repo: repoName,
+      repo: path.basename(repoPath),
       ref,
       pattern,
       matches,
       total_matches: matches.length,
-      truncated,
+      truncated: found.length > maxCount,
     };
+  };
+
+  try {
+    const stdout = await runGit({ repoPath, args: buildGrepArgs({ pattern, ref, maxCount, options }) });
+    return toResult(parseGitGrepOutput({ output: stdout, ref }));
   } catch (error) {
     // git grep exits with code 1 when no matches found
     if (error instanceof Error && "code" in error && (error as { code: number }).code === 1) {
-      return {
-        repo: repoName,
-        ref,
-        pattern,
-        matches: [],
-        total_matches: 0,
-        truncated: false,
-      };
+      return toResult([]);
     }
     throw error;
   }
@@ -273,29 +302,8 @@ export async function gitLsFiles(params: {
     args.push("--", options.path);
   }
 
-  const { stdout } = await execFileAsync("git", args, {
-    cwd: repoPath,
-    timeout: 30_000,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-
-  let files = stdout.trim().split("\n").filter(Boolean);
-
-  if (options.pattern) {
-    const globToRegex = (glob: string) => {
-      const escaped = glob
-        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-        .replace(/\*\*/g, "___GLOBSTAR___")
-        .replace(/\*/g, "[^/]*")
-        .replace(/\?/g, "[^/]")
-        .replace(/___GLOBSTAR___/g, ".*");
-      return new RegExp(`^${escaped}$`);
-    };
-    const regex = globToRegex(options.pattern);
-    files = files.filter(f => regex.test(f));
-  }
-
-  return files;
+  const files = toLines(await runGit({ repoPath, args }));
+  return filterByGlob({ items: files, pattern: options.pattern });
 }
 
 /**
@@ -333,13 +341,7 @@ export async function gitLog(params: {
     args.push("--", options.path);
   }
 
-  const { stdout } = await execFileAsync("git", args, {
-    cwd: repoPath,
-    timeout: 30_000,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-
-  return stdout.trim();
+  return (await runGit({ repoPath, args })).trim();
 }
 
 /**
@@ -363,13 +365,7 @@ export async function gitBlame(params: {
 
   args.push(ref, "--", filePath);
 
-  const { stdout } = await execFileAsync("git", args, {
-    cwd: repoPath,
-    timeout: 30_000,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-
-  return stdout.trim();
+  return (await runGit({ repoPath, args })).trim();
 }
 
 /**
@@ -385,13 +381,7 @@ export async function gitShow(params: {
   const target = filePath ? `${ref}:${filePath}` : ref;
   const args = ["show", target];
 
-  const { stdout } = await execFileAsync("git", args, {
-    cwd: repoPath,
-    timeout: 30_000,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-
-  return stdout;
+  return runGit({ repoPath, args });
 }
 
 /**
@@ -411,13 +401,7 @@ export async function gitDiff(params: {
     args.push("--", options.path);
   }
 
-  const { stdout } = await execFileAsync("git", args, {
-    cwd: repoPath,
-    timeout: 30_000,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-
-  return stdout;
+  return runGit({ repoPath, args });
 }
 
 export interface BranchListOptions {
@@ -440,29 +424,8 @@ export async function gitBranchList(params: {
     ? ["for-each-ref", "--format=%(refname:short)", "refs/heads/"]
     : ["branch", "-a", "--format=%(refname:short)"];
 
-  const { stdout } = await execFileAsync("git", args, {
-    cwd: repoPath,
-    timeout: 30_000,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-
-  let branches = stdout.trim().split("\n").filter(Boolean);
-
-  if (options.pattern) {
-    const globToRegex = (glob: string) => {
-      const escaped = glob
-        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-        .replace(/\*\*/g, "___GLOBSTAR___")
-        .replace(/\*/g, "[^/]*")
-        .replace(/\?/g, "[^/]")
-        .replace(/___GLOBSTAR___/g, ".*");
-      return new RegExp(`^${escaped}$`);
-    };
-    const regex = globToRegex(options.pattern);
-    branches = branches.filter(b => regex.test(b));
-  }
-
-  return branches;
+  const branches = toLines(await runGit({ repoPath, args }));
+  return filterByGlob({ items: branches, pattern: options.pattern });
 }
 
 export interface TagListOptions {
@@ -485,13 +448,7 @@ export async function gitTagList(params: {
     args.push(options.pattern);
   }
 
-  const { stdout } = await execFileAsync("git", args, {
-    cwd: repoPath,
-    timeout: 30_000,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-
-  let tags = stdout.trim().split("\n").filter(Boolean);
+  let tags = toLines(await runGit({ repoPath, args }));
 
   if (options.max_count) {
     tags = tags.slice(0, options.max_count);
