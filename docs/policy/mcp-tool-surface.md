@@ -1,9 +1,10 @@
 ---
-description: A tool's schema carries no argument information; a describe tool carries all of it. Every server has one, and it is called describe.
+description: Every server has two tools, describe and exec. exec takes op; no schema carries argument information, and describe carries all of it.
 whenToUse:
   - Registering a tool on an MCP server
   - Deciding what a tool's inputSchema should contain
   - Adding or renaming a describe tool
+  - Naming a tool or adding an operation to one
   - Reviewing a server whose schema lists its arguments
 ---
 
@@ -13,15 +14,24 @@ whenToUse:
 it.** The schema accepts anything; the handler decides what is valid; `describe`
 says what the handler wants.
 
-## The four rules
+## The rules
 
 1. **A tool's `inputSchema` names no argument.** It is `z.object({}).passthrough()`.
-2. **Every server registers a `describe` tool.** A server without one is
-   incomplete, not minimal.
-3. **It is called `describe`,** with no prefix. The server name is already the
-   namespace: a caller reaches it as `mcp__<server>__describe`, so a prefix inside
-   the tool name says the same thing twice.
-4. **Validation lives in the handler,** against that handler's own schema, and a
+2. **Every server registers two tools, `describe` and `exec`.** A server without
+   `describe` is incomplete, not minimal.
+3. **The tool says what kind of call it is; `op` says what the call does.** `exec`
+   takes an `op` argument naming the operation, and `describe` lists every `op`.
+   A tool named after the domain (`instruction`, `chain_query`) repeats the
+   server's name, and one named after the operation (`kroki_render`) repeats the
+   `op`. Either way the name says something twice.
+4. **No prefix.** The server name is already the namespace: a caller reaches the
+   tools as `mcp__<server>__describe` and `mcp__<server>__exec`, so a prefix
+   inside the tool name says the same thing twice.
+5. **An `op` a person must approve goes in `approve`, not `exec`.** Claude Code
+   approves per tool, not per argument (`coding-rules__mcp-tool-approval`), so an
+   `op` inside `exec` is approved whenever `exec` is. A server whose ops all run
+   without a person has no `approve`.
+6. **Validation lives in the handler,** against that handler's own schema, and a
    test holds every example in `describe` to the schema it would be validated
    against. That test is what keeps `describe` from drifting; nothing else can,
    because nothing else is checkable.
@@ -91,21 +101,22 @@ already publishes a passthrough schema and is not yet wrapped or checked.
 Measured by starting each server and reading `tools/list`. Servers needing
 configuration to start are not listed; they are unmeasured, not conforming.
 
-| server | `describe` | inputSchema | tools |
-|---|---|---|---|
-| `interactive-instruction-mcp` | `describe` | **146 B** | 2 |
-| `git-repo-explorer-mcp` | `git_describe` | 360 B | 2 |
-| `traceable-chain-mcp` | `chain_describe` | 497 B | 3 |
-| `kroki-mcp` | `kroki_describe` | 629 B | 2 |
-| `duckdb-mcp` | `duckdb_describe` | 1,500 B | 3 |
-| `cli-to-mcp` | **none** (`cli_help`) | 1,026 B | 3 |
-| `ast-typescript-mcp` | **none** | 363 B | 1 |
-| `interactive-pdca-mcp` | **none** | 6,401 B | 2 |
-| `ast-file-mcp` | **none** | 7,014 B | 14 |
+| server | `describe` | second tool | inputSchema | tools |
+|---|---|---|---|---|
+| `interactive-instruction-mcp` | `describe` | `instruction(action)` | **146 B** | 2 |
+| `git-repo-explorer-mcp` | `git_describe` | `git_execute` | 360 B | 2 |
+| `traceable-chain-mcp` | `chain_describe` | `chain_query` / `chain_mutate` | 497 B | 3 |
+| `kroki-mcp` | `kroki_describe` | `kroki_render` | 629 B | 2 |
+| `duckdb-mcp` | `duckdb_describe` | `duckdb_query` / `duckdb_count` | 1,500 B | 3 |
+| `cli-to-mcp` | **none** (`cli_help`) | `cli_execute` / `cli_status` | 1,026 B | 3 |
+| `ast-typescript-mcp` | **none** | `ts_ast` | 363 B | 1 |
+| `interactive-pdca-mcp` | **none** | `plan` / `approve` | 6,401 B | 2 |
+| `ast-file-mcp` | **none** | 14 tools | 7,014 B | 14 |
 
-So: one server conforms. The work this implies, in the order the cost suggests:
+So: no server conforms. `interactive-instruction-mcp` meets every rule but the
+name of its second tool. The work this implies, in the order the cost suggests:
 
-1. **`ast-file-mcp`** — 14 tools, 7 KB of schema, no `describe`. Both rules broken
+1. **`ast-file-mcp`** — 14 tools, 7 KB of schema, no `describe`. Every rule broken
    at once, and the most expensive instance of each.
 2. **`interactive-pdca-mcp`** — 6.4 KB and no `describe`. It also carries
    `input-schema-fields.ts` and `schema-consistency.test.ts`, which exist to keep
@@ -114,7 +125,12 @@ So: one server conforms. The work this implies, in the order the cost suggests:
    one under another name; if so it is a rename, and if not it is a new tool.
 4. **The prefixed four** — `git_describe`, `chain_describe`, `kroki_describe`,
    `duckdb_describe` become `describe`. Breaking for anything naming them.
-5. **Every schema above 146 B** — the argument information comes out.
+5. **Every second tool** becomes `exec`, and its operations become `op` values:
+   `instruction(action)`, `git_execute`, `kroki_render`, `duckdb_query` /
+   `duckdb_count`, `cli_execute` / `cli_status`. `chain_mutate` and any other
+   tool holding operations a person must approve becomes `approve`, not `exec`.
+   Breaking for anything naming them.
+6. **Every schema above 146 B** — the argument information comes out.
 
 Each of these, as it drops its argument information, takes on the section above:
 its handlers' booleans, numbers and arrays get the loose wrappers, and its handler

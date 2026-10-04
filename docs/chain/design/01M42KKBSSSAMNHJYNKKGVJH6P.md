@@ -4,7 +4,7 @@ type: design
 title: 報告 MCP の実装設計
 requires: 01M42J5FD0DVHH7DFJETNJ18GS
 created: 2026-10-04T04:43:48.000Z
-updated: 2026-10-04T04:55:00.000Z
+updated: 2026-10-04T08:15:00.000Z
 ---
 
 # 報告 MCP の実装設計
@@ -68,18 +68,22 @@ interface Problem {
 
 ### ツール
 
-`policy__mcp-tool-surface` に従い、2つ。
+`policy__mcp-tool-surface` に従い、`describe` と `exec` の2つ。
 
-| ツール | 内容 |
-|---|---|
-| `describe` | 報告の構造、必須項目、読みやすさの基準 R1〜R6、例を返す |
-| `report` | 報告を受けて検証し、HTML を書いてパスを返す |
+| ツール | `op` | 内容 |
+|---|---|---|
+| `describe` | — | 報告の構造、必須項目、読みやすさの基準 R1〜R6、例を返す |
+| `exec` | `report` | 報告を受けて検証し、HTML を書いてパスを返す |
+
+呼び出しは `exec(op: "report", title: ..., conclusion: ..., claims: [...], asks: [...])` になる。
 
 - どちらも `inputSchema` は `z.object({}).passthrough()`。検証はハンドラ内で行う
+- 配列の引数（`claims` など）はクライアントから文字列で届く。ハンドラのスキーマで `looseArray` を使う（`policy__mcp-tool-surface`「Arguments arrive as strings」）
+- `approve` は持たない（下記「承認ゲートは置かない」）
 - **基準は `describe` に載せる。** リポジトリの `docs/` はパッケージに同梱されないので、利用者が基準を読める場所は `describe` だけになる（#83 で学んだこと）
 - `describe` の例は、テストで `validate` に通す。例と検証のずれを防ぐ
 
-### report の応答
+### `exec(op: "report")` の応答
 
 成功時:
 
