@@ -33,12 +33,13 @@ import {
   type CreateCodegenToolsConfig,
 } from "mcp-shared-db-codegen";
 import {
+  bootstrapResolver,
   composeDbUrlFromResolver,
   createSecretResolver,
   envSource,
-  loadEnvFile,
   secretsManagerSource,
   ssmSource,
+  type BootstrapSeams,
   type SecretResolver,
 } from "mcp-shared-secrets";
 import { parseArgs, type CliArgs } from "./cli.js";
@@ -74,14 +75,7 @@ export interface CreateServerOptions {
   toolsConfig?: Partial<CreateCodegenToolsConfig>;
 }
 
-export interface StartServerOptions extends CreateServerOptions {
-  /** Pre-parsed CLI arguments (preferred over re-parsing argv inside startServer). */
-  cli?: CliArgs;
-  /** Pre-built resolver (test seam). When omitted, one is constructed internally. */
-  resolver?: SecretResolver;
-  /** Test seam: dotenv loader. Defaults to `loadEnvFile`. */
-  loadEnvFile?: (path: string) => unknown;
-}
+export type StartServerOptions = CreateServerOptions & BootstrapSeams<CliArgs>;
 
 /**
  * Build a resolver using the standard scheme set (`ssm:`, `sm:`, `env:`).
@@ -223,16 +217,15 @@ export function createServer(options: CreateServerWithResolverOptions): Server {
 export async function startServer(
   argvOrOptions: readonly string[] | StartServerOptions = [],
 ): Promise<void> {
-  const options = isStartServerOptions(argvOrOptions)
-    ? argvOrOptions
-    : ({ cli: parseArgs(argvOrOptions) } satisfies StartServerOptions);
-
-  const cli = options.cli ?? {};
-  const load = options.loadEnvFile ?? loadEnvFile;
-  if (cli.envFile) load(cli.envFile);
-
-  const resolver = options.resolver ?? buildDefaultResolver();
-  await resolver.preload([...SECRET_KEYS]);
+  const { options, resolver } = await bootstrapResolver<CliArgs, StartServerOptions>({
+    argvOrOptions,
+    parseArgs,
+    // Every flag is optional here: with none, the server starts and reports
+    // "URL not configured" from the tool call instead.
+    onMissingCli: () => ({}),
+    buildResolver: () => buildDefaultResolver(),
+    secretKeys: SECRET_KEYS,
+  });
 
   const server = createServer({
     resolver,
@@ -240,10 +233,4 @@ export async function startServer(
   });
   await server.connect(new StdioServerTransport());
   console.error(`${SERVER_NAME} v${SERVER_VERSION} started`);
-}
-
-function isStartServerOptions(
-  v: readonly string[] | StartServerOptions,
-): v is StartServerOptions {
-  return !Array.isArray(v);
 }

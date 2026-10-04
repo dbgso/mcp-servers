@@ -43,12 +43,13 @@ import {
   type LegacyUsageReport,
 } from "mcp-shared-db-core";
 import {
+  bootstrapResolver,
   composeDbUrlFromResolver,
   createSecretResolver,
   envSource,
-  loadEnvFile,
   secretsManagerSource,
   ssmSource,
+  type BootstrapSeams,
   type SecretResolver,
 } from "mcp-shared-secrets";
 import { parseArgs, type CliArgs } from "./cli.js";
@@ -289,13 +290,7 @@ export function createServer(options: CreateServerWithDataSourceOptions): Server
   return server;
 }
 
-export interface StartServerOptions {
-  /** Pre-parsed CLI arguments (preferred over re-parsing argv). */
-  cli?: CliArgs;
-  /** Pre-built resolver (test seam). When omitted, one is constructed internally. */
-  resolver?: SecretResolver;
-  /** Test seam: dotenv loader. Defaults to `loadEnvFile`. */
-  loadEnvFile?: (path: string) => unknown;
+export interface StartServerOptions extends BootstrapSeams<CliArgs> {
   /** Test seam: dynamic importer used by load-config helpers. */
   importer?: DynamicImport;
   /** Test seam: opens the tunneled pg connection. Defaults to `defaultOpenConnection`. */
@@ -315,20 +310,15 @@ export interface StartServerOptions {
 export async function startServer(
   argvOrOptions: readonly string[] | StartServerOptions,
 ): Promise<void> {
-  const options = isStartServerOptions(argvOrOptions)
-    ? argvOrOptions
-    : ({ cli: parseArgs(argvOrOptions) } satisfies StartServerOptions);
-
-  if (!options.cli) {
-    throw new Error("startServer requires CLI arguments (envFile / metadata / selectableFields)");
-  }
-  const cli = options.cli;
-
-  const load = options.loadEnvFile ?? loadEnvFile;
-  load(cli.envFile);
-
-  const resolver = options.resolver ?? buildDefaultResolver();
-  await resolver.preload([...SECRET_KEYS]);
+  const { options, cli, resolver } = await bootstrapResolver<CliArgs, StartServerOptions>({
+    argvOrOptions,
+    parseArgs,
+    onMissingCli: () => {
+      throw new Error("startServer requires CLI arguments (envFile / metadata / selectableFields)");
+    },
+    buildResolver: () => buildDefaultResolver(),
+    secretKeys: SECRET_KEYS,
+  });
 
   const [tableMetadata, selectableFields] = await Promise.all([
     loadMetadata({
@@ -389,10 +379,4 @@ export function registerShutdownHooks(connection: Connection): void {
       void shutdown().finally(() => process.exit(0));
     });
   }
-}
-
-function isStartServerOptions(
-  v: readonly string[] | StartServerOptions,
-): v is StartServerOptions {
-  return !Array.isArray(v);
 }

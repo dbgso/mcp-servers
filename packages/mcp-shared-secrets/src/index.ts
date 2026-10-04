@@ -30,3 +30,10 @@ export {
   SecretsManagerSource,
 } from "./aws/index.js";
 export type { AwsExecOptions, ExecFileFn } from "./aws/index.js";
+
+export { bootstrapResolver } from "./bootstrap.js";
+export type {
+  BootstrapResolverParams,
+  BootstrapSeams,
+  BootstrappedResolver,
+} from "./bootstrap.js";
