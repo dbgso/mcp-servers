@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { convertBlocks } from "../handlers/asciidoc-convert.js";
+import { convertBlocks, pickAttributes } from "../handlers/asciidoc-convert.js";
 
 /** The least a block can be: a context and nothing else. */
 const bare = { getContext: () => "paragraph" };
@@ -183,5 +183,46 @@ describe("a tree that points back at itself", () => {
     // one; this records that the guards above stop at the accessors and are
     // not a general tolerance for anything in the array.
     expect(() => convertBlocks({ blocks: [null] })).toThrow(TypeError);
+  });
+});
+
+describe("a block with every accessor", () => {
+  it("serialises its fields in a fixed order", () => {
+    // The handler returns this as JSON, so key order is part of the output.
+    const [converted] = convertBlocks({
+      blocks: [
+        {
+          getContext: () => "list_item",
+          getBlocks: () => [{ getContext: () => "paragraph" }],
+          getLines: () => ["a"],
+          getText: () => "t",
+          getSource: () => "s",
+          getMarker: () => "*",
+          getAttributes: () => ({ role: "r" }),
+          getStyle: () => "st",
+          getTitle: () => "ti",
+          getLevel: () => 0,
+        },
+      ],
+    });
+
+    expect(JSON.stringify(converted)).toBe(
+      '{"context":"list_item","level":0,"title":"ti","style":"st","attributes":{"role":"r"},' +
+        '"marker":"*","source":"s","text":"t","lines":["a"],"blocks":[{"context":"paragraph"}]}',
+    );
+  });
+});
+
+describe("pickAttributes", () => {
+  it.each([
+    ["no attributes object", undefined],
+    ["a non-object", "language"],
+    ["no relevant string attribute", { id: "x", linenums: 1 }],
+  ])("returns undefined for %s", (_label, attrs) => {
+    expect(pickAttributes(attrs)).toBeUndefined();
+  });
+
+  it("keeps the relevant string attributes in a fixed order", () => {
+    expect(pickAttributes({ role: "r", id: "x", language: "ts" })).toEqual({ language: "ts", role: "r" });
   });
 });
