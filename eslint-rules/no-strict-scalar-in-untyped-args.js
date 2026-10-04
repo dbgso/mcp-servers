@@ -25,8 +25,10 @@
  * shape to write and one to check: the schema the handler declares is exactly
  * what runs after the conversion.
  *
- * Enabled only where the tool's input schema is untyped (`.oxlintrc.json`
- * overrides). A tool that publishes its types gets real booleans from the client
+ * The wrappers live in mcp-shared (`utils/untyped-args.ts`), since every server
+ * that follows policy__mcp-tool-surface publishes no argument types and has the
+ * same problem. Enabled only where the tool's input schema is untyped
+ * (`.oxlintrc.json` overrides). A tool that publishes its types gets real booleans from the client
  * and should keep rejecting strings.
  */
 

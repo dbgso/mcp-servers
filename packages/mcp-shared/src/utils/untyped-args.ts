@@ -1,17 +1,22 @@
 /**
- * Booleans, numbers and arrays that also accept their string spelling.
+ * Arguments of a tool that publishes no argument types, turned back into the
+ * types its handler expects.
  *
- * `instruction` advertises no arguments in its input schema on purpose --
- * `describe` is where they are written down. The cost is that a client has no
- * type to serialise against, so `recursive: true` can arrive as `"true"` and
- * `depth: 2` as `"2"`. A strict `z.boolean()` then rejects a call made exactly
- * as `describe` shows it. Arrays arrive the same way: `whenToUse: ["a"]` came
- * in as the string `'["a"]'`, so `add` -- whose `whenToUse` is required --
- * could not be called from Claude Code at all.
+ * `policy__mcp-tool-surface`: a tool's inputSchema names no argument
+ * (`z.object({}).passthrough()`); `describe` says what each action takes. The
+ * client converts a tool call's arguments using that inputSchema, so for an
+ * argument it has no type for, it sends the value as a string. Claude Code sends
+ * `recursive: true` as `"true"`, `depth: 2` as `"2"` and `whenToUse: ["a"]` as
+ * `'["a"]'` -- however exactly the model followed `describe`. A strict
+ * `z.boolean()` / `z.number()` / `z.array()` in the handler then rejects a
+ * documented call: `list(recursive: true)` failed, and `add`, whose `whenToUse`
+ * is required, could not be called at all.
  *
- * These accept the string form and nothing looser: `"yes"` or `"1"` for a
- * boolean is still an error, and a string that is not a JSON array stays a
- * string for the array schema to reject.
+ * So every handler behind such a tool wraps those schemas here
+ * (`custom/no-strict-scalar-in-untyped-args` checks it). The wrappers accept the
+ * string form and nothing looser: `"yes"` or `"1"` for a boolean is still an
+ * error, and a string that is not a JSON array stays a string for the array
+ * schema to reject.
  */
 
 import { z } from "zod";

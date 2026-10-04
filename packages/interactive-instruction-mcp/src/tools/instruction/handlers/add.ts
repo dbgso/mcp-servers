@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { BaseActionHandler, type ToolResponse } from "mcp-shared";
+import { BaseActionHandler, looseArray, type ToolResponse } from "mcp-shared";
 import type { TriggerResult } from "mcp-shared/workflow";
 import type { InstructionContext } from "../types.js";
-import { looseArray } from "../schema-coerce.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
 import {
