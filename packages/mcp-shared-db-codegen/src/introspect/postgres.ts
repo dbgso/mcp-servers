@@ -2,9 +2,10 @@
  * PostgreSQL introspector backed by `pg_catalog` / `information_schema`.
  *
  * The class is constructed with a duck-typed `PgQueryClient` so tests can
- * inject a fake. The default factory `createPgClient(url)` lazy-imports
- * `pg` and wires up a real `pg.Client` — keeping `pg` out of the import
- * graph for callers that only use the format / heuristics modules.
+ * inject a fake. The default factory is `createPgClient(url)` from
+ * `mcp-shared-db-postgres`, which lazy-imports `pg` and wires up a real
+ * `pg.Client` — keeping `pg` out of the import graph for callers that only
+ * use the format / heuristics modules.
  */
 import type {
   IntrospectTableInput,
@@ -17,6 +18,8 @@ import type {
 } from "./types.js";
 import { mapPostgresType } from "./postgres-types.js";
 
+export { createPgClient } from "mcp-shared-db-postgres";
+
 export interface PgQueryResultRow {
   [column: string]: unknown;
 }
@@ -25,7 +28,10 @@ export interface PgQueryResult<T extends PgQueryResultRow = PgQueryResultRow> {
   rows: T[];
 }
 
-/** Minimal subset of `pg.Client` we depend on. Easy to mock in tests. */
+/**
+ * Minimal subset of `pg.Client` we depend on. Easy to mock in tests; the
+ * `mcp-shared-db-postgres` client satisfies it.
+ */
 export interface PgQueryClient {
   connect(): Promise<void>;
   query<T extends PgQueryResultRow = PgQueryResultRow>(
@@ -283,32 +289,4 @@ export class PostgresIntrospector implements Introspector {
     await this.client.end();
     this.connected = false;
   }
-}
-
-interface PgClientCtor {
-  new (cfg: { connectionString: string }): PgQueryClient;
-}
-
-interface PgModule {
-  Client?: PgClientCtor;
-  default?: { Client?: PgClientCtor };
-}
-
-/**
- * Lazy factory that builds a real `pg.Client` from a connection URL.
- *
- * We import `pg` dynamically so packages that only consume formatting /
- * heuristics utilities don't pay for the `pg` import. ESM interop quirk:
- * `pg` exposes its constructors via the default export, hence the
- * `(mod.default ?? mod)` shape.
- */
-export async function createPgClient(url: string): Promise<PgQueryClient> {
-  // Cast through unknown — pg ships without bundled types and we don't want
-  // to force callers to install @types/pg just to use the introspector.
-  const mod = (await import("pg" as string)) as unknown as PgModule;
-  const ctor = mod.default?.Client ?? mod.Client;
-  if (!ctor) {
-    throw new Error("pg.Client is not available — is the 'pg' package installed?");
-  }
-  return new ctor({ connectionString: url });
 }

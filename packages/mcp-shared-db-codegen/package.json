@@ -27,7 +27,8 @@
   "dependencies": {
     "mcp-shared": "workspace:*",
     "mcp-shared-db-core": "workspace:*",
-    "pg": "8.11.0",
+    "mcp-shared-db-mysql": "workspace:*",
+    "mcp-shared-db-postgres": "workspace:*",
     "zod": "catalog:"
   },
   "peerDependencies": {
@@ -40,7 +41,9 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
+    "mcp-shared-secrets": "workspace:*",
     "mysql2": ">=3.0.0",
+    "pg": "8.11.0",
     "vitest": "catalog:"
   }
 }

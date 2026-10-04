@@ -3,7 +3,7 @@
  * real MySQL instance.
  *
  * Usage:
- *   pnpm --filter mcp-shared-db-mysql exec tsx \
+ *   pnpm --filter mcp-shared-db-codegen exec tsx \
  *     scripts/smoke-test-mysql.ts <env-file>
  *
  * The env file must define DBGEN_URL (a `mysql://` URL). Bastion is
@@ -21,13 +21,9 @@
  */
 import { loadEnvFile, createSecretResolver, envSource } from "mcp-shared-secrets";
 import { resolveTunneledUrl, type BastionConfig } from "mcp-shared/tunnel";
-import {
-  MysqlIntrospector,
-  createMysqlClient as createIntrospectorMysqlClient,
-} from "mcp-shared-db-codegen";
 import type { RdbTableMetadataMap } from "mcp-shared-db-core";
-import { createMysqlClient } from "../src/client.js";
-import { createMysqlDataSource } from "../src/factory.js";
+import { createMysqlClient, createMysqlDataSource } from "mcp-shared-db-mysql";
+import { MysqlIntrospector } from "../src/introspect/mysql.js";
 
 interface Args {
   envFile: string;
@@ -159,9 +155,9 @@ async function main(): Promise<void> {
     await client.connect();
     client.onError((err) => console.error("[smoke] mysql client error:", err.message));
     try {
-      // 2. Introspector via the codegen-side client (separate connection).
-      console.log("[smoke] opening introspector connection (codegen client)");
-      const introClient = await createIntrospectorMysqlClient(tunneledUrl);
+      // 2. Introspector on its own connection.
+      console.log("[smoke] opening introspector connection");
+      const introClient = await createMysqlClient(tunneledUrl);
       const introspector = new MysqlIntrospector(introClient);
       try {
         const schemas = await introspector.listSchemas();
