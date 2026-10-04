@@ -5,6 +5,7 @@ export type {
   ParamBuilder,
   DialectExplainResult,
 } from "./dialect.js";
+export { noExplainPlan } from "./dialect.js";
 
 // Param accumulator — exposed for adapters that want to use it directly.
 export { ParamBuilderImpl } from "./param-builder.js";
