@@ -28,36 +28,36 @@ interface MysqlScanLeaf {
   rows_examined_per_scan?: number;
 }
 
-interface MysqlNestedLoopEntry {
-  table?: MysqlScanLeaf;
-}
-
 interface MysqlSubqueryWrapper {
-  query_block?: MysqlQueryBlock;
+  query_block?: MysqlPlanNode;
 }
 
-interface MysqlUnionResult {
-  query_specifications?: MysqlSubqueryWrapper[];
+/** A `table` node, which can itself carry further sub-plans. */
+interface MysqlTableNode extends MysqlScanLeaf {
+  attached_subqueries?: MysqlSubqueryWrapper[];
+  /** Derived table: the plan that fills it. */
+  materialized_from_subquery?: MysqlSubqueryWrapper;
 }
 
-// MySQL 8's EXPLAIN FORMAT=JSON nests the actual table scans under a handful
-// of operation wrappers (ORDER BY, GROUP BY, DISTINCT). The wrapper itself
-// has no `rows_examined_per_scan`; the underlying `table` (or `nested_loop`)
-// is what we want.
-interface MysqlOperationWrapper {
-  table?: MysqlScanLeaf;
-  nested_loop?: MysqlNestedLoopEntry[];
-}
-
-interface MysqlQueryBlock {
-  cost_info?: { query_cost?: string };
-  table?: MysqlScanLeaf & { attached_subqueries?: MysqlSubqueryWrapper[] };
-  nested_loop?: MysqlNestedLoopEntry[];
-  union_result?: MysqlUnionResult;
-  ordering_operation?: MysqlOperationWrapper;
-  grouping_operation?: MysqlOperationWrapper;
-  duplicates_removal?: MysqlOperationWrapper;
+/**
+ * Any node of a MySQL 8 EXPLAIN FORMAT=JSON plan that can hold scans: the
+ * query block itself, a `nested_loop` entry, and the operation wrappers
+ * (ORDER BY, GROUP BY, DISTINCT). They share one shape, and wrappers nest
+ * inside each other (`ordering_operation` -> `grouping_operation` -> ...), so
+ * the walk treats them all alike and recurses.
+ */
+interface MysqlPlanNode {
+  table?: MysqlTableNode;
+  nested_loop?: MysqlPlanNode[];
+  union_result?: { query_specifications?: MysqlSubqueryWrapper[] };
   select_list_subqueries?: MysqlSubqueryWrapper[];
+  ordering_operation?: MysqlPlanNode;
+  grouping_operation?: MysqlPlanNode;
+  duplicates_removal?: MysqlPlanNode;
+}
+
+interface MysqlQueryBlock extends MysqlPlanNode {
+  cost_info?: { query_cost?: string };
 }
 
 interface MysqlExplainPlan {
@@ -68,53 +68,44 @@ interface MysqlExplainRow {
   EXPLAIN?: string | MysqlExplainPlan;
 }
 
+// Operation wrappers have no `rows_examined_per_scan` of their own; the
+// table or join underneath is the scan we care about.
+const OPERATION_WRAPPERS = [
+  "ordering_operation",
+  "grouping_operation",
+  "duplicates_removal",
+] as const;
+
 /**
  * Walk a MySQL plan tree and collect every leaf `table` node — including
- * those nested under nested_loop / union / subquery / ordering / grouping
- * wrappers. Used to compute the worst-case scan width.
+ * those nested under nested_loop / union / subquery / derived-table /
+ * ordering / grouping wrappers, at any depth. Used to compute the worst-case
+ * scan width.
  */
-function collectScanLeaves(block: MysqlQueryBlock | undefined): MysqlScanLeaf[] {
-  if (!block) return [];
-  const leaves: MysqlScanLeaf[] = [];
-  if (block.table) {
-    leaves.push(block.table);
-    if (block.table.attached_subqueries) {
-      for (const sub of block.table.attached_subqueries) {
-        leaves.push(...collectScanLeaves(sub.query_block));
-      }
-    }
-  }
-  if (block.nested_loop) {
-    for (const entry of block.nested_loop) {
-      if (entry.table) leaves.push(entry.table);
-    }
-  }
-  if (block.union_result?.query_specifications) {
-    for (const spec of block.union_result.query_specifications) {
-      leaves.push(...collectScanLeaves(spec.query_block));
-    }
-  }
-  if (block.select_list_subqueries) {
-    for (const sub of block.select_list_subqueries) {
-      leaves.push(...collectScanLeaves(sub.query_block));
-    }
-  }
-  // Walk past ordering/grouping/duplicates wrappers — the underlying table or
-  // join is the scan we care about, not the operation node itself.
-  for (const wrapper of [
-    block.ordering_operation,
-    block.grouping_operation,
-    block.duplicates_removal,
-  ]) {
-    if (!wrapper) continue;
-    if (wrapper.table) leaves.push(wrapper.table);
-    if (wrapper.nested_loop) {
-      for (const entry of wrapper.nested_loop) {
-        if (entry.table) leaves.push(entry.table);
-      }
-    }
-  }
-  return leaves;
+function collectScanLeaves(node: MysqlPlanNode | undefined): MysqlScanLeaf[] {
+  if (!node) return [];
+  return [
+    ...collectTableLeaves(node.table),
+    ...(node.nested_loop ?? []).flatMap((entry) => collectScanLeaves(entry)),
+    ...collectSubqueryLeaves(node.union_result?.query_specifications),
+    ...collectSubqueryLeaves(node.select_list_subqueries),
+    ...OPERATION_WRAPPERS.flatMap((key) => collectScanLeaves(node[key])),
+  ];
+}
+
+function collectTableLeaves(table: MysqlTableNode | undefined): MysqlScanLeaf[] {
+  if (!table) return [];
+  return [
+    table,
+    ...collectSubqueryLeaves(table.attached_subqueries),
+    ...collectScanLeaves(table.materialized_from_subquery?.query_block),
+  ];
+}
+
+function collectSubqueryLeaves(
+  wrappers: MysqlSubqueryWrapper[] | undefined,
+): MysqlScanLeaf[] {
+  return (wrappers ?? []).flatMap((sub) => collectScanLeaves(sub.query_block));
 }
 
 function summariseLeaf(leaf: MysqlScanLeaf): string {

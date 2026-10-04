@@ -561,4 +561,89 @@ describe("mysqlDialect.parseExplainResult", () => {
     expect(result.estimatedRows).toBeNull();
     expect(result.planSummary).toBe("ALL on a");
   });
+
+  // Regression: wrappers used to be looked into one level only, so a scan
+  // nested two wrappers deep (the usual GROUP BY + ORDER BY shape) or a
+  // subquery attached to a join entry was never seen, and the auto-EXPLAIN
+  // guard measured only the small driving table.
+  describe("nested plan shapes", () => {
+    const explain = (queryBlock: object) => [
+      { EXPLAIN: JSON.stringify({ query_block: queryBlock }) },
+    ];
+
+    it("finds a scan under grouping_operation nested in ordering_operation", () => {
+      const result = mysqlDialect.parseExplainResult(
+        explain({
+          ordering_operation: {
+            using_filesort: true,
+            grouping_operation: {
+              using_temporary_table: true,
+              table: {
+                table_name: "orders",
+                access_type: "ALL",
+                rows_examined_per_scan: 2_000_000,
+              },
+            },
+          },
+        }),
+      );
+
+      expect(result.estimatedRows).toBe(2_000_000);
+      expect(result.planSummary).toBe("ALL on orders");
+    });
+
+    it("finds a subquery attached to a nested_loop entry", () => {
+      const result = mysqlDialect.parseExplainResult(
+        explain({
+          nested_loop: [
+            {
+              table: {
+                table_name: "users",
+                access_type: "const",
+                rows_examined_per_scan: 1,
+                attached_subqueries: [
+                  {
+                    query_block: {
+                      table: {
+                        table_name: "events",
+                        access_type: "ALL",
+                        rows_examined_per_scan: 750_000,
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+
+      expect(result.estimatedRows).toBe(750_000);
+      expect(result.planSummary).toBe("ALL on events");
+    });
+
+    it("finds the scan inside a derived table (materialized_from_subquery)", () => {
+      const result = mysqlDialect.parseExplainResult(
+        explain({
+          table: {
+            table_name: "t",
+            access_type: "ALL",
+            rows_examined_per_scan: 10,
+            materialized_from_subquery: {
+              query_block: {
+                table: {
+                  table_name: "logs",
+                  access_type: "ALL",
+                  rows_examined_per_scan: 300_000,
+                },
+              },
+            },
+          },
+        }),
+      );
+
+      expect(result.estimatedRows).toBe(300_000);
+      expect(result.planSummary).toBe("ALL on logs");
+    });
+  });
 });
