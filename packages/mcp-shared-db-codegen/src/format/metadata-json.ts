@@ -13,6 +13,7 @@
  * with `nativeType` added on every field.
  */
 import type { RawTableMetadata, RawColumn } from "../introspect/types.js";
+import { buildTableMetadata, type TableMetadataWithFields } from "./to-rdb-metadata.js";
 
 interface JsonField {
   type: RawColumn["type"];
@@ -22,26 +23,7 @@ interface JsonField {
   description?: string;
 }
 
-interface JsonIndex {
-  name: string;
-  fields: string[];
-  isUnique: boolean;
-}
-
-interface JsonForeignKey {
-  fieldName: string;
-  referencedTable: string;
-  referencedField: string;
-}
-
-interface JsonTable {
-  tableName: string;
-  description?: string;
-  primaryKey: string[];
-  fields: Record<string, JsonField>;
-  indexes?: JsonIndex[];
-  foreignKeys?: JsonForeignKey[];
-}
+type JsonTable = TableMetadataWithFields<JsonField>;
 
 function toJsonField(column: RawColumn): JsonField {
   const out: JsonField = {
@@ -53,32 +35,6 @@ function toJsonField(column: RawColumn): JsonField {
   return out;
 }
 
-function toJsonTable(table: RawTableMetadata): JsonTable {
-  const fields: Record<string, JsonField> = {};
-  for (const c of table.columns) fields[c.name] = toJsonField(c);
-  const out: JsonTable = {
-    tableName: table.name,
-    primaryKey: table.primaryKey,
-    fields,
-  };
-  if (table.description) out.description = table.description;
-  if (table.indexes.length > 0) {
-    out.indexes = table.indexes.map((i) => ({
-      name: i.name,
-      fields: i.fields,
-      isUnique: i.isUnique,
-    }));
-  }
-  if (table.foreignKeys.length > 0) {
-    out.foreignKeys = table.foreignKeys.map((fk) => ({
-      fieldName: fk.field,
-      referencedTable: fk.referencedTable,
-      referencedField: fk.referencedField,
-    }));
-  }
-  return out;
-}
-
 /**
  * Build a pretty-printed JSON document keyed by table name.
  *
@@ -86,6 +42,8 @@ function toJsonTable(table: RawTableMetadata): JsonTable {
  */
 export function formatMetadataJson(tables: RawTableMetadata[]): string {
   const out: Record<string, JsonTable> = {};
-  for (const t of tables) out[t.name] = toJsonTable(t);
+  for (const t of tables) {
+    out[t.name] = buildTableMetadata({ table: t, toField: toJsonField });
+  }
   return `${JSON.stringify(out, null, 2)}\n`;
 }
