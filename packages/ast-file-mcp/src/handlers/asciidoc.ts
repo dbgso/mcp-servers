@@ -93,10 +93,7 @@ interface AsciidocSection {
   getSections(): AsciidocSection[];
 }
 
-/**
- * What one `query` type reads from an AsciiDoc file. `lists` is Markdown's
- * alone and is refused before the lookup.
- */
+/** What one `query` type reads from an AsciiDoc file. */
 interface AsciidocQuery {
   data(params: { handler: AsciidocHandler; filePath: string; depth?: number }): Promise<QueryResult["data"]>;
 }
@@ -130,17 +127,38 @@ class LinksQuery implements AsciidocQuery {
   }
 }
 
-const ASCIIDOC_QUERIES: Record<Exclude<QueryType, "lists">, AsciidocQuery> = {
+/** `lists` is Markdown's alone: AsciiDoc lists are read through `full`. */
+class UnsupportedQuery implements AsciidocQuery {
+  constructor(private readonly queryType: QueryType) {}
+
+  data(): Promise<QueryResult["data"]> {
+    return Promise.reject(new Error(`Query type "${this.queryType}" is not supported for AsciiDoc files`));
+  }
+}
+
+const ASCIIDOC_QUERIES: Record<QueryType, AsciidocQuery> = {
   full: new FullQuery(),
   headings: new HeadingsQuery(),
   code_blocks: new CodeBlocksQuery(),
+  lists: new UnsupportedQuery("lists"),
   links: new LinksQuery(),
 };
 
 /** As for Markdown: a query type outside the schema reads the whole document. */
-function asciidocQueryFor(queryType: string): { query: Exclude<QueryType, "lists">; reader: AsciidocQuery } {
-  const query = Object.hasOwn(ASCIIDOC_QUERIES, queryType) ? (queryType as Exclude<QueryType, "lists">) : "full";
+function asciidocQueryFor(queryType: string): { query: QueryType; reader: AsciidocQuery } {
+  const query = Object.hasOwn(ASCIIDOC_QUERIES, queryType) ? (queryType as QueryType) : "full";
   return { query, reader: ASCIIDOC_QUERIES[query] };
+}
+
+/** The first section titled `heading`, at any depth, or undefined. */
+function findSectionBlock(params: { blocks: AsciidocBlock[]; heading: string }): AsciidocBlock | undefined {
+  const { blocks, heading } = params;
+  for (const block of blocks) {
+    if (block.context === "section" && block.title === heading) return block;
+    const nested = findSectionBlock({ blocks: block.blocks ?? [], heading });
+    if (nested) return nested;
+  }
+  return undefined;
 }
 
 export class AsciidocHandler extends BaseHandler implements ContentGenerator {
@@ -184,26 +202,13 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
   }): Promise<QueryResult> {
     const { filePath, queryType, options } = params;
 
-    // lists are Markdown-specific
-    if (queryType === "lists") {
-      throw new Error(`Query type "${queryType}" is not supported for AsciiDoc files`);
-    }
-
-    // Section query
+    // Section query: the section block alone, as Markdown returns its section
     if (options?.heading) {
-      const content = await readFile(filePath, "utf-8");
-      const doc = asciidoctor.load(content);
-      const ast: AsciidocDocument = {
-        type: "asciidoc",
-        title: doc.getTitle() as string | undefined,
-        blocks: convertBlocks({ blocks: doc.getBlocks() }),
-      };
-      // Return section as full query
       return {
         filePath,
         fileType: "asciidoc",
         query: "full",
-        data: ast,
+        data: await this.readSection({ filePath, heading: options.heading }),
       };
     }
 
@@ -214,6 +219,16 @@ export class AsciidocHandler extends BaseHandler implements ContentGenerator {
       query,
       data: await reader.data({ handler: this, filePath, depth: options?.depth }),
     };
+  }
+
+  /**
+   * The section titled `heading` as a document of its own; no blocks when no
+   * section has that title.
+   */
+  private async readSection(params: { filePath: string; heading: string }): Promise<AsciidocDocument> {
+    const { ast } = await this.read(params.filePath);
+    const section = findSectionBlock({ blocks: (ast as AsciidocDocument).blocks, heading: params.heading });
+    return { type: "asciidoc", blocks: section ? [section] : [] };
   }
 
   /**
