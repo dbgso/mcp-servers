@@ -26,5 +26,5 @@ export type {
 } from "./types.js";
 export { CRITERIA } from "./criteria.js";
 export type { Criterion } from "./criteria.js";
-export { formatProblems, validateReport } from "./validate.js";
+export { formatProblems, reportSchema, validateReport } from "./validate.js";
 export { renderHtml } from "./renderers/html/index.js";

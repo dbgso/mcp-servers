@@ -6,8 +6,8 @@ const text = z.string().trim().min(1, "must not be empty");
 
 const evidenceSchema = z
   .object({
-    source: text,
-    output: text,
+    source: text.describe("What was run: a command, a file, a URL"),
+    output: text.describe("What it printed, verbatim -- never a summary"),
   })
   .strict();
 
@@ -20,7 +20,7 @@ const claimSchema = z
 
 /** A comparison needs something to compare against, and each row says what speaks for and against it (R9). */
 const optionsSchema = z
-  .array(z.object({ label: text, pros: text, cons: text }).strict())
+  .array(z.object({ label: text, pros: text.describe("What speaks for it"), cons: text.describe("What speaks against it") }).strict())
   .min(2, "at least two options are required; a comparison needs an alternative");
 
 const pickSchema = z.object({ label: text, reason: text }).strict();
@@ -77,26 +77,44 @@ const askSchema = z
  * Every object is strict. A field the structure does not have would be dropped
  * from the page without a word, so the caller would believe the reader saw it.
  */
-const reportSchema = z
+export const reportSchema = z
   .object({
-    title: text,
-    conclusion: text,
-    background: text,
+    title: text.describe("What the report is about"),
+    conclusion: text.describe("R1: what is finished, or what the reader has to decide"),
+    background: text.describe("R7: why the work was done -- who asked for what, or what you noticed"),
     impact: z
       .object({
-        ifLeft: text,
+        ifLeft: text.describe("R10: what happens if the work is not done"),
         scope: z
-          .array(z.object({ who: text, what: text, when: text, where: text, why: text, how: text }).strict())
-          .min(1, "at least one target is required; say what the work reaches"),
+          .array(
+            z
+              .object({
+                who: text.describe("Who is affected"),
+                what: text.describe("What changes for them"),
+                when: text.describe("From when, e.g. after the PR is merged"),
+                where: text.describe("Where: a file, a tool, a screen"),
+                why: text.describe("Why it changes"),
+                how: text.describe("What the affected party has to do"),
+              })
+              .strict(),
+          )
+          .min(1, "at least one target is required; say what the work reaches")
+          .describe("R10, R11: what doing the work reaches, one entry per affected party, in 5W1H"),
       })
       .strict(),
-    claims: z.array(claimSchema).min(1, "at least one claim is required"),
-    asks: z.array(askSchema),
-    decisions: z.array(decisionMadeSchema),
-    corrections: z.array(z.object({ said: text, actually: text, why: text }).strict()).optional(),
+    claims: z.array(claimSchema).min(1, "at least one claim is required").describe("R2, R3: one claim per entry, each with raw evidence"),
+    asks: z.array(askSchema).describe("R4: what the reader has to decide or do; [] when nothing"),
+    decisions: z.array(decisionMadeSchema).describe("R8, R9: what you decided on your own, with every option weighed; [] when nothing"),
+    corrections: z
+      .array(z.object({ said: text, actually: text, why: text }).strict())
+      .optional()
+      .describe("R6: something said earlier that was wrong"),
     changes: z.array(z.object({ what: text, before: text, after: text }).strict()).optional(),
-    remaining: z.array(z.object({ item: text, why: text }).strict()).optional(),
-    asides: z.array(z.object({ note: text, cost: text }).strict()).optional(),
+    remaining: z.array(z.object({ item: text, why: text }).strict()).optional().describe("Work still on your side"),
+    asides: z
+      .array(z.object({ note: text, cost: text }).strict())
+      .optional()
+      .describe("R5: findings that are not the subject; cost is what leaving them costs"),
   })
   .strict();
 

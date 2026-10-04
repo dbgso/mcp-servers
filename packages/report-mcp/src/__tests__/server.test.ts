@@ -39,12 +39,32 @@ function textOf(result: Awaited<ReturnType<Client["callTool"]>>): string {
 }
 
 describe("the advertised tools", () => {
-  it("are describe and exec, and exec names no argument", async () => {
+  it("are describe and exec, and exec lists the report's required fields", async () => {
     const client = await connected();
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(["describe", "exec"]);
     const exec = tools.find((t) => t.name === "exec");
-    expect(exec?.inputSchema.properties ?? {}).toEqual({});
+    expect(exec?.inputSchema.required).toEqual([
+      "op",
+      "title",
+      "conclusion",
+      "background",
+      "impact",
+      "claims",
+      "asks",
+      "decisions",
+    ]);
+    const impact = exec?.inputSchema.properties?.impact as {
+      properties: { scope: { items: { required: string[] } } };
+    };
+    expect(impact.properties.scope.items.required).toEqual(["who", "what", "when", "where", "why", "how"]);
+    await client.close();
+  });
+
+  it("leaves validation to the handler, so a call missing fields gets every problem with its criterion", async () => {
+    const client = await connected();
+    const result = await client.callTool({ name: "exec", arguments: { op: "report", title: "t" } });
+    expect(textOf(result)).toContain("- impact: required (R10)");
     await client.close();
   });
 });
