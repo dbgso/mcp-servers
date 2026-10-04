@@ -82,6 +82,7 @@ describe("parseTimeoutMs", () => {
     { input: "10s", expected: 10_000 },
     { input: "1.5s", expected: 1500 },
     { input: "5min", expected: 300_000 },
+    { input: "2MIN", expected: 120_000 },
     { input: "garbage", expected: DEFAULT_MAX_EXECUTION_TIME_MS },
     { input: "10sec", expected: DEFAULT_MAX_EXECUTION_TIME_MS },
   ])("parses '$input' to $expected ms", ({ input, expected }) => {
