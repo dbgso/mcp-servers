@@ -1,0 +1,38 @@
+{
+  "name": "mcp-shared-report",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Validate a structured report and render it as a single-file HTML page. Pure: no I/O.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "oxlint src/"
+  },
+  "keywords": [
+    "mcp",
+    "shared",
+    "report"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
+  }
+}

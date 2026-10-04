@@ -1,0 +1,47 @@
+{
+  "name": "report-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server that turns a structured report into a single-file HTML page for a person to read",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "report-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && tsup && node ../../scripts/verify-bundle.mjs .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "report",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/report-mcp"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "mcp-shared": "workspace:*",
+    "mcp-shared-report": "workspace:*",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "vitest": "catalog:"
+  }
+}

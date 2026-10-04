@@ -1,0 +1,22 @@
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    globals: false,
+    environment: "node",
+    include: ["src/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      // Barrels and type-only modules hold no executable code.
+      exclude: ["src/__tests__/**", "src/index.ts", "src/types.ts"],
+      reporter: ["text", "html", "clover", "json"],
+      thresholds: {
+        lines: 95,
+        statements: 95,
+        branches: 95,
+        functions: 95,
+      },
+    },
+  },
+});
