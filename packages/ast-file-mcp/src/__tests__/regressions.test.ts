@@ -179,3 +179,18 @@ describe("structure_analysis over a directory", () => {
     expect(text(result)).toContain("Unsupported file pattern");
   });
 });
+
+describe("AsciiDoc code blocks with more than a word in [source]", () => {
+  it.each([
+    { attributes: "[source,c++]", lang: "c++" },
+    { attributes: "[source,java,linenums]", lang: "java" },
+    { attributes: "[source, shell]", lang: "shell" },
+  ])("reads $attributes as a $lang block", async ({ attributes, lang }) => {
+    // The pattern wanted `]` straight after a run of word characters, so these
+    // matched neither as a source block nor -- being under a `[source` line --
+    // as a bare one: the block was not reported at all.
+    const path = await file({ name: "code.adoc", content: `= T\n\n${attributes}\n----\nbody\n----\n` });
+
+    expect(await adoc.getCodeBlocksFromFile(path)).toEqual([{ lang, value: "body", line: 4 }]);
+  });
+});
