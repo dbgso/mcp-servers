@@ -194,7 +194,7 @@ describe("PlanReporter", () => {
       );
       expect(content).toContain("# Task Graph");
       expect(content).toContain("```mermaid");
-      expect(content).toContain("flowchart LR");
+      expect(content).toContain("flowchart TD");
       expect(content).toContain("task_a");
       expect(content).toContain("Task A");
     });
@@ -280,8 +280,8 @@ describe("PlanReporter", () => {
         path.join(testDir, "GRAPH.md"),
         "utf-8"
       );
-      expect(content).toContain("[pending]"); // pending
-      expect(content).toContain("[done]"); // completed
+      expect(content).toContain("Pending ○"); // pending
+      expect(content).toContain("✓"); // completed
     });
   });
 
@@ -553,11 +553,11 @@ describe("PlanReporter", () => {
     };
 
     const statusIconStyleTestCases: StatusIconStyleTestCase[] = [
-      { status: "blocked", icon: "[blocked]", style: "fill:#FFB6C1" },
-      { status: "skipped", icon: "[skip]", style: "fill:#D3D3D3" },
-      { status: "in_progress", icon: "[wip]", style: "fill:#87CEEB" },
-      { status: "self_review", icon: "[self-review]", style: "fill:#FFD700" },
-      { status: "pending_review", icon: "[review]", style: "fill:#DDA0DD" },
+      { status: "blocked", icon: "◇", style: "fill:#FFB6C1" },
+      { status: "skipped", icon: "⊘", style: "fill:#D3D3D3" },
+      { status: "in_progress", icon: "●", style: "fill:#87CEEB" },
+      { status: "self_review", icon: "◐", style: "fill:#FFD700" },
+      { status: "pending_review", icon: "⏳", style: "fill:#DDA0DD" },
     ];
 
     it.each(statusIconStyleTestCases)(

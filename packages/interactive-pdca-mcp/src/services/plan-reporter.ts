@@ -1,19 +1,10 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { Task, TaskOutput, TaskStatus, FeedbackEntry } from "../types/index.js";
+import type { Task, TaskOutput, FeedbackEntry } from "../types/index.js";
 import type { PlanReader } from "./plan-reader.js";
 import type { FeedbackReader } from "./feedback-reader.js";
-import { phaseSections, renderSections, reviewCommands, STATUS_STYLE, statusLookup } from "./task-presentation.js";
-
-const STATUS_ICON: Record<TaskStatus, string> = {
-  completed: "[done]",
-  self_review: "[self-review]",
-  pending_review: "[review]",
-  in_progress: "[wip]",
-  blocked: "[blocked]",
-  skipped: "[skip]",
-  pending: "[pending]",
-};
+import { phaseSections, renderSections, reviewCommands } from "./task-presentation.js";
+import { renderTaskGraph } from "./task-graph.js";
 
 export class PlanReporter {
   private readonly directory: string;
@@ -208,76 +199,9 @@ ${risks}`;
 
   async updateGraphFile(): Promise<void> {
     const tasks = await this.planReader.listTasks();
-    const allTasks = await Promise.all(
-      tasks.map((t) => this.planReader.getTask(t.id))
-    );
-    const taskMap = new Map(
-      allTasks.filter((t): t is Task => t !== null).map((t) => [t.id, t])
-    );
-
-    const lines: string[] = ["# Task Graph", "", "```mermaid", "flowchart LR"];
-
-    // Define nodes
-    for (const task of tasks) {
-      const icon = statusLookup({ table: STATUS_ICON, status: task.status });
-      // Escape quotes in title and wrap in quotes for Mermaid compatibility
-      const escapedTitle = task.title.replace(/"/g, '\\"');
-      const label = `"${escapedTitle} ${icon}"`;
-      const nodeShape = task.is_parallelizable
-        ? `([${label}])`
-        : `[${label}]`;
-      const safeId = task.id.replace(/-/g, "_");
-      lines.push(`  ${safeId}${nodeShape}`);
-    }
-
-    lines.push("");
-
-    // Define edges (dependencies)
-    for (const task of tasks) {
-      const fullTask = taskMap.get(task.id);
-      if (fullTask && fullTask.dependencies.length > 0) {
-        for (const dep of fullTask.dependencies) {
-          const safeId = task.id.replace(/-/g, "_");
-          const safeDep = dep.replace(/-/g, "_");
-          lines.push(`  ${safeDep} --> ${safeId}`);
-        }
-      }
-      // Also show parent relationship
-      if (fullTask && fullTask.parent) {
-        const safeId = task.id.replace(/-/g, "_");
-        const safeParent = fullTask.parent.replace(/-/g, "_");
-        lines.push(`  ${safeParent} -.-> ${safeId}`);
-      }
-    }
-
-    lines.push("");
-    lines.push("  %% Styling");
-
-    // Add styling
-    for (const task of tasks) {
-      const safeId = task.id.replace(/-/g, "_");
-      const style = statusLookup({ table: STATUS_STYLE, status: task.status });
-      lines.push(`  style ${safeId} ${style}`);
-    }
-
-    lines.push("```");
-    lines.push("");
-    lines.push("## Legend");
-    lines.push("- completed");
-    lines.push("- self_review");
-    lines.push("- pending_review");
-    lines.push("- in_progress");
-    lines.push("- pending/ready");
-    lines.push("- blocked");
-    lines.push("- skipped");
-    lines.push("- `[ ]` sequential");
-    lines.push("- `([ ])` parallelizable");
-    lines.push("- `-->` dependency");
-    lines.push("- `-.->` parent-child");
-
-    const content = lines.join("\n") + "\n";
+    const blockedIds = new Set((await this.planReader.getBlockedTasks()).map((t) => t.id));
     const filePath = path.join(this.directory, "GRAPH.md");
-    await fs.writeFile(filePath, content, "utf-8");
+    await fs.writeFile(filePath, renderTaskGraph({ tasks, blockedIds }) + "\n", "utf-8");
   }
 
   async updateAll(): Promise<void> {
