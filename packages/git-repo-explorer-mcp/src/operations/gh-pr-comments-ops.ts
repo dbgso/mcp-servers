@@ -20,7 +20,6 @@ interface GhReview {
   body: string;
   state: string;
   createdAt: string;
-  comments: GhComment[];
 }
 
 interface ClassifiedComment {
@@ -54,48 +53,122 @@ export function isBot(login: string): boolean {
   return BOT_PATTERNS.some((p) => p.test(login));
 }
 
-export function flattenReviews(reviews: GhReview[]): ClassifiedComment[] {
-  const comments: ClassifiedComment[] = [];
+/**
+ * The non-empty review bodies, as comments carrying the review's state.
+ * Inline comments are fetched from the pulls/comments endpoint instead.
+ */
+export function reviewBodies(reviews: GhReview[]): ClassifiedComment[] {
+  return reviews
+    .filter((review) => review.body?.trim())
+    .map((review) => ({
+      author: review.author.login,
+      is_bot: isBot(review.author.login),
+      body: review.body,
+      path: null,
+      line: null,
+      start_line: null,
+      diff_hunk: null,
+      created_at: review.createdAt,
+      review_state: review.state,
+    }));
+}
 
-  for (const review of reviews) {
-    // Review body itself (if non-empty)
-    if (review.body?.trim()) {
-      comments.push({
-        author: review.author.login,
-        is_bot: isBot(review.author.login),
-        body: review.body,
-        path: null,
-        line: null,
-        start_line: null,
-        diff_hunk: null,
-        created_at: review.createdAt,
-        review_state: review.state,
-      });
-    }
+/** An inline review comment. Its review's state is not fetched, so it is null. */
+export function inlineComment(c: GhComment): ClassifiedComment {
+  return {
+    author: c.author.login,
+    is_bot: isBot(c.author.login),
+    body: c.body,
+    path: c.path,
+    line: c.line,
+    start_line: c.startLine,
+    diff_hunk: c.diffHunk,
+    created_at: c.createdAt,
+    review_state: null,
+  };
+}
 
-    // Inline review comments
-    for (const c of review.comments ?? []) {
-      comments.push({
-        author: c.author.login,
-        is_bot: isBot(c.author.login),
-        body: c.body,
-        path: c.path,
-        line: c.line,
-        start_line: c.startLine,
-        diff_hunk: c.diffHunk,
-        created_at: c.createdAt,
-        review_state: review.state,
-      });
-    }
-  }
+/**
+ * Review bodies and inline comments in one list, oldest first, without
+ * repeats of the same author, place and body.
+ */
+export function mergeComments(params: {
+  reviews: GhReview[];
+  reviewComments: GhComment[];
+}): ClassifiedComment[] {
+  const all = [...reviewBodies(params.reviews), ...params.reviewComments.map(inlineComment)];
+  all.sort((a, b) => a.created_at.localeCompare(b.created_at));
 
-  return comments;
+  // Deduplicate by body+author+path+line
+  const seen = new Set<string>();
+  return all.filter((c) => {
+    const key = `${c.author}:${c.path}:${c.line}:${(c.body ?? "").slice(0, 100)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const COMMENT_FILTERS = ["all", "human", "bot"] as const;
+type CommentFilter = (typeof COMMENT_FILTERS)[number];
+
+/** Which comments each `filter` value keeps. */
+export const FILTERS: Record<CommentFilter, (c: ClassifiedComment) => boolean> = {
+  all: () => true,
+  human: (c) => !c.is_bot,
+  bot: (c) => c.is_bot,
+};
+
+/** Fetch a PR's reviews and inline review comments through the gh cache. */
+async function fetchPrComments(params: {
+  repo: string;
+  prNumber: number;
+  ttlMs: number;
+  forceRefresh: boolean | undefined;
+}): Promise<{ reviews: GhReview[]; reviewComments: GhComment[]; fromCache: boolean; cacheAge?: number }> {
+  const { repo, prNumber, ttlMs, forceRefresh } = params;
+  const cacheKey = `pr-comments-${repo}-${prNumber}`;
+
+  const {
+    data: reviews,
+    fromCache,
+    cacheAge,
+  } = await ghCachedExec<GhReview[]>({
+    args: [
+      "api",
+      `repos/${repo}/pulls/${prNumber}/reviews`,
+      "--paginate",
+      "--jq",
+      // One object per line: gh applies --jq to each page separately
+      ".[] | {author: .user, body: .body, state: .state, createdAt: .submitted_at}",
+    ],
+    cacheKey: `${cacheKey}-reviews`,
+    parse: parseJsonLines<GhReview>,
+    ttlMs,
+    forceRefresh,
+  });
+
+  const { data: reviewComments } = await ghCachedExec<GhComment[]>({
+    args: [
+      "api",
+      `repos/${repo}/pulls/${prNumber}/comments`,
+      "--paginate",
+      "--jq",
+      ".[] | {author: .user, body: .body, createdAt: .created_at, path: .path, line: .line, startLine: .start_line, diffHunk: .diff_hunk, pullRequestReviewId: .pull_request_review_id}",
+    ],
+    cacheKey: `${cacheKey}-review-comments`,
+    parse: parseJsonLines<GhComment>,
+    ttlMs,
+    forceRefresh,
+  });
+
+  return { reviews, reviewComments, fromCache, cacheAge };
 }
 
 const prCommentsArgsSchema = z.object({
   repo: z.string().describe("Repository in owner/repo format (required)"),
   pr_number: z.number().int().min(1).describe("Pull request number (required)"),
-  filter: z.enum(["all", "human", "bot"]).optional().describe("Filter by comment author type (default: all)"),
+  filter: z.enum(COMMENT_FILTERS).optional().describe("Filter by comment author type (default: all)"),
   limit: z.number().int().min(1).max(200).optional().describe("Maximum comments to return (default: 50)"),
   force_refresh: z.boolean().optional().describe("Bypass cache and fetch fresh data"),
   ttl_minutes: z.number().int().min(1).max(60).optional().describe("Cache TTL in minutes (default: 3)"),
@@ -123,83 +196,19 @@ Examples:
     const unavailable = await ghUnavailableResponse();
     if (unavailable) return unavailable;
 
-    const ttlMs = (args.ttl_minutes ?? 3) * 60 * 1000;
     const limit = args.limit ?? 50;
-    const cacheKey = `pr-comments-${args.repo}-${args.pr_number}`;
-
-    const {
-      data: reviews,
-      fromCache,
-      cacheAge,
-    } = await ghCachedExec<GhReview[]>({
-      args: [
-        "api",
-        `repos/${args.repo}/pulls/${args.pr_number}/reviews`,
-        "--paginate",
-        "--jq",
-        // One object per line: gh applies --jq to each page separately
-        ".[] | {author: .user, body: .body, state: .state, createdAt: .submitted_at, comments: []}",
-      ],
-      cacheKey: `${cacheKey}-reviews`,
-      parse: parseJsonLines<GhReview>,
-      ttlMs,
-      forceRefresh: args.force_refresh,
-    });
-
-    const { data: reviewComments } = await ghCachedExec<GhComment[]>({
-      args: [
-        "api",
-        `repos/${args.repo}/pulls/${args.pr_number}/comments`,
-        "--paginate",
-        "--jq",
-        ".[] | {author: .user, body: .body, createdAt: .created_at, path: .path, line: .line, startLine: .start_line, diffHunk: .diff_hunk, pullRequestReviewId: .pull_request_review_id}",
-      ],
-      cacheKey: `${cacheKey}-review-comments`,
-      parse: parseJsonLines<GhComment>,
-      ttlMs,
-      forceRefresh: args.force_refresh,
-    });
-
-    // Merge inline comments into their parent reviews
-    const allComments = flattenReviews(reviews);
-
-    // Add standalone review comments not captured by reviews
-    for (const c of reviewComments) {
-      allComments.push({
-        author: c.author.login,
-        is_bot: isBot(c.author.login),
-        body: c.body,
-        path: c.path,
-        line: c.line,
-        start_line: c.startLine,
-        diff_hunk: c.diffHunk,
-        created_at: c.createdAt,
-        review_state: null,
-      });
-    }
-
-    // Sort by created_at
-    allComments.sort((a, b) => a.created_at.localeCompare(b.created_at));
-
-    // Deduplicate by body+author+path+line
-    const seen = new Set<string>();
-    const deduped = allComments.filter((c) => {
-      const key = `${c.author}:${c.path}:${c.line}:${(c.body ?? "").slice(0, 100)}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    // Filter by type
     const filter = args.filter ?? "all";
-    const filtered = deduped.filter((c) => {
-      if (filter === "human") return !c.is_bot;
-      if (filter === "bot") return c.is_bot;
-      return true;
+    const { reviews, reviewComments, fromCache, cacheAge } = await fetchPrComments({
+      repo: args.repo,
+      prNumber: args.pr_number,
+      ttlMs: (args.ttl_minutes ?? 3) * 60 * 1000,
+      forceRefresh: args.force_refresh,
     });
 
-    const botCount = deduped.filter((c) => c.is_bot).length;
-    const humanCount = deduped.filter((c) => !c.is_bot).length;
+    const deduped = mergeComments({ reviews, reviewComments });
+    const filtered = deduped.filter(FILTERS[filter]);
+    const botCount = deduped.filter(FILTERS.bot).length;
+    const humanCount = deduped.filter(FILTERS.human).length;
     const limited = filtered.slice(0, limit);
 
     return jsonResponse({
