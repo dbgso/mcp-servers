@@ -9,7 +9,6 @@
  *   `DBREAD_STATEMENT_TIMEOUT`) and `default_transaction_read_only = on`.
  * - DataSource: `createPostgresDataSource` with the pg.Client.
  */
-import { resolveTunneledUrl } from "mcp-shared/tunnel";
 import { createPgClient, createPostgresDataSource } from "mcp-shared-db-postgres";
 import type { PgQueryClient } from "mcp-shared-db-postgres";
 import type {
@@ -18,7 +17,7 @@ import type {
   EngineStrategy,
   OpenStrategyArgs,
 } from "./types.js";
-import { SqlEngineConnection } from "./engine-connection.js";
+import { openSqlConnection, type SqlEngineSteps } from "./engine-connection.js";
 
 const URL_SCHEME = /^postgres(ql)?:\/\//i;
 
@@ -49,49 +48,32 @@ export class PostgresStrategy implements EngineStrategy {
     return explicitlyEncrypted ? null : buildInsecureWarning();
   }
 
-  async open(args: OpenStrategyArgs): Promise<EngineConnection> {
-    const { url: tunneledUrl, tunnel } = await resolveTunneledUrl({
-      url: args.url,
-      ...(args.tunnel && { tunnel: args.tunnel }),
-    });
-    let client: PgQueryClient | null = null;
-    try {
-      client = await createPgClient(tunneledUrl);
-      await client.connect();
-      // pg.Client emits async errors on idle disconnect (RDS ~60min,
-      // network blips, server kills). Without a listener the EventEmitter
-      // throws and Node tears the process down.
-      client.on("error", (err) => {
-        console.error("[db-read-mcp] pg client error:", err.message);
-      });
-      const env = args.env ?? process.env;
-      // Treat empty / whitespace-only env values as "unset" so a stray
-      // `DBREAD_STATEMENT_TIMEOUT=` in a dotenv file doesn't poison the SET.
-      const timeout =
-        env.DBREAD_STATEMENT_TIMEOUT?.trim() || DEFAULT_STATEMENT_TIMEOUT;
-      await client.query(
-        "SELECT set_config('statement_timeout', $1, false)",
-        [timeout],
-      );
-      // `set_config(...)` is a function call, so this stays legal even
-      // after `default_transaction_read_only = on` flips on for the
-      // session — only INSERT/UPDATE/DELETE would error, and the op layer
-      // never emits those.
-      await client.query(
-        "SELECT set_config('default_transaction_read_only', 'on', false)",
-      );
-    } catch (err) {
-      if (client) await client.end().catch(() => undefined);
-      if (tunnel) await tunnel.close().catch(() => undefined);
-      throw err;
-    }
-    const connectedClient = client;
-    const dataSource = createPostgresDataSource({
-      client: connectedClient,
-      tableMetadata: args.tableMetadata,
-    });
-    return new SqlEngineConnection({ dataSource, client: connectedClient, tunnel });
+  open(args: OpenStrategyArgs): Promise<EngineConnection> {
+    return openSqlConnection({ args, steps: POSTGRES_STEPS });
   }
 }
+
+const POSTGRES_STEPS: SqlEngineSteps<PgQueryClient> = {
+  createClient: createPgClient,
+  async startSession({ client, env }) {
+    await client.connect();
+    // pg.Client emits async errors on idle disconnect (RDS ~60min,
+    // network blips, server kills). Without a listener the EventEmitter
+    // throws and Node tears the process down.
+    client.on("error", (err) => {
+      console.error("[db-read-mcp] pg client error:", err.message);
+    });
+    // Treat empty / whitespace-only env values as "unset" so a stray
+    // `DBREAD_STATEMENT_TIMEOUT=` in a dotenv file doesn't poison the SET.
+    const timeout = env.DBREAD_STATEMENT_TIMEOUT?.trim() || DEFAULT_STATEMENT_TIMEOUT;
+    await client.query("SELECT set_config('statement_timeout', $1, false)", [timeout]);
+    // `set_config(...)` is a function call, so this stays legal even
+    // after `default_transaction_read_only = on` flips on for the
+    // session — only INSERT/UPDATE/DELETE would error, and the op layer
+    // never emits those.
+    await client.query("SELECT set_config('default_transaction_read_only', 'on', false)");
+  },
+  createDataSource: createPostgresDataSource,
+};
 
 export const postgresStrategy = new PostgresStrategy();
