@@ -1,13 +1,13 @@
 import { z } from "zod";
 import type { SourceFileStructure } from "ts-morph";
 import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
+import { BaseToolHandler, looseObject } from "mcp-shared";
 import type { ToolResponse } from "../types.js";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 
 const WriteSchema = z.object({
   file_path: z.string().describe("Absolute path to the TypeScript file to write"),
-  structure: z.unknown().describe("SourceFileStructure object from ts-morph"),
+  structure: looseObject(z.unknown().describe("SourceFileStructure object from ts-morph")),
 });
 
 type WriteArgs = z.infer<typeof WriteSchema>;

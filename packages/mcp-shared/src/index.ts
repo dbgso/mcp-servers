@@ -46,7 +46,7 @@ export {
 export { displayText } from "./utils/display-text.js";
 
 // Arguments of a tool whose inputSchema publishes no types (policy__mcp-tool-surface).
-export { looseArray, looseBoolean, looseNumber } from "./utils/untyped-args.js";
+export { looseArray, looseBoolean, looseNumber, looseObject } from "./utils/untyped-args.js";
 
 export {
   processMultipleFiles,

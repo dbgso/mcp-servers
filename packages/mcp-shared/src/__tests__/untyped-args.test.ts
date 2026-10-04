@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { looseArray, looseBoolean, looseNumber } from "../utils/untyped-args.js";
+import { looseArray, looseBoolean, looseNumber, looseObject } from "../utils/untyped-args.js";
 
 /**
  * A tool that publishes no argument types gets every value its client could not
@@ -66,5 +66,22 @@ describe("looseArray", () => {
 
   it("still checks the element type", () => {
     expect(schema.safeParse("[1, 2]").success).toBe(false);
+  });
+});
+
+describe("looseObject", () => {
+  const schema = looseObject(z.object({ kind: z.string(), deep: z.boolean().optional() }).optional());
+
+  it.each([
+    ['{"kind":"x"}', { kind: "x" }],
+    [' {"kind":"x","deep":true}', { kind: "x", deep: true }],
+    [{ kind: "x" }, { kind: "x" }],
+    [undefined, undefined],
+  ])("accepts %j as %j", (input, expected) => {
+    expect(schema.parse(input)).toEqual(expected);
+  });
+
+  it.each(["kind", "{not json", '["x"]'])("rejects %j", (input) => {
+    expect(schema.safeParse(input).success).toBe(false);
   });
 });
