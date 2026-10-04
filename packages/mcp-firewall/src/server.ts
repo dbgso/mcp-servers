@@ -8,6 +8,7 @@ import { ProxyClient } from "./proxy-client.js";
 import { RuleEngine } from "./rule-engine.js";
 import { RuleStore } from "./rule-store.js";
 import { registerRuleTools } from "./tools/index.js";
+import { dryRunNote, forwardedResult } from "./forwarded-result.js";
 import type { Rule, TargetConfig } from "./types.js";
 import { VERSION } from "./version.js";
 
@@ -183,47 +184,7 @@ function registerProxyExecuteTool(params: {
           dryRun,
         });
 
-        if ("content" in result && Array.isArray(result.content)) {
-          if (dryRun && evaluation.action === "deny") {
-            const originalContent = result.content as Array<{ type: "text"; text: string }>;
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: `[DRY-RUN NOTE] This call would be blocked: ${evaluation.reason}\n\n---\n\n`,
-                },
-                ...originalContent,
-              ],
-              isError: result.isError === true ? true : undefined,
-            };
-          }
-          if (dryRun && evaluation.action === "ask") {
-            const originalContent = result.content as Array<{ type: "text"; text: string }>;
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: `[DRY-RUN NOTE] This call would require approval: ${evaluation.reason}\n\n---\n\n`,
-                },
-                ...originalContent,
-              ],
-              isError: result.isError === true ? true : undefined,
-            };
-          }
-          return {
-            content: result.content as Array<{ type: "text"; text: string }>,
-            isError: result.isError === true ? true : undefined,
-          };
-        }
-
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(result),
-            },
-          ],
-        };
+        return forwardedResult({ result, prefix: dryRun ? dryRunNote(evaluation) : [] });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         auditLogger?.logError({ toolName, args, error: errorMessage });
