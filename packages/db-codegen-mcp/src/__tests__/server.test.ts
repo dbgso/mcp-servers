@@ -395,9 +395,6 @@ describe("db-codegen-mcp server", () => {
     });
 
     it("accepts argv array form and parses --env-file", async () => {
-      const resolver = fakeResolver({
-        cache: { [URL_KEY]: "postgres://u@h:5432/d" },
-      });
       vi.spyOn(console, "error").mockImplementation(() => {});
       const { Server } = await import(
         "@modelcontextprotocol/sdk/server/index.js"

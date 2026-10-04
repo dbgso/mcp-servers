@@ -6,7 +6,7 @@ export type {
   SecretResolverConfig,
 } from "./resolver.js";
 export { parseSecretUri, createSecretResolver } from "./resolver.js";
-export { envSource } from "./env-source.js";
+export { envSource, EnvSource } from "./env-source.js";
 export { loadEnvFile } from "./dotenv.js";
 export {
   composeDbUrlFromResolver,
@@ -26,5 +26,7 @@ export {
   translateAwsError,
   ssmSource,
   secretsManagerSource,
+  SsmSource,
+  SecretsManagerSource,
 } from "./aws/index.js";
 export type { AwsExecOptions, ExecFileFn } from "./aws/index.js";

@@ -41,10 +41,10 @@ function resolveThreshold(): number {
     : DEFAULT_MAX_ESTIMATED_ROWS;
 }
 
-export const getByDateRangeOp: DatabaseOperation<z.infer<typeof argsSchema>> = {
-  id: "get_by_date_range",
-  summary: "Fetch rows whose datetime column falls within [from, to] (auto-EXPLAIN guarded)",
-  detail: `Inclusive range filter on a datetime column. Both bounds are required.
+export class GetByDateRangeOp implements DatabaseOperation<z.infer<typeof argsSchema>> {
+  readonly id = "get_by_date_range";
+  readonly summary = "Fetch rows whose datetime column falls within [from, to] (auto-EXPLAIN guarded)";
+  readonly detail = `Inclusive range filter on a datetime column. Both bounds are required.
 Column must be selectable AND declared as \`type: "datetime"\` in Layer 1 metadata.
 
 Runs \`EXPLAIN\` first. When the planner's row-count estimate exceeds the
@@ -55,10 +55,10 @@ carries the estimate so the caller can narrow the range. Pass
 size-checked. Engines that cannot surface a row estimate (e.g. SQLite
 without ANALYZE) skip the guard transparently.
 
-PII fields are redacted as \`"[REDACTED]"\`.`,
-  category: "Read",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+PII fields are redacted as \`"[REDACTED]"\`.`;
+  readonly category = "Read";
+  readonly argsSchema = argsSchema;
+  execute: DatabaseOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
     const config = ctx.selectableFields[args.table];
     const meta = ctx.tableMetadata[args.table];
     // Unknown / non-whitelisted table.
@@ -159,5 +159,7 @@ PII fields are redacted as \`"[REDACTED]"\`.`,
       response.warning = unindexedColumnWarning({ table: args.table, column: args.column });
     }
     return jsonResponse(response);
-  },
-};
+  };
+}
+
+export const getByDateRangeOp = new GetByDateRangeOp();

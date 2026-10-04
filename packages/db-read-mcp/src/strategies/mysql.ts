@@ -22,6 +22,7 @@ import type {
   EngineStrategy,
   OpenStrategyArgs,
 } from "./types.js";
+import { SqlEngineConnection } from "./engine-connection.js";
 
 const URL_SCHEME = /^mysql:\/\//i;
 
@@ -62,12 +63,12 @@ export function parseTimeoutMs(input: string | undefined): number {
   return Math.round(value * 60_000);
 }
 
-export const mysqlStrategy: EngineStrategy = {
-  engine: "mysql",
+export class MysqlStrategy implements EngineStrategy {
+  readonly engine = "mysql";
 
   matches(url: string): boolean {
     return URL_SCHEME.test(url);
-  },
+  }
 
   detectInsecureTls(args: DetectInsecureTlsArgs): string | null {
     // Any tunnel (SSH bastion / SSM port forward) encrypts the hop the
@@ -77,7 +78,7 @@ export const mysqlStrategy: EngineStrategy = {
     const mode = args.url.match(SSL_MODE_RE)?.[1];
     if (mode && ENCRYPTED_SSL_MODE_RE.test(mode)) return null;
     return buildInsecureWarning();
-  },
+  }
 
   async open(args: OpenStrategyArgs): Promise<EngineConnection> {
     const { url: tunneledUrl, tunnel } = await resolveTunneledUrl({
@@ -113,12 +114,8 @@ export const mysqlStrategy: EngineStrategy = {
       client: connectedClient,
       tableMetadata: args.tableMetadata,
     });
-    return {
-      dataSource,
-      async close(): Promise<void> {
-        await connectedClient.end();
-        if (tunnel) await tunnel.close();
-      },
-    };
-  },
-};
+    return new SqlEngineConnection({ dataSource, client: connectedClient, tunnel });
+  }
+}
+
+export const mysqlStrategy = new MysqlStrategy();

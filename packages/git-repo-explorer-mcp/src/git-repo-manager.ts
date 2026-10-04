@@ -116,7 +116,7 @@ export async function ensureRepo(repoUrl: string): Promise<string> {
         cwd: repoPath,
         timeout: 60_000,
       });
-    } catch (error) {
+    } catch {
       // Fetch failed - repository may be corrupted or incomplete
       // Remove and re-clone
       console.error(`Fetch failed for ${repoPath}, re-cloning...`);

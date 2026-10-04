@@ -17,19 +17,19 @@ const argsSchema = z.object({
   table: z.string().describe("Logical table name (see list_tables)"),
 });
 
-export const describeTableOp: CoreOperation<z.infer<typeof argsSchema>> = {
-  id: "describe_table",
-  summary: "Show columns + types + PII flags for a table",
-  detail: `Merges Layer 1 (structural metadata: type/nullable/default/PK)
+export class DescribeTableOp implements CoreOperation<z.infer<typeof argsSchema>> {
+  readonly id = "describe_table";
+  readonly summary = "Show columns + types + PII flags for a table";
+  readonly detail = `Merges Layer 1 (structural metadata: type/nullable/default/PK)
 with Layer 2 (selectable-fields: PII flags) for a single table. Fields with
 \`pii: true\` are returned as \`"[REDACTED]"\` in query results (null stays null).
 
 Note: DB-specific structural details (indexes, foreign keys, GSIs) are not
 shown here — DB-specific tool factories may extend this op or expose them
-via additional ops.`,
-  category: "Discovery",
-  argsSchema,
-  execute: async ({ args, ctx }) => {
+via additional ops.`;
+  readonly category = "Discovery";
+  readonly argsSchema = argsSchema;
+  execute: CoreOperation<z.infer<typeof argsSchema>>["execute"] = async ({ args, ctx }) => {
     const config = ctx.selectableFields[args.table];
     const metadata = ctx.tableMetadata[args.table];
     if (!config || !metadata) {
@@ -60,5 +60,7 @@ via additional ops.`,
       primaryKey: metadata.primaryKey,
       fields,
     });
-  },
-};
+  };
+}
+
+export const describeTableOp = new DescribeTableOp();

@@ -27,7 +27,7 @@ export type {
 } from "./builder.js";
 
 // Recommended public surface: factory that returns a `DataSource`.
-export { createSqlDataSource } from "./data-source.js";
+export { createSqlDataSource, SqlDataSource } from "./data-source.js";
 export type {
   CreateSqlDataSourceConfig,
   QueryFn,

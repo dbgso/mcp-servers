@@ -312,14 +312,14 @@ function generateBestPractices({ toolId, subDiagramId }: { toolId: string; subDi
   return all.map(p => `- ${p}`).join("\n");
 }
 
-export const describeOperation: Operation<DescribeArgs> = {
-  id: "list",
-  summary: "List diagram tools or get detailed guidelines",
-  detail: `Without arguments: Lists all available diagram tools with use case recommendations.
+export class DescribeOperation implements Operation<DescribeArgs> {
+  readonly id = "list";
+  readonly summary = "List diagram tools or get detailed guidelines";
+  readonly detail = `Without arguments: Lists all available diagram tools with use case recommendations.
 With tool argument: Returns detailed guidelines for that specific tool.
-With tool and subDiagram: Returns focused guide for that diagram type.`,
-  argsSchema: DescribeArgsSchema,
-  execute: async (args): Promise<CallToolResult> => {
+With tool and subDiagram: Returns focused guide for that diagram type.`;
+  readonly argsSchema = DescribeArgsSchema;
+  execute = async (args: DescribeArgs): Promise<CallToolResult> => {
     const { tool, subDiagram } = args;
 
     let text: string;
@@ -332,5 +332,7 @@ With tool and subDiagram: Returns focused guide for that diagram type.`,
     return {
       content: [{ type: "text", text }],
     };
-  },
-};
+  };
+}
+
+export const describeOperation = new DescribeOperation();
