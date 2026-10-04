@@ -189,7 +189,8 @@ export async function gitGrep(params: {
     args.push("-i");
   }
   args.push(`--max-count=${maxCount}`);
-  args.push(pattern);
+  // -e keeps a pattern that starts with "-" from being read as an option
+  args.push("-e", pattern);
   args.push(ref);
 
   if (options.path) {
