@@ -51,6 +51,11 @@ h2 { font-size: 1.15rem; margin: 32px 0 8px; padding-bottom: 4px; border-bottom:
 .reason, .why { color: var(--muted); }
 .why { display: block; font-size: .9rem; }
 .statement { font-weight: 600; margin-bottom: 4px; }
+.background { margin: 12px 0 0; }
+.label { display: inline-block; font-size: .8rem; padding: 0 8px; margin-right: 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.decisions .what { font-weight: 600; margin: 0 0 4px; }
+.decisions .chosen, .decisions .grounds { margin: 0 0 4px; }
+.decisions.none p { color: var(--muted); }
 figure { margin: 0 0 12px; }
 figcaption { font-size: .85rem; color: var(--muted); }
 pre { margin: 4px 0 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font-size: .85rem; line-height: 1.5; }

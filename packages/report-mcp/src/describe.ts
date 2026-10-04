@@ -8,6 +8,7 @@ import type { Report } from "mcp-shared-report";
 export const EXAMPLE_REPORT: Report = {
   title: "docs/ is not shipped in the package",
   conclusion: "The rules in docs/ never reach users; only describe does",
+  background: "A user reported that the rules in docs/ had no effect after installing the package",
   claims: [
     {
       statement: "The packed tarball holds no file from docs/",
@@ -28,6 +29,14 @@ export const EXAMPLE_REPORT: Report = {
         { label: "README", consequence: "Ships, but nothing makes a caller read it" },
       ],
       recommendation: { label: "describe", reason: "It is the one place every caller reads" },
+    },
+  ],
+  decisions: [
+    {
+      what: "How to check what the package ships",
+      chosen: "Read the output of npm pack --dry-run",
+      why: "It lists the files that are actually published",
+      rejected: [{ option: "Read the files field in package.json", why: "It misses what .npmignore removes" }],
     },
   ],
   corrections: [
@@ -58,7 +67,7 @@ is for.
 
 ## Call
 
-\`exec(op: "report", title, conclusion, claims, asks, corrections?, changes?, remaining?, asides?)\`
+\`exec(op: "report", title, conclusion, background, claims, asks, decisions, corrections?, changes?, remaining?, asides?)\`
 
 The response is the path of the written file.
 
@@ -76,11 +85,13 @@ ${criteriaTable()}
 |---|---|---|
 | \`title\` | What the report is about | -- |
 | \`conclusion\` | What is finished, or what the reader has to decide | R1 |
+| \`background\` | Why the work was done: who asked for what, or what you noticed | R7 |
 | \`claims[]\` | At least one. \`{ statement, evidence[] }\`, one claim per entry | R2 |
 | \`claims[].evidence[]\` | At least one. \`{ source, output }\`: what was run, and its output verbatim -- never a summary of it | R3 |
 | \`asks[]\` | What the reader has to do. Pass \`[]\` when nothing is needed; it cannot be left out | R4 |
 | \`asks[]\` (decision) | \`{ kind: "decision", what, options[] (2+, each { label, consequence }), recommendation { label, reason } }\`. The recommendation's label must be one of the options | R4 |
 | \`asks[]\` (action) | \`{ kind: "action", what }\` | R4 |
+| \`decisions[]\` | What you decided on your own. \`{ what, chosen, why, rejected[] (1+, each { option, why }) }\`. Pass \`[]\` when you decided nothing; it cannot be left out | R8 |
 
 ### Optional
 
@@ -93,8 +104,8 @@ ${criteriaTable()}
 
 ## Page order
 
-title and conclusion, asks, corrections, claims with their evidence, changes,
-remaining, asides.
+title, conclusion and background, asks, corrections, decisions, claims with
+their evidence, changes, remaining, asides.
 
 ## Example
 

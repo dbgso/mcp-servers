@@ -18,6 +18,7 @@ const listFields = z
   .object({
     claims: looseArray(z.unknown()),
     asks: looseArray(z.unknown()),
+    decisions: looseArray(z.unknown()),
     corrections: looseArray(z.unknown()),
     changes: looseArray(z.unknown()),
     remaining: looseArray(z.unknown()),

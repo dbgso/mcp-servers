@@ -44,4 +44,14 @@ export const CRITERIA: readonly Criterion[] = [
     rule: "A correction is shown as a correction",
     failure: "Overwrote an earlier explanation without saying it was wrong",
   },
+  {
+    id: "R7",
+    rule: "Why the work was done is stated",
+    failure: "Left out what started the work, so the reader could not tell why it was done",
+  },
+  {
+    id: "R8",
+    rule: "A decision made alone shows what was turned down and why",
+    failure: "Stated the approach taken, with no alternatives or grounds the reader could check",
+  },
 ];

@@ -36,6 +36,17 @@ const actionSchema = z
   })
   .strict();
 
+const decisionMadeSchema = z
+  .object({
+    what: text,
+    chosen: text,
+    why: text,
+    rejected: z
+      .array(z.object({ option: text, why: text }).strict())
+      .min(1, "at least one rejected option is required; a choice with no alternative is not a decision"),
+  })
+  .strict();
+
 /**
  * Refined per element rather than on the whole report, so that it runs even
  * when another field is wrong and its problem is returned with the rest.
@@ -56,8 +67,10 @@ const reportSchema = z
   .object({
     title: text,
     conclusion: text,
+    background: text,
     claims: z.array(claimSchema).min(1, "at least one claim is required"),
     asks: z.array(askSchema),
+    decisions: z.array(decisionMadeSchema),
     corrections: z.array(z.object({ said: text, actually: text, why: text }).strict()).optional(),
     changes: z.array(z.object({ what: text, before: text, after: text }).strict()).optional(),
     remaining: z.array(z.object({ item: text, why: text }).strict()).optional(),
@@ -73,6 +86,8 @@ const reportSchema = z
  */
 const CRITERION_BY_PATH: readonly { pattern: RegExp; criterion: string }[] = [
   { pattern: /^conclusion/, criterion: "R1" },
+  { pattern: /^background/, criterion: "R7" },
+  { pattern: /^decisions/, criterion: "R8" },
   { pattern: /^claims\[\d+\]\.evidence/, criterion: "R3" },
   { pattern: /^claims/, criterion: "R2" },
   { pattern: /^asks/, criterion: "R4" },
@@ -110,13 +125,16 @@ function messageFor(params: { issue: z.ZodIssue }): string {
   return MESSAGE_BY_CODE[issue.code] ?? issue.message;
 }
 
-/** `asks` may be empty but not omitted, and the message says how to say "nothing". */
+/** Lists that may be empty but not omitted, and how to say "nothing" for each. */
+const WHEN_EMPTY: Record<string, string> = {
+  asks: "required; pass [] if nothing is needed from the reader",
+  decisions: "required; pass [] if you decided nothing on your own",
+};
+
 function adviceFor(params: { path: string; message: string }): string {
   const { path, message } = params;
-  if (path === "asks" && message === "required") {
-    return "required; pass [] if nothing is needed from the reader";
-  }
-  return message;
+  if (message !== "required") return message;
+  return WHEN_EMPTY[path] ?? message;
 }
 
 function problemAt(params: { path: (string | number)[]; message: string }): Problem {

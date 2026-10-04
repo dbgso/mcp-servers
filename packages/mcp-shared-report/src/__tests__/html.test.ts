@@ -8,8 +8,10 @@ describe("renderHtml", () => {
     const html = renderHtml({ report: fullReport() });
     const order = [
       'class="conclusion"',
+      'class="background"',
       'class="asks"',
       'class="corrections"',
+      'class="decisions"',
       'class="claims"',
       'class="changes"',
       'class="remaining"',
@@ -22,6 +24,18 @@ describe("renderHtml", () => {
   it("says nothing is needed when there are no asks", () => {
     const html = renderHtml({ report: minimalReport() });
     expect(html).toContain('<section class="asks none"><h2>あなたに求めること</h2><p>対応不要</p></section>');
+  });
+
+  it("says no decision was made alone when there are none", () => {
+    const html = renderHtml({ report: minimalReport() });
+    expect(html).toContain('<section class="decisions none"><h2>自分で判断したこと</h2><p>なし</p></section>');
+  });
+
+  it("shows a decision with its grounds and what was turned down", () => {
+    const html = renderHtml({ report: fullReport() });
+    expect(html).toContain("<strong>npm pack の出力を見る</strong>");
+    expect(html).toContain("根拠: 配布物そのものを見られる");
+    expect(html).toContain("<s>package.json を読む</s><span class=\"why\">退けた理由: .npmignore を見落とす</span>");
   });
 
   it("leaves out optional sections the report does not fill", () => {

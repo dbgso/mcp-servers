@@ -48,6 +48,20 @@ export interface ActionAsk {
 
 export type Ask = DecisionAsk | ActionAsk;
 
+/** An option the reporter considered and did not take. */
+export interface RejectedOption {
+  option: string;
+  why: string;
+}
+
+/** Something the reporter decided on their own, with what they turned down (R8). */
+export interface Decision {
+  what: string;
+  chosen: string;
+  why: string;
+  rejected: RejectedOption[];
+}
+
 /** A correction to something said earlier (R6). */
 export interface Correction {
   said: string;
@@ -77,9 +91,13 @@ export interface Aside {
 export interface Report {
   title: string;
   conclusion: string;
+  /** Why the work was done: who asked for what, or what was noticed (R7). */
+  background: string;
   claims: Claim[];
   /** May be empty, which renders as "nothing needed"; may not be omitted. */
   asks: Ask[];
+  /** May be empty, which renders as "none"; may not be omitted. */
+  decisions: Decision[];
   corrections?: Correction[];
   changes?: Change[];
   remaining?: Remaining[];

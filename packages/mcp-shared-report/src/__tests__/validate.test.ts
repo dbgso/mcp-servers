@@ -21,8 +21,21 @@ describe("validateReport", () => {
     expect(problemsOf({})).toEqual([
       { path: "title", message: "required" },
       { path: "conclusion", message: "required", criterion: "R1" },
+      { path: "background", message: "required", criterion: "R7" },
       { path: "claims", message: "required", criterion: "R2" },
       { path: "asks", message: "required; pass [] if nothing is needed from the reader", criterion: "R4" },
+      { path: "decisions", message: "required; pass [] if you decided nothing on your own", criterion: "R8" },
+    ]);
+  });
+
+  it("needs a rejected option for each decision made", () => {
+    const input = { ...minimalReport(), decisions: [{ what: "w", chosen: "c", why: "y", rejected: [] }] };
+    expect(problemsOf(input)).toEqual([
+      {
+        path: "decisions[0].rejected",
+        message: "at least one rejected option is required; a choice with no alternative is not a decision",
+        criterion: "R8",
+      },
     ]);
   });
 

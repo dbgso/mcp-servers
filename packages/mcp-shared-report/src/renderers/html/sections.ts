@@ -20,6 +20,7 @@ class HeaderSection implements Section {
     return `<header>
 <h1>${e(report.title)}</h1>
 <p class="conclusion">${e(report.conclusion)}</p>
+<p class="background"><span class="label">背景</span>${e(report.background)}</p>
 </header>`;
   }
 }
@@ -74,6 +75,33 @@ class CorrectionsSection implements Section {
 <ul>
 ${items}
 </ul>
+</section>`;
+  }
+}
+
+/** What the reporter chose, on what grounds, and what they turned down, so the reader can check it (R8). */
+class DecisionsSection implements Section {
+  render(report: Report): string {
+    if (report.decisions.length === 0) {
+      return `<section class="decisions none"><h2>自分で判断したこと</h2><p>なし</p></section>`;
+    }
+    const items = report.decisions
+      .map((d) => {
+        const rejected = d.rejected
+          .map((r) => `<li><s>${e(r.option)}</s><span class="why">退けた理由: ${e(r.why)}</span></li>`)
+          .join("\n");
+        return `<li><p class="what">${e(d.what)}</p>
+<p class="chosen"><strong>${e(d.chosen)}</strong></p>
+<p class="grounds">根拠: ${e(d.why)}</p>
+<ul class="rejected">
+${rejected}
+</ul></li>`;
+      })
+      .join("\n");
+    return `<section class="decisions"><h2>自分で判断したこと</h2>
+<ol>
+${items}
+</ol>
 </section>`;
   }
 }
@@ -149,6 +177,7 @@ export const SECTIONS: readonly Section[] = [
   new HeaderSection(),
   new AsksSection(),
   new CorrectionsSection(),
+  new DecisionsSection(),
   new ClaimsSection(),
   new ChangesSection(),
   new RemainingSection(),

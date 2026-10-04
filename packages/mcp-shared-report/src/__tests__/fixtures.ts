@@ -5,6 +5,7 @@ export function fullReport(): Report {
   return {
     title: "パッケージに docs が入らない",
     conclusion: "docs/ は npm に配布されない",
+    background: "利用者からルールが効いていないと言われた",
     claims: [
       {
         statement: "pack の出力に docs/ 由来のファイルがない",
@@ -23,6 +24,14 @@ export function fullReport(): Report {
       },
       { kind: "action", what: "PR をマージする" },
     ],
+    decisions: [
+      {
+        what: "確認の方法",
+        chosen: "npm pack の出力を見る",
+        why: "配布物そのものを見られる",
+        rejected: [{ option: "package.json を読む", why: ".npmignore を見落とす" }],
+      },
+    ],
     corrections: [{ said: "lint が強制している", actually: "lint は強制していない", why: "設定を読まずに書いた" }],
     changes: [{ what: "files", before: "[\"dist\", \"docs\"]", after: "[\"dist\"]" }],
     remaining: [{ item: "CHANGELOG を書く", why: "リリース前に要る" }],
@@ -35,7 +44,9 @@ export function minimalReport(): Report {
   return {
     title: "t",
     conclusion: "c",
+    background: "b",
     claims: [{ statement: "s", evidence: [{ source: "cmd", output: "out" }] }],
     asks: [],
+    decisions: [],
   };
 }
