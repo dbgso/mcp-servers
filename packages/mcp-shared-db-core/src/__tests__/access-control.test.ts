@@ -3,6 +3,7 @@ import {
   isTableAllowed,
   isColumnAllowed,
   listAvailableTables,
+  resolveTable,
 } from "../access-control.js";
 import type { SelectableFieldsMap } from "../selectable-fields.js";
 
@@ -53,5 +54,32 @@ describe("isColumnAllowed", () => {
     { tableName: "products", column: "price", expected: true, reason: "second table works too" },
   ])("$tableName.$column → $expected ($reason)", ({ tableName, column, expected }) => {
     expect(isColumnAllowed({ selectableFields: fields, tableName, column })).toBe(expected);
+  });
+});
+
+describe("resolveTable", () => {
+  const tableMetadata = { users: { primaryKey: ["id"] }, orphan: { primaryKey: [] } };
+  const ctx = { selectableFields: fields, tableMetadata };
+
+  it("returns the whitelist entry and metadata of a table in both layers", () => {
+    expect(resolveTable({ ctx, table: "users" })).toEqual({
+      config: fields.users,
+      meta: tableMetadata.users,
+    });
+  });
+
+  it.each([
+    { table: "products", why: "no metadata" },
+    { table: "orphan", why: "not whitelisted" },
+    { table: "missing", why: "in neither layer" },
+  ])("refuses $table ($why) and lists the selectable tables", ({ table }) => {
+    const resolved = resolveTable({ ctx, table });
+
+    expect("refusal" in resolved).toBe(true);
+    const text = "refusal" in resolved ? resolved.refusal.content[0]?.text : "";
+    expect(JSON.parse(String(text))).toEqual({
+      error: `Table '${table}' is not selectable.`,
+      availableTables: ["products", "users"],
+    });
   });
 });

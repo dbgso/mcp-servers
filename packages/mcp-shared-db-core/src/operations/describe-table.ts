@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { jsonResponse } from "mcp-shared";
 import type { CoreOperation } from "../types.js";
-import { listAvailableTables } from "../access-control.js";
+import { resolveTable } from "../access-control.js";
 
 interface DescribedField {
   name: string;
@@ -30,14 +30,9 @@ via additional ops.`;
   readonly category = "Discovery";
   readonly argsSchema = argsSchema;
   async execute({ args, ctx }: Parameters<CoreOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
-    const config = ctx.selectableFields[args.table];
-    const metadata = ctx.tableMetadata[args.table];
-    if (!config || !metadata) {
-      return jsonResponse({
-        error: `Table '${args.table}' is not selectable.`,
-        availableTables: listAvailableTables(ctx.selectableFields),
-      });
-    }
+    const resolved = resolveTable({ ctx, table: args.table });
+    if ("refusal" in resolved) return resolved.refusal;
+    const { config, meta: metadata } = resolved;
 
     const fields: DescribedField[] = Object.entries(config.fields).map(([name, sel]) => {
       const meta = metadata.fields[name];

@@ -40,7 +40,13 @@ export type {
 } from "./rdb-metadata.js";
 
 // Access-control helpers
-export { listAvailableTables, isTableAllowed, isColumnAllowed } from "./access-control.js";
+export {
+  listAvailableTables,
+  isTableAllowed,
+  isColumnAllowed,
+  resolveTable,
+} from "./access-control.js";
+export type { ResolvedTable, Refusal } from "./access-control.js";
 
 // Index-coverage helpers (used by read ops to flag un-indexed lookups)
 export { hasLeadingIndex, unindexedColumnWarning } from "./index-check.js";

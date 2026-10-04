@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonResponse } from "mcp-shared";
-import { listAvailableTables, redactPii } from "mcp-shared-db-core";
+import { redactPii, resolveTable } from "mcp-shared-db-core";
 import type { DatabaseOperation } from "./types.js";
 
 const argsSchema = z.object({
@@ -20,15 +20,9 @@ PII fields are redacted as \`"[REDACTED]"\`.`;
   readonly category = "Read";
   readonly argsSchema = argsSchema;
   async execute({ args, ctx }: Parameters<DatabaseOperation<z.infer<typeof argsSchema>>["execute"]>[0]) {
-    const config = ctx.selectableFields[args.table];
-    const meta = ctx.tableMetadata[args.table];
-    // Unknown / non-whitelisted table.
-    if (!config || !meta) {
-      return jsonResponse({
-        error: `Table '${args.table}' is not selectable.`,
-        availableTables: listAvailableTables(ctx.selectableFields),
-      });
-    }
+    const resolved = resolveTable({ ctx, table: args.table });
+    if ("refusal" in resolved) return resolved.refusal;
+    const { config, meta } = resolved;
 
     const pkFields = meta.primaryKey;
     // Tables with no declared PK can't be looked up by PK.
