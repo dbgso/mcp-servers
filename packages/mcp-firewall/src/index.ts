@@ -177,60 +177,47 @@ function printPresets(): void {
 }
 
 function resolvePresetPath(presetName: string): string {
-  // Check if it's a path to a file
-  if (existsSync(presetName)) {
-    return resolve(presetName);
+  // A path to a file, a preset name, or a preset file name with its extension
+  const candidates = [
+    resolve(presetName),
+    join(PRESETS_DIR, `${presetName}.json`),
+    join(PRESETS_DIR, presetName),
+  ];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (!found) {
+    throw new Error(`Preset not found: ${presetName}\nRun --list-presets to see available presets.`);
   }
-
-  // Check in presets directory
-  const presetPath = join(PRESETS_DIR, `${presetName}.json`);
-  if (existsSync(presetPath)) {
-    return presetPath;
-  }
-
-  // Check without .json extension
-  const presetPathWithExt = join(PRESETS_DIR, presetName);
-  if (existsSync(presetPathWithExt)) {
-    return presetPathWithExt;
-  }
-
-  throw new Error(`Preset not found: ${presetName}\nRun --list-presets to see available presets.`);
+  return found;
 }
 
-function loadConfig(cliArgs: CliArgs): {
+interface LoadedConfig {
   target: TargetConfig;
   rulesFile: string;
   dryRun: boolean;
   auditLog?: string;
-} {
-  if (cliArgs.config) {
-    // Load from config file
-    const configPath = resolve(cliArgs.config);
-    const configContent = readFileSync(configPath, "utf-8");
-    const config = ProxyConfigSchema.parse(JSON.parse(configContent));
-    const auditLog = cliArgs.auditLog ?? config.auditLog;
-    return {
-      target: config.target,
-      rulesFile: resolve(config.rulesFile),
-      dryRun: cliArgs.dryRun ?? config.dryRun ?? false,
-      auditLog: auditLog ? resolve(auditLog) : undefined,
-    };
-  }
+}
 
-  // Use CLI arguments
+function loadConfig(cliArgs: CliArgs): LoadedConfig {
+  return cliArgs.config ? loadFromConfigFile({ configFile: cliArgs.config, cliArgs }) : loadFromCli(cliArgs);
+}
+
+/** A config file, with `--dry-run` and `--audit-log` taking precedence over it. */
+function loadFromConfigFile(params: { configFile: string; cliArgs: CliArgs }): LoadedConfig {
+  const { configFile, cliArgs } = params;
+  const config = ProxyConfigSchema.parse(JSON.parse(readFileSync(resolve(configFile), "utf-8")));
+  const auditLog = cliArgs.auditLog ?? config.auditLog;
+  return {
+    target: config.target,
+    rulesFile: resolve(config.rulesFile),
+    dryRun: cliArgs.dryRun ?? config.dryRun ?? false,
+    auditLog: auditLog ? resolve(auditLog) : undefined,
+  };
+}
+
+/** Everything from flags: `--command` and one of `--rules-file` / `--preset` are required. */
+function loadFromCli(cliArgs: CliArgs): LoadedConfig {
   if (!cliArgs.command) {
     console.error("Error: --command is required (or use --config)");
-    process.exit(1);
-  }
-
-  // Determine rules file: --rules-file or --preset
-  let rulesFile: string;
-  if (cliArgs.rulesFile) {
-    rulesFile = resolve(cliArgs.rulesFile);
-  } else if (cliArgs.preset) {
-    rulesFile = resolvePresetPath(cliArgs.preset);
-  } else {
-    console.error("Error: --rules-file or --preset is required (or use --config)");
     process.exit(1);
   }
 
@@ -239,10 +226,22 @@ function loadConfig(cliArgs: CliArgs): {
       command: cliArgs.command,
       args: cliArgs.args,
     },
-    rulesFile,
+    rulesFile: resolveRulesFile(cliArgs),
     dryRun: cliArgs.dryRun ?? false,
     auditLog: cliArgs.auditLog ? resolve(cliArgs.auditLog) : undefined,
   };
+}
+
+/** `--rules-file` if given, else the `--preset` it names. */
+function resolveRulesFile(cliArgs: CliArgs): string {
+  if (cliArgs.rulesFile) {
+    return resolve(cliArgs.rulesFile);
+  }
+  if (cliArgs.preset) {
+    return resolvePresetPath(cliArgs.preset);
+  }
+  console.error("Error: --rules-file or --preset is required (or use --config)");
+  process.exit(1);
 }
 
 // Setup signal handlers for graceful shutdown
