@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
+import { looseBoolean } from "../schema-coerce.js";
 import {
   errorResponse,
   formatNextActions,
@@ -18,11 +19,11 @@ import {
 const listSchema = z.object({
   action: z.literal("list"),
   id: z.string().optional().describe("Parent ID to list documents under"),
-  recursive: z.boolean().optional().default(false).describe("Include nested documents"),
+  recursive: looseBoolean(z.boolean().optional().default(false).describe("Include nested documents")),
   query: z.string().optional().describe("Search by description or whenToUse"),
   missingMeta: z.enum(["description", "whenToUse", "any"]).optional()
     .describe("Find documents with missing metadata"),
-  drafts: z.boolean().optional().describe("List drafts instead of promoted documents"),
+  drafts: looseBoolean(z.boolean().optional().describe("List drafts instead of promoted documents")),
 });
 
 type ListArgs = z.infer<typeof listSchema>;
