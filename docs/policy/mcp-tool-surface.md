@@ -63,6 +63,29 @@ tool that looks like it takes nothing and then does not take anything.
 `passthrough` publishes `additionalProperties: true`, which says "arbitrary
 arguments", and hands them all over.
 
+## Arguments arrive as strings
+
+**The price of an empty schema is that the handler, not the client, restores the
+types.** A client converts a tool call's arguments using the tool's `inputSchema`.
+For an argument that schema does not name, it has no type to convert to, and
+sends the value as a string. Claude Code sends `recursive: true` as `"true"`,
+`depth: 2` as `"2"` and `whenToUse: ["a"]` as `'["a"]'` -- however exactly the
+model followed `describe`, because `describe` is read by the model and the
+conversion is done by the client. `describe` cannot fix this; only the schema or
+the handler can, and this policy has chosen the schema.
+
+So a handler behind such a tool wraps every boolean, number and array in its
+schema with `looseBoolean`, `looseNumber` and `looseArray` from `mcp-shared`.
+They accept the string spelling and nothing looser. Without them, the documented
+call fails: `list(recursive: true)` was rejected, and `add`, whose `whenToUse` is
+required, could not be called from Claude Code at all.
+
+`custom/no-strict-scalar-in-untyped-args` reports an unwrapped `z.boolean()`,
+`z.number()` or `z.array()`. It is enabled per directory, for the handlers of
+tools with an untyped schema; a server moving to this policy adds its handler
+directory to that entry in `.oxlintrc.json`. `ast-typescript-mcp`'s `ts_ast`
+already publishes a passthrough schema and is not yet wrapped or checked.
+
 ## Conformance
 
 Measured by starting each server and reading `tools/list`. Servers needing
@@ -92,6 +115,10 @@ So: one server conforms. The work this implies, in the order the cost suggests:
 4. **The prefixed four** — `git_describe`, `chain_describe`, `kroki_describe`,
    `duckdb_describe` become `describe`. Breaking for anything naming them.
 5. **Every schema above 146 B** — the argument information comes out.
+
+Each of these, as it drops its argument information, takes on the section above:
+its handlers' booleans, numbers and arrays get the loose wrappers, and its handler
+directory goes into the lint override.
 
 `coding-rules__schema-sync` predates this and says the opposite: it takes two
 schemas as given and prescribes a checklist and a consistency test for keeping
