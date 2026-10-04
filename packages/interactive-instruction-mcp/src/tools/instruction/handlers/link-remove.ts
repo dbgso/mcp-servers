@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BaseActionHandler, type ToolResponse } from "mcp-shared";
+import { BaseActionHandler, looseArray, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
 import { errorResponse, formatNextActions } from "../types.js";
 import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
@@ -17,7 +17,7 @@ import {
 const schema = z.object({
   action: z.literal("link_remove"),
   id: z.string().describe("Document ID to remove links from"),
-  relatedDocs: z.array(z.string()).describe("Document IDs to remove from related"),
+  relatedDocs: looseArray(z.array(z.string()).describe("Document IDs to remove from related")),
   explanation: z
     .string()
     .min(1)
