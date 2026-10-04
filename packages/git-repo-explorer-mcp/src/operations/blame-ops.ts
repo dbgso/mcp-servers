@@ -11,14 +11,26 @@ interface BlameLine {
   content: string;
 }
 
+interface CommitInfo {
+  author: string;
+  date: string;
+}
+
+/**
+ * Parse `git blame --porcelain` output.
+ *
+ * Porcelain prints a commit's `author` / `author-time` lines only the first
+ * time that commit appears, so they are remembered per commit: a later hunk
+ * from the same commit carries just its header line.
+ */
 function parseBlameOutput(output: string): BlameLine[] {
   if (!output.trim()) return [];
 
   const lines = output.split("\n");
   const result: BlameLine[] = [];
+  const commits = new Map<string, CommitInfo>();
   let currentCommit = "";
-  let currentAuthor = "";
-  let currentDate = "";
+  let currentInfo: CommitInfo = { author: "", date: "" };
   let currentLineNum = 0;
 
   for (const line of lines) {
@@ -27,20 +39,22 @@ function parseBlameOutput(output: string): BlameLine[] {
     if (commitMatch && commitMatch[1] && commitMatch[2]) {
       currentCommit = commitMatch[1];
       currentLineNum = Number.parseInt(commitMatch[2], 10);
+      currentInfo = commits.get(currentCommit) ?? { author: "", date: "" };
+      commits.set(currentCommit, currentInfo);
       continue;
     }
 
     if (line.startsWith("author ")) {
-      currentAuthor = line.slice("author ".length);
+      currentInfo.author = line.slice("author ".length);
     } else if (line.startsWith("author-time ")) {
       const timestamp = Number.parseInt(line.slice("author-time ".length), 10);
-      currentDate = new Date(timestamp * 1000).toISOString().slice(0, 10);
+      currentInfo.date = new Date(timestamp * 1000).toISOString().slice(0, 10);
     } else if (line.startsWith("\t")) {
       // Content line (starts with tab)
       result.push({
         commit: currentCommit.slice(0, 8),
-        author: currentAuthor,
-        date: currentDate,
+        author: currentInfo.author,
+        date: currentInfo.date,
         line_number: currentLineNum,
         content: line.slice(1), // Remove leading tab
       });
