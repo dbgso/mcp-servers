@@ -492,7 +492,7 @@ More text.
     expect(result.data).toBeDefined();
   });
 
-  it("returns the whole document when a heading is named", async () => {
+  it("returns only the named section when a heading is named", async () => {
     const filePath = await fixture({ content });
 
     const result = await handler.query({
@@ -502,7 +502,7 @@ More text.
     });
 
     expect(result.query).toBe("full");
-    expect((result.data as AsciidocDocument).title).toBe("Title");
+    expect((result.data as AsciidocDocument).blocks.map((b) => b.title)).toEqual(["One"]);
   });
 
   it("stops at the depth asked for", async () => {

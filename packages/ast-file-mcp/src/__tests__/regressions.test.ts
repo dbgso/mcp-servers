@@ -15,6 +15,7 @@ import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { MarkdownHandler } from "../handlers/markdown.js";
 import { AsciidocHandler } from "../handlers/asciidoc.js";
 import { TopicIndexHandler } from "../tools/handlers/topic-index.js";
+import type { AsciidocDocument } from "../types/index.js";
 
 let dir: string;
 const md = new MarkdownHandler();
@@ -112,5 +113,33 @@ describe("anchors topic_index hands out are the anchors the link tools accept", 
 
     expect(await md.generateToc({ filePath: mdPath })).toContain("[詳細設計](#詳細設計)");
     expect(await adoc.generateToc({ filePath: adocPath })).toContain("<<_near_section,Near Section>>");
+  });
+});
+
+describe("AsciiDoc query with a heading", () => {
+  it("returns only that section, as Markdown's does", async () => {
+    const path = await file({
+      name: "doc.adoc",
+      content: "= Doc\n\n== First\n\none\n\n== Second\n\ntwo\n\n=== Inner\n\nthree\n",
+    });
+
+    const result = await adoc.query({ filePath: path, queryType: "full", options: { heading: "Second" } });
+    const data = result.data as AsciidocDocument;
+
+    expect(data.blocks.map((b) => b.title)).toEqual(["Second"]);
+    expect(data.blocks[0].blocks?.map((b) => b.title ?? b.source)).toEqual(["two", "Inner"]);
+  });
+
+  it("finds a nested section, and nothing for a heading that is not there", async () => {
+    const path = await file({
+      name: "doc.adoc",
+      content: "= Doc\n\n== First\n\none\n\n=== Inner\n\nthree\n",
+    });
+
+    const inner = await adoc.query({ filePath: path, queryType: "full", options: { heading: "Inner" } });
+    const missing = await adoc.query({ filePath: path, queryType: "full", options: { heading: "Nope" } });
+
+    expect((inner.data as AsciidocDocument).blocks.map((b) => b.title)).toEqual(["Inner"]);
+    expect((missing.data as AsciidocDocument).blocks).toEqual([]);
   });
 });
