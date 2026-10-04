@@ -5,10 +5,14 @@
  * options bag. No process-level mutation, no I/O — easy to unit-test.
  */
 
+import { parseFlagArgs, type FlagSpec } from "mcp-shared-db-core";
+
 export interface CliArgs {
   /** Path to a dotenv file to load before resolver construction. */
   envFile?: string;
 }
+
+const FLAG_SPECS: readonly FlagSpec<keyof CliArgs>[] = [{ flag: "--env-file", key: "envFile" }];
 
 /**
  * Parse `db-codegen-mcp` CLI args.
@@ -19,18 +23,5 @@ export interface CliArgs {
  * Unknown flags are intentionally ignored (forward-compatible).
  */
 export function parseArgs(argv: readonly string[]): CliArgs {
-  const out: CliArgs = {};
-  for (let i = 0; i < argv.length; i++) {
-    const flag = argv[i];
-    if (flag === "--env-file") {
-      const next = argv[i + 1];
-      if (next === undefined) {
-        throw new Error("--env-file requires a path argument");
-      }
-      out.envFile = next;
-      i++;
-      continue;
-    }
-  }
-  return out;
+  return parseFlagArgs({ argv, specs: FLAG_SPECS });
 }

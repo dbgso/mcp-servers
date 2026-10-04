@@ -84,3 +84,7 @@ export {
   pickTunnelSpec,
   tunnelConfigFromSecrets,
 } from "./tunnel-config.js";
+
+// `--flag <value>` argv reader shared by the DB servers' CLIs
+export type { FlagSpec, ParseFlagArgsParams } from "./cli-args.js";
+export { parseFlagArgs } from "./cli-args.js";
