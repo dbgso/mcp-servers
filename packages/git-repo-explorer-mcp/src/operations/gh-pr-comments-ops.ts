@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { jsonResponse, errorResponse } from "mcp-shared";
 import type { GitOperation } from "./types.js";
-import { ghCachedExec, isGhAvailable } from "../gh-cache.js";
+import { ghCachedExec, isGhAvailable, parseJsonLines } from "../gh-cache.js";
 
 interface GhComment {
   author: { login: string };
@@ -139,9 +139,11 @@ Examples:
         `repos/${args.repo}/pulls/${args.pr_number}/reviews`,
         "--paginate",
         "--jq",
-        "[.[] | {author: .user, body: .body, state: .state, createdAt: .submitted_at, comments: []}]",
+        // One object per line: gh applies --jq to each page separately
+        ".[] | {author: .user, body: .body, state: .state, createdAt: .submitted_at, comments: []}",
       ],
       cacheKey: `${cacheKey}-reviews`,
+      parse: parseJsonLines<GhReview>,
       ttlMs,
       forceRefresh: args.force_refresh,
     });
@@ -152,9 +154,10 @@ Examples:
         `repos/${args.repo}/pulls/${args.pr_number}/comments`,
         "--paginate",
         "--jq",
-        "[.[] | {author: .user, body: .body, createdAt: .created_at, path: .path, line: .line, startLine: .start_line, diffHunk: .diff_hunk, pullRequestReviewId: .pull_request_review_id}]",
+        ".[] | {author: .user, body: .body, createdAt: .created_at, path: .path, line: .line, startLine: .start_line, diffHunk: .diff_hunk, pullRequestReviewId: .pull_request_review_id}",
       ],
       cacheKey: `${cacheKey}-review-comments`,
+      parse: parseJsonLines<GhComment>,
       ttlMs,
       forceRefresh: args.force_refresh,
     });
