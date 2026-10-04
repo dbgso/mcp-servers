@@ -6,6 +6,7 @@ import type { ToolResponse } from "mcp-shared";
 import {
   getHandler,
   getSupportedExtensions,
+  type DocumentHandler,
 } from "../../handlers/index.js";
 import type { QueryType, QueryResult } from "../../types/index.js";
 
@@ -51,11 +52,75 @@ interface SectionsQueryResult {
   sections: SectionSummary[];
 }
 
+type ReadResult = FileResult<QueryResult | SectionResult | SectionsQueryResult>;
+
+interface ReadParams {
+  handler: DocumentHandler;
+  filePath: string;
+  options: { heading?: string; depth?: number; level?: number };
+}
+
+/** What one way of reading a file returns for it. */
+interface FileReader {
+  read(params: ReadParams): Promise<ReadResult>;
+}
+
+/** `heading`: the plain text under that heading. */
+class SectionTextReader implements FileReader {
+  constructor(private readonly heading: string) {}
+
+  async read(params: ReadParams): Promise<ReadResult> {
+    const { handler, filePath } = params;
+    const { heading } = this;
+    const content = await handler.getSectionText({ filePath, headingText: heading });
+    if (!content) {
+      return { filePath, error: `Heading "${heading}" not found` };
+    }
+    return { filePath, result: { filePath, fileType: handler.fileType, heading, content } };
+  }
+}
+
+/** `sections`: the titles at one level, for choosing an order to reorder into. */
+class SectionsReader implements FileReader {
+  async read(params: ReadParams): Promise<ReadResult> {
+    const { handler, filePath, options } = params;
+    const { sections } = await handler.getSections({ filePath, level: options.level ?? handler.defaultSectionLevel });
+    return {
+      filePath,
+      result: {
+        filePath,
+        fileType: handler.fileType,
+        query: "sections",
+        sections: sections.map((s) => ({ title: s.title, level: s.level })),
+      },
+    };
+  }
+}
+
+/** Every handler query type; each handler throws for the ones it does not support. */
+class HandlerQueryReader implements FileReader {
+  constructor(private readonly queryType: QueryType) {}
+
+  async read(params: ReadParams): Promise<ReadResult> {
+    const { handler, filePath, options } = params;
+    return { filePath, result: await handler.query({ filePath, queryType: this.queryType, options }) };
+  }
+}
+
+const READERS: Record<ReadArgs["query"], FileReader> = {
+  full: new HandlerQueryReader("full"),
+  headings: new HandlerQueryReader("headings"),
+  code_blocks: new HandlerQueryReader("code_blocks"),
+  lists: new HandlerQueryReader("lists"),
+  links: new HandlerQueryReader("links"),
+  sections: new SectionsReader(),
+};
+
 async function processFile(params: {
   filePath: string;
-  query: string;
+  query: ReadArgs["query"];
   options: { heading?: string; depth?: number; level?: number };
-}): Promise<FileResult<QueryResult | SectionResult | SectionsQueryResult>> {
+}): Promise<ReadResult> {
   const { filePath, query, options } = params;
   const handler = getHandler(filePath);
 
@@ -63,81 +128,10 @@ async function processFile(params: {
     return { filePath, error: `Unsupported file type` };
   }
 
+  // A heading asks for that section's text, whatever the query
+  const reader = options.heading ? new SectionTextReader(options.heading) : READERS[query];
   try {
-    // Section query: return plain text content under the heading
-    // Polymorphism: all handlers implement getSectionText
-    if (options.heading) {
-      const content = await handler.getSectionText({
-        filePath,
-        headingText: options.heading,
-      });
-      if (!content) {
-        return { filePath, error: `Heading "${options.heading}" not found` };
-      }
-      return {
-        filePath,
-        result: {
-          filePath,
-          fileType: handler.fileType as "markdown" | "asciidoc",
-          heading: options.heading,
-          content,
-        },
-      };
-    }
-
-    // Query by type: all handlers implement getHeadingsFromFile and getLinksFromFile
-    if (query === "headings") {
-      const headings = await handler.getHeadingsFromFile({
-        filePath,
-        maxDepth: options.depth,
-      });
-      return {
-        filePath,
-        result: {
-          filePath,
-          fileType: handler.fileType as "markdown" | "asciidoc",
-          query: "headings" as QueryType,
-          data: headings,
-        },
-      };
-    }
-
-    if (query === "links") {
-      const links = await handler.getLinksFromFile(filePath);
-      return {
-        filePath,
-        result: {
-          filePath,
-          fileType: handler.fileType as "markdown" | "asciidoc",
-          query: "links" as QueryType,
-          data: links,
-        },
-      };
-    }
-
-    // Sections query: lightweight section info for reordering
-    if (query === "sections") {
-      const level = options.level ?? handler.defaultSectionLevel;
-      const { sections } = await handler.getSections({ filePath, level });
-      return {
-        filePath,
-        result: {
-          filePath,
-          fileType: handler.fileType as "markdown" | "asciidoc",
-          query: "sections" as const,
-          sections: sections.map((s) => ({ title: s.title, level: s.level })),
-        },
-      };
-    }
-
-    // Polymorphism: use handler.query() for all remaining query types
-    // Each handler implements supported queries and throws for unsupported ones
-    const result = await handler.query({
-      filePath,
-      queryType: query as QueryType,
-      options,
-    });
-    return { filePath, result };
+    return await reader.read({ handler, filePath, options });
   } catch (error) {
     return {
       filePath,
