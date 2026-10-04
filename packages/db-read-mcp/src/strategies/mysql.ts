@@ -36,6 +36,13 @@ function buildInsecureWarning(): string {
   return "[db-read-mcp] WARNING: connecting without SSL — append `ssl=true` (or `ssl-mode=required`) to DBREAD_URL when bypassing the SSH bastion.";
 }
 
+type TimeoutUnit = "ms" | "s" | "min";
+
+/** Milliseconds per unit of a `DBREAD_STATEMENT_TIMEOUT` duration. */
+const MS_PER_UNIT: Record<TimeoutUnit, number> = { ms: 1, s: 1000, min: 60_000 };
+
+const TIMEOUT_RE = /^(\d+(?:\.\d+)?)(ms|s|min)?$/i;
+
 /**
  * Parse `DBREAD_STATEMENT_TIMEOUT` into a MySQL `max_execution_time`
  * milliseconds value. Accepts:
@@ -48,18 +55,12 @@ function buildInsecureWarning(): string {
  * Exported for unit-testing.
  */
 export function parseTimeoutMs(input: string | undefined): number {
-  if (!input) return DEFAULT_MAX_EXECUTION_TIME_MS;
-  const trimmed = input.trim();
+  const trimmed = input?.trim();
   if (!trimmed) return DEFAULT_MAX_EXECUTION_TIME_MS;
-  if (trimmed === "0") return 0;
-  const match = trimmed.match(/^(\d+(?:\.\d+)?)(ms|s|min)?$/i);
+  const match = TIMEOUT_RE.exec(trimmed);
   if (!match) return DEFAULT_MAX_EXECUTION_TIME_MS;
-  const value = Number(match[1]);
-  const unit = (match[2] ?? "ms").toLowerCase();
-  if (unit === "ms") return Math.round(value);
-  if (unit === "s") return Math.round(value * 1000);
-  // unit === "min"
-  return Math.round(value * 60_000);
+  const unit = (match[2] ?? "ms").toLowerCase() as TimeoutUnit;
+  return Math.round(Number(match[1]) * MS_PER_UNIT[unit]);
 }
 
 export class MysqlStrategy implements EngineStrategy {
