@@ -174,6 +174,7 @@ export function parseGitGrepOutput(params: { output: string; ref: string }): Gre
 
 /**
  * Execute git grep on a bare repository.
+ * Returns at most `max_count` matches in total; `truncated` says whether more were found.
  */
 export async function gitGrep(params: {
   repoPath: string;
@@ -188,7 +189,9 @@ export async function gitGrep(params: {
   if (options.ignore_case) {
     args.push("-i");
   }
-  args.push(`--max-count=${maxCount}`);
+  // --max-count limits matches per file, not in total. One above the limit is
+  // enough to tell that a single file went over it; the total is cut below.
+  args.push(`--max-count=${maxCount + 1}`);
   // -e keeps a pattern that starts with "-" from being read as an option
   args.push("-e", pattern);
   args.push(ref);
@@ -206,8 +209,9 @@ export async function gitGrep(params: {
       maxBuffer: 10 * 1024 * 1024, // 10MB
     });
 
-    const matches = parseGitGrepOutput({ output: stdout, ref });
-    const truncated = matches.length >= maxCount;
+    const found = parseGitGrepOutput({ output: stdout, ref });
+    const matches = found.slice(0, maxCount);
+    const truncated = found.length > maxCount;
 
     return {
       repo: repoName,
