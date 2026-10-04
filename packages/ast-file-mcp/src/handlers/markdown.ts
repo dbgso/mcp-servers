@@ -8,6 +8,7 @@ import type { Root as MdastRoot, Heading, Code, List, Link, Text, ListItem } fro
 import type { GoToDefinitionResult, DefinitionLocation } from "mcp-shared";
 import { BaseHandler } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
+import { anchorMatchesHeading, headingAnchor } from "./anchor.js";
 import { generateContent, type ContentGenerator } from "./content-format.js";
 import { diffStructures, displayText, getErrorMessage } from "mcp-shared";
 import type {
@@ -512,26 +513,13 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
     for (const node of ast.children) {
       if (node.type === "heading") {
         const heading = node as Heading;
-        const headingText = this.extractText(heading);
-        if (this.toSlug(headingText) === slug || this.toSlug(headingText) === this.toSlug(slug)) {
+        if (anchorMatchesHeading({ anchor: slug, headingText: this.extractText(heading), fileType: "markdown" })) {
           return heading;
         }
       }
     }
 
     return null;
-  }
-
-  /**
-   * Convert heading text to slug (GitHub-style).
-   */
-  private toSlug(text: string): string {
-    return text
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .trim();
   }
 
   /**
@@ -684,7 +672,7 @@ export class MarkdownHandler extends BaseHandler implements ContentGenerator {
 
     const lines = headings.map((heading) => {
       const indent = "  ".repeat(heading.depth - minDepth);
-      const slug = this.toSlug(heading.text);
+      const slug = headingAnchor({ text: heading.text, fileType: "markdown" });
       return `${indent}- [${heading.text}](#${slug})`;
     });
 

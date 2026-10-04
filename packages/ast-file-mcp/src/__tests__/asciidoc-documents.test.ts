@@ -171,9 +171,9 @@ describe("a table of contents", () => {
     const toc = await handler.generateToc({ filePath: path, maxDepth: 3 });
 
     expect(toc.split("\n")).toEqual([
-      "* <<title,Title>>",
-      "** <<one,One>>",
-      "*** <<deeper,Deeper>>",
+      "* <<_title,Title>>",
+      "** <<_one,One>>",
+      "*** <<_deeper,Deeper>>",
     ]);
   });
 });
