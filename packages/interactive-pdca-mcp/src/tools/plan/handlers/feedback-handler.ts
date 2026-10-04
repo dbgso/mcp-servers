@@ -100,28 +100,18 @@ plan(action: "feedback", id: "task-001", feedback_id: "fb-001")
 
 `;
 
-    // Draft feedback (needs interpretation)
-    if (draftFeedback.length > 0) {
-      output += `## 📝 Draft (needs interpretation)\n\n`;
-      for (const fb of draftFeedback) {
-        output += this.formatFeedbackSummary({ fb, taskId });
+    // Draft needs interpretation, unaddressed is confirmed but needs work.
+    const sections: ReadonlyArray<readonly [string, FeedbackEntry[]]> = [
+      ["📝 Draft (needs interpretation)", draftFeedback],
+      ["⚠️ Unaddressed (confirmed, needs work)", unaddressedFeedback],
+      ["✅ Addressed", addressedFeedback],
+    ];
+    for (const [title, list] of sections) {
+      if (list.length === 0) {
+        continue;
       }
-    }
-
-    // Unaddressed feedback (confirmed but not yet addressed)
-    if (unaddressedFeedback.length > 0) {
-      output += `## ⚠️ Unaddressed (confirmed, needs work)\n\n`;
-      for (const fb of unaddressedFeedback) {
-        output += this.formatFeedbackSummary({ fb, taskId });
-      }
-    }
-
-    // Addressed feedback
-    if (addressedFeedback.length > 0) {
-      output += `## ✅ Addressed\n\n`;
-      for (const fb of addressedFeedback) {
-        output += this.formatFeedbackSummary({ fb, taskId });
-      }
+      output += `## ${title}\n\n`;
+      output += list.map((fb) => this.formatFeedbackSummary({ fb, taskId })).join("");
     }
 
     return {
