@@ -1,5 +1,17 @@
 # mcp-interactive-instruction
 
+## 2.1.1
+
+### Patch Changes
+
+- 117c27e: `add`, `update`, `link_add` and `link_remove` accept their array arguments as JSON strings.
+
+  `instruction` publishes no argument types, so a client has nothing to convert against and sends untyped arguments as strings: Claude Code sends `whenToUse: ["a"]` as `'["a"]'`. `add` requires `whenToUse`, so it could not be called from Claude Code at all. `whenToUse` and `relatedDocs` now take a JSON array in a string; a string that is not a JSON array is still rejected. The conversions for booleans, numbers and arrays now live in `mcp-shared`, for every server whose tools publish no argument types.
+
+- 9c1ba48: `list` and `graph` accept their boolean and number arguments as strings.
+
+  `instruction` publishes no argument types on purpose -- `describe` is where they are written down -- so a client has nothing to serialise against and can send `recursive: true` as `"true"`. The schema then rejected `list(recursive: true)`, the first call CLAUDE.md asks for, while it was being made exactly as `describe` shows it. `recursive`, `drafts` and `includeUnlinked` now take `"true"` and `"false"`, and `depth` and `spacing` take a plain decimal string such as `"2"`. Nothing looser: `"yes"`, `"1"` for a boolean, or `"two"` is still an error.
+
 ## 2.1.0
 
 ### Minor Changes
