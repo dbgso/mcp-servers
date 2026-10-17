@@ -1,0 +1,9 @@
+id: C-0001
+kind: C
+fields:
+  condition: 種別が指すべき上流の決まりが、決められた数だけ存在していなければ、その決まりは書かれていない
+refs:
+  - id: P-0001
+    version: 9dd0dafe8cf2
+  - id: DEF-0002
+    version: 163e74d7f2ca

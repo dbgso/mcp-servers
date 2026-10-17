@@ -10,6 +10,7 @@ A collection of Model Context Protocol (MCP) servers.
 | [interactive-instruction-mcp](./packages/interactive-instruction-mcp) | Interactive instruction document management (help, draft, apply) |
 | [interactive-pdca-mcp](./packages/interactive-pdca-mcp) | PDCA task planning workflow (plan, approve) |
 | [traceable-chain-mcp](./packages/traceable-chain-mcp) | Traceable document chains with enforced dependencies |
+| [claim-chain-mcp](./packages/claim-chain-mcp) | Typed claims that can only cite what upstream has decided, with a record of what upstream is missing |
 | [kroki-mcp](./packages/kroki-mcp) | Diagram rendering via Kroki |
 | [mcp-shared](./packages/mcp-shared) | Shared types and utilities for MCP servers |
 

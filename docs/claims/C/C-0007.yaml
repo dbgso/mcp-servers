@@ -1,0 +1,7 @@
+id: C-0007
+kind: C
+fields:
+  condition: MCP の check とコマンドの check は、同じ根に対して同じ指摘を返し、コマンドはエラーがあれば失敗で終わる
+refs:
+  - id: P-0007
+    version: 8dcbc0a8990c

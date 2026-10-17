@@ -1,0 +1,7 @@
+id: C-0005
+kind: C
+fields:
+  condition: 値を列挙で決めていない欄の文を、空でない別の文に変えても、種別と指す先が同じなら、検査の結果は変わらない
+refs:
+  - id: P-0005
+    version: 01743adcd7f5

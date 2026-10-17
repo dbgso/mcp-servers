@@ -1,0 +1,8 @@
+id: P-0007
+kind: P
+fields:
+  modality: must
+  statement: 同じ決まりの集まりに対する判定は、AI の操作中に呼んでも CI で呼んでも同じ
+refs:
+  - id: DEF-0001
+    version: 34d877205a12

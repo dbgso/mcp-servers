@@ -1,0 +1,6 @@
+id: DEF-0002
+kind: DEF
+fields:
+  term: 上流
+  meaning: ある決まりがその種別ゆえに指さなければならない、別の種別の決まり
+refs: []

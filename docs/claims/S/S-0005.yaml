@@ -1,0 +1,7 @@
+id: S-0005
+kind: S
+fields:
+  behavior: check が欄の値を見るのは、空かどうかと、values で列挙した値のどれかかどうかだけ。それ以外は id、種別、参照の個数、版だけで決める
+refs:
+  - id: C-0005
+    version: 266725d9617e

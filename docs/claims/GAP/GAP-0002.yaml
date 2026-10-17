@@ -1,0 +1,13 @@
+id: GAP-0002
+kind: GAP
+needs: C
+under: []
+want: 複数の人や AI が同時に決まりを足したときに、何が保たれなければならないか
+draft:
+  kind: S
+  fields:
+    behavior: 決まりは 1 件 1 ファイル (<root>/<種別>/<id>.yaml) で持つ。新しい id のファイルは、既にあれば作らず、次の
+      id で作り直す
+  refs: []
+status: resolved
+resolvedBy: S-0006

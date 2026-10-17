@@ -1,0 +1,6 @@
+id: DEF-0003
+kind: DEF
+fields:
+  term: 足りない上流
+  meaning: 下流を書こうとして指せなかった上流と、何が決まっていないかの記録
+refs: []

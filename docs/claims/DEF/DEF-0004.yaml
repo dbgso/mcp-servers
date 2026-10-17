@@ -1,0 +1,6 @@
+id: DEF-0004
+kind: DEF
+fields:
+  term: 版
+  meaning: 決まりの中身から決まり、中身が変われば変わる識別子
+refs: []

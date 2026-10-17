@@ -1,0 +1,9 @@
+id: S-0004
+kind: S
+fields:
+  behavior: 参照は指した時点の相手の版 (種別と欄の hash の先頭 12 文字) を持つ。update
+    で欄が変わると、その決まりを指す決まりを古いものとして返し、check はそれらを stale-ref として報告する。refs を渡して update
+    すると今の版で指し直す
+refs:
+  - id: C-0004
+    version: 9299fabe4bfc

@@ -1,0 +1,12 @@
+id: GAP-0001
+kind: GAP
+needs: C
+under: []
+want: 上流を指していない決まりを書けないことを、何で判定するか
+draft:
+  kind: S
+  fields:
+    behavior: add は、種別が指すべき上流の決まりの数が足りないとき、id を発行せず保存もしない
+  refs: []
+status: resolved
+resolvedBy: S-0001

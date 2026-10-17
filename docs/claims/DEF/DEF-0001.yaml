@@ -1,0 +1,6 @@
+id: DEF-0001
+kind: DEF
+fields:
+  term: 決まり
+  meaning: id を 1 つ持つ、単独で破れる判断 1 つ
+refs: []

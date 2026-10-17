@@ -1,0 +1,9 @@
+id: S-0002
+kind: S
+fields:
+  behavior: add は、上流の数が足りないことだけが理由で書けず、want があるとき、足りない種別ごとに GAP を作り、needs / under
+    / want / draft を保存する。want が無ければ何も保存せず、want を付けて呼び直すよう返す。存在しない id や型の合わない参照は
+    GAP にしない
+refs:
+  - id: C-0002
+    version: 4d9e6b84d922
