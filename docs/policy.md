@@ -32,8 +32,8 @@ is `workflow/`, and how the code inside it is written is `coding-rules/`.
 
 ## Documents
 
-- `policy__mcp-tool-surface` — what a tool publishes about itself, and where the
-  arguments are documented.
+- `policy__mcp-tool-surface` — which tools a server has (`describe` and `exec`),
+  what a tool publishes about itself, and where the arguments are documented.
 - `policy__approval` — why the approval prompt is not a control, and which gate to
   pick for what is behind it.
 - `policy__parameterise` — a value that needs deciding and can be read from the
