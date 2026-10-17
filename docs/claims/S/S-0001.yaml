@@ -1,0 +1,7 @@
+id: S-0001
+kind: S
+fields:
+  behavior: add は、種別が指すべき上流の決まりの数が足りないとき、id を発行せず保存もしない
+refs:
+  - id: C-0001
+    version: cf9671d1c125

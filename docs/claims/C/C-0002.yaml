@@ -1,0 +1,9 @@
+id: C-0002
+kind: C
+fields:
+  condition: 上流の数が足りずに書けなかった下流ごとに、足りない種別、何が決まっていないか、書こうとした中身を持つ足りない上流が 1 件ある
+refs:
+  - id: P-0002
+    version: 24867c10b5dd
+  - id: DEF-0003
+    version: efa17bde05bb

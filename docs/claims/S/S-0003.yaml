@@ -1,0 +1,8 @@
+id: S-0003
+kind: S
+fields:
+  behavior: add が成功したら、needs がその種別で、under が空か、新しい決まりかその指す先を含む open な GAP
+    を、下書きを書き直す呼び出しと一緒に返す。unblocked は同じものを、既存の決まりについて返す
+refs:
+  - id: C-0003
+    version: c525162d3c19

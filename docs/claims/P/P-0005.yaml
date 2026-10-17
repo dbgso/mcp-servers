@@ -1,0 +1,8 @@
+id: P-0005
+kind: P
+fields:
+  modality: must
+  statement: 決まりが正しいかは、指している決まりの存在と種別だけで決まる
+refs:
+  - id: DEF-0001
+    version: 34d877205a12

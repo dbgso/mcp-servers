@@ -86,7 +86,8 @@
     },
     {
       "files": [
-        "packages/interactive-instruction-mcp/src/tools/instruction/handlers/**"
+        "packages/interactive-instruction-mcp/src/tools/instruction/handlers/**",
+        "packages/claim-chain-mcp/src/tools/handlers/**"
       ],
       "rules": {
         "custom/no-strict-scalar-in-untyped-args": "error"
