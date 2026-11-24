@@ -1,0 +1,41 @@
+{{!-- 既定の UI の上の帯には見本のメニュー (Home / Products / Services / Download) が入っているので、
+      サイト名と検索、言語の切り替え、repo へのリンクだけにする。playbook の site.keys で決める
+      (Antora が camelCase にするので、playbook の repo_url はここでは repoUrl)。
+        site.keys.languages … true なら component (ja / en など) を切り替える下ろし窓を出す
+        site.keys.repoUrl   … あれば右端に repo へのリンクを出す --}}
+<header class="header">
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <a class="navbar-item" href="{{{or site.url siteRootPath}}}">{{site.title}}</a>
+      {{#if env.SITE_SEARCH_PROVIDER}}
+      <div class="navbar-item search hide-for-print">
+        <div id="search-field" class="field">
+          <input id="search-input" type="search" placeholder="検索 / Search"{{#if page.home}} autofocus{{/if}}>
+        </div>
+      </div>
+      {{/if}}
+      <button class="navbar-burger" aria-controls="topbar-nav" aria-expanded="false" aria-label="Toggle main menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+    <div id="topbar-nav" class="navbar-menu">
+      <div class="navbar-end">
+        {{#if site.keys.languages}}
+        <div class="navbar-item has-dropdown is-hoverable pss-lang">
+          <a class="navbar-link" href="#">{{#if page.component}}{{page.component.name}}{{else}}Language{{/if}}</a>
+          <div class="navbar-dropdown is-right">
+            {{#each site.components}}
+            <a class="navbar-item{{#if (eq ./name @root.page.component.name)}} is-current{{/if}}" href="{{{relativize ./url}}}">{{{./title}}}</a>
+            {{/each}}
+          </div>
+        </div>
+        {{/if}}
+        {{#if site.keys.repoUrl}}
+        <a class="navbar-item pss-repo" href="{{{site.keys.repoUrl}}}">GitHub</a>
+        {{/if}}
+      </div>
+    </div>
+  </nav>
+</header>

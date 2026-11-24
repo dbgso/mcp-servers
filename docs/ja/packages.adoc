@@ -1,0 +1,135 @@
+= パッケージの一覧と依存
+
+`+packages/*+` の 25 パッケージの役割と、パッケージ同士の依存。各サーバーの中身は分野ごとのページにある。
+
+[[servers]]
+== MCP サーバー
+
+[cols="2,4,1,1",options="header"]
+|===
+|パッケージ |何をするか |npm 公開 |ページ
+|`+interactive-instruction-mcp+` (npm 名 `+mcp-interactive-instruction+`) |エージェント向けの Markdown 文書の一覧・検索・下書き・承認・lint・関係グラフ |する |xref:interactive-instruction.adoc[]
+|`+interactive-pdca-mcp+` |作業を Plan / Do / Check / Act のタスクに分け、人の承認で閉じる |しない |xref:interactive-pdca.adoc[]
+|`+traceable-chain-mcp+` |要求 → 仕様 → 設計 → 実装 のように、親へのリンクを必ず持つ文書の鎖 |しない |xref:traceable-chain.adoc[]
+|`+ast-file-mcp+` |Markdown / AsciiDoc を AST として読み書きし、リンクや見出しを木全体で調べる |しない |xref:code-tools.adoc#ast-file[]
+|`+ast-typescript-mcp+` |ts-morph で TypeScript を構造で検索・変換する |しない |xref:code-tools.adoc#ast-typescript[]
+|`+git-repo-explorer-mcp+` |git (bare clone) を読み取り専用で調べる。`+gh+` で PR の情報も読む |しない |xref:code-tools.adoc#git[]
+|`+kroki-mcp+` |Kroki で図を描く。図の種類ごとの書き方の指針も返す |する |xref:diagram-tools.adoc#kroki[]
+|`+python-diagrams-mcp+` |Python diagrams のコードを Docker の中で描く |ghcr.io |xref:diagram-tools.adoc#python-diagrams[]
+|`+graph-math-mcp+` |タスクの依存のトポロジカルソート・クリティカルパス・循環の検出 (NetworkX) |ghcr.io |xref:diagram-tools.adoc#graph-math[]
+|`+duckdb-mcp+` |CSV / JSON / Parquet を DuckDB の SQL で読む |しない |xref:data-tools.adoc#duckdb[]
+|`+db-read-mcp+` |PostgreSQL / MySQL を、許可した列だけ読み取り専用で読む |しない |xref:data-tools.adoc#db-read[]
+|`+db-codegen-mcp+` |DB の catalog から `+db-read-mcp+` 用の設定 JSON の下書きを作る |しない |xref:data-tools.adoc#db-codegen[]
+|`+mcp-firewall+` |他の MCP サーバーを包み、ツールの呼び出しを allow / deny / ask のルールで止める |しない |xref:firewall.adoc[]
+|`+cli-to-mcp+` |任意の CLI を 1 つのツールで実行する (`+mcp-firewall+` と組で使う前提) |しない |xref:firewall.adoc#cli-to-mcp[]
+|`+mcp-lab+` |この repo の任意のサーバーを、任意の worktree から起動して対話的に呼ぶ (開発用) |しない |xref:dev-loop.adoc#mcp-lab[]
+|===
+
+「しない」は `+private: true+` のこと。公開するかどうかは package.json の `+private+` を外すことで 1 つずつ決める (xref:ci-release.adoc#publish-opt-in[公開は opt-in])。
+
+[[libraries]]
+== 共有ライブラリ
+
+どれも `+private: true+` で、npm には出さない。サーバーの bundle に埋め込まれる (<<bundle,bundle と依存>>)。
+
+[cols="2,4",options="header"]
+|===
+|パッケージ |中身
+|`+mcp-shared+` |ツールの基本形 (describe / execute の factory、action handler、registry)、応答の包み (reminder)、承認 (`+mcp-shared/approval+`)、トンネル (`+mcp-shared/tunnel+`)、DuckDB (`+mcp-shared/duckdb+`)、ワークフローの状態機械 (`+mcp-shared/workflow+`)
+|`+mcp-shared-graph-viz+` |ノードとエッジを cytoscape の対話的な HTML にする。ドメインの知識は持たない
+|`+mcp-shared-secrets+` |`+ssm:+` / `+sm:+` / `+env:+` の URI を値に解決する。dotenv の読み込み、DB URL の組み立て
+|`+mcp-shared-db-core+` |DB の種類によらない概念 (列の公開ポリシー、ホワイトリスト、`+list_tables+` / `+describe_table+`)
+|`+mcp-shared-db+` |関係 DB の読み取り操作 (`+get_by_pk+` など) と、`+DataSource+` の interface
+|`+mcp-shared-db-sql+` |パラメーター化した SQL の builder と `+Dialect+` の interface
+|`+mcp-shared-db-postgres+` |`+DataSource+` の PostgreSQL 実装 (node-postgres)
+|`+mcp-shared-db-mysql+` |`+DataSource+` の MySQL 実装 (mysql2)
+|`+mcp-shared-db-codegen+` |DB の catalog を読み、`+metadata.json+` / `+selectable-fields.json+` の下書きを作る
+|`+mcp-shared-dynamodb+` |DynamoDB 用の置き場 (まだ中身は無い)
+|===
+
+[[dependencies]]
+== 依存
+
+矢印は「使う」向き。サーバーの側は bundle に埋め込むため `+devDependencies+` に書いてあるものも含む。テストのためだけの依存 (`+mcp-firewall+` → `+git-repo-explorer-mcp+` など) と、推移的に辿れる矢印 (`+db-read-mcp+` → `+mcp-shared+` など、DB 系はどれも最後は `+mcp-shared+` を使う) は省いた。
+
+[plantuml]
+----
+@startuml
+skinparam componentStyle rectangle
+
+package "mcp-shared だけを使うサーバー" as only {
+  component "interactive-pdca-mcp" as pdca
+  component "traceable-chain-mcp" as chain
+  component "ast-file-mcp" as astf
+  component "ast-typescript-mcp" as astt
+  component "git-repo-explorer-mcp" as git
+  component "kroki-mcp" as kroki
+  component "duckdb-mcp" as duck
+  component "mcp-lab" as lab
+}
+component "interactive-instruction-mcp" as iim
+component "db-read-mcp" as dbr
+component "db-codegen-mcp" as dbg
+
+component "mcp-shared-graph-viz" as viz
+component "mcp-shared-secrets" as sec
+package "DB 系のライブラリ" {
+  component "mcp-shared-db-postgres" as pg
+  component "mcp-shared-db-mysql" as my
+  component "mcp-shared-db-sql" as sql
+  component "mcp-shared-db" as db
+  component "mcp-shared-db-codegen" as cg
+  component "mcp-shared-dynamodb" as ddb
+  component "mcp-shared-db-core" as core
+}
+component "mcp-shared" as shared
+
+only --> shared
+iim --> shared
+iim --> viz
+dbr --> pg
+dbr --> my
+dbr --> db
+dbr --> sec
+dbg --> cg
+dbg --> sec
+pg --> sql
+my --> sql
+sql --> db
+db --> core
+cg --> core
+ddb --> core
+core --> shared
+@enduml
+----
+
+`+mcp-firewall+`、`+cli-to-mcp+`、`+graph-math-mcp+`、`+python-diagrams-mcp+`、`+mcp-shared-secrets+` は他のパッケージに依存しない (`+mcp-shared-secrets+` は npm の依存も 0。AWS は `+aws+` CLI を呼ぶ)。
+
+[[bundle]]
+== bundle と依存
+
+`+mcp-shared*+` は npm に出さないので、それに依存する package.json のまま公開すると、誰も install できないパッケージになる。そこで公開しうるサーバーは tsup で `+mcp-shared*+` を `+dist/index.js+` に埋め込み、`+mcp-shared*+` は `+devDependencies+` に置く (共通の設定は `+scripts/tsup-bin-config.ts+`)。
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "packages/kroki-mcp/src/*.ts" as src
+rectangle "packages/mcp-shared/src/*.ts" as shared
+rectangle "tsup\n(noExternal: /^mcp-shared/)" as tsup
+rectangle "dist/index.js\n(mcp-shared を含む)" as dist
+rectangle "scripts/verify-bundle.mjs" as verify
+rectangle "npm の package\n(dependencies は外部のものだけ)" as npm
+
+src --> tsup
+shared --> tsup
+tsup --> dist
+dist --> verify : esbuild の metafile で\n残った import を調べる
+verify --> npm : 宣言していない import が\n無ければ公開できる
+@enduml
+----
+
+* `+dependencies+` に書いたもの (zod、`+@modelcontextprotocol/sdk+` など) は外部のまま残し、利用側で重複を除けるようにする。
+* `+node-notifier+` は CommonJS で、ESM の bundle に入れると起動時に `+Dynamic require of "os" is not supported+` で落ちる。なので external にして、使わない bin では tree-shake で消えるようにしている。
+* `+scripts/verify-bundle.mjs+` は、`+dist/+` に残った bare import が node の組み込みか宣言済みの依存であることを確かめる。テキストの検索ではなく esbuild の metafile を読む (ツールの説明文の中の `+from "x"+` を import と間違えないため)。
+* `+interactive-pdca-mcp+` と `+traceable-chain-mcp+` はまだ `+mcp-shared+` を `+dependencies+` に持つ (tsup にしていない)。GitHub Packages への公開 (`+gpr-release.yml+`) はこの形を拒む。

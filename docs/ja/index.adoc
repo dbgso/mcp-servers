@@ -1,0 +1,130 @@
+= mcp-servers: 自分用の MCP サーバー集
+
+AI エージェント (主に Claude Code) に渡す MCP サーバーを集めた pnpm の monorepo。
+文書の管理、作業計画、コードやドキュメントの構造的な読み書き、図の描画、データの読み取り、他の MCP サーバーへの関所 (firewall) などを、それぞれ独立したサーバーとして持つ。
+
+[cols="1,3",options="header"]
+|===
+|項目 |内容
+|構成 |`+packages/*+` に 25 パッケージ (MCP サーバー 15、共有ライブラリ 10。サーバーのうち 2 つは Python で Docker 配布)
+|言語 |TypeScript (Node.js 22.13 以上、pnpm 11)。`+graph-math-mcp+` と `+python-diagrams-mcp+` だけ Python
+|サーバーの形 |多くのサーバーが `+describe+` と `+execute+` の 2 つのツールに操作をまとめる (xref:architecture.adoc[])
+|安全の考え方 |AI ツールの承認プロンプトに頼らず、サーバー側で止める (xref:approval.adoc[])
+|配布 |npm (OIDC の Trusted Publishing)、ghcr.io (Docker)、GitHub Packages (試し用)。ほとんどは `+private: true+` で公開しない (xref:ci-release.adoc[])
+|開発時の起動 |`+.mcp.json+` から `+npx tsx ./packages/<name>/src/index.ts+` でソースのまま動かす (xref:dev-loop.adoc[])
+|===
+
+[[guide]]
+== 読む人ごとの入口
+
+[cols="2,3",options="header"]
+|===
+|やりたいこと |ページ
+|どんなサーバーがあって、どれがどれに依存しているかを知る |xref:packages.adoc[]
+|新しいサーバーを足す、ツールの見せ方を決める |xref:architecture.adoc[]
+|書き込みや削除をする操作に、どの承認の仕組みを付けるか決める |xref:approval.adoc[]
+|エージェント向けの文書を管理する (`+docs/+` の中身) |xref:interactive-instruction.adoc[]
+|作業を PDCA で計画して、人の承認で閉じる |xref:interactive-pdca.adoc[]
+|要求 → 仕様 → 設計 のつながりを強制して文書を書く |xref:traceable-chain.adoc[]
+|コード・ドキュメント・git を構造で読み書きする |xref:code-tools.adoc[]
+|図を描く、依存関係を計算する |xref:diagram-tools.adoc[]
+|CSV や DB を読む |xref:data-tools.adoc[]
+|他の MCP サーバーや CLI の呼び出しをルールで止める |xref:firewall.adoc[]
+|サーバーを開発中に動かして試す |xref:dev-loop.adoc[]
+|CI、npm / Docker への公開の流れを知る |xref:ci-release.adoc[]
+|このドキュメント自体を直す、ビルドする |xref:docs-site.adoc[]
+|===
+
+[[overview]]
+== 全体像
+
+エージェントは MCP クライアント (Claude Code) を通して各サーバーを stdio で起動して呼ぶ。サーバーの多くは共有ライブラリ `+mcp-shared+` の上に作られていて、ツールの形や承認の仕組みを揃えている。
+
+[plantuml]
+----
+@startuml
+left to right direction
+skinparam componentStyle rectangle
+actor "人" as human
+rectangle "Claude Code\n(MCP クライアント)" as client
+
+package "文書と作業の管理" {
+  component "interactive-instruction-mcp" as iim
+  component "interactive-pdca-mcp" as pdca
+  component "traceable-chain-mcp" as chain
+}
+package "コードと文書の構造" {
+  component "ast-file-mcp" as astf
+  component "ast-typescript-mcp" as astt
+  component "git-repo-explorer-mcp" as git
+}
+package "図と計算" {
+  component "kroki-mcp" as kroki
+  component "python-diagrams-mcp\n(Docker)" as pyd
+  component "graph-math-mcp\n(Docker)" as gm
+}
+package "データ" {
+  component "duckdb-mcp" as duck
+  component "db-read-mcp" as dbr
+  component "db-codegen-mcp" as dbg
+}
+package "関所と実行" {
+  component "mcp-firewall" as fw
+  component "cli-to-mcp" as cli
+}
+package "開発用" {
+  component "mcp-lab" as lab
+}
+
+human --> client : 依頼 / 承認
+client --> iim
+client --> pdca
+client --> chain
+client --> astf
+client --> astt
+client --> git
+client --> kroki
+client --> pyd
+client --> gm
+client --> duck
+client --> dbr
+client --> dbg
+client --> fw
+fw --> cli : 子プロセスとして起動
+client --> lab
+@enduml
+----
+
+[[layout]]
+== ディレクトリ構成
+
+[cols="2,4",options="header"]
+|===
+|パス |中身
+|`+packages/*/+` |各パッケージ。サーバーは `+src/index.ts+` が入口で、`+src/__tests__/+` にテスト
+|`+docs/+` |エージェント向けの規約の文書 (Markdown)。`+interactive-instruction-mcp+` が読み書きする (xref:dev-loop.adoc#corpus[規約の文書])
+|`+docs/ja/+` |このドキュメント (AsciiDoc)。`+.adoc+` は `+interactive-instruction-mcp+` から見えない
+|`+docs-site/+` |このドキュメントを Antora でサイトにする道具 (xref:docs-site.adoc[])
+|`+scripts/+` |repo の道具 (`+mcp-session.mjs+`、CI のテスト matrix、bundle と changelog の検査)。これも workspace の 1 パッケージ
+|`+eslint-rules/+` |独自の lint ルール (oxlint から読む)
+|`+.github/workflows/+` |CI、npm / Docker / GitHub Packages への公開、workflow の lint、docs site
+|`+.changeset/+` |Changesets の設定と、まだ version に反映されていない変更の記録
+|`+.claude/+` |Claude Code の設定と SessionStart hook (クラウドのセッションで install と build をする)
+|`+.mcp.json+` |この repo で作業するときに使う MCP サーバーの登録 (ソースから起動)
+|`+compose.yaml+` |テスト用の AWS エミュレーター (floci)
+|===
+
+[[principles]]
+== 共通の決まり
+
+`+docs/policy.md+` 以下にある、どのサーバーも従う決まりのうち、構造に効くものをまとめる。
+
+[cols="1,3",options="header"]
+|===
+|決まり |中身
+|ツールの schema に引数を書かない |`+inputSchema+` は `+z.object({}).passthrough()+`。引数の説明は `+describe+` ツールが返す (xref:architecture.adoc#tool-surface[ツールの見せ方])
+|承認プロンプトは制御ではない |止めたい操作は、許可リストに載らない別のツールにするか、変更内容に紐づく token で止める (xref:approval.adoc[])
+|環境から読める値は設定にする |閾値などは環境変数で変えられるようにし、議論で決めない (`+IIMCP_LINT_MAX_LINES+` など)
+|ミスはなるべく高い段で防ぐ |型 → lint → 独自 lint → テスト → 文書のルール、の順に、表せる一番上で防ぐ
+|カバレッジ 95% 以上 |テストは repo の中の fixture だけを使う
+|===

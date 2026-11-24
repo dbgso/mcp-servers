@@ -1,0 +1,14 @@
+<script id="site-script" src="{{{uiRootPath}}}/js/site.js" data-ui-root-path="{{{uiRootPath}}}"></script>
+<script async src="{{{uiRootPath}}}/js/vendor/highlight.js"></script>
+{{#if env.SITE_SEARCH_PROVIDER}}
+{{> search-scripts}}
+{{/if}}
+{{!-- private-static-site の機能 (コメント / 差分 / ページ関係グラフ / 一時トークン)。
+      コメントの issue を立てる repo は playbook の site.keys.issue_repo (Antora が camelCase にする)。
+      /_pss/* はサイトの CloudFront が共有 S3 に振り分ける。ローカルのプレビューでは 404 になるだけ。 --}}
+<script defer src="/_pss/comments.js" data-root="article.doc" data-issue-repo="{{site.keys.issueRepo}}"></script>
+<script defer src="/_pss/diff.js" data-root="article.doc"></script>
+<script defer src="/_pss/graph.js" data-root="article.doc"></script>
+<script defer src="/_pss/temporary-token.js"></script>
+{{!-- 図の拡大・移動 (terraform/private-static-site-antora-theme/theme.js) --}}
+<script defer src="/_pss/antora/theme.js"></script>

@@ -1,0 +1,286 @@
+= interactive-instruction-mcp (文書の管理)
+
+エージェント向けの規約や知識を Markdown の文書として持ち、エージェントがツールの応答から必要な文書を探して読む MCP サーバー。npm には `+mcp-interactive-instruction+` の名前で公開している。この repo 自身の `+docs/+` もこのサーバーで管理している。
+
+[[why]]
+== skill ファイルとの違い
+
+文書をエージェントに届けることだけなら、skill や `+CLAUDE.md+` とほぼ同じ。違いは書く側にある。
+
+[cols="1,2,2",options="header"]
+|===
+|観点 |skill / CLAUDE.md |interactive-instruction-mcp
+|誰が書くか |人が前もって書く。エージェントが作業中に学んだことは、ファイルを黙って書くしかない |エージェントが下書きを作り、自分で見直し、利用者に説明して、同じ説明を繰り返して初めて確定する
+|文書同士のリンク |文の中の参照。検査できない |frontmatter の `+relatedDocs+`。backlink、循環、壊れたリンクを検査し、グラフに描ける
+|読ませ方 |読まれるのを待つ |応答に reminder を付けて読み直させる (`+--topic-for-every-task+`)
+|苦手なこと |— |呼ばれなければ何も見えない。定型作業の起動には向かない (skill から 1 行で指すとよい)
+|===
+
+[[tools]]
+== ツールと action
+
+ツールは `+describe+` と `+instruction+` の 2 つだけ。`+instruction+` の `+action+` で操作を選ぶ (xref:architecture.adoc#tool-surface[ツールの見せ方] に完全に従っている唯一のサーバー)。
+
+[plantuml]
+----
+@startmindmap
+* instruction(action)
+** 読む
+*** list
+*** read
+*** read_meta
+*** backlinks
+*** graph
+** 書く
+*** add
+*** update
+*** delete
+*** rename
+*** link_add / link_remove
+** 承認
+*** approve
+*** apply
+*** cancel
+*** set_status
+** 品質
+*** lint
+@endmindmap
+----
+
+[[layout]]
+== 文書の置き方と id
+
+----
+docs/
+├── coding-style.md          → id: coding-style
+├── git/
+│   ├── workflow.md          → id: git__workflow
+│   └── commands.md          → id: git__commands
+└── _mcp_drafts/             ← 下書き (確定前)
+    └── coding/
+        └── testing.md       → 下書きの id: coding__testing
+----
+
+* id はパスの区切りを `+__+` にしたもの。
+* 1 文書 1 話題にする。読み込む量が減り、`+description+` / `+whenToUse+` で選ばれやすくなる。
+* `+.md+` だけを読む。この AsciiDoc (`+docs/ja/*.adoc+`) は見えない。
+
+frontmatter の例:
+
+[source,markdown]
+----
+---
+description: この文書が何かを 1 行で
+whenToUse:
+  - X をするとき
+  - Y をするとき
+relatedDocs:
+  - other-doc-id
+---
+
+# 見出し
+----
+
+[[draft-lifecycle]]
+== 下書きの昇格
+
+新しい文書は必ず下書き (`+_mcp_drafts/+`) から始まり、状態機械 (`+src/workflows/draft-workflow.ts+`) を通って確定する。状態は frontmatter の `+status+` にも写すので、途中から再開できる。
+
+[plantuml]
+----
+@startuml
+hide empty description
+state "editing" as editing
+state "self_review" as self
+state "user_reviewing" as user
+state "pending_approval" as pending
+state "applied" as applied
+
+[*] --> editing
+editing --> self : add(id, content,\ndescription, whenToUse)
+self --> user : approve(notes)\n自己レビューを記録
+user --> pending : approve(explanation)\n1 回目は断られる
+pending --> pending : 言い換え・下書きの変更\n(最初からやり直し)
+pending --> applied : 同じ approve を繰り返す
+applied --> [*] : _mcp_drafts から\n文書の木へ移る
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|状態 |次に起きること
+|`+editing+` |下書きがある。`+add+` が中身を出し、すぐ次へ進む
+|`+self_review+` |エージェントが自分の下書きを見直し、`+notes+` に書く
+|`+user_reviewing+` |エージェントが利用者に **自分の言葉で** 説明する。説明を写せないよう、この段階ではツールが中身を返さない
+|`+pending_approval+` |同じ `+approve+` を同じ `+explanation+` で繰り返す。言い換えや下書きの変更は最初から
+|`+applied+` |文書の木に移り、状態は消える
+|===
+
+[plantuml]
+----
+@startuml
+autonumber
+actor "利用者" as human
+participant "エージェント" as ai
+participant "instruction" as tool
+database "docs/_mcp_drafts" as drafts
+database "docs/" as docs
+
+ai -> tool : add(id, content, description, whenToUse)
+tool -> drafts : 下書きを書く
+ai -> tool : approve(id, notes: 自己レビュー)
+tool --> ai : 説明の形式 (中身は返さない)
+ai -> human : 下書きを自分の言葉で説明
+ai -> tool : approve(id, explanation)
+tool --> ai : 断る (diff と、繰り返せという指示)
+ai -> tool : approve(id, explanation) を同じまま
+tool -> docs : 確定した文書として移す
+tool -> drafts : 下書きと状態を消す
+@enduml
+----
+
+複数の下書きは `+ids: "a,b,c"+` で 1 つの説明でまとめて昇格できる。別の場所に置くときは `+targetId+`。
+
+[[promoted]]
+== 確定した文書の変更
+
+確定した文書の変更は状態機械を通らない。内容の更新は先に diff として置き、それ以外はその場でゲートを通す。
+
+[plantuml]
+----
+@startuml
+hide empty description
+state "変更なし" as clean
+state "更新が待っている" as pending
+state "run が開いている" as open
+
+clean --> pending : update(id, 内容 / メタデータ)\ndiff を置く
+pending --> clean : apply(id, explanation) を 2 回\n書き込む
+pending --> clean : cancel(id)\n捨てる
+clean --> open : delete / rename (explanation)\n断られる (preview 付き)
+open --> clean : 同じ呼び出しを繰り返す\n実行する
+open --> open : 言い換え・文書が変わった\nやり直し
+@enduml
+----
+
+* `+apply+` は書く前に文書を読み直し、diff を作った後に文書が変わっていたら拒む。消されていたら、置いていた更新を捨てて拒む。置いた更新は 1 日で切れる。
+* `+delete+` は 3 回目で実行し、断るときにリンクが切れる文書を名前で出す。消したファイルを戻すのは git。
+* `+rename+` は backlink の書き換えを 1 つの操作の中で行うので、逆向きに rename すれば戻せる。
+
+[[gates]]
+=== 下書きと確定した文書の違い
+
+[cols="1,2,2",options="header"]
+|===
+|操作 |下書き (`+_mcp_drafts/+`) |確定した文書
+|`+add+` |自由 |下書きを作って `+approve+`
+|`+update+` |直接上書き |diff を置く → `+apply+` (deliberation) / `+cancel+`
+|`+delete+` |すぐ消える |preview と断り → 繰り返し (3 回)
+|`+rename+` |すぐ |preview と断り → 繰り返し (3 回)
+|`+link_add+` / `+link_remove+` |preview と断り → 繰り返し |preview と断り → 繰り返し
+|`+lint+` (その文書だけで分かる規則) |報告する |報告する
+|`+lint+` (文書の集まりで決まる規則) |しない |報告する
+|`+graph+` |描かない |描く
+|===
+
+リンクの変更だけは下書きでもゲートを通る。`+relatedDocs+` は両側の frontmatter を書き換えるので、下書きの編集が確定した文書に届くため。
+
+[[graph]]
+== 関係のグラフ
+
+`+relatedDocs+` は frontmatter にあるデータなので描ける。矢印は親から子 (文書は自分の下にある文書を並べる)。`+orphaned-document+` は何からも参照されない文書を報告するので、親 → 子の向きなら入口の文書だけが参照されずに残る。
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "docs/**/*.md の\nfrontmatter (relatedDocs)" as fm
+rectangle "interactive-instruction-mcp\n(文書 → ノードとエッジ)" as iim
+rectangle "mcp-shared-graph-viz\n(ノードとエッジ → ページ)" as viz
+file "graph.html\n(cytoscape、ブラウザで配置)" as html
+rectangle "隣接リストのテキスト\n(format: text)" as text
+
+fm --> iim
+iim --> viz : nodes / edges / group (分類)
+viz --> html
+iim --> text : ブラウザが無い呼び出し側向け
+@enduml
+----
+
+* 分類 (id の最上位) ごとに色を付ける。色はコーパス全体から決めるので、部分のグラフでも同じ色になる。
+* 存在しない文書へのリンクも `+(missing)+` として描く。黙って省くと、壊れたコーパスが無事に見える。
+* `+format: "text"+` は 1 文書 1 行の隣接リスト。`+list(recursive: true)+` の約 1/8 の量。
+
+[[hub]]
+== hub と lint
+
+`+lint+` は文書の質を調べる。frontmatter が YAML として読めない、メタデータが無い、孤立、長すぎる、似た文書、コピーした段落、循環、同じ親の下で繰り返す見出し、などを報告する。その文書だけで答えられる規則 (長さ、見出し、メタデータ) は `+add+` / `+update+` の時点でも返す (書き込みは成功する)。
+
+文書の族 (`+coding-rules__*+` など) には、それを索引する hub の文書 (`+coding-rules+`) を置く。hub に関わる規則が 3 つある。
+
+[plantuml]
+----
+@startuml
+rectangle "every-task" as every
+rectangle "coding-rules\n(hub)" as hub
+rectangle "coding-rules__general" as g
+rectangle "coding-rules__typescript" as t
+rectangle "coding-rules__test-coverage" as c
+rectangle "ある文書" as other
+
+every --> hub : hub を 1 つ指す
+hub --> g
+hub --> t
+hub --> c
+other ..> g : prefer-hub-reference\n(族の子を 2 つ以上並べるなら hub を指す)
+other ..> t
+note right of hub
+  stale-hub-index:
+  hub の一覧と、実際に下にある文書が
+  ずれたら報告する
+end note
+note bottom of c
+  misplaced-hub:
+  hub の無い族の中にある
+  overview / index / readme を報告する
+end note
+@enduml
+----
+
+[cols="2,1",options="header"]
+|===
+|閾値 (環境変数) |既定
+|`+IIMCP_LINT_MAX_LINES+` (長さ) |150
+|`+IIMCP_LINT_SIMILARITY+` (似た文書) |0.6
+|`+IIMCP_LINT_MIN_DUPLICATE_LINES+` (コピーした段落) |8
+|`+IIMCP_LINT_HUB_CHILDREN+` (hub を指すべき子の数) |2
+|===
+
+意図して長い文書は `+update(id, sizeExemption: "<理由>")+` で長さの規則から外す。
+
+[[config]]
+== 起動の仕方
+
+[source,json]
+----
+{
+  "mcpServers": {
+    "interactive-instruction-mcp": {
+      "command": "npx",
+      "args": ["mcp-interactive-instruction", "./docs",
+               "--remind-mcp", "--topic-for-every-task", "every-task"]
+    }
+  }
+}
+----
+
+[cols="1,3",options="header"]
+|===
+|引数 |意味
+|`+<markdown-directory>+` |文書の置き場 (必須)
+|`+--remind-mcp+` / `+--remind-organize+` / `+--reminder <文>+` |応答に付ける reminder (xref:architecture.adoc#reminder[])
+|`+--topic-for-every-task <id>+` / `+--info-expires <秒>+` |毎回読み直させる文書と、その有効期間
+|`+--include <id の接頭辞>+` / `+--exclude <id の接頭辞>+` |見せる文書を絞る
+|===
+
+1.x からの移行 (ツール名がすべて変わった、`+promote+` が無くなった、通知の token が無くなった、など) は package の README の "Upgrading from 1.x" にある。

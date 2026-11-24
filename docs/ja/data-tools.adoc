@@ -1,0 +1,236 @@
+= データを読む
+
+ファイル (CSV、Parquet …) を SQL で読む `+duckdb-mcp+` と、関係 DB を読み取り専用で読む `+db-read-mcp+` / その設定を作る `+db-codegen-mcp+`。DB 側は共有ライブラリを層に分けている。
+
+[[duckdb]]
+== duckdb-mcp
+
+CSV、TSV、JSON、JSONL、Parquet を、置いた場所のまま DuckDB の SQL で読む。DB に取り込む手間が無い。
+
+[cols="1,3",options="header"]
+|===
+|ツール |中身
+|`+duckdb_describe+` |列の名前と型、行数、形式。SQL を書く前の安い最初の呼び出し
+|`+duckdb_count+` |1 列で group by した件数 (多い順、`+top_n+` 既定 20)
+|`+duckdb_query+` |任意の SQL。1 ファイルなら表の名前は `+data+`、複数なら `+files+` で付けた別名。`+limit+` 既定 100。`+output_path+` で結果をファイルに書く
+|===
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "エージェント" as ai
+participant "duckdb-mcp" as duck
+database "orders.csv\n(2.4M 行)" as csv
+database "customers.parquet" as pq
+
+ai -> duck : duckdb_describe(orders.csv)
+duck -> csv : 列と型を推定
+duck --> ai : order_id, customer_id, status, total / 2.4M 行
+ai -> duck : duckdb_count(orders.csv, group_by: status)
+duck --> ai : shipped 1.9M, pending 380K, cancelled 120K
+ai -> duck : duckdb_query(files: [o, c], sql: JOIN ... GROUP BY region)
+duck -> csv : 読む
+duck -> pq : 読む
+duck --> ai : 地域ごとの売上 (数行)
+@enduml
+----
+
+* 200 MB の CSV は会話に読み込めないが、`+GROUP BY+` の結果は数行で済む。schema → 集計 → 行、の順に読む。
+* `+encoding+` で Shift_JIS などを読める。
+* 返すには大きすぎる結果は `+output_path+` で Parquet / CSV に書き、それをまた問い合わせる。
+
+[[db-layers]]
+== DB 系の層
+
+[plantuml]
+----
+@startuml
+skinparam componentStyle rectangle
+component "db-read-mcp\n(読み取りの MCP サーバー)" as dbr
+component "db-codegen-mcp\n(設定の下書きを作る MCP サーバー)" as dbg
+
+package "共有ライブラリ" {
+  component "mcp-shared-db\n読み取り操作 / DataSource の interface" as db
+  component "mcp-shared-db-codegen\ncatalog の読み取り / JSON の下書き" as cg
+  component "mcp-shared-db-sql\nSQL builder / Dialect の interface" as sql
+  component "mcp-shared-db-postgres\n(node-postgres)" as pg
+  component "mcp-shared-db-mysql\n(mysql2)" as my
+  component "mcp-shared-db-core\n公開ポリシー / ホワイトリスト /\nlist_tables / describe_table" as core
+  component "mcp-shared-secrets\nssm: / sm: / env: の解決" as sec
+  component "mcp-shared/tunnel\nSSH bastion / SSM port forward" as tunnel
+}
+database "PostgreSQL / MySQL" as rdb
+
+dbr --> db
+dbr --> pg
+dbr --> my
+dbr --> sec
+dbr --> tunnel
+dbg --> cg
+dbg --> sec
+dbg --> tunnel
+pg --> sql
+my --> sql
+sql --> db
+db --> core
+cg --> core
+pg --> rdb
+my --> rdb
+cg --> rdb : catalog
+@enduml
+----
+
+[[config-files]]
+== 2 つの設定ファイル
+
+`+db-read-mcp+` は、利用者が用意する 2 つの JSON に書いた範囲しか読まない。下書きは `+db-codegen-mcp+` が DB の catalog から作る。
+
+[cols="1,3",options="header"]
+|===
+|ファイル |中身
+|`+metadata.json+` |表ごとの主キー、index、外部キー、列の型。どの読み方 (`+get_by_pk+`、`+get_by_index+` …) ができるかを決める
+|`+selectable-fields.json+` |読んでよい表と列 (ホワイトリスト) と、列ごとの公開ポリシー (`+select+`)
+|===
+
+[cols="1,1,2",options="header"]
+|===
+|`+select+` |問い合わせ |結果
+|`+"expose"+` |受け付ける |値をそのまま返す
+|`+"redact"+` (既定) |受け付ける |`+[REDACTED]+` に置き換える
+|`+"exclude"+` |拒む |列が呼び出し側に届かない
+|===
+
+`+select+` の無い列は `+redact+` として扱う (安全な側が既定)。`+db-codegen-mcp+` の下書きは全列を `+redact+` で出し、運用する人が監査してから `+expose+` に、決して見せない列を `+exclude+` に変える。古い `+{ "pii": true, "piiReason": "..." }+` も `+redact+` として読み、起動時に書き換えを促す一覧を出す。
+
+[[db-codegen]]
+== db-codegen-mcp の流れ
+
+`+dbgen_describe+` / `+dbgen_execute+` の 2 ツール。catalog は読むだけで、ファイルも書かない (JSON の下書きを返し、保存は人がする)。
+
+[plantuml]
+----
+@startuml
+start
+:list_schemas\n(表のある namespace を探す);
+:list_tables\n(schema の表の一覧);
+:introspect_table / introspect_all\n(列、主キー、index、外部キー);
+:preview_metadata_json\npreview_selectable_fields_json;
+:人が metadata.json /\nselectable-fields.json に保存;
+repeat
+  :列ごとに select を決める\n(既定 redact → 監査して expose、\n見せない列は exclude);
+  :validate_selectable_fields\n(保存した JSON を今の schema と突き合わせる);
+repeat while (食い違いがある?) is (はい)
+->いいえ;
+:db-read-mcp に渡す;
+stop
+@enduml
+----
+
+[[db-read]]
+== db-read-mcp
+
+`+<prefix>_describe+` / `+<prefix>_execute+` の 2 ツール (`+--tool-prefix+` で接頭辞を変え、DB ごとに別のサーバーとして登録できる)。
+
+[cols="1,3",options="header"]
+|===
+|operation |中身
+|`+list_tables+` / `+describe_table+` |ホワイトリストの表と、表の列
+|`+get_by_pk+` / `+get_by_fk+` / `+get_by_index+` |キーで引く。index の先頭の列でない列で引くときは警告する
+|`+get_by_date_range+` |日時の範囲。先に `+EXPLAIN+` し、推定行数が多すぎれば断る (確かめた上で外すこともできる)
+|`+json_search+` |JSON のパスで等しい値を探す (PG は `+#>>+`、MySQL は `+JSON_EXTRACT+`)
+|`+explain_sql+` |任意の `+EXPLAIN+` (規模の見積もり用)
+|===
+
+[plantuml]
+----
+@startuml
+start
+:<prefix>_execute(operation, params);
+if (表がホワイトリストにある?) then (いいえ)
+  :拒む (使える表の一覧を返す);
+  stop
+endif
+if (要求した列に exclude がある /\nホワイトリストに無い?) then (はい)
+  :拒む;
+  stop
+endif
+:SQL builder が SELECT だけを\nパラメーター付きで組み立てる;
+if (get_by_date_range?) then (はい)
+  :EXPLAIN で推定行数を見る;
+  if (多すぎる?) then (はい)
+    :拒む;
+    stop
+  endif
+endif
+:読み取り専用のセッションで実行\n(PG: default_transaction_read_only = on\nMySQL: transaction_read_only = 1);
+:redact の列を [REDACTED] に置き換える;
+:結果を返す;
+stop
+@enduml
+----
+
+読み取り専用は 2 重にしている。SQL builder が SELECT 以外の形を作らず、さらに DB のセッション自体を読み取り専用にする。
+
+[[secrets]]
+== 接続情報の解決
+
+接続先は env ファイル (`+--env-file+`) で渡す。値は URI の形で、`+mcp-shared-secrets+` が実行時に解決する。
+
+[plantuml]
+----
+@startuml
+left to right direction
+file "myapp.env" as env
+rectangle "loadEnvFile" as load
+rectangle "createSecretResolver\n(scheme ごとの source)" as resolver
+rectangle "env:" as envs
+rectangle "ssm:\n(aws ssm get-parameter)" as ssm
+rectangle "sm:\n(aws secretsmanager get-secret-value)" as sm
+rectangle "composeDbUrlFromResolver" as compose
+rectangle "postgres://… / mysql://…" as url
+
+env --> load
+load --> resolver : DBREAD_URL=…\nまたは DBREAD_HOST=ssm:/myapp/db/host …
+resolver --> envs
+resolver --> ssm
+resolver --> sm
+resolver --> compose : 部品 (DIALECT / HOST / PORT /\nUSER / PASSWORD / DATABASE / PARAMS)
+compose --> url : USER / PASSWORD / DATABASE は\nencodeURIComponent する
+@enduml
+----
+
+* `+mcp-shared-secrets+` は npm の依存が 0。AWS の値は `+aws+` CLI を呼んで読む。
+* URL を 1 つで渡す (`+DBREAD_URL+`) か、部品を別々に渡す (6 つ全部そろえば部品が優先、両方あれば stderr に警告)。パスワードの `+@+` `+:+` `+/+` を手で escape しなくてよい。
+* `+db-read-mcp+` は `+DBREAD_*+`、`+db-codegen-mcp+` は `+DBGEN_*+` を読む。接頭辞が違うので 1 つの env ファイルに両方を書ける。
+
+[[tunnel]]
+== トンネル
+
+VPC の中の RDS などには、`+mcp-shared/tunnel+` のトンネルを通す。SSH bastion (`+*_BASTION_HOST+`) と AWS SSM の port forward (`+*_SSM_TARGET+`) のどちらか 1 つ (両方あれば起動時に止める)。どちらも無ければ URL の host に直接つなぐ。
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "db-read-mcp" as mcp
+participant "aws ssm start-session\n(子プロセス)" as ssm
+participant "session-manager-plugin" as plugin
+participant "EC2 (SSM agent)\nDBREAD_SSM_TARGET" as ec2
+database "RDS\n(DBREAD_URL の host:port)" as rds
+
+mcp -> mcp : 空いている手元の port を確保
+mcp -> ssm : AWS-StartPortForwardingSessionToRemoteHost\n(host, port, localPortNumber)
+ssm -> plugin : port forward
+plugin -> ec2 : session
+mcp -> mcp : 準備を待つ (既定 15 秒、\nDBREAD_SSM_READY_TIMEOUT_MS)
+mcp -> mcp : URL を 127.0.0.1:<確保した port> に書き換える
+mcp -> plugin : DB の接続
+plugin -> ec2
+ec2 -> rds
+rds --> mcp : 結果
+mcp -> ssm : 終了時に SIGINT (だめなら SIGKILL)
+@enduml
+----
+
+`+DBREAD_URL+` は「手元の proxy の port」ではなく「論理的な接続先 (RDS の host)」を書く。手元で `+aws ssm start-session+` を別に動かしていた設定から移るときは、URL を本当の接続先に戻し、`+DBREAD_SSM_TARGET+` を足し、外の session を止める。必要なもの: `+aws+` CLI、`+session-manager-plugin+`、対象への `+ssm:StartSession+` の権限。

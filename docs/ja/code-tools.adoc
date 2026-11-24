@@ -1,0 +1,231 @@
+= コード・文書・git を構造で扱う
+
+テキストの検索 (grep) や行番号での書き換えではなく、構造 (AST、git の object) で読み書きする 3 つのサーバー。
+
+[cols="1,3",options="header"]
+|===
+|サーバー |対象
+|<<ast-file,ast-file-mcp>> |Markdown / AsciiDoc の文書と、文書の木全体のリンク
+|<<ast-typescript,ast-typescript-mcp>> |TypeScript のコード (ts-morph)
+|<<git,git-repo-explorer-mcp>> |git の repo (手元の作業ツリー、または remote の bare clone) と GitHub の PR
+|===
+
+[[ast-file]]
+== ast-file-mcp
+
+文書を AST として読み書きし、文書の木全体にまたがる問い (どこからリンクされているか、このリンクの先はどこか、この話題を既に書いた文書はあるか) に答える。Markdown (`+.md+`、`+.markdown+`) は remark、AsciiDoc (`+.adoc+`、`+.asciidoc+`、`+.asc+`) は asciidoctor.js で読み、同じツールで扱う。パスは絶対パスで渡す (サーバーは基準の directory を持たない)。
+
+[plantuml]
+----
+@startuml
+left to right direction
+file "*.md / *.markdown" as md
+file "*.adoc / *.asciidoc / *.asc" as adoc
+rectangle "remark (unified)" as remark
+rectangle "@asciidoctor/core" as asciidoctor
+rectangle "共通の構造\n(見出し、節、リスト、\nコード、リンク)" as ast
+
+package "ツール (14)" {
+  rectangle "読む・書く\nast_read / ast_write\nstructured_write\nast_reorder_sections" as rw
+  rectangle "たどる\ngo_to_definition / find_backlinks\ncrawl / read_directory\ntopic_index" as nav
+  rectangle "調べる\nlink_check / lint_document\nstructure_analysis\ndiff_structure / toc_generate" as check
+}
+
+md --> remark
+adoc --> asciidoctor
+remark --> ast
+asciidoctor --> ast
+ast --> rw
+ast --> nav
+ast --> check
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|ツール |中身
+|`+ast_read+` |1 つか複数のファイルを読む。`+query+` で `+full+` / `+headings+` / `+code_blocks+` / `+lists+` / `+links+` / `+sections+` を選ぶか、`+heading+` で 1 つの節の中身だけを読む
+|`+ast_write+` / `+structured_write+` |AST、または表・節・リストの JSON を Markdown / AsciiDoc に書く
+|`+ast_reorder_sections+` |節の中身に触れずに順番だけ変える
+|`+go_to_definition+` |ある位置のリンクが指すファイルと節
+|`+find_backlinks+` |あるファイル・節を参照している文書の一覧 (移動や改名の前の影響調査)
+|`+crawl+` / `+read_directory+` |リンクを再帰的にたどる / directory の文書をまとめて読む
+|`+topic_index+` |木全体の見出しの索引。既に書いた文書を探す
+|`+link_check+` / `+lint_document+` |壊れたリンク / 質の規則
+|`+structure_analysis+` / `+diff_structure+` / `+toc_generate+` |語数や深さ / 2 つの文書の見出しの差分 / 目次
+|===
+
+文書を改名するときの順番 (リンクを切らさない):
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "エージェント" as ai
+participant "ast-file-mcp" as ast
+database "文書の木" as tree
+
+ai -> ast : find_backlinks(target: docs/setup.md)
+ast -> tree : 全文書のリンクを解決
+ast --> ai : リンクしている 6 文書
+ai -> ast : ast_read(docs/setup.md, query: headings)
+ast --> ai : 見出しだけ (本文は読まない)
+ai -> tree : 改名し、6 文書のリンクを直す
+ai -> ast : link_check(6 文書)
+ast --> ai : 壊れたリンクなし
+@enduml
+----
+
+`+ast-file-mcp+` は 14 ツール・7 KB の schema を持ち、`+describe+` が無い。ツールの見せ方の決まりから最も外れていて、直す順番の 1 番目 (xref:architecture.adoc#conformance[])。
+
+[[ast-typescript]]
+== ast-typescript-mcp
+
+ts-morph の上で TypeScript を構造で検索・変換する。grep は文字列に当たり、これは「呼び出し」「`+*Handler+` という名前の関数」のような node の種類に当たる。grep での改名はコメントや文字列にも当たるが、ここでの改名は型検査器に従う。
+
+ツールは `+ts_ast+` 1 つで、`+action+` で選ぶ。`+ts_ast(help: true)+` が一覧、`+ts_ast(action: "<action>", help: true)+` が 1 つの説明。
+
+[plantuml]
+----
+@startmindmap
+* ts_ast(action)
+** 検索と解析
+*** query
+*** find_blocks
+*** references
+*** definition
+*** call_graph
+*** dead_code
+*** type_check
+** 変換
+*** transform
+*** transform_call_site
+*** rename
+*** remove_nodes
+*** remove_unused_imports
+** 構造
+*** read
+*** write
+*** dependency_graph
+*** monorepo_graph
+** batch
+@endmindmap
+----
+
+[[batch]]
+=== batch の 2 段階の実行
+
+`+batch+` は複数の変換をまとめて当てる。順に当てると 2 つの問題が起きる (`+docs/design/batch-execute-two-phase.md+`)。
+
+* 行番号のずれ: 1 つ目の変換で行が増減すると、後の変換の行番号が合わなくなる。
+* node の無効化: ts-morph の `+sourceFile.replaceText()+` は、そのファイルの node の参照を全部無効にする。
+
+そこで、node ではなくテキストの位置で集めてから、下から当てる。
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "batch" as batch
+participant "各変換の\nprepareTransform()" as prep
+participant "SourceFile" as sf
+
+== 1 段目: 集める (何も書き換えない) ==
+batch -> prep : 操作 1 (3 行目)
+prep -> sf : node を探す
+prep --> batch : { start, end, newText }
+batch -> prep : 操作 2 (10 行目)
+prep -> sf : node を探す
+prep --> batch : { start, end, newText }
+note over batch : node の参照は持たない\n(書き換えると無効になるため)
+
+== 2 段目: 下から当てる ==
+batch -> batch : start の大きい順に並べる
+batch -> sf : replaceText([操作 2 の start, end])
+batch -> sf : replaceText([操作 1 の start, end])
+note over sf : 下を先に書き換えるので\n上の位置はずれない
+@enduml
+----
+
+全部を集めてから書き換えるので、途中で失敗した変換があれば何も書かずに済み、書かずに結果だけを返す preview もできる。
+
+[[git]]
+== git-repo-explorer-mcp
+
+git の repo を読み取り専用で調べる。`+repo_url+` を渡すと base directory に bare clone して調べ、渡さなければ今の作業ツリーの repo を調べる。GitHub の repo・PR・review のコメントは、利用者の `+gh+` CLI で読む。この repo では読み取りの git はこのサーバーを使う決まり (`+coding-rules__prefer-git-mcp+`)。
+
+ツールは `+git_describe+` と `+git_execute+` の 2 つ。
+
+[cols="1,3",options="header"]
+|===
+|分類 |operation
+|検索 |`+grep+` (`+git grep+`)
+|ファイル |`+ls_files+`、`+show+`
+|履歴 |`+log+`、`+blame+`、`+diff+`
+|参照 |`+branch_list+`、`+tag_list+`
+|GitHub (`+gh+` が要る) |`+repo_list+`、`+pr_list+`、`+pr_comments+`
+|===
+
+[[bare-clone]]
+=== bare clone と ref
+
+[plantuml]
+----
+@startuml
+start
+:git_execute(operation, params);
+if (params.repo_url がある?) then (はい)
+  if (<base-dir>/<repo 名> に bare clone がある?) then (はい)
+    :git fetch --all --prune;
+    if (fetch に失敗?) then (はい)
+      :消して clone し直す;
+    endif
+  else (いいえ)
+    :git clone --bare;
+  endif
+  :その bare repo で実行;
+else (いいえ)
+  :git rev-parse --show-toplevel\n(今の作業ツリーの repo);
+  note right: base directory には何も書かない
+endif
+:ref を tree-ish として渡す\n(grep -n <pattern> <ref>、\nls-tree -r <ref>、show <ref>:<path> …);
+:結果を返す;
+stop
+@enduml
+----
+
+worktree も checkout も作らない。どの操作も ref を直接指定するので、`+ref+` を `+main+` から `+feat/x+` に変えてもファイルは何も動かず、別の commit object をたどるだけになる。
+
+base directory の決まり方: 1 番目の引数 → 環境変数 `+GIT_REPO_EXPLORER_BASE_DIR+` → `+~/.cache/git-repo-explorer-mcp+`。
+
+[[gh-cache]]
+=== GitHub の情報のキャッシュ
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "エージェント" as ai
+participant "git-repo-explorer-mcp" as server
+database "<tmpdir>/git-repo-explorer-gh-cache" as cache
+participant "gh CLI" as gh
+participant "GitHub API" as api
+
+ai -> server : pr_comments(repo, pr_number, filter: human)
+server -> cache : operation + 引数の key で探す
+alt TTL 以内 (pr_* は 3 分、repo_list は 5 分)
+  cache --> server : JSON
+  server --> ai : 結果 (from_cache: true, cache_age_seconds)
+else 無い / 古い / force_refresh
+  server -> gh : gh api .../pulls/:n/reviews と /comments
+  gh -> api : 利用者の認証で呼ぶ
+  api --> gh : review とコメント
+  gh --> server : JSON
+  server -> server : 作成日時で並べ、重複を除き、\nbot か人かを付ける
+  server -> cache : 保存
+  server --> ai : 結果 (summary: total / human / bot)
+end
+@enduml
+----
+
+`+pr_comments+` は login が `+[bot]+` で終わるもの、`+github-actions+` / `+dependabot+` / `+renovate+` / `+copilot+`、`+coderabbit*+` / `+claude*+` などで始まるものを bot とみなす。`+filter+` で絞っても、`+summary+` は絞る前の件数を返す。

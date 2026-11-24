@@ -6,3 +6,6 @@ coverage/
 *.tsbuildinfo
 tmp
 .claude/session-setup.done
+
+# docs site (docs-site/build.sh の出力)
+docs-site/build/

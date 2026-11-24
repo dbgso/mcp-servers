@@ -1,0 +1,197 @@
+= 開発の進め方
+
+この repo でサーバーを直すときの道具と流れ。サーバーはソースのまま動かし、試す → 流れとして残す → テストにする、の順に固めていく。
+
+[[setup]]
+== 準備
+
+[source,bash]
+----
+pnpm install
+pnpm build        # workspace の依存 (mcp-shared など) は dist/ から解決されるので build が要る
+pnpm test         # 全パッケージのテスト
+pnpm lint         # oxlint (type-aware。build の後に流す)
+pnpm typecheck
+----
+
+[[mcp-json]]
+== .mcp.json とクラウドのセッション
+
+`+.mcp.json+` のサーバーは `+npx tsx ./packages/<name>/src/index.ts+` でソースから起動する。ただし workspace の依存は `+dist/+` を読むので、install と build が終わる前に起動すると落ちる。クラウドのセッション (checkout が毎回新しい) では、Claude Code は SessionStart hook と MCP サーバーを同時に起動するので、待ち合わせをしている。
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "Claude Code" as cc
+participant ".claude/hooks/\nsession-start.sh" as hook
+participant "scripts/\nwait-for-session-setup.sh" as wait
+participant "MCP サーバー\n(npx tsx ...)" as server
+
+cc -> hook : SessionStart
+cc -> wait : .mcp.json の各サーバーを起動 (同時)
+hook -> hook : pnpm install --frozen-lockfile
+wait -> wait : .claude/session-setup.done を待つ\n(既定 170 秒)
+hook -> hook : pnpm build
+hook -> hook : 終わったら marker を書く\n(失敗しても書く)
+wait -> server : exec
+server --> cc : stdio でつながる
+@enduml
+----
+
+* 手元のセッション (`+CLAUDE_CODE_REMOTE+` が無い) では hook は何もせず、サーバーはすぐ起動する。
+* 失敗しても marker を書くのは、待っているサーバーに timeout まで待たせず、自分のエラーを出させるため。
+* `+.claude/settings.json+` の `+MCP_TIMEOUT=180000+` は、この待ちの間にクライアントが諦めないための値。
+
+[[test-ladder]]
+== 試す → 残す → テストにする
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "mcp-lab\n(対話的に試す)" as lab
+rectangle "scripts/mcp-session.mjs\n(呼び出しの流れを .jsonl に残す)" as session
+rectangle "packages/*/src/__tests__/\nstdio.test.ts など\n(戻ってはいけない振る舞い)" as test
+rectangle "scripts/mcp-test.sh\n(1 回だけ呼ぶ)" as one
+
+one --> lab : 状態のある操作は\n1 回では試せない
+lab --> session : 見つけたことを\n流れとして残す
+session --> test : 壊れてはいけないものを\nテストに上げる
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|道具 |向く場面
+|`+scripts/mcp-test.sh <pkg> <tool> '<json>' [-- <サーバーの引数>]+` |状態の無いツールを 1 回呼ぶ
+|`+mcp-lab+` |状態のある操作を、クライアントを再起動せずに何度でも試す (<<mcp-lab>>)
+|`+node scripts/mcp-session.mjs <pkg> <flow.jsonl> [-- <引数>]+` |1 つのプロセスで呼び出しの流れを流す。ファイルなので commit でき、他人や CI が再生できる (`+scripts/flows/+`)
+|テスト (vitest) |戻ってはいけない振る舞い。カバレッジ 95% 以上
+|===
+
+ゲートを 2 回通る、下書きを `+add+` してから `+approve+` する、更新を置いてから `+apply+` する、のような操作は、1 回呼んで終わるプロセスでは見えない。
+
+[[mcp-lab]]
+== mcp-lab
+
+MCP サーバーは、クライアントが起動した時点のコマンド・引数・環境・ソースに固定される。直したサーバーを試すには、クライアントを再起動して会話を失うか、worktree ごとにサーバーを登録するしかなかった。`+mcp-lab+` は固定される側を汎用にし、残りを全部その中から起動する。登録は 1 回だけで、どの branch・worktree・環境のサーバーでも再起動なしで呼べる。
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "エージェント" as ai
+participant "mcp-lab\n(登録は 1 つだけ)" as lab
+participant "子サーバー s1\n(worktree A の src)" as s1
+participant "子サーバー s2\n(worktree B の src)" as s2
+
+ai -> lab : execute(start, worktree: /repo-a,\npackage: interactive-instruction-mcp, args: ["{{SCRATCH}}"])
+lab -> s1 : tsx src/index.ts (今のソース)
+lab --> ai : session s1
+ai -> lab : execute(start, worktree: /repo-b, ...)
+lab -> s2 : tsx src/index.ts
+lab --> ai : session s2
+ai -> lab : execute(call, session: s1, tool: instruction, params)
+lab -> s1 : tools/call
+s1 --> ai : 結果 A
+ai -> lab : execute(call, session: s2, tool: instruction, params)
+lab -> s2 : tools/call
+s2 --> ai : 結果 B (2 つの branch を比べる)
+ai -> lab : execute(stop, all: true)
+lab -> s1 : 終了 (scratch も消す)
+lab -> s2 : 終了
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|action |中身
+|`+start+` |`+worktree+`、`+package+`、`+args+`、`+env+` で子サーバーを起動。毎回その時点のソースを読む (`+dist+` は使わない)
+|`+call+` |子のツールを呼ぶ。`+params+` は子がそのまま検証する
+|`+tools+` |子のツールの schema
+|`+logs+` |子の stderr
+|`+list+` / `+stop+` |session の一覧 / 終了 (`+all: true+`、`+keepScratch: true+`)
+|===
+
+`+{{SCRATCH}}+` は session ごとに作って消す directory、`+{{WORKTREE}}+` は worktree のパスに展開される。同じ worktree で `+env+` だけ変えた 2 つの session なら、コードではなく設定による違いを比べられる。
+
+[[corpus]]
+== 規約の文書 (docs/)
+
+`+docs/+` の Markdown は、エージェントが作業の前に読む規約。`+interactive-instruction-mcp+` (この repo では `+--topic-for-every-task every-task+`) で読み書きし、直接ファイルを編集しない (`+workflow__edit-docs-through-the-tool+`)。
+
+[plantuml]
+----
+@startuml
+rectangle "every-task\n(作業の前に毎回)" as every
+rectangle "policy\nサーバーが「何でなければならないか」\n外れたら欠陥" as policy
+rectangle "workflow\n作業の「進め方」" as workflow
+rectangle "coding-rules\nコードの「書き方」" as coding
+
+rectangle "mcp-tool-surface\napproval\nparameterise\ncriterion-before-detection\nsharpen-over-exempt" as p
+rectangle "plan-tool-required\nverification-reporting\nconstraint-ladder\nmeasure-dont-assume\nskill-as-trigger\nedit-docs-through-the-tool\ndry-principle\nast-tool-evolution" as w
+rectangle "general / style / typescript\nearly-return / polymorphism\nmcp-tool-design / handler-pattern\ntest-coverage / test-fixtures\nprefer-git-mcp …" as c
+
+every --> policy
+every --> workflow
+every --> coding
+policy --> p
+workflow --> w
+coding --> c
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|hub |違い
+|`+policy+` |サーバーが従う仕様。外れたサーバーは「違うやり方」ではなく欠陥で、各文書の最後に「今従っていないもの」の一覧 (= 残りの作業) を持つ
+|`+workflow+` |作業の進め方。実装は `+plan+` ツールを通す、「動いた」の報告に何を含めるか、など
+|`+coding-rules+` |コードの書き方。レビューで外してよい助言
+|===
+
+[[constraint-ladder]]
+=== 制約のはしご
+
+同じミスを繰り返さないための制約は、表せる一番上の段で付ける (`+workflow__constraint-ladder+`)。下の段ほど、ミスが見つかるのが遅く、確実さも下がる。
+
+[plantuml]
+----
+@startuml
+start
+:防ぎたいミス;
+if (型で表せる?) then (はい)
+  :型 (コンパイルエラーになる);
+  stop
+elseif (既存の lint で表せる?) then (はい)
+  :lint を有効にする / 強める;
+  stop
+elseif (独自 lint で表せる?) then (はい)
+  :eslint-rules/ に書く;
+  stop
+elseif (テストで表せる?) then (はい)
+  :テスト;
+  stop
+else (どれも無理)
+  :文書のルール\n(読んだ人にしか効かない);
+  stop
+endif
+@enduml
+----
+
+例: `+InstructionAction+` は handler の一覧から型を導くので、どの handler も持たない action を案内するとコンパイルエラーになる。`+custom/no-branching-literal+` や `+custom/single-params-object+` は、既存の lint では表せない家の約束事を独自 lint にしたもの。
+
+[[lint-rules]]
+=== 独自 lint
+
+`+eslint-rules/+` にあり、oxlint (`+.oxlintrc.json+`) から使う。
+
+[cols="1,3",options="header"]
+|===
+|ルール |止めるもの
+|`+implement-interface-with-class+` |interface を object literal で実装する (class で実装する決まり)
+|`+no-arrow-class-method+` |class の method を arrow 関数の property で書く
+|`+no-branching-literal+` |引数の中で、分岐 (三項演算子など) の両側に大きな literal を書く
+|`+no-strict-scalar-in-untyped-args+` |型の無いツールの handler で、`+z.boolean()+` などを loose で包み忘れる
+|`+single-params-object+` |引数を複数並べる関数 (1 つの params object にする決まり)
+|===

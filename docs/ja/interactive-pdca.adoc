@@ -1,0 +1,130 @@
+= interactive-pdca-mcp (作業の計画と承認)
+
+作業を Plan / Do / Check / Act のタスクに分けて進め、タスクの完了を人の承認で閉じる MCP サーバー。この repo では実装の作業はすべて `+plan+` ツールを通す決まり (`+docs/workflow/plan-tool-required.md+`)。
+
+[[why]]
+== 何のためか
+
+[cols="1,3",options="header"]
+|===
+|狙い |仕組み
+|作業の前に計画を書かせる |`+add+` は完了条件、前提、成果物、依存とその理由を必須にする。こう書けないタスクは、たいてい考え切れていない
+|依存を暗黙にしない |`+graph+` で順序を見せ、「これが先のはずだった」を作業の前に見つける
+|完了を自己申告にしない |エージェントは review に出すだけで、`+approve+` は人が呼ぶ。タスクの承認には通知の token が要る
+|指摘を読み違えたまま直さない |人の指摘に、エージェントが自分の理解を書き (`+interpret+`)、人が確かめてから直す
+|===
+
+[[tools]]
+== ツール
+
+[cols="1,1,3",options="header"]
+|===
+|ツール |呼ぶのは |action / target
+|`+plan+` |エージェント |`+list+`、`+read+`、`+read_output+`、`+add+`、`+update+`、`+delete+`、`+clear+`、`+graph+`、`+start+`、`+submit_plan+` / `+submit_do+` / `+submit_check+` / `+submit_act+`、`+confirm+`、`+feedback+`、`+interpret+`、`+request_changes+`、`+block+`
+|`+approve+` |**人だけ** (エージェントは呼ばない。許可リストにも入れない) |`+task+`、`+feedback+`、`+deletion+`、`+skip+`、`+setup_templates+` / `+skip_templates+`
+|===
+
+ツールを `+plan+` と `+approve+` に分けているのは、承認を許可リストの外に置くため (xref:approval.adoc#tiers[ツールの境界])。
+
+[[tasks]]
+== タスクと PDCA のサブタスク
+
+`+start+` すると、そのタスクの下に 4 つのサブタスク (`+<id>__plan+`、`+__do+`、`+__check+`、`+__act+`) ができ、前の段の完了に依存する形でつながる。サブタスクは `+content+` と `+completion_criteria+` を埋めてからでないと始められない。
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "fix-bug\n(親タスク)" as parent
+rectangle "fix-bug__research" as research
+rectangle "fix-bug__implement" as impl
+rectangle "fix-bug__test" as test
+
+rectangle "fix-bug__implement__plan" as p
+rectangle "fix-bug__implement__do" as d
+rectangle "fix-bug__implement__check" as c
+rectangle "fix-bug__implement__act" as a
+
+parent *-- research
+parent *-- impl
+parent *-- test
+research --> impl : 原因が分かってから直す
+impl --> test : 直してから確かめる
+
+impl *-- p : start で作られる
+impl *-- d
+impl *-- c
+impl *-- a
+p --> d
+d --> c
+c --> a
+@enduml
+----
+
+タスクは OS の一時 directory (`+mcp-interactive-instruction-plan+`) に、作業のセッションごとに置かれる。
+
+[[status]]
+== タスクの状態
+
+[plantuml]
+----
+@startuml
+hide empty description
+state "pending" as pending
+state "in_progress" as progress
+state "self_review" as self
+state "pending_review" as review
+state "completed" as done
+state "blocked" as blocked
+state "skipped" as skipped
+
+[*] --> pending : add
+pending --> progress : start(id, prompt)
+blocked --> progress : start
+progress --> blocked : block
+progress --> self : submit_<phase>\n(completed と書いても self_review になる)
+self --> review : confirm(self_review_ref,\nreview_summary, evidence)
+review --> done : approve(target: task)\n人 + 通知の token
+review --> progress : request_changes(comment)
+pending --> skipped : approve(target: skip)\n人 + 通知の token
+blocked --> skipped : approve(target: skip)
+done --> [*]
+skipped --> [*]
+@enduml
+----
+
+* `+submit_*+` で完了を出しても、状態は `+completed+` ではなく `+self_review+` になる。エージェントは自己レビューの手順書 (`+_mcp-interactive-instruction__plan__self-review__<phase>+`) を読み直し、`+confirm+` で根拠 (ファイルと行など) を付けて初めて review に出せる。
+* skip は `+completed+` 以外のどの状態からでもできる (図では pending と blocked からだけ描いた)。理由が記録に残る。
+* 自己レビューの手順書は `+approve(target: "setup_templates")+` で文書の置き場に入る (この repo では `+docs/_mcp-interactive-instruction/plan/self-review/+`)。
+
+[[feedback]]
+== 指摘のやり取り
+
+[plantuml]
+----
+@startuml
+autonumber
+actor "人" as human
+participant "エージェント" as ai
+participant "plan / approve" as tool
+
+ai -> tool : submit_do → confirm
+tool --> human : pending_review のタスク
+human -> tool : plan(request_changes, comment)
+tool -> tool : 指摘を draft として記録\nタスクは in_progress に戻る
+ai -> tool : plan(feedback) で指摘を読む
+ai -> tool : plan(interpret, feedback_id, 自分の理解)
+human -> tool : approve(target: feedback)\n理解が合っていれば confirmed
+ai -> ai : 直す
+ai -> tool : submit → confirm
+human -> tool : approve(target: task) + token
+tool --> ai : completed
+@enduml
+----
+
+`+interpret+` は指摘が `+draft+` の間しか書けない。確かめられた (`+confirmed+`) 後は変えられず、直した作業がどの指摘に応えたかが残る。
+
+[[use]]
+== いつ分けるか
+
+分ける手間に見合うのは、実装の前に調査がある、成果物が複数ある、確かめる作業だけで 1 サイクルに値する、のどれかに当たるとき。

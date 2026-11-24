@@ -1,0 +1,4 @@
+    <link rel="stylesheet" href="{{{uiRootPath}}}/css/site.css">
+    {{!-- private-static-site の共有の見た目 (terraform/private-static-site-antora-theme/theme.css)。
+          /_pss/* はサイトの CloudFront が共有 S3 に振り分ける。ローカルのプレビューでは build.sh の PSS_THEME_LOCAL=1 --}}
+    <link rel="stylesheet" href="/_pss/antora/theme.css">

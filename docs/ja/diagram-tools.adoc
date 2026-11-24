@@ -1,0 +1,176 @@
+= 図と計算
+
+図を描く 2 つのサーバー、依存関係を計算する 1 つのサーバー、対話的なグラフのページを作る共有ライブラリ。
+
+[cols="1,2,1",options="header"]
+|===
+|パッケージ |何をするか |配布
+|<<kroki,kroki-mcp>> |図のソース (Mermaid、PlantUML、D2 …) を Kroki で描く |npm
+|<<python-diagrams,python-diagrams-mcp>> |Python diagrams のコードで構成図を描く |ghcr.io (Docker)
+|<<graph-math,graph-math-mcp>> |トポロジカルソート、クリティカルパス、循環の検出 |ghcr.io (Docker)
+|<<graph-viz,mcp-shared-graph-viz>> |ノードとエッジを、ブラウザで動かせる HTML にする |共有ライブラリ
+|===
+
+[plantuml]
+----
+@startuml
+start
+:描きたいもの / 知りたいこと;
+if (人がブラウザで触って見る\n関係のグラフ?) then (はい)
+  :mcp-shared-graph-viz\n(サーバーの graph action から使う);
+elseif (クラウドの構成図\n(アイコン付き)?) then (はい)
+  :python-diagrams-mcp;
+elseif (順序・クリティカルパス・\n循環を「正しく」知りたい?) then (はい)
+  :graph-math-mcp;
+else (それ以外の図)
+  :kroki-mcp\n(シーケンス、状態、ER、構成 …);
+endif
+stop
+@enduml
+----
+
+[[kroki]]
+== kroki-mcp
+
+図のソースを Kroki に送って SVG / PNG / PDF にする。Java や Graphviz を手元に入れなくてよい。描く前に、図の種類ごとの書き方の指針を返す (`+kroki_describe+`) のが特徴で、先に指針を読むモデルは、やり取りを描くのにフローチャートではなくシーケンス図を選び、1 回目で正しい文法を書きやすい。
+
+[cols="1,3",options="header"]
+|===
+|ツール |中身
+|`+kroki_describe+` |引数なしで全ツール (図の道具) の一覧と向く用途。`+tool+` でその道具の約束事、`+tool+` と `+subDiagram+` で 1 種類に絞る
+|`+kroki_render+` |`+tool+`、`+diagram+`、`+format+` (`+svg+` / `+png+` / `+pdf+`)。`+output_path+` を渡すとファイルに書く
+|===
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "エージェント" as ai
+participant "kroki-mcp" as server
+participant "Kroki\n(KROKI_URL、既定 https://kroki.io)" as kroki
+
+ai -> server : kroki_describe()
+server --> ai : 道具の一覧と、それぞれ向く図
+ai -> server : kroki_describe(tool: mermaid, subDiagram: sequence)
+server --> ai : 参加者や activation の約束事
+ai -> server : kroki_render(tool, diagram, format: png, output_path)
+server -> kroki : POST /mermaid/png
+alt 描けた
+  kroki --> server : 画像
+  server --> ai : ファイルに保存した (または画像そのもの)
+else 文法の誤り
+  kroki --> server : Kroki のエラー文 (壊れた行)
+  server --> ai : そのエラー文
+end
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|道具 (`+tool+`) |指針がある図
+|`+mermaid+` |flowchart、sequence、class、state、ER、gantt、mindmap、pie、gitGraph
+|`+plantuml+` |sequence、class、usecase、activity、component、deployment、state
+|`+d2+` |basic、containers、sequence、class、grid
+|`+graphviz+` |digraph、graph、cluster
+|`+structurizr+` |C4 の system context 以下
+|`+excalidraw+` |手描き風
+|===
+
+図のソースは `+KROKI_URL+` の Kroki に送られる。外に出したくない構成を描くなら、自前の Kroki を立てて `+KROKI_URL+` を向ける。
+
+[[python-diagrams]]
+== python-diagrams-mcp
+
+https://diagrams.mingrammer.com/[diagrams] (Python) のコードを描く。Python、diagrams、Graphviz、MCP サーバー (`+server.py+`) を 1 つの Docker image に入れていて、サーバーごと container の中で動く。
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "MCP クライアント" as client
+node "docker run --rm -i\nghcr.io/dbgso/python-diagrams-mcp" as container {
+  rectangle "server.py\n(MCP、stdio)" as server
+  rectangle "python + diagrams\n+ graphviz" as lib
+}
+folder "./output\n(-v ${PWD}/output:/output)" as out
+
+client --> server : stdin / stdout
+server --> lib : diagrams_render(code)
+lib --> out : PNG / SVG / PDF\n(--user で自分の uid のまま書く)
+server --> client : 画像 (保存しないとき)
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|ツール |中身
+|`+diagrams_describe+` |diagrams の書き方の指針。`+category+` で `+aws+` / `+gcp+` / `+k8s+` / `+onprem+` に絞る
+|`+diagrams_render+` |`+code+` (Python)、`+format+`、`+output_path+` (`+/output+` の下に保存)
+|===
+
+MCP の設定は shell の展開をしないので、`+${PWD}+` や `+$(id -u)+` を使うには wrapper の script を挟む (この repo の `+.mcp.json+` は `+sh -c+` で包んでいる)。
+
+[[graph-math]]
+== graph-math-mcp
+
+タスクと依存の計算を NetworkX でする。役割分担がこのサーバーの意味になる。
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "モデル" as model
+participant "graph-math-mcp\n(NetworkX)" as gm
+
+model -> model : 文章からタスクと依存を取り出す\n(nodes / edges)
+model -> gm : graph_execute(detect_cycles, data)
+gm --> model : 循環なし
+model -> gm : graph_execute(critical_path, data)
+gm --> model : A → C → E、長さ 11
+model -> gm : graph_execute(topological_sort, data)
+gm --> model : A, B, C, D, E
+model -> model : 結果を文章や図に戻す
+@enduml
+----
+
+20 個の依存し合うタスクを手で並べさせると、モデルはもっともらしい順序を出す。もっともらしいことと正しいことは違い、依存を破った順序も守った順序と同じ見た目になる。取り出した後の並べ替えは計算なので、推測させない。
+
+入力はどの operation も同じ形。
+
+[source,json]
+----
+{
+  "nodes": [ { "id": "A", "duration": 3 }, { "id": "B", "duration": 2 } ],
+  "edges": [ { "from": "A", "to": "B" } ]
+}
+----
+
+`+from+` が終わってから `+to+` が始まる。`+duration+` はクリティカルパスだけが使う。人が書いた説明から取り出したグラフには循環が入りやすく、循環があると他の 2 つには答えが無いので、`+detect_cycles+` を先に流す。ファイルを読み書きしないので、container に mount は要らない。
+
+[[graph-viz]]
+== mcp-shared-graph-viz
+
+ノードとエッジを渡すと、人が見られるページ (HTML) を返すライブラリ。ドメインの知識は持たず、`+relatedDocs+` や `+requires+` をノードとエッジに写すのは呼ぶ側の仕事。
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "呼ぶ側のサーバー\n(例: interactive-instruction-mcp)" as caller
+rectangle "renderGraphHtml({ graph, layout, ... })" as render
+file "1 つの HTML" as html
+rectangle "ブラウザ" as browser
+cloud "CDN の cytoscape\n(版を固定、差し替え可)" as cdn
+
+caller --> render : 自分のドメイン → nodes / edges / group
+render --> html : 要素、style、色、layout の指定、\n操作 (hover、click、凡例)
+html --> browser : 開く
+browser --> cdn : cytoscape を読む
+browser --> browser : 配置して描く\n(文字の幅もブラウザが測る)
+@enduml
+----
+
+* 配置をブラウザでするのは、cytoscape の描画には canvas が要り、headless の Node には無いから。Node で座標だけ計算すると文字の幅を測れず、ノードの大きさを推測することになる。その結果、このライブラリは実行時の依存が 0。
+* layout は 15 種類 (`+dagre+` が既定。向きのあるものは `+dagre+` / `+klay+` / `+elk-layered+`、木は `+elk-mrtree+` / `+breadthfirst+`、まとまりは `+fcose+` など)。
+* ページでは拡大・移動、hover で隣だけ残して薄くする、`+href+` のノードを click で開く、`+group+` の凡例、ができる。
+* 静的な画像が欲しいとき (Markdown に埋める、ブラウザの無い返答) は、同じノードとエッジから DOT や Mermaid を出して `+kroki-mcp+` で描く。
