@@ -43,6 +43,7 @@
     "mcp-shared": "workspace:*",
     "mcp-shared-db-codegen": "workspace:*",
     "mcp-shared-secrets": "workspace:*",
+    "mysql2": "catalog:",
     "vitest": "catalog:"
   }
 }

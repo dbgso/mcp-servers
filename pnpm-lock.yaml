@@ -21,6 +21,9 @@ catalogs:
     '@vitest/coverage-v8':
       specifier: 4.0.18
       version: 4.0.18
+    mysql2:
+      specifier: 3.22.3
+      version: 3.22.3
     node-notifier:
       specifier: 10.0.1
       version: 10.0.1
@@ -30,6 +33,9 @@ catalogs:
     oxlint-tsgolint:
       specifier: 7.0.2003
       version: 7.0.2003
+    pg:
+      specifier: 8.11.0
+      version: 8.11.0
     tsup:
       specifier: 8.5.0
       version: 8.5.0
@@ -201,12 +207,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.26.0(supports-color@7.2.0)(zod@3.25.76)
-      mysql2:
-        specifier: '>=3.0.0'
-        version: 3.22.3(@types/node@22.19.10)
-      pg:
-        specifier: 8.11.0
-        version: 8.11.0
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
@@ -229,6 +229,12 @@ importers:
       mcp-shared-secrets:
         specifier: workspace:*
         version: link:../mcp-shared-secrets
+      mysql2:
+        specifier: 'catalog:'
+        version: 3.22.3(@types/node@22.15.21)
+      pg:
+        specifier: 'catalog:'
+        version: 8.11.0
       tsup:
         specifier: 'catalog:'
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
@@ -527,9 +533,6 @@ importers:
       mcp-shared-db-sql:
         specifier: workspace:*
         version: link:../mcp-shared-db-sql
-      mysql2:
-        specifier: '>=3.0.0'
-        version: 3.22.3(@types/node@22.19.10)
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
@@ -543,6 +546,9 @@ importers:
       mcp-shared-secrets:
         specifier: workspace:*
         version: link:../mcp-shared-secrets
+      mysql2:
+        specifier: 'catalog:'
+        version: 3.22.3(@types/node@22.15.21)
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
@@ -558,9 +564,6 @@ importers:
       mcp-shared-db-sql:
         specifier: workspace:*
         version: link:../mcp-shared-db-sql
-      pg:
-        specifier: '>=8.11.0'
-        version: 8.11.0
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
@@ -574,6 +577,9 @@ importers:
       mcp-shared-secrets:
         specifier: workspace:*
         version: link:../mcp-shared-secrets
+      pg:
+        specifier: 'catalog:'
+        version: 8.11.0
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
@@ -1710,6 +1716,9 @@ packages:
   '@smithy/smithy-client@4.12.13':
     resolution: {integrity: sha512-y/Pcj1V9+qG98gyu1gvftHB7rDpdh+7kIBIggs55yGm3JdtBV8GT8IFF3a1qxZ79QnaJHX9GXzvBG6tAd+czJA==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with
+        this version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/types@4.14.1':
     resolution: {integrity: sha512-59b5HtSVrVR/eYNei3BUj3DCPKD/G7EtDDe7OEJE7i7FtQFugYo6MxbotS8mVJkLNVf8gYaAlEBwwtJ9HzhWSg==}
@@ -5461,6 +5470,18 @@ snapshots:
   mri@1.2.0: {}
 
   ms@2.1.3: {}
+
+  mysql2@3.22.3(@types/node@22.15.21):
+    dependencies:
+      '@types/node': 22.15.21
+      aws-ssl-profiles: 1.1.2
+      denque: 2.1.0
+      generate-function: 2.3.1
+      iconv-lite: 0.7.2
+      long: 5.3.2
+      lru.min: 1.1.4
+      named-placeholders: 1.1.6
+      sql-escaper: 1.3.3
 
   mysql2@3.22.3(@types/node@22.19.10):
     dependencies:

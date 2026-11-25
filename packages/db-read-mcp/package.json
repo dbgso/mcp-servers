@@ -69,6 +69,8 @@
     "mcp-shared-db-mysql": "workspace:*",
     "mcp-shared-db-postgres": "workspace:*",
     "mcp-shared-secrets": "workspace:*",
+    "mysql2": "catalog:",
+    "pg": "catalog:",
     "tsup": "catalog:",
     "vitest": "catalog:"
   }

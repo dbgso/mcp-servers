@@ -4,7 +4,9 @@
 # `AllowTcpForwarding no`, which is a sensible default for a general SSH
 # server and exactly wrong for this one. The setting that matters is the whole
 # point of the container, so it is stated here instead of inherited.
-FROM alpine:3.21
+# Digest-pinned like the database images in compose.yaml; update tag+digest
+# together.
+FROM alpine:3.21@sha256:bc21487101ae47172509130ee1092cc273a831968d64b617776d1f69c81e42ab
 
 RUN apk add --no-cache openssh-server \
  && ssh-keygen -A \

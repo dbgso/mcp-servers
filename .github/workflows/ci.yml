@@ -102,13 +102,21 @@ jobs:
           flags: ${{ matrix.package.name }}
           fail_ci_if_error: false
 
-  # Separate job, not a step in `test`: it needs two database servers, and the
-  # drivers it installs would break the unit tests that mock them. Runs in
-  # parallel, so it costs wall-clock only if it is the slower of the two.
+  # Separate job, not a step in `test`: it needs two database servers and an
+  # SSH bastion, which no other job pays for. Runs in parallel, so it costs
+  # wall-clock only if it is the slower of the two.
+  #
+  # The drivers come from the lockfile like everything else (the `pg` and
+  # `mysql2` catalog entries), so a dependency update to either is exercised
+  # here against a real engine rather than only against `vi.mock`.
   db-smoke:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
 
       # Before the bastion starts: compose mounts the public key into it.
@@ -125,8 +133,10 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Install database drivers
-        run: ./ci/db/install-drivers.sh
+      # So a run's log says which driver versions it actually proved, without
+      # having to reconstruct them from the lockfile at that commit.
+      - name: Driver versions under test
+        run: pnpm -r list pg mysql2 --depth 0
 
       # Each asserts nothing about a particular schema: it introspects, picks a
       # table, probes a real value out of it, and runs every read operation

@@ -16,9 +16,14 @@ catalog:
   '@modelcontextprotocol/sdk': 1.26.0
   '@types/node': 22.15.21
   '@vitest/coverage-v8': 4.0.18
+  # The database drivers the smoke tests run against (ci.yml `db-smoke`).
+  # Declared as devDependencies of the packages that load them, so a bump here
+  # is what the smoke job exercises against real engines.
+  mysql2: 3.22.3
   'node-notifier': 10.0.1
   oxlint: 1.63.0
   oxlint-tsgolint: 7.0.2003
+  pg: 8.11.0
   tsup: 8.5.0
   tsx: 4.19.4
   typescript: 5.8.3

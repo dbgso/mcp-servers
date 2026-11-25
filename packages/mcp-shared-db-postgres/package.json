@@ -43,6 +43,7 @@
     "mcp-shared": "workspace:*",
     "mcp-shared-db-codegen": "workspace:*",
     "mcp-shared-secrets": "workspace:*",
+    "pg": "catalog:",
     "vitest": "catalog:"
   }
 }
