@@ -121,9 +121,10 @@ function interleave(input: { fragment: JsonPathFragment; params: ParamBuilder })
       `dialect returned ${sql.length} SQL parts for ${values.length} values; expected ${values.length + 1}`,
     );
   }
-  let out = sql[0] ?? "";
-  for (const [i, value] of values.entries()) {
-    out += input.params.add(value) + (sql[i + 1] ?? "");
+  let out = "";
+  for (const [i, part] of sql.entries()) {
+    if (i > 0) out += input.params.add(values[i - 1]);
+    out += part;
   }
   return out;
 }

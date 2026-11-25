@@ -163,6 +163,27 @@ describe("buildFindByJsonPath", () => {
     );
     expect(built.values).toEqual(["$.foo.bar", "x", 5]);
   });
+
+  it("refuses a fragment whose SQL parts and values do not alternate", () => {
+    // One part too few would drop the text after the last placeholder; one
+    // too many would leave a value with no slot. Either is a dialect bug,
+    // and it must surface here rather than as a statement the engine runs.
+    const broken = {
+      ...pgFakeDialect,
+      jsonPathEquals: () => ({ sql: ["a", "b"], values: [1, 2] }),
+    };
+    expect(() =>
+      buildFindByJsonPath({
+        dialect: broken,
+        table: "users",
+        field: "meta",
+        path: "$.foo",
+        value: "x",
+        columns: ["id"],
+        limit: 1,
+      }),
+    ).toThrow("dialect returned 2 SQL parts for 2 values; expected 3");
+  });
 });
 
 describe("Dialect.quoteIdent escaping", () => {
