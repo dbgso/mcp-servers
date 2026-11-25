@@ -5,6 +5,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # 公開から7日経っていないバージョンには上げない (サプライチェーン攻撃対策)
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       npm-minor-patch:
@@ -16,6 +19,9 @@ updates:
       - /.github/actions/*
     schedule:
       interval: weekly
+    # 公開から7日経っていないバージョンには上げない (サプライチェーン攻撃対策)
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns: ["*"]
@@ -26,6 +32,9 @@ updates:
       - /packages/python-diagrams-mcp
     schedule:
       interval: weekly
+    # 公開から7日経っていないバージョンには上げない (サプライチェーン攻撃対策)
+    cooldown:
+      default-days: 7
     groups:
       docker:
         patterns: ["*"]
