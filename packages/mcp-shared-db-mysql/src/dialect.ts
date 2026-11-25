@@ -17,7 +17,7 @@
  *   that mysql2 returns and walks the plan tree to find the worst-case scan
  *   width across all leaves.
  */
-import type { Dialect, DialectExplainResult } from "mcp-shared-db-sql";
+import type { Dialect, DialectExplainResult, JsonPathFragment } from "mcp-shared-db-sql";
 
 type JsonPathEqualsInput = Parameters<Dialect["jsonPathEquals"]>[0];
 
@@ -146,17 +146,14 @@ export class MysqlDialect implements Dialect {
   placeholder(): string {
     return "?";
   }
-  jsonPathEquals({
-    columnSql,
-    path,
-    valuePlaceholder,
-    params,
-  }: JsonPathEqualsInput): string {
-    // Bind the path — never interpolate `path.raw` into the SQL. The
-    // op-layer Zod regex is defense-in-depth; the bind is the load-bearing
+  jsonPathEquals({ columnSql, path, value }: JsonPathEqualsInput): JsonPathFragment {
+    // The path is a bound value, never interpolated into the SQL — the
+    // op-layer Zod regex is defense-in-depth; this is the load-bearing
     // defence. Lock-tested in dialect.test.ts.
-    const pathPh = params.add(path.raw);
-    return `JSON_UNQUOTE(JSON_EXTRACT(${columnSql}, ${pathPh})) = ${valuePlaceholder}`;
+    return {
+      sql: [`JSON_UNQUOTE(JSON_EXTRACT(${columnSql}, `, ")) = ", ""],
+      values: [path.raw, value],
+    };
   }
   explainPrefix(): string {
     return "EXPLAIN FORMAT=JSON";

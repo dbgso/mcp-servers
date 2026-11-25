@@ -18,7 +18,8 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke": "tsx scripts/smoke-test-mysql.ts ../../ci/db/smoke-mysql.env"
   },
   "license": "MIT",
   "engines": {

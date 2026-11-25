@@ -11,7 +11,7 @@
  * - `parseExplainResult` walks the JSON plan tree and pulls out the leading
  *   node's row / cost estimate plus a one-line summary.
  */
-import type { Dialect, DialectExplainResult } from "mcp-shared-db-sql";
+import type { Dialect, DialectExplainResult, JsonPathFragment } from "mcp-shared-db-sql";
 
 type JsonPathEqualsInput = Parameters<Dialect["jsonPathEquals"]>[0];
 
@@ -78,14 +78,12 @@ export class PostgresDialect implements Dialect {
   placeholder(index: number): string {
     return `$${index}`;
   }
-  jsonPathEquals({
-    columnSql,
-    path,
-    valuePlaceholder,
-    params,
-  }: JsonPathEqualsInput): string {
-    const segmentsPh = params.add(path.segments);
-    return `${columnSql} #>> ${segmentsPh} = ${valuePlaceholder}`;
+  jsonPathEquals({ columnSql, path, value }: JsonPathEqualsInput): JsonPathFragment {
+    // Segments travel as a JS array; `pg` serialises that as a `text[]`.
+    return {
+      sql: [`${columnSql} #>> `, " = ", ""],
+      values: [path.segments, value],
+    };
   }
   explainPrefix(): string {
     return "EXPLAIN (FORMAT JSON)";

@@ -4,6 +4,7 @@ export type {
   JsonPathInput,
   ParamBuilder,
   DialectExplainResult,
+  JsonPathFragment,
 } from "./dialect.js";
 
 // Param accumulator — exposed for adapters that want to use it directly.
