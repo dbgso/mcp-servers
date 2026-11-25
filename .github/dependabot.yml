@@ -10,8 +10,21 @@ updates:
       default-days: 7
     open-pull-requests-limit: 10
     groups:
+      # @vitest/coverage-v8 は同じ版の vitest にしか合わないので、major も 1 つの PR で上げる
+      # (別々だと、どちらの PR も単独では test が全部落ちる。#182 / #187)。
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # 型は実行する Node (engines の >=22.13、CI は 22) の major に合わせる。新しい major の型だと、
+      # 22 に無い API でも typecheck が通ってしまう (#189)。Node を上げるときに、手で一緒に上げる。
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # 4 は default export が無くなり、ast-file-mcp の build が落ちる (#188)。上げるときは
+      # import と asciidoc*.test.ts を同じ PR で直す。
+      - dependency-name: "@asciidoctor/core"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directories:
