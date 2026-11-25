@@ -13,6 +13,13 @@
  * or an object key. Log a value built without the secret (`{ host, port }`),
  * or the name of the secret rather than its value.
  *
+ * Scope: only those direct calls. A log written another way -- a file such as
+ * mcp-firewall's audit log, a logger wrapper, a value passed through a
+ * variable with an innocent name -- is not seen, and a secret that arrives as
+ * data (a tool's `args`) cannot be told apart by name at all. A clean run
+ * means "no secret-named value reaches console/stdout/stderr directly", not
+ * "nothing secret is logged".
+ *
  * Examples of INVALID code:
  *
  *   console.error(`connecting with ${config.password}`);
@@ -39,7 +46,8 @@ module.exports = {
     docs: {
       description:
         "Do not pass values named like secrets (password, token, credential, connection string...) to " +
-        "console.* or process.stdout/stderr.write: an MCP server's stderr is kept by the client and shared in bug reports.",
+        "console.* or process.stdout/stderr.write: an MCP server's stderr is kept by the client and shared in bug reports. " +
+        "Only those direct calls are checked; file logs and logger wrappers are not.",
     },
     messages: {
       secret:

@@ -44,6 +44,9 @@ jobs:
       # and rules like require-array-sort-compare report what a build resolves.
       - run: pnpm build
       - run: pnpm lint
+      # The custom rules (eslint-rules/) are checked against valid / invalid
+      # examples. A rule that silently stops reporting leaves `pnpm lint` green.
+      - run: pnpm test:lint-rules
       # A changeset is published verbatim inside the package's CHANGELOG.md, and
       # nobody reads a generated file before it ships. This is the one chance to
       # catch markdown that will say something else once prettier has resolved
