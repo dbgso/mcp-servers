@@ -38,3 +38,24 @@ updates:
     groups:
       docker:
         patterns: ["*"]
+
+  # docs-site/ (Antora) は root の pnpm workspace の外にある npm の package なので、別に指定する。
+  - package-ecosystem: npm
+    directory: /docs-site
+    schedule:
+      interval: weekly
+    # 公開から7日経っていないバージョンには上げない (サプライチェーン攻撃対策)
+    cooldown:
+      default-days: 7
+    groups:
+      docs-site:
+        update-types: [minor, patch]
+    ignore:
+      # asciidoctor-kroki 2 は Antora 3.2 (@asciidoctor/core ~2.2) と組み合わせられない。
+      # Antora の major を上げるときに、手で一緒に上げる。
+      - dependency-name: asciidoctor-kroki
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@antora/*"
+        update-types: ["version-update:semver-major"]
+  # docs-site/kroki/Dockerfile はわざと対象にしない。private-static-site の Kroki の Lambda と
+  # 同じ tag と digest に揃えるためのものなので、向こうを上げたときに手で合わせる (docs/ja/docs-site.adoc)。

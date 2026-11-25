@@ -47,6 +47,7 @@ kroki --> viewer : SVG
 * Antora は `+://+` の無い画像をサイトの中の画像として探すので、playbook では一旦 `+https://kroki.invalid/api/kroki+` (決して解決されない domain) にしておき、build の後で HTML の `+src+` を `+/api/kroki/+` に書き換える。
 * シーケンス図には必ず `+autonumber+` を入れる (本文から番号で指せるように)。`+docs-site/check-plantuml-rules.sh+` が確かめる。
 * 図が全部描けるかは、Kroki の Lambda と同じ版の image (`+docs-site/kroki/Dockerfile+`) を立てて `+docs-site/check-diagrams.sh+` で確かめる。CI も同じことをする。
+* `+docs-site/kroki/Dockerfile+` は dependabot の対象にしていない。勝手に上がると Lambda とずれるので、private-static-site の Kroki を上げたときに、ここの tag と digest も手で合わせる。`+docs-site/+` の npm は dependabot が上げるが、`+asciidoctor-kroki+` と `+@antora/*+` の major は Antora と組み合わせを揃えて手で上げる。
 
 手元でビルドする:
 
