@@ -285,8 +285,7 @@ describe("FeedbackHandler (plan)", () => {
         // The hint has to carry the real ids. It was once a plain string, which
         // printed the placeholders literally and still matched the two lines above.
         expect(text).toContain('id: "task-1", feedback_id: "fb-001"');
-        expect(text).not.toContain("${taskId}");
-        expect(text).not.toContain("${feedbackId}");
+        expect(text).not.toContain("$" + "{");
       });
 
       it("should show draft feedback with interpretation ready for approval", async () => {
