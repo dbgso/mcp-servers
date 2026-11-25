@@ -22,7 +22,7 @@ catalog:
   tsup: 8.5.0
   tsx: 4.19.4
   typescript: 5.8.3
-  ulid: 2.3.0
+  ulid: 3.0.2
   vitest: 4.0.18
   yaml: 2.8.2
   zod: 3.25.76
