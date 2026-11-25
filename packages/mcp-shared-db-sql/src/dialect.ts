@@ -36,11 +36,6 @@ export interface ParamBuilder {
 }
 
 /**
- * Normalised result of an EXPLAIN call. Matches `ExplainResult` in
- * `mcp-shared-db` — re-declared here only to keep the SQL package free of
- * a dependency on the operations layer's interfaces.
- */
-/**
  * Literal SQL interleaved with the values to bind, in the order they appear.
  * `sql.length === values.length + 1` — the builder alternates the two, so the
  * binding order is the array order and cannot disagree with the text.
@@ -50,6 +45,11 @@ export interface JsonPathFragment {
   values: unknown[];
 }
 
+/**
+ * Normalised result of an EXPLAIN call. Matches `ExplainResult` in
+ * `mcp-shared-db` — re-declared here only to keep the SQL package free of
+ * a dependency on the operations layer's interfaces.
+ */
 export interface DialectExplainResult {
   estimatedRows: number | null;
   totalCost: number | null;

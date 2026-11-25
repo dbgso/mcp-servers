@@ -51,7 +51,7 @@
   },
   "peerDependencies": {
     "mysql2": ">=3.0.0",
-    "pg": "8.11.0"
+    "pg": ">=8.11.0"
   },
   "peerDependenciesMeta": {
     "mysql2": {

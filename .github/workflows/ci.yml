@@ -124,8 +124,8 @@ jobs:
         run: ./ci/db/gen-ssh-key.sh
 
       # `--wait` blocks on each service's healthcheck, so nothing here polls or
-      # sleeps. Postgres reports ready on its bootstrap database before the
-      # seed has run, which is why its healthcheck names the database.
+      # sleeps. Postgres answers on its unix socket while the seed is still
+      # running, which is why its healthcheck goes over TCP.
       - name: Start Postgres, MySQL and the SSH bastion
         run: docker compose -f compose.yaml up -d --wait postgres mysql bastion
 
@@ -149,7 +149,9 @@ jobs:
 
       # The read-only guarantee is a property of the session, so no unit test
       # can reach it: these issue a write on a guarded connection and require
-      # the engine to refuse. Both probes are harmless if the guard is missing
+      # the engine to refuse it with its read-only error code. Each probe is
+      # first run unguarded and must succeed, so a probe that fails for some
+      # other reason cannot pass. Both are harmless if the guard is missing
       # -- a temporary table that dies with the connection, and an UPDATE whose
       # WHERE clause matches nothing.
       - name: Read-only guarantee (Postgres)

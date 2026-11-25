@@ -57,9 +57,12 @@ services:
     volumes:
       - ./ci/db/postgres-init.sql:/docker-entrypoint-initdb.d/10-seed.sql:ro
     healthcheck:
-      # `-d smoke` matters: pg_isready reports ready on the bootstrap database
-      # before the seed has run, and the smoke test would then find no tables.
-      test: ["CMD-SHELL", "pg_isready -U smoke -d smoke"]
+      # `-h 127.0.0.1` matters. While the image runs docker-entrypoint-initdb.d
+      # it starts a temporary server that listens on the unix socket only, so
+      # a socket check passes mid-seed. TCP opens only once the real server
+      # is up, after the seed. (`-d` does not help: pg_isready does not check
+      # the database or user, and POSTGRES_DB exists before the seed runs.)
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U smoke -d smoke"]
       interval: 2s
       timeout: 3s
       retries: 30

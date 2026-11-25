@@ -21,6 +21,13 @@
  * UPDATE whose WHERE clause matches nothing. If the guard were missing, the
  * temporary table would vanish with the connection and the UPDATE would touch
  * zero rows.
+ *
+ * Two things keep the check from passing for the wrong reason:
+ *   - each probe is first run *before* the guards are applied, and must be
+ *     accepted there. A probe that fails anyway (missing table, missing
+ *     privilege) would otherwise read as "refused".
+ *   - after the guards, the refusal must carry the engine's read-only error
+ *     code (Postgres SQLSTATE 25006, MySQL errno 1792), not just any error.
  */
 import { loadEnvFile } from "mcp-shared-secrets";
 import { createPgClient } from "mcp-shared-db-postgres";
@@ -34,19 +41,54 @@ function check(condition: boolean, message: string): asserts condition {
   }
 }
 
-/** Run `write`, and fail unless the engine refuses it. */
-async function expectRefused(what: string, write: () => Promise<unknown>): Promise<void> {
-  let refusal: string | null = null;
+/** Run `write`, and fail unless the engine accepts it. */
+async function expectAccepted(what: string, write: () => Promise<unknown>): Promise<void> {
   try {
     await write();
   } catch (err) {
-    refusal = err instanceof Error ? err.message : String(err);
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `${what} failed before the guards were applied (${message}), so a refusal after them would prove nothing`,
+      { cause: err },
+    );
   }
+  console.log(`[smoke]   accepted without guards`);
+}
+
+/**
+ * Run `write`, and fail unless the engine refuses it *because the session is
+ * read-only*. `isReadOnlyRefusal` decides that from the driver's error.
+ */
+async function expectRefused(
+  what: string,
+  write: () => Promise<unknown>,
+  isReadOnlyRefusal: (err: unknown) => boolean,
+): Promise<void> {
+  let refusal: unknown = undefined;
+  let refused = false;
+  try {
+    await write();
+  } catch (err) {
+    refusal = err;
+    refused = true;
+  }
+  check(refused, `${what} was accepted on a session that is supposed to be read-only`);
+  const message = refusal instanceof Error ? refusal.message : String(refusal);
   check(
-    refusal !== null,
-    `${what} was accepted on a session that is supposed to be read-only`,
+    isReadOnlyRefusal(refusal),
+    `${what} failed, but not with the read-only error: ${message}`,
   );
-  console.log(`[smoke]   refused: ${refusal}`);
+  console.log(`[smoke]   refused: ${message}`);
+}
+
+/** Postgres SQLSTATE `read_only_sql_transaction`. */
+function isPgReadOnly(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === "25006";
+}
+
+/** MySQL `ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION`. */
+function isMysqlReadOnly(err: unknown): boolean {
+  return (err as { errno?: unknown } | null)?.errno === 1792;
 }
 
 async function smokePostgres(url: string): Promise<void> {
@@ -54,6 +96,13 @@ async function smokePostgres(url: string): Promise<void> {
   await client.connect();
   client.on("error", (err) => console.error("[smoke] pg client error:", err.message));
   try {
+    // Control: the same probe must succeed on an unguarded session.
+    console.log("[smoke] CREATE TEMP TABLE before the guards (expected to be accepted)");
+    await expectAccepted("CREATE TEMP TABLE", async () => {
+      await client.query({ text: "CREATE TEMP TABLE smoke_readonly_probe (x integer)" });
+      await client.query({ text: "DROP TABLE smoke_readonly_probe" });
+    });
+
     await applyPostgresSessionGuards({ client, env: process.env });
     console.log("[smoke] session guards applied");
 
@@ -68,6 +117,7 @@ async function smokePostgres(url: string): Promise<void> {
     console.log("[smoke] CREATE TEMP TABLE (expected to be refused)");
     await expectRefused("CREATE TEMP TABLE", () =>
       client.query({ text: "CREATE TEMP TABLE smoke_readonly_probe (x integer)" }),
+      isPgReadOnly,
     );
 
     // The timeout guard travels with the same call, so check it landed.
@@ -88,7 +138,13 @@ async function smokeMysql(url: string, table: string): Promise<void> {
   const client = await createMysqlClient(url);
   await client.connect();
   client.onError((err) => console.error("[smoke] mysql client error:", err.message));
+  const probe = `UPDATE \`${table}\` SET \`id\` = \`id\` WHERE 1 = 0`;
   try {
+    // Control: the same probe must succeed on an unguarded session. This is
+    // also what catches a wrong DBREAD_SMOKE_TABLE (ER_NO_SUCH_TABLE).
+    console.log(`[smoke] UPDATE ${table} ... WHERE 1 = 0 before the guards (expected to be accepted)`);
+    await expectAccepted("UPDATE", () => client.query({ text: probe }));
+
     await applyMysqlSessionGuards({ client, env: process.env });
     console.log("[smoke] session guards applied");
 
@@ -100,9 +156,7 @@ async function smokeMysql(url: string, table: string): Promise<void> {
     // probe has to name a real one. `WHERE 1 = 0` keeps it harmless if the
     // guard is missing: the statement would be accepted and change nothing.
     console.log(`[smoke] UPDATE ${table} ... WHERE 1 = 0 (expected to be refused)`);
-    await expectRefused("UPDATE", () =>
-      client.query({ text: `UPDATE \`${table}\` SET \`id\` = \`id\` WHERE 1 = 0` }),
-    );
+    await expectRefused("UPDATE", () => client.query({ text: probe }), isMysqlReadOnly);
 
     const timeout = await client.query<{ Value: string }>({
       text: "SHOW SESSION VARIABLES LIKE 'max_execution_time'",
