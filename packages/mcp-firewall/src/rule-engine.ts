@@ -209,18 +209,18 @@ export class RuleEngine {
     args: Record<string, unknown>;
   }): {
     finalAction: EvaluationResult;
-    evaluatedRules: Array<{
+    evaluatedRules: {
       rule: Rule;
       order: number;
       matches: boolean;
       patternMatch: boolean;
-      conditionResults: Array<{
+      conditionResults: {
         condition: Condition;
         matches: boolean;
         actualValue: unknown;
-      }>;
+      }[];
       wouldApply: boolean;
-    }>;
+    }[];
   } {
     const { toolName, args } = params;
     const rules = this.ruleStore.getRules();

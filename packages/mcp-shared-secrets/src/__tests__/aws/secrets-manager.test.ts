@@ -6,8 +6,8 @@ function makeExecFile(result: {
   err?: NodeJS.ErrnoException & { stdout?: string; stderr?: string };
   stdout?: string;
   stderr?: string;
-}): { fn: ExecFileFn; calls: Array<{ command: string; args: readonly string[] }> } {
-  const calls: Array<{ command: string; args: readonly string[] }> = [];
+}): { fn: ExecFileFn; calls: { command: string; args: readonly string[] }[] } {
+  const calls: { command: string; args: readonly string[] }[] = [];
   const fn = ((command: string, args: readonly string[], _opts: unknown, cb: unknown) => {
     calls.push({ command, args });
     const callback = cb as (e: Error | null, o: string, er: string) => void;
@@ -43,7 +43,7 @@ describe("secretsManagerSource — error handling", () => {
       stderr?: string;
     };
     err.stderr = stderr;
-    const { fn } = makeExecFile({ err: err as NodeJS.ErrnoException });
+    const { fn } = makeExecFile({ err: err });
     const src = secretsManagerSource({ spawnFn: fn });
     await expect(src.fetch("missing")).resolves.toBeUndefined();
   });
@@ -53,7 +53,7 @@ describe("secretsManagerSource — error handling", () => {
       stderr?: string;
     };
     err.stderr = "An error occurred (AccessDeniedException): denied";
-    const { fn } = makeExecFile({ err: err as NodeJS.ErrnoException });
+    const { fn } = makeExecFile({ err: err });
     const src = secretsManagerSource({ spawnFn: fn });
     await expect(src.fetch("forbidden")).rejects.toThrow(/AccessDenied/);
   });

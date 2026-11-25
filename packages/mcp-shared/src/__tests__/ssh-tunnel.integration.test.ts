@@ -305,7 +305,7 @@ describe("process exit / signal handlers", () => {
    */
   function lastListener(event: "exit" | "SIGINT" | "SIGTERM"): (() => void) | undefined {
     const listeners = process.listeners(event);
-    return listeners[listeners.length - 1] as (() => void) | undefined;
+    return listeners[listeners.length - 1];
   }
 
   it("kills live tunnels via the process 'exit' handler", async () => {
@@ -353,7 +353,7 @@ describe("process exit / signal handlers", () => {
 
 describe("resolveTunneledUrl integration", () => {
   let echo: EchoServer;
-  const openTunnels: Array<{ close: () => Promise<void> }> = [];
+  const openTunnels: { close: () => Promise<void> }[] = [];
 
   beforeAll(async () => {
     echo = new EchoServer();

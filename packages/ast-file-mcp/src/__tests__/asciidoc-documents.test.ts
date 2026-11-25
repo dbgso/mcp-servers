@@ -14,7 +14,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp, rm, writeFile, mkdir, readFile } from "node:fs/promises";
 import { AsciidocHandler } from "../handlers/asciidoc.js";
-import type { AsciidocDocument } from "../types/index.js";
 
 let dir: string;
 let handler: AsciidocHandler;
@@ -320,7 +319,7 @@ describe("blocks with nothing in them", () => {
 
     await handler.write({
       filePath: out,
-      ast: { type: "asciidoc", blocks: [block] } as AsciidocDocument,
+      ast: { type: "asciidoc", blocks: [block] },
     });
 
     expect(typeof (await readFile(out, "utf-8"))).toBe("string");

@@ -1,4 +1,4 @@
-import { createOperationRegistry, type Operation } from "mcp-shared";
+import { createOperationRegistry } from "mcp-shared";
 import type { CodegenOperation, CodegenOperationContext } from "./types.js";
 import { listSchemasOp } from "./list-schemas.js";
 import { listTablesOp } from "./list-tables.js";
@@ -27,5 +27,5 @@ export const allCodegenOperations: CodegenOperation[] = [
 ];
 
 export const codegenRegistry = createOperationRegistry<CodegenOperationContext>(
-  allCodegenOperations as Operation<unknown, CodegenOperationContext>[],
+  allCodegenOperations,
 );

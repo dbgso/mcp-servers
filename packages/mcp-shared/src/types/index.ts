@@ -13,7 +13,7 @@ export interface ReminderConfig {
  * Standard MCP tool result format
  */
 export type ToolResult = {
-  content: Array<{ type: "text"; text: string }>;
+  content: { type: "text"; text: string }[];
   isError?: boolean;
 };
 

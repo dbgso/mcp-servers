@@ -4,4 +4,4 @@
 // - Reuse `list_tables` / `describe_table` from `mcp-shared-db-core`.
 // - Add DynamoDB-specific ops (get_item, query, scan).
 // - Provide `createDynamoDBTools()` factory.
-export {};
+

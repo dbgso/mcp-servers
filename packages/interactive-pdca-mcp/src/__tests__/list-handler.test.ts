@@ -23,7 +23,7 @@ describe("ListHandler", () => {
       updateAll: vi.fn().mockResolvedValue(undefined),
       updatePendingReviewFile: vi.fn().mockResolvedValue(undefined),
       updateGraphFile: vi.fn().mockResolvedValue(undefined),
-    } as unknown as PlanReporter;
+    };
 
     mockContext = {
       planReader: mockPlanReader,

@@ -3,9 +3,9 @@ import { LinkAddHandler } from "../tools/instruction/handlers/link-add.js";
 import { LinkRemoveHandler } from "../tools/instruction/handlers/link-remove.js";
 import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
 import { MarkdownReader } from "../services/markdown-reader.js";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import { DRAFT_DIR } from "../constants.js";
 
 describe("LinkHandler", () => {

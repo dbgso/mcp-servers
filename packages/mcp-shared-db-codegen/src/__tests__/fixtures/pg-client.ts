@@ -21,7 +21,7 @@ export interface FakePgClient extends PgQueryClient {
   end: ReturnType<typeof vi.fn>;
   query: ReturnType<typeof vi.fn>;
   /** Calls captured for assertions: `[sql, values]`. */
-  calls: Array<{ sql: string; values: unknown[] }>;
+  calls: { sql: string; values: unknown[] }[];
 }
 
 /**
@@ -36,7 +36,7 @@ export function createFakePgClient(handlers: {
   indexes?: Handler;
   foreignKeys?: Handler;
 }): FakePgClient {
-  const calls: Array<{ sql: string; values: unknown[] }> = [];
+  const calls: { sql: string; values: unknown[] }[] = [];
 
   function pickHandler(sql: string): Handler {
     if (sql === POSTGRES_QUERIES.schemas && handlers.schemas) return handlers.schemas;
@@ -61,7 +61,7 @@ export function createFakePgClient(handlers: {
   return {
     connect,
     end,
-    query: query as unknown as PgQueryClient["query"] & ReturnType<typeof vi.fn>,
+    query: query,
     calls,
   };
 }

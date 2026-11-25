@@ -174,7 +174,7 @@ describe("createSsmTunnel", () => {
       spawnFn: ((_cmd: string, args: readonly string[]) => {
         calls.push({ args });
         return child as unknown as ChildProcess;
-      }) as SsmTunnelConfig["spawnFn"],
+      }),
       calls,
       child,
     };

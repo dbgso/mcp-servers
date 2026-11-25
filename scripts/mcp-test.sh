@@ -34,7 +34,9 @@ if [ -z "$PACKAGE" ] || [ -z "$TOOL" ]; then
   echo "Usage: $0 <package> <tool> '<json_args>' [-- <server args>]"
   echo ""
   echo "Servers:"
-  ls -1 "$PROJECT_ROOT/packages" | sed 's/^/  /'
+  for dir in "$PROJECT_ROOT"/packages/*/; do
+    echo "  $(basename "$dir")"
+  done
   exit 1
 fi
 

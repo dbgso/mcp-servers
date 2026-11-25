@@ -390,7 +390,7 @@ export function registerRuleTools(params: RegisterRuleToolsParams): void {
 
         // Handle different response formats
         if ("content" in result && Array.isArray(result.content)) {
-          const originalContent = result.content as Array<{ type: "text"; text: string }>;
+          const originalContent = result.content as { type: "text"; text: string }[];
           return {
             content: [
               {

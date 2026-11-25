@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse, paginate } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, paginate, BaseToolHandler, type ToolResponse } from "mcp-shared";
 import {
   getHandler,
   getSupportedExtensions,

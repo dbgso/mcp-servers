@@ -53,7 +53,7 @@ beforeEach(async () => {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   client = new Client({ name: "probe", version: "1" });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
-  tools = (await client.listTools()).tools as typeof tools;
+  tools = (await client.listTools()).tools;
 });
 
 afterEach(async () => {

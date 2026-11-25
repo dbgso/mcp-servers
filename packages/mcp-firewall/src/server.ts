@@ -183,7 +183,7 @@ function registerProxyExecuteTool(params: {
 
         if ("content" in result && Array.isArray(result.content)) {
           if (dryRun && evaluation.action === "deny") {
-            const originalContent = result.content as Array<{ type: "text"; text: string }>;
+            const originalContent = result.content as { type: "text"; text: string }[];
             return {
               content: [
                 {
@@ -196,7 +196,7 @@ function registerProxyExecuteTool(params: {
             };
           }
           if (dryRun && evaluation.action === "ask") {
-            const originalContent = result.content as Array<{ type: "text"; text: string }>;
+            const originalContent = result.content as { type: "text"; text: string }[];
             return {
               content: [
                 {
@@ -209,7 +209,7 @@ function registerProxyExecuteTool(params: {
             };
           }
           return {
-            content: result.content as Array<{ type: "text"; text: string }>,
+            content: result.content as { type: "text"; text: string }[],
             isError: result.isError === true ? true : undefined,
           };
         }

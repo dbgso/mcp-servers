@@ -134,7 +134,7 @@ function parseExplainPayload(value: unknown): MysqlExplainPlan | null {
     }
   }
   if (value && typeof value === "object") {
-    return value as MysqlExplainPlan;
+    return value;
   }
   return null;
 }

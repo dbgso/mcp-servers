@@ -311,7 +311,7 @@ describe("stack integration: read ops drive the SQL builder + Postgres dialect e
     // then limit ($3). The segments arrive as a JS array which pg coerces
     // to a text[] over the wire.
     expect(pg.calls[0].values).toEqual(["x", ["foo", "bar"], 100]);
-    expect(Array.isArray((pg.calls[0].values as unknown[])[1])).toBe(true);
+    expect(Array.isArray((pg.calls[0].values)[1])).toBe(true);
     expect(data.path).toBe("$.foo.bar");
     expect(data.count).toBe(1);
     expect((data.rows as Record<string, unknown>[])[0].name).toBe("[REDACTED]");

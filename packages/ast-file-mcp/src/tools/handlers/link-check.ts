@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { formatMultiFileResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import { formatMultiFileResponse, getErrorMessage, BaseToolHandler, type ToolResponse } from "mcp-shared";
 import { getHandler } from "../../handlers/index.js";
 
 const LinkCheckSchema = z.object({

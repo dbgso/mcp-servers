@@ -20,7 +20,7 @@ export function convertBlocks(params: {
   blocks: unknown[];
   visited?: WeakSet<object>;
 }): AsciidocBlock[] {
-  const { blocks, visited = new WeakSet<object>() } = params;
+  const { blocks, visited = new WeakSet() } = params;
   return blocks.map((block: unknown) => {
     // Prevent circular reference
     if (typeof block === "object" && block !== null) {
@@ -78,7 +78,7 @@ export function convertBlocks(params: {
         const keysToCapture = ["language", "source-language", "linenums", "role"];
         for (const key of keysToCapture) {
           if (key in attrs && typeof attrs[key] === "string") {
-            relevantAttrs[key] = attrs[key] as string;
+            relevantAttrs[key] = attrs[key];
           }
         }
         if (Object.keys(relevantAttrs).length > 0) {

@@ -15,9 +15,9 @@ export interface ToolGuidelines {
 
 export function getGuidelines(toolId: string): ToolGuidelines | undefined {
   const guidelinesMap: Record<string, ToolGuidelines> = {
-    mermaid: mermaidGuidelines as ToolGuidelines,
-    plantuml: plantumlGuidelines as ToolGuidelines,
-    d2: d2Guidelines as ToolGuidelines,
+    mermaid: mermaidGuidelines,
+    plantuml: plantumlGuidelines,
+    d2: d2Guidelines,
   };
   return guidelinesMap[toolId];
 }

@@ -331,6 +331,8 @@ export async function createMysqlClient(url: string): Promise<MysqlQueryClient> 
   if (pathDb) opts.database = safeDecode(pathDb);
   if (parsed.searchParams.get("ssl") === "true") opts.ssl = {};
 
+  // `as string` keeps tsc from resolving the specifier (and asking for its @types package).
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion
   const mod = (await import("mysql2/promise" as string)) as unknown as Mysql2Module;
   const create = mod.createConnection ?? mod.default?.createConnection;
   if (!create) {

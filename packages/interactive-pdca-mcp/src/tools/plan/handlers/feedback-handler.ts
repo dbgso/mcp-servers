@@ -170,7 +170,7 @@ plan(action: "feedback", id: "task-001", feedback_id: "fb-001")
 
     const interpretationSection = feedback.interpretation
       ? `## AI Interpretation\n\n${feedback.interpretation}`
-      : "_No interpretation yet. AI needs to add interpretation before approval._\n\n**Next step:** \`plan(action: \"interpret\", id: \"${taskId}\", feedback_id: \"${feedbackId}\", interpretation: \"<detailed action items>\")\`";
+      : `_No interpretation yet. AI needs to add interpretation before approval._\n\n**Next step:** \`plan(action: "interpret", id: "${taskId}", feedback_id: "${feedbackId}", interpretation: "<detailed action items>")\``;
 
     const approvalSection = feedback.status === "draft" && feedback.interpretation
       ? `\n---\n\n**Ready for approval:** \`approve(target: "feedback", task_id: "${taskId}", feedback_id: "${feedbackId}")\``

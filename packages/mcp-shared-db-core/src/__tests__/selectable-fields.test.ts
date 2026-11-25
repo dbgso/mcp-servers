@@ -139,11 +139,11 @@ describe("redactPii — leak-prevention safety matrix", () => {
   const SECRET = "TOP_SECRET_VALUE";
 
   /** Every input shape we want to be defensive about. */
-  const policyCases: Array<{
+  const policyCases: {
     label: string;
     info: SelectableFieldInfo;
     expected: "expose" | "redacted" | "deleted";
-  }> = [
+  }[] = [
     // --- explicit select ---
     { label: "select=expose", info: { select: "expose" }, expected: "expose" },
     { label: "select=redact", info: { select: "redact" }, expected: "redacted" },

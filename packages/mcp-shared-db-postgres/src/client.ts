@@ -43,9 +43,7 @@ export interface PgQueryClient {
   on(event: "error", listener: (err: Error) => void): void;
 }
 
-interface PgClientCtor {
-  new (cfg: { connectionString: string }): PgQueryClient;
-}
+type PgClientCtor = new (cfg: { connectionString: string }) => PgQueryClient;
 
 interface PgModule {
   Client?: PgClientCtor;
@@ -64,6 +62,8 @@ interface PgModule {
 export async function createPgClient(url: string): Promise<PgQueryClient> {
   // Cast through unknown — pg ships without bundled types and we don't want
   // to force callers to install @types/pg just to use the adapter.
+  // `as string` keeps tsc from resolving the specifier (and asking for its @types package).
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion
   const mod = (await import("pg" as string)) as unknown as PgModule;
   const ctor = mod.default?.Client ?? mod.Client;
   if (!ctor) {

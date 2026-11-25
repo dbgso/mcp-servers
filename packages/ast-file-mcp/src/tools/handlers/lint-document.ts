@@ -1,7 +1,11 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import {
+  jsonResponse,
+  errorResponse,
+  getErrorMessage,
+  BaseToolHandler,
+  type ToolResponse,
+} from "mcp-shared";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
 import type {
   LintIssue,

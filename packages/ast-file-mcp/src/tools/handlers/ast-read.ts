@@ -1,8 +1,11 @@
 import { z } from "zod";
-import type { FileResult } from "mcp-shared";
-import { formatMultiFileResponse, getErrorMessage } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import {
+  type FileResult,
+  formatMultiFileResponse,
+  getErrorMessage,
+  BaseToolHandler,
+  type ToolResponse,
+} from "mcp-shared";
 import {
   getHandler,
   getSupportedExtensions,
@@ -78,7 +81,7 @@ async function processFile(params: {
         filePath,
         result: {
           filePath,
-          fileType: handler.fileType as "markdown" | "asciidoc",
+          fileType: handler.fileType,
           heading: options.heading,
           content,
         },
@@ -95,7 +98,7 @@ async function processFile(params: {
         filePath,
         result: {
           filePath,
-          fileType: handler.fileType as "markdown" | "asciidoc",
+          fileType: handler.fileType,
           query: "headings" as QueryType,
           data: headings,
         },
@@ -108,7 +111,7 @@ async function processFile(params: {
         filePath,
         result: {
           filePath,
-          fileType: handler.fileType as "markdown" | "asciidoc",
+          fileType: handler.fileType,
           query: "links" as QueryType,
           data: links,
         },
@@ -125,7 +128,7 @@ async function processFile(params: {
         filePath,
         result: {
           filePath,
-          fileType: handler.fileType as "markdown" | "asciidoc",
+          fileType: handler.fileType,
           query: "sections" as const,
           sections: sections.map((s) => ({ title: s.title, level: s.level })),
         },

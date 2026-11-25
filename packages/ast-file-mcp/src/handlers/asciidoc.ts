@@ -107,7 +107,7 @@ export class AsciidocHandler extends BaseHandler {
 
     const ast: AsciidocDocument = {
       type: "asciidoc",
-      title: doc.getTitle() as string | undefined,
+      title: doc.getTitle(),
       docAttributes: docAttributes.length > 0 ? docAttributes : undefined,
       blocks: convertBlocks({ blocks: doc.getBlocks() }),
     };
@@ -142,7 +142,7 @@ export class AsciidocHandler extends BaseHandler {
       const doc = asciidoctor.load(content);
       const ast: AsciidocDocument = {
         type: "asciidoc",
-        title: doc.getTitle() as string | undefined,
+        title: doc.getTitle(),
         blocks: convertBlocks({ blocks: doc.getBlocks() }),
       };
       // Return section as full query
@@ -494,7 +494,7 @@ export class AsciidocHandler extends BaseHandler {
     if (title && (!maxDepth || maxDepth >= 1)) {
       headings.push({
         depth: 1,
-        text: title as string,
+        text: title,
         line: 1,
       });
     }
@@ -515,14 +515,14 @@ export class AsciidocHandler extends BaseHandler {
         });
 
         // Get nested sections
-        const nestedSections = section.getSections() as AsciidocSection[];
+        const nestedSections = section.getSections();
         if (nestedSections && nestedSections.length > 0) {
           getSections(nestedSections);
         }
       }
     };
 
-    const sections = doc.getSections() as AsciidocSection[];
+    const sections = doc.getSections();
     getSections(sections);
 
     return headings;
@@ -534,7 +534,7 @@ export class AsciidocHandler extends BaseHandler {
    */
   getLinks(doc: AsciidocDoc): LinkSummary[] {
     const links: LinkSummary[] = [];
-    const content = doc.getSource() as string;
+    const content = doc.getSource();
 
     if (!content) return links;
 
@@ -734,7 +734,7 @@ export class AsciidocHandler extends BaseHandler {
       }
 
       // Also check for bare ---- blocks (listing without [source])
-      if (line.trim() === "----" && (i === 0 || !lines[i - 1].match(/^\[source/))) {
+      if (line.trim() === "----" && (i === 0 || !/^\[source/.test(lines[i - 1]))) {
         const startLine = i;
         const contentLines: string[] = [];
         let j = i + 1;
@@ -821,7 +821,7 @@ export class AsciidocHandler extends BaseHandler {
     const { startFile: startFilePath, maxDepth = 10 } = params;
     const visited = new Set<string>();
     const files: FileSummary[] = [];
-    const errors: Array<{ filePath: string; error: string }> = [];
+    const errors: { filePath: string; error: string }[] = [];
 
     const crawlFile = async (params: {
       filePath: string;
@@ -934,11 +934,11 @@ export class AsciidocHandler extends BaseHandler {
   async readDirectory(params: {
     directory: string;
     pattern?: string;
-  }): Promise<{ files: FileSummary[]; errors: Array<{ filePath: string; error: string }> }> {
+  }): Promise<{ files: FileSummary[]; errors: { filePath: string; error: string }[] }> {
     const { directory, pattern } = params;
     const filePaths = await this.findFiles({ directory, pattern });
     const files: FileSummary[] = [];
-    const errors: Array<{ filePath: string; error: string }> = [];
+    const errors: { filePath: string; error: string }[] = [];
 
     for (const filePath of filePaths) {
       try {

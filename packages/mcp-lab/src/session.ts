@@ -75,7 +75,7 @@ export class LabSession {
       this.captureStderr();
       // Give the pipe a turn to deliver what the child wrote before exiting.
       await new Promise((resolve) => setTimeout(resolve, 50));
-      throw new Error(`${messageOf(error)}${this.log.length === 0 ? "" : `\n\n${this.logs()}`}`);
+      throw new Error(`${messageOf(error)}${this.log.length === 0 ? "" : `\n\n${this.logs()}`}`, { cause: error });
     }
 
     this.captureStderr();

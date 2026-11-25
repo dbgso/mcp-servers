@@ -20,7 +20,7 @@
  * and SSM tunnels share a single signal handler and a single registry of
  * live tunnels.
  */
-import { type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import {
   awaitTunnelReadyOrKill,
   ChildTunnelHandle,

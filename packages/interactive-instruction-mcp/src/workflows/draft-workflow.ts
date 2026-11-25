@@ -160,6 +160,7 @@ function buildManager(docsDir: string | null): WorkflowManager<DraftState, Draft
  *
  * Until configured it falls back to an unscoped store, which is what tests use.
  */
+// oxlint-disable-next-line import/no-mutable-exports -- a live binding on purpose (see above)
 export let draftWorkflowManager = buildManager(null);
 
 /**

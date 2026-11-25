@@ -90,7 +90,7 @@ function wrapExecFile(
       execFileAsync(command, [...args], {
         timeout: 15_000,
         maxBuffer: 1024 * 1024,
-      }) as Promise<ExecFileResult>;
+      });
   }
   return ({ command, args }) =>
     new Promise((resolve, reject) => {

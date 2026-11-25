@@ -1,63 +1,28 @@
+// oxlint configuration (`pnpm lint`, type-aware).
+//
+// The base is every rule in the correctness / suspicious / perf categories as an error; rules that do not fit are
+// turned off below with the reason. On top of that: rules the code already follows (carried over from
+// dbgso/private-static-site), and this repository's own rules (eslint-rules/, `custom/*`).
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": [
-    "typescript",
-    "unicorn",
-    "oxc"
-  ],
-  "jsPlugins": [
-    "./eslint-rules/index.js"
-  ],
-  "ignorePatterns": [
-    "node_modules/**",
-    "**/node_modules/**",
-    "**/dist/**",
-    "**/coverage/**",
-    "eslint-rules/**",
-    "packages/ast-typescript-mcp/**"
-  ],
-  "categories": {
-    "correctness": "error"
-  },
-  "env": {
-    "builtin": true
-  },
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "node", "promise", "vitest"],
+  "jsPlugins": ["./eslint-rules/index.js"],
+  "ignorePatterns": ["node_modules/**", "**/node_modules/**", "**/dist/**", "**/coverage/**", "eslint-rules/**", "packages/ast-typescript-mcp/**"],
+  "categories": {"correctness": "error", "suspicious": "error", "perf": "error"},
+  "env": {"builtin": true},
   "rules": {
-    "no-unused-vars": [
-      "warn",
-      {
-        "argsIgnorePattern": "^_"
-      }
-    ],
+    // --- existing rules ---
+    "no-unused-vars": ["warn", {"argsIgnorePattern": "^_"}],
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "prefer-const": "error",
-    "custom/single-params-object": [
-      "error",
-      {
-        "maxParams": 1,
-        "ignoreConstructors": true,
-        "ignoreMethods": [
-          "execute",
-          "action",
-          "check"
-        ]
-      }
-    ],
+    "custom/single-params-object": ["error", {"maxParams": 1, "ignoreConstructors": true, "ignoreMethods": ["execute", "action", "check"]}],
     "custom/implement-interface-with-class": "warn",
     "no-useless-escape": "off",
     "typescript/no-this-alias": "off",
     "unicorn/prefer-string-starts-ends-with": "off",
-    "custom/no-branching-literal": [
-      "error",
-      {
-        "maxLines": 3
-      }
-    ],
-    "complexity": [
-      "warn",
-      3
-    ],
+    "custom/no-branching-literal": ["error", {"maxLines": 3}],
+    "complexity": ["warn", 3],
     "typescript/unbound-method": "error",
     "typescript/no-base-to-string": "error",
     "typescript/await-thenable": "error",
@@ -65,7 +30,112 @@
     "typescript/no-redundant-type-constituents": "error",
     "typescript/restrict-template-expressions": "error",
     "typescript/no-misused-spread": "error",
-    "custom/no-arrow-class-method": "error"
+    "custom/no-arrow-class-method": "error",
+    // Carried over from dbgso/private-static-site. Reasons at the top of each eslint-rules/*.js
+    "custom/no-secret-in-log": "error",
+    "custom/no-insecure-random": "error",
+
+    // --- carried over from dbgso/private-static-site (what the code already follows) ---
+    "eslint/eqeqeq": ["error", "always", {"null": "ignore"}],
+    "eslint/radix": "error",
+    "eslint/prefer-promise-reject-errors": ["error", {"allowEmptyReject": true}],
+    "eslint/no-empty": "error",
+    "eslint/no-proto": "error",
+    "eslint/no-sequences": "error",
+    "eslint/no-array-constructor": "error",
+    "eslint/no-new-wrappers": "error",
+    "eslint/no-new-func": "error",
+    "eslint/no-script-url": "error",
+    "eslint/no-useless-computed-key": "error",
+    "eslint/no-self-compare": "error",
+    "eslint/no-object-constructor": "error",
+    "eslint/no-prototype-builtins": "error",
+    "eslint/no-redeclare": "error",
+    "eslint/no-return-assign": "error",
+    "eslint/no-useless-concat": "error",
+    "eslint/no-lonely-if": "error",
+    "eslint/no-unneeded-ternary": "error",
+    "eslint/no-else-return": "error",
+    "eslint/no-useless-return": "error",
+    // "${x}" in a plain string never interpolates (this caught a broken hint in feedback-handler.ts).
+    "eslint/no-template-curly-in-string": "error",
+    "typescript/ban-ts-comment": "error",
+    "typescript/prefer-ts-expect-error": "error",
+    // Type-only imports are `import type` (verbatimModuleSyntax). `import("x").T` in a type stays allowed.
+    "typescript/consistent-type-imports": ["error", {"disallowTypeAnnotations": false}],
+    "typescript/no-import-type-side-effects": "error",
+    "typescript/no-namespace": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-unsafe-function-type": "error",
+    "typescript/no-wrapper-object-types": "error",
+    "typescript/prefer-function-type": "error",
+    "typescript/array-type": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "import/no-cycle": "error",
+    "import/no-duplicates": "error",
+    "import/no-mutable-exports": "error",
+    "unicorn/throw-new-error": "error",
+    "unicorn/no-instanceof-array": "error",
+    "unicorn/prefer-optional-catch-binding": "error",
+    "unicorn/no-useless-promise-resolve-reject": "error",
+    "unicorn/prefer-regexp-test": "error",
+    "unicorn/no-unreadable-iife": "error",
+    "unicorn/prefer-array-some": "error",
+    "unicorn/prefer-array-index-of": "error",
+    "unicorn/prefer-array-flat-map": "error",
+    "unicorn/prefer-set-has": "error",
+    "unicorn/prefer-math-min-max": "error",
+    "unicorn/prefer-modern-math-apis": "error",
+    "unicorn/prefer-native-coercion-functions": "error",
+    "unicorn/prefer-object-from-entries": "error",
+    "unicorn/no-negation-in-equality-check": "error",
+    "unicorn/no-useless-length-check": "error",
+    "unicorn/no-unnecessary-await": "error",
+    "unicorn/no-zero-fractions": "error",
+    "unicorn/number-literal-case": "error",
+    "unicorn/escape-case": "error",
+    "unicorn/no-hex-escape": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "promise/no-return-wrap": "error",
+    "promise/spec-only": "error",
+    "node/no-exports-assign": "error",
+    "node/no-new-require": "error",
+
+    // --- category rules turned off, with the reason ---
+    // "utf-8" vs "utf8" is spelling, and the fix touches 330 lines for no behaviour.
+    "unicorn/text-encoding-identifier-case": "off",
+    // Tunnels, migrations and git calls run one after another on purpose (order and back-pressure).
+    "eslint/no-await-in-loop": "off",
+    // `new Promise((r) => ...)` and similar short names are used throughout; naming is not what goes wrong.
+    "promise/param-names": "off",
+    // Cannot see the `settled` guard or `return resolve()` before the next resolve (ssh-tunnel.ts, approval/core.ts).
+    "promise/no-multiple-resolved": "off",
+    // Spreading a few small objects in `map` is not where the time goes; the copy keeps inputs untouched.
+    "oxc/no-map-spread": "off",
+    // `query<T>()` in the db clients is the API: the caller names the row type.
+    "typescript/no-unnecessary-type-parameters": "off",
+    // Placeholder modules (`export {}` plus a note on where the code went) are kept for their note.
+    "unicorn/no-empty-file": "off",
+    // `vi.fn()` takes its type from where it is passed; spelling it out on 270 mocks adds nothing.
+    "vitest/require-mock-type-parameters": "off",
+    // Tests branch on `isError` to report the server's text when it fails; the expect still runs.
+    "vitest/no-conditional-expect": "off",
+    // `toThrow()` without a message is used where only throwing matters.
+    "vitest/require-to-throw-message": "off",
+    // 670 `as` casts, nearly all on parsed JSON and MCP tool results in tests; strict tsc is what checks the types
+    "typescript/no-unsafe-type-assertion": "off",
+    // Sorting arrays that were just built (Object.keys, map results). toSorted would be the same thing with a copy
+    "unicorn/no-array-sort": "off",
+    // `_` prefixes mark unused parameters (no-unused-vars argsIgnorePattern) and private-ish fields
+    "eslint/no-underscore-dangle": "off",
+    // Small helpers are kept next to the one place that uses them, for reading
+    "unicorn/consistent-function-scoping": "off",
+    // Re-using a short name (`result`, `path`, `e`) in an inner callback; strict tsc and no-unused-vars catch the mix-ups
+    "eslint/no-shadow": "off",
+    // The declared type of a tool argument or a DuckDB row is not what arrives at runtime. `Number(limit)` in SQL
+    // is the guarantee that only a number reaches the query, and DuckDB returns counts as strings
+    "typescript/no-unnecessary-type-conversion": "off"
   },
   "overrides": [
     {
@@ -81,7 +151,23 @@
         "complexity": "off",
         "custom/no-branching-literal": "off",
         "typescript/unbound-method": "off",
-        "custom/no-arrow-class-method": "off"
+        "custom/no-arrow-class-method": "off",
+        // Constructing for the side effect is what some tests check (the constructor creates the directory)
+        "eslint/no-new": "off",
+        // vitest's expect takes a message as the second argument
+        "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+        // it.each rows carry a `check` that calls expect; schema tests assert through verify* helpers
+        "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expect*", "assert*", "verify*", "check"] }],
+        // Tests throw strings and plain objects to check how the handler reports them
+        "eslint/no-throw-literal": "off",
+        "unicorn/throw-new-error": "off",
+        // Tests reach into private state with `as` and require() a module fresh after vi.resetModules
+        "typescript/no-require-imports": "off",
+        // Tests use Math.random for throwaway names; the reason for the rule is ids and nonces in servers
+        "custom/no-insecure-random": "off",
+        "custom/no-focused-or-skipped-tests": ["error", { "allowConditional": true }],
+        // warn for now: 80 existing places, to be folded into it.each in follow-up changes. New ones show up in the lint output
+        "custom/similar-tests-each": "warn"
       }
     },
     {

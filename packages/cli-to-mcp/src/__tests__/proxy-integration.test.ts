@@ -104,7 +104,7 @@ describe("cli-to-mcp with mcp-firewall", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("hello");
     });
 
@@ -130,7 +130,7 @@ describe("cli-to-mcp with mcp-firewall", () => {
       });
 
       expect(result.isError).toBeTruthy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("denied");
     });
 
@@ -144,7 +144,7 @@ describe("cli-to-mcp with mcp-firewall", () => {
       });
 
       expect(result.isError).toBeTruthy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("denied");
     });
 
@@ -169,7 +169,7 @@ describe("cli-to-mcp with mcp-firewall", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("block-prod-profile");
       expect(text).toContain("allow-echo");
     });
@@ -293,7 +293,7 @@ describe("cli-to-mcp proxy with options parameter", () => {
     });
 
     expect(result.isError).toBeTruthy();
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     expect(text).toContain("denied");
   });
 
@@ -329,7 +329,7 @@ describe("cli-to-mcp proxy with options parameter", () => {
     });
 
     expect(result.isError).toBeTruthy();
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     expect(text).toContain("denied");
   });
 
@@ -417,7 +417,7 @@ describe("cli-to-mcp proxy with array args handling", () => {
     });
 
     expect(result.isError).toBeTruthy();
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     expect(text).toContain("denied");
   });
 
@@ -432,7 +432,7 @@ describe("cli-to-mcp proxy with array args handling", () => {
 
     // contains operator should work on array args
     expect(result.isError).toBeTruthy();
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     expect(text).toContain("denied");
   });
 
@@ -446,7 +446,7 @@ describe("cli-to-mcp proxy with array args handling", () => {
     });
 
     expect(result.isError).toBeFalsy();
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     expect(text).toContain("safe message");
   });
 });

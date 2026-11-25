@@ -41,7 +41,7 @@ export abstract class BaseHandler implements FileHandler {
   abstract readDirectory(params: {
     directory: string;
     pattern?: string;
-  }): Promise<{ files: FileSummary[]; errors: Array<{ filePath: string; error: string }> }>;
+  }): Promise<{ files: FileSummary[]; errors: { filePath: string; error: string }[] }>;
 
   /**
    * Crawl from a starting file, following links recursively.

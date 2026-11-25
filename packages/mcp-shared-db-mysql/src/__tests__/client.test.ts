@@ -222,7 +222,7 @@ describe("wrapConnection", () => {
     const client = wrapConnection({
       async query() {
         // SET / DDL: mysql2 returns an OkPacket object, not an array.
-        return [{ affectedRows: 0 } as unknown as never[], []];
+        return [{ affectedRows: 0 }, []];
       },
       async end() {},
       on() {},

@@ -1,8 +1,6 @@
 import { z } from "zod";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import { BaseToolHandler, type ToolResponse, getErrorMessage } from "mcp-shared";
 import { getHandler, getSupportedExtensions } from "../../handlers/index.js";
-import { getErrorMessage } from "mcp-shared";
 
 const ReorderSectionsSchema = z.object({
   file_path: z.string().describe("Absolute path to the source file"),

@@ -291,7 +291,7 @@ class WorkflowInstanceImpl<TState extends string, TContext, TParams>
     // Inject visited states into context for stateVisited validator
     const ctxWithVisited: ContextWithVisitedStates<TContext> = {
       ...this.contextValue,
-      _visitedStates: this.visited as string[],
+      _visitedStates: this.visited,
     };
 
     // Validators expecting TContext will work with extended context

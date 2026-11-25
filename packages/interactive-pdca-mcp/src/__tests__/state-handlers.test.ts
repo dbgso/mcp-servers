@@ -178,7 +178,7 @@ describe("RequestChangesHandler", () => {
 
     mockFeedbackReader = {
       createDraftFeedback: vi.fn().mockResolvedValue({ success: true, feedbackId: "fb-001" }),
-    } as unknown as FeedbackReader;
+    };
 
     mockContext = {
       planReader: mockPlanReader,
@@ -340,7 +340,7 @@ describe("InterpretHandler", () => {
     mockFeedbackReader = {
       getFeedback: vi.fn().mockResolvedValue(mockFeedback),
       addInterpretation: vi.fn().mockResolvedValue({ success: true }),
-    } as unknown as FeedbackReader;
+    };
 
     mockContext = {
       planReader: mockPlanReader,

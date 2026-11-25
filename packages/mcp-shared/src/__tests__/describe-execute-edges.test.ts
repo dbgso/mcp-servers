@@ -56,7 +56,7 @@ function handlers(params: {
   });
 }
 
-describe("describe", () => {
+describe("the branches that vary between servers", () => {
   it("puts the preamble above the list when there is one", async () => {
     const [describeTool] = handlers({
       ops: [noParams as Operation<unknown, Ctx>],

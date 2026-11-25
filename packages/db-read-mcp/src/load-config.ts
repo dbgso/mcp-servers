@@ -141,14 +141,14 @@ async function loadJson<T>(params: LoadJsonParams): Promise<T> {
     raw = await jsonReader(fsPath);
   } catch (err) {
     throw new Error(
-      `Failed to read ${what} from ${filePath}: ${(err as Error).message}`,
+      `Failed to read ${what} from ${filePath}: ${(err as Error).message}`, { cause: err },
     );
   }
   try {
     return JSON.parse(raw) as T;
   } catch (err) {
     throw new Error(
-      `Failed to parse ${what} JSON from ${filePath}: ${(err as Error).message}`,
+      `Failed to parse ${what} JSON from ${filePath}: ${(err as Error).message}`, { cause: err },
     );
   }
 }

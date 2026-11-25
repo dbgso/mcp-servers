@@ -70,7 +70,7 @@ describe("createSsmTunnel", () => {
     const spawnFn = vi.fn(() => child as never);
 
     const tunnel = await createSsmTunnel(
-      config({ localPort: port, spawnFn }) as never
+      config({ localPort: port, spawnFn })
     );
 
     expect(spawnFn).toHaveBeenCalledTimes(1);
@@ -91,7 +91,7 @@ describe("createSsmTunnel", () => {
     const spawnFn = vi.fn(() => child as never);
 
     const tunnel = await createSsmTunnel(
-      config({ localPort: port, spawnFn, profile: "staging", region: "ap-northeast-1" }) as never
+      config({ localPort: port, spawnFn, profile: "staging", region: "ap-northeast-1" })
     );
 
     const args = (spawnFn.mock.calls[0][1] as string[]).join(" ");
@@ -111,7 +111,7 @@ describe("createSsmTunnel", () => {
     const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
 
     const tunnel = await createSsmTunnel(
-      config({ localPort: port, spawnFn: () => child as never }) as never
+      config({ localPort: port, spawnFn: () => child as never })
     );
     child.stderr.emit("data", Buffer.from("SessionManagerPlugin is not found"));
 
@@ -162,7 +162,7 @@ describe("when the caller names no local port", () => {
         },
         readyTimeoutMs: 2000,
         probeIntervalMs: 20,
-      }) as never
+      })
     );
 
     expect(tunnel.localPort).toBeGreaterThan(0);
@@ -179,7 +179,7 @@ describe("when the caller names no local port", () => {
     const spawnFn = vi.fn(() => child as never);
 
     const tunnel = await createSsmTunnel(
-      config({ localPort: port, spawnFn, documentName: "AWS-StartPortForwardingSessionToRemoteHost" }) as never
+      config({ localPort: port, spawnFn, documentName: "AWS-StartPortForwardingSessionToRemoteHost" })
     );
 
     expect((spawnFn.mock.calls[0][1] as string[]).join(" ")).toContain(
@@ -197,7 +197,7 @@ describe("close", () => {
     const child = new FakeChild();
 
     const tunnel = await createSsmTunnel(
-      config({ localPort: port, spawnFn: () => child as never }) as never
+      config({ localPort: port, spawnFn: () => child as never })
     );
     await tunnel.close();
 
@@ -212,7 +212,7 @@ describe("close", () => {
     const child = new FakeChild();
 
     const tunnel = await createSsmTunnel(
-      config({ localPort: port, spawnFn: () => child as never }) as never
+      config({ localPort: port, spawnFn: () => child as never })
     );
     await tunnel.close();
     const after = child.signals.length;
@@ -227,7 +227,7 @@ describe("close", () => {
     const child = new FakeChild();
 
     const tunnel = await createSsmTunnel(
-      config({ localPort: port, spawnFn: () => child as never }) as never
+      config({ localPort: port, spawnFn: () => child as never })
     );
     // The CLI died on its own; `active` follows the exit.
     child.exitCode = 1;
@@ -246,7 +246,7 @@ describe("withSsmTunnel", () => {
     const child = new FakeChild();
 
     const result = await withSsmTunnel({
-      config: config({ localPort: port, spawnFn: () => child as never }) as never,
+      config: config({ localPort: port, spawnFn: () => child as never }),
       fn: async (tunnel) => {
         expect(tunnel.active).toBe(true);
         return "done";
@@ -266,7 +266,7 @@ describe("withSsmTunnel", () => {
 
     await expect(
       withSsmTunnel({
-        config: config({ localPort: port, spawnFn: () => child as never }) as never,
+        config: config({ localPort: port, spawnFn: () => child as never }),
         fn: async () => {
           throw new Error("the query failed");
         },

@@ -96,7 +96,7 @@ export interface FileSummary {
 export interface CrawlResult {
   startFile: string;
   files: FileSummary[];
-  errors: Array<{ filePath: string; error: string }>;
+  errors: { filePath: string; error: string }[];
 }
 
 // Link check types

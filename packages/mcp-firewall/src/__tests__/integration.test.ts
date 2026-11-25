@@ -125,7 +125,7 @@ describe("mcp-firewall Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("Git Operations");
     });
 
@@ -136,7 +136,7 @@ describe("mcp-firewall Integration Tests", () => {
       });
 
       expect(result.isError).toBe(true);
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("[BLOCKED]");
       expect(text).toContain("Block git log operation");
     });
@@ -148,7 +148,7 @@ describe("mcp-firewall Integration Tests", () => {
       });
 
       // Should not be blocked (may error from git-repo-explorer if params missing, but not [BLOCKED])
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).not.toContain("[BLOCKED]");
     });
   });
@@ -161,7 +161,7 @@ describe("mcp-firewall Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       const parsed = JSON.parse(text);
 
       expect(parsed.defaultAction).toBe("deny");
@@ -184,7 +184,7 @@ describe("mcp-firewall Integration Tests", () => {
       });
 
       expect(addResult.isError).toBeFalsy();
-      const addText = (addResult.content as Array<{ type: string; text: string }>)[0]?.text;
+      const addText = (addResult.content as { type: string; text: string }[])[0]?.text;
       expect(addText).toContain("Rule created");
 
       // Extract the new rule ID
@@ -198,7 +198,7 @@ describe("mcp-firewall Integration Tests", () => {
         arguments: { toolName: "git_describe", args: {} },
       });
       expect(blockedResult.isError).toBe(true);
-      const blockedText = (blockedResult.content as Array<{ type: string; text: string }>)[0]?.text;
+      const blockedText = (blockedResult.content as { type: string; text: string }[])[0]?.text;
       expect(blockedText).toContain("[BLOCKED]");
 
       // Remove the rule
@@ -207,7 +207,7 @@ describe("mcp-firewall Integration Tests", () => {
         arguments: { id: newRuleId },
       });
       expect(removeResult.isError).toBeFalsy();
-      const removeText = (removeResult.content as Array<{ type: string; text: string }>)[0]?.text;
+      const removeText = (removeResult.content as { type: string; text: string }[])[0]?.text;
       expect(removeText).toContain("Rule removed");
 
       // Verify git_describe is allowed again
@@ -216,7 +216,7 @@ describe("mcp-firewall Integration Tests", () => {
         arguments: { toolName: "git_describe", args: {} },
       });
       expect(allowedResult.isError).toBeFalsy();
-      const allowedText = (allowedResult.content as Array<{ type: string; text: string }>)[0]?.text;
+      const allowedText = (allowedResult.content as { type: string; text: string }[])[0]?.text;
       expect(allowedText).toContain("Git Operations");
     });
   });
@@ -234,7 +234,7 @@ describe("mcp-firewall Integration Tests", () => {
         },
       });
 
-      const addText = (addResult.content as Array<{ type: string; text: string }>)[0]?.text;
+      const addText = (addResult.content as { type: string; text: string }[])[0]?.text;
       const match = addText.match(/"id":\s*"([^"]+)"/);
       const ruleId = match?.[1];
       expect(ruleId).toBeDefined();
@@ -250,7 +250,7 @@ describe("mcp-firewall Integration Tests", () => {
       });
 
       expect(updateResult.isError).toBeFalsy();
-      const updateText = (updateResult.content as Array<{ type: string; text: string }>)[0]?.text;
+      const updateText = (updateResult.content as { type: string; text: string }[])[0]?.text;
       expect(updateText).toContain("Rule updated");
       expect(updateText).toContain("deny");
       expect(updateText).toContain("Changed to deny all git operations");
@@ -260,7 +260,7 @@ describe("mcp-firewall Integration Tests", () => {
         name: "proxy_rule_list",
         arguments: {},
       });
-      const listText = (listResult.content as Array<{ type: string; text: string }>)[0]?.text;
+      const listText = (listResult.content as { type: string; text: string }[])[0]?.text;
       const parsed = JSON.parse(listText);
       const updatedRule = parsed.rules.find((r: { id: string }) => r.id === ruleId);
       expect(updatedRule.action).toBe("deny");
@@ -283,7 +283,7 @@ describe("mcp-firewall Integration Tests", () => {
       });
 
       expect(updateResult.isError).toBe(true);
-      const text = (updateResult.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (updateResult.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("Rule not found");
     });
   });
@@ -299,7 +299,7 @@ describe("mcp-firewall Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       const parsed = JSON.parse(text);
 
       expect(parsed.result.action).toBe("deny");
@@ -319,7 +319,7 @@ describe("mcp-firewall Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       const parsed = JSON.parse(text);
 
       expect(parsed.connected).toBe(true);
@@ -376,7 +376,7 @@ describe("mcp-firewall Dry-run Mode", () => {
     // Should NOT be an error (not blocked)
     expect(result.isError).toBeFalsy();
 
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     expect(text).toContain("[DRY-RUN NOTE]");
     expect(text).toContain("would be blocked");
   });
@@ -387,7 +387,7 @@ describe("mcp-firewall Dry-run Mode", () => {
       arguments: {},
     });
 
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     const parsed = JSON.parse(text);
 
     expect(parsed.dryRun).toBe(true);
@@ -461,7 +461,7 @@ describe("mcp-firewall Ask Action", () => {
 
     // Should not be an error, but require approval
     expect(result.isError).toBeFalsy();
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     expect(text).toContain("[APPROVAL REQUIRED]");
     expect(text).toContain("Request ID:");
     expect(text).toContain("proxy_approve");
@@ -481,7 +481,7 @@ describe("mcp-firewall Ask Action", () => {
     });
 
     expect(result.isError).toBeFalsy();
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     const parsed = JSON.parse(text);
 
     expect(parsed.count).toBeGreaterThanOrEqual(1);
@@ -496,7 +496,7 @@ describe("mcp-firewall Ask Action", () => {
     });
 
     // Extract request ID
-    const askText = (askResult.content as Array<{ type: string; text: string }>)[0]?.text;
+    const askText = (askResult.content as { type: string; text: string }[])[0]?.text;
     const match = askText.match(/Request ID:\s*(\S+)/);
     const requestId = match?.[1];
     expect(requestId).toBeDefined();
@@ -508,7 +508,7 @@ describe("mcp-firewall Ask Action", () => {
     });
 
     expect(rejectResult.isError).toBeFalsy();
-    const rejectText = (rejectResult.content as Array<{ type: string; text: string }>)[0]?.text;
+    const rejectText = (rejectResult.content as { type: string; text: string }[])[0]?.text;
     expect(rejectText).toContain("[REJECTED]");
   });
 
@@ -520,7 +520,7 @@ describe("mcp-firewall Ask Action", () => {
     });
 
     // Extract request ID
-    const askText = (askResult.content as Array<{ type: string; text: string }>)[0]?.text;
+    const askText = (askResult.content as { type: string; text: string }[])[0]?.text;
     const match = askText.match(/Request ID:\s*(\S+)/);
     const requestId = match?.[1];
 
@@ -531,7 +531,7 @@ describe("mcp-firewall Ask Action", () => {
     });
 
     expect(approveResult.isError).toBe(true);
-    const approveText = (approveResult.content as Array<{ type: string; text: string }>)[0]?.text;
+    const approveText = (approveResult.content as { type: string; text: string }[])[0]?.text;
     expect(approveText).toContain("[APPROVAL FAILED]");
   });
 
@@ -543,7 +543,7 @@ describe("mcp-firewall Ask Action", () => {
     });
 
     // Extract request ID
-    const askText = (askResult.content as Array<{ type: string; text: string }>)[0]?.text;
+    const askText = (askResult.content as { type: string; text: string }[])[0]?.text;
     const requestIdMatch = askText.match(/Request ID:\s*(\S+)/);
     const requestId = requestIdMatch?.[1];
     expect(requestId).toBeDefined();
@@ -556,7 +556,7 @@ describe("mcp-firewall Ask Action", () => {
     });
 
     expect(approveResult.isError).toBeFalsy();
-    const approveText = (approveResult.content as Array<{ type: string; text: string }>)[0]?.text;
+    const approveText = (approveResult.content as { type: string; text: string }[])[0]?.text;
     expect(approveText).toContain("[APPROVED]");
   });
 

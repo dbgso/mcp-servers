@@ -18,7 +18,7 @@ describe("FeedbackHandler (plan)", () => {
     mockFeedbackReader = {
       listFeedback: vi.fn().mockResolvedValue([]),
       getFeedback: vi.fn().mockResolvedValue(null),
-    } as unknown as FeedbackReader;
+    };
 
     mockContext = {
       planReader: mockPlanReader,

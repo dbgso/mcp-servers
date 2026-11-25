@@ -45,7 +45,7 @@ describe("cli-to-mcp Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("hello world");
       expect(text).toContain("Exit code: 0");
     });
@@ -57,7 +57,7 @@ describe("cli-to-mcp Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("hello world");
     });
 
@@ -68,7 +68,7 @@ describe("cli-to-mcp Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("Exit code: 0");
     });
 
@@ -79,7 +79,7 @@ describe("cli-to-mcp Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("Exit code: 0");
     });
 
@@ -103,7 +103,7 @@ describe("cli-to-mcp Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("-n");
     });
 
@@ -118,7 +118,7 @@ describe("cli-to-mcp Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("--all");
       expect(text).toContain("--human-readable");
     });
@@ -132,7 +132,7 @@ describe("cli-to-mcp Integration Tests", () => {
         },
       });
 
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("-e");
       expect(text).toContain("hello world");
     });
@@ -146,7 +146,7 @@ describe("cli-to-mcp Integration Tests", () => {
         },
       });
 
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text).toContain("-e value1 -e value2");
     });
   });
@@ -158,7 +158,7 @@ describe("cli-to-mcp Integration Tests", () => {
         arguments: { command: "ls" },
       });
 
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text.length).toBeGreaterThan(0);
     });
 
@@ -168,7 +168,7 @@ describe("cli-to-mcp Integration Tests", () => {
         arguments: { command: "git", subcommand: "status" },
       });
 
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       expect(text.length).toBeGreaterThan(0);
     });
 
@@ -190,7 +190,7 @@ describe("cli-to-mcp Integration Tests", () => {
       });
 
       expect(result.isError).toBeFalsy();
-      const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+      const text = (result.content as { type: string; text: string }[])[0]?.text;
       const status = JSON.parse(text);
 
       expect(status.timeout).toBe(30000);
@@ -225,7 +225,7 @@ describe("cli-to-mcp with --cwd option", () => {
     });
 
     expect(result.isError).toBeFalsy();
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     expect(text).toContain("/tmp");
   });
 });
@@ -263,7 +263,7 @@ describe("cli-to-mcp with --config option", () => {
     });
 
     expect(result.isError).toBeFalsy();
-    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text;
+    const text = (result.content as { type: string; text: string }[])[0]?.text;
     const status = JSON.parse(text);
 
     expect(status.cwd).toBe("/tmp");

@@ -1,4 +1,4 @@
-import { createOperationRegistry, type Operation } from "mcp-shared";
+import { createOperationRegistry } from "mcp-shared";
 import { listTablesOp, describeTableOp } from "mcp-shared-db-core";
 import type { DatabaseOperation, DatabaseOperationContext } from "./types.js";
 import { getByPkOp } from "./get-by-pk.js";
@@ -25,5 +25,5 @@ export const allDatabaseOperations: DatabaseOperation[] = [
 ];
 
 export const databaseRegistry = createOperationRegistry<DatabaseOperationContext>(
-  allDatabaseOperations as Operation<unknown, DatabaseOperationContext>[],
+  allDatabaseOperations,
 );

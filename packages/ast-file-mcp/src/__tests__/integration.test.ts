@@ -41,7 +41,7 @@ describe("Integration Tests", () => {
       expect(result.query).toBe("headings");
       expect(Array.isArray(result.data)).toBe(true);
 
-      const headings = result.data as Array<{ depth: number; text: string; line: number }>;
+      const headings = result.data as { depth: number; text: string; line: number }[];
       const h1 = headings.find((h) => h.depth === 1);
       const h2s = headings.filter((h) => h.depth === 2);
 
@@ -54,7 +54,7 @@ describe("Integration Tests", () => {
       const filePath = join(FIXTURES_DIR, "sample.md");
       const result = await handler.query({ filePath, queryType: "headings", options: { depth: 2 } });
 
-      const headings = result.data as Array<{ depth: number }>;
+      const headings = result.data as { depth: number }[];
       // h3 (depth 3) should be excluded
       const hasH3 = headings.some((h) => h.depth > 2);
       expect(hasH3).toBe(false);
@@ -67,7 +67,7 @@ describe("Integration Tests", () => {
       expect(result.query).toBe("code_blocks");
       expect(Array.isArray(result.data)).toBe(true);
 
-      const codeBlocks = result.data as Array<{ lang: string | null; value: string }>;
+      const codeBlocks = result.data as { lang: string | null; value: string }[];
       const bashBlock = codeBlocks.find((b) => b.lang === "bash");
       const tsBlock = codeBlocks.find((b) => b.lang === "typescript");
 
@@ -83,7 +83,7 @@ describe("Integration Tests", () => {
       expect(result.query).toBe("lists");
       expect(Array.isArray(result.data)).toBe(true);
 
-      const lists = result.data as Array<{ ordered: boolean; items: string[] }>;
+      const lists = result.data as { ordered: boolean; items: string[] }[];
       expect(lists.length).toBeGreaterThan(0);
 
       const optionsList = lists.find((l) => l.items.some((i) => i.includes("Option A")));
@@ -98,7 +98,7 @@ describe("Integration Tests", () => {
       expect(result.query).toBe("links");
       expect(Array.isArray(result.data)).toBe(true);
 
-      const links = result.data as Array<{ url: string; text: string }>;
+      const links = result.data as { url: string; text: string }[];
       const githubLink = links.find((l) => l.url.includes("github.com"));
       const localLink = links.find((l) => l.url.startsWith("./"));
 
@@ -1383,7 +1383,7 @@ describe("Integration Tests", () => {
       });
 
       // Reverse the sections
-      const reversed = [...sections].reverse();
+      const reversed = [...sections].toReversed();
 
       await mdHandler.writeSections({
         filePath: targetPath,

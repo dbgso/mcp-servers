@@ -370,7 +370,7 @@ describe("serialising each block from a hand-built AST", () => {
       expected: "| a | b",
     },
   ])("writes $name", async ({ block, expected }) => {
-    const out = await written({ type: "asciidoc", blocks: [block as AsciidocBlock] });
+    const out = await written({ type: "asciidoc", blocks: [block] });
 
     expect(out).toContain(expected);
   });
@@ -383,7 +383,7 @@ describe("serialising each block from a hand-built AST", () => {
     { name: "a preamble with nothing in it", block: { context: "preamble" } },
     { name: "an unknown context with nothing in it", block: { context: "open" } },
   ])("writes nothing for $name", async ({ block }) => {
-    const out = await written({ type: "asciidoc", blocks: [block as AsciidocBlock] });
+    const out = await written({ type: "asciidoc", blocks: [block] });
 
     expect(out.trim()).toBe("");
   });

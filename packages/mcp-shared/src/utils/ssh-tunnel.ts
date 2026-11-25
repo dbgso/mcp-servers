@@ -20,7 +20,7 @@
  * live-tunnel registry, signal handlers) lives in `tunnel-common.ts` so a
  * single SIGINT / SIGTERM tears down every tunnel regardless of kind.
  */
-import { type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import {
   awaitTunnelReadyOrKill,
   ChildTunnelHandle,
@@ -32,8 +32,7 @@ import {
   SpawnedTunnel,
   waitForPort,
 } from "./tunnel-common.js";
-import type { SsmTunnelEnvConfig } from "./ssm-tunnel.js";
-import { createSsmTunnel, type SsmTunnel } from "./ssm-tunnel.js";
+import { type SsmTunnelEnvConfig, createSsmTunnel, type SsmTunnel } from "./ssm-tunnel.js";
 
 // Re-export common helpers so existing callers that imported them from this
 // module keep working unchanged.
