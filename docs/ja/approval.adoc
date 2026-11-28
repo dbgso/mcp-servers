@@ -1,0 +1,147 @@
+= 承認とゲート
+
+書き込み・削除・外への呼び出しをする操作を、どう止めるか。`+docs/policy/approval.md+` の考え方と、`+mcp-shared/approval+` にある仕組み。
+
+[[principle]]
+== 承認プロンプトは制御ではない
+
+Claude Code などの AI ツールは、ツールを許可リストに入れて承認プロンプトを出さないようにできる。また、毎回プロンプトが出れば、人は中身を読まずに承認するようになる。承認のクリックに安全を預けた設計は、安全を持たない。
+
+なので、止めたい操作は **サーバー自身が回避させない仕組み** で止める。呼び出し側が「プロンプトを出さない許可」をもらえば通れてしまうものには頼らない。
+
+[[tiers]]
+== 段階と選び方
+
+[cols="1,2,2",options="header"]
+|===
+|段階 |仕組み |何を保証するか
+|回避できない |ツールの境界。人が呼ぶ操作 (`+approve+` など) を、誰の許可リストにも入れない別のツールにする |呼び出しを分けることそのものが強制になる
+|回避できない |内容に紐づく token。変更 1 件ごとに token を作り、デスクトップ通知だけで人に渡す。実行時に同じ変更か確かめる |対象のすり替えが「見える」のではなく「できない」
+|開示 |deliberation gate。最初の呼び出しを断り、エージェント自身の言葉で説明させ、同じ呼び出しの繰り返しだけを通す |黙って変更できない。ただし人が読んだことは確かめない
+|===
+
+[plantuml]
+----
+@startuml
+start
+:書き込み・削除・外への呼び出しをする操作;
+if (人が関わらずに実行されてよい?) then (はい)
+  :ゲートなし;
+  stop
+endif
+if (協力しない / 混乱したエージェントに\n通られると、実害がある?) then (はい)
+  :token (または ツールの境界);
+  note right
+    interactive-pdca-mcp の approve
+    mcp-firewall の ask
+  end note
+else (いいえ。元に戻せる)
+  :deliberation gate;
+  note right
+    interactive-instruction-mcp の
+    昇格・更新・削除・改名
+  end note
+endif
+stop
+@enduml
+----
+
+ゲートは好みではなく、後ろにあるものの重さで選ぶ。deliberation gate で済ませてよいのは、守っているのが文書 (git で戻せる) だから。
+
+[[token]]
+== token (通知でだけ渡す)
+
+`+TokenApprovalStrategy+` (`+mcp-shared/approval+`)。token は既定で 4 桁の数字で、デスクトップ通知 (node-notifier) にだけ出し、ディスクには書かない。シェルを持つエージェントでも通知は読めない。
+
+[plantuml]
+----
+@startuml
+autonumber
+actor "人" as human
+participant "エージェント" as ai
+participant "サーバー" as server
+participant "デスクトップ通知" as notify
+
+ai -> server : 変更を要求 (why 付き)
+server -> server : preview() で変更 (what) を計算\nwhat の sha256 を記録
+server -> notify : token を表示
+server --> ai : 承認が要る (request id)
+notify -> human : token
+ai -> human : 何をなぜ変えるかを説明
+human -> ai : token を伝える
+ai -> server : 同じ要求 + approvalToken
+server -> server : token、期限 (既定 5 分)、\nwhat の hash が一致するか確かめる
+server --> ai : 実行した結果
+@enduml
+----
+
+* 承認は変更の中身 (`+what+`。エージェントの要約ではなく、ツールが計算した diff や dry-run) に紐づく。承認の後に対象を変えると `+content_mismatch+` で拒まれる。
+* テストのときだけ `+MCP_APPROVAL_TEST_TOKEN+` で token を固定できる。テストでない環境では読まない (エージェントもその環境変数を読めるので、読むと通知だけの経路が意味を失う)。
+* HTML の承認画面 (`+html.ts+`) もある。127.0.0.1 に review の画面を立て、hunk ごとの確認と、通知の token の入力の両方を求める。ブラウザを操作できるエージェントでも token は読めない。
+
+token は人の往復を毎回求め、headless や SSH のセッションでは通知が届かず、操作ができなくなる。これが `+interactive-instruction-mcp+` 2.0 で token をやめた理由。
+
+[[deliberation]]
+== deliberation gate (開示)
+
+`+mcp-shared/approval+` の `+deliberation.ts+`。最初の呼び出しは断られ、断りの応答 (エラーではなく普通の応答) に、変更の preview と「利用者に自分の言葉で説明してから、同じ呼び出しを繰り返せ」という指示が入る。
+
+[plantuml]
+----
+@startuml
+autonumber
+actor "人" as human
+participant "エージェント" as ai
+participant "サーバー" as server
+
+ai -> server : apply(id, explanation: "A")
+server -> server : key = 操作 + ツールが計算した変更 + "A"\n1 回目として記録
+server --> ai : 断る (diff と、説明してから繰り返せという指示)
+ai -> human : 変更の説明 ("A")
+human -> ai : (止めるならここで言う)
+ai -> server : apply(id, explanation: "A")
+server -> server : 同じ key の 2 回目
+server --> ai : 書き込んだ
+@enduml
+----
+
+[plantuml]
+----
+@startuml
+[*] --> 未着手
+未着手 --> 1回目 : 呼び出し (断られる)
+1回目 --> 1回目 : 言い換え・変更が変わった\n(別の key なので新しい run の 1 回目)
+1回目 --> 通過 : 同じ呼び出し\n(必要な回数に達した)
+通過 --> [*] : 操作が終わったと報告
+1回目 --> 未着手 : サーバーの再起動\n(run はメモリにだけある)
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|性質 |中身
+|key |操作、ツールが計算した変更 (昇格先、上書きの有無、本文、`+relatedDocs+`、消す内容)、説明の文。どれかが違えば新しい run
+|回数 |操作ごとに決まる (`+interactive-instruction-mcp+` は更新・リンク・昇格が 2 回、削除・改名が 3 回)。`+IIMCP_DELIBERATION_ATTEMPTS_DELETE=5+` のように環境変数で変えられる
+|run の保持 |key ごと。別の文書への操作を挟んでも切れない。プロセスのメモリにだけあり、再起動で消える (安全な側に倒れる)
+|保証しないこと |人が説明を読んだこと。断られたエージェントが、すり替えた変更で新しい run を始め、もう 1 回説明して通すことはできる
+|===
+
+繰り返しに意味があるのは、断られたエージェントは引数を変えて再試行しがちで、変えた引数は別の key として再び断られるから。通るには、1 つの説明を決めてそのまま繰り返す必要がある。
+
+[[measured]]
+== ゲートが見えるのは、ツールを選んだ呼び出しだけ
+
+`+interactive-instruction-mcp+` の README にある測定 (headless で 15 回)。普通に頼むと 3/3 のエージェントが変更を説明して判断を返した (ゲート無しでは 0/3)。しかし「どんな方法でもよい」と言うと 3/3 が `+Edit+` でファイルを直接書き換え、`+apply+` を呼ばなかった。ツールを呼ばない相手はゲートでは止められないので、それには `+PreToolUse+` hook のような、ツールを選ぶより前の仕組みが要る。
+
+[[where]]
+== どこで何を使っているか
+
+[cols="2,2,1",options="header"]
+|===
+|サーバー |操作 |ゲート
+|`+interactive-instruction-mcp+` |下書きの昇格 (`+approve+`)、確定した文書の更新 (`+apply+`)、`+link_add+` / `+link_remove+` |deliberation (2 回)
+|`+interactive-instruction-mcp+` |確定した文書の `+delete+` / `+rename+` |deliberation (3 回)
+|`+interactive-pdca-mcp+` |タスクの承認、skip (`+approve+` ツール) |ツールの境界 + 通知の token
+|`+mcp-firewall+` |`+ask+` のルールに当たった呼び出し |通知の token (`+proxy_approve+`)
+|`+db-read-mcp+` / `+db-codegen-mcp+` |なし (読み取りだけ。書けない作りにしている) |—
+|===

@@ -1,0 +1,163 @@
+= CI とリリース
+
+PR と main への push で流れる CI、Changesets による version の管理、npm / ghcr.io / GitHub Packages への公開。詳しい手順は `+docs/release.md+` と `+docs/release/*.md+`。
+
+[cols="1,1,3",options="header"]
+|===
+|workflow |きっかけ |やること
+|`+ci.yml+` |PR、main への push |lint、build、パッケージごとのテスト (matrix)
+|`+release.yml+` |main への push |version の PR を作る / npm に公開する / Docker の tag を打つ
+|`+docker-release.yml+` |tag `+*-mcp-v*+` |Docker image を build して ghcr.io に push
+|`+gpr-release.yml+` |手動 (`+workflow_dispatch+`)、他の workflow から |1 パッケージを GitHub Packages に試し公開
+|`+lint-workflows.yml+` |`+.github/**+` を変える PR |actionlint (`+fail_level: error+`)
+|`+docs-site.yml+` |`+docs/ja/**+`、`+docs-site/**+` の変更 |このドキュメントのビルドと deploy (xref:docs-site.adoc[])
+|`+bundle-pilot-snapshot.yml+` |`+chore/npm-bundle-publish+` への push |bundle の試し公開 (一時的。bundle の移行が終われば消す)
+|===
+
+[[ci]]
+== ci.yml
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "packages\nscripts/ci-test-matrix.mjs で\nmatrix を作る" as packages
+rectangle "lint\npnpm build → pnpm lint\n→ changeset の Markdown の検査" as lint
+rectangle "build\npnpm build\n(全体がコンパイルできるか)" as build
+rectangle "test (パッケージ A)" as t1
+rectangle "test (パッケージ B)" as t2
+rectangle "test (パッケージ C 1/2)" as t3
+rectangle "test (パッケージ C 2/2)" as t4
+rectangle "floci\n(AWS エミュレーター)" as floci
+rectangle "Codecov" as codecov
+
+packages --> t1
+packages --> t2
+packages --> t3
+packages --> t4
+t2 ..> floci : *.floci.test.ts が\nあるパッケージだけ
+t1 --> codecov
+t2 --> codecov
+t3 --> codecov
+t4 --> codecov
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|決まり |理由
+|matrix は package から導く (一覧を書かない) |workflow に行を足し忘れたパッケージは、テストが走らないのに何も赤くならない。`+test+` script があれば入る
+|floci は `+*.floci.test.ts+` があるパッケージだけ |テストが `+describe.skipIf(!hasEmulator)+` で読むのと同じファイルから決めるので、2 つがずれない (ずれるとテストが黙って skip する)
+|`+ciShards+` で分割できる。カバレッジの閾値とは併用できない |`+--shard+` は各 runner に一部のファイルしか渡さず、全体用の閾値で落ちる。matrix の生成が組み合わせを拒む
+|各 test job は `+pnpm --filter <pkg>... build+` |自分の依存だけを build する。build の artifact を待つ直列の段を作らない
+|`+fail-fast: false+` |1 つの失敗で他の結果を捨てない
+|lint の前に build |type-aware の lint は workspace の型を `+dist/*.d.ts+` から読む。build しないと型が any になり、規則が見逃す
+|changeset の Markdown を検査する |changeset はそのまま CHANGELOG.md に入り、公開の前に誰も読まない
+|PR の古い run は取り消す、main は取り消さない |main の run は merge したものの記録
+|===
+
+[[release-flow]]
+== npm への公開 (Changesets)
+
+[plantuml]
+----
+@startuml
+autonumber
+actor "開発する人" as dev
+participant "PR" as pr
+participant "release.yml\n(main への push)" as rel
+participant "Version Packages の PR" as vpr
+participant "npm" as npm
+
+dev -> pr : 変更 + pnpm changeset\n(.changeset/*.md)
+pr -> rel : merge
+rel -> vpr : changeset があれば\nversion と CHANGELOG を上げる PR を作る
+dev -> vpr : merge
+vpr -> rel : main への push
+rel -> rel : 公開する package を決める\n(private でなく、版が npm に無い)
+rel -> rel : verify-changelog-gate\n(CHANGELOG に ## <version> があるか)
+rel -> npm : changeset publish\n(OIDC。token は使わない)
+@enduml
+----
+
+[[publish-opt-in]]
+=== 公開は opt-in
+
+[plantuml]
+----
+@startuml
+start
+:packages/*/package.json;
+if (private: true?) then (はい)
+  :公開しない\n(mcp-shared* と Docker のサーバー、\nまだ準備のできていないサーバー);
+  stop
+endif
+if (その版が npm にある?) then (はい)
+  :何もしない;
+  stop
+endif
+if (CHANGELOG.md に\n## <version> がある?) then (いいえ)
+  :release 全体を失敗にする\n(1 つも公開しない);
+  stop
+endif
+:pnpm で publish\n(catalog: / workspace: を本当の版に置き換える);
+stop
+@enduml
+----
+
+* `+changeset publish+` は changeset を見ず、「private でなく、版が npm に無い」package を全部公開する。`+private+` が無いと、npm に名前の無い package は毎回「公開が要る」に見え、1 回の push で全部が出る。なので今公開しているのは `+private+` を外した 2 つ (`+mcp-interactive-instruction+`、`+kroki-mcp+`) だけ。
+* `+.changeset/config.json+` の `+ignore+` は version の対象から外すだけで、公開は止めない。止めるのは `+private: true+` だけ。
+* 手で版を上げたり、未公開の版のまま `+private+` を外したりすると、changeset 無しで npm に出てしまう。`+scripts/verify-changelog-gate.mjs+` がそれを止める。
+* `+npm publish+` ではなく pnpm を使う。依存は `+catalog:+` / `+workspace:+` で書いてあり、それを本当の版に置き換えるのは `+pnpm publish+` / `+pnpm pack+` だけ。
+
+[[oidc]]
+=== npm の OIDC (Trusted Publishing)
+
+npm の token は持たない。npm 側で package ごとに Trusted Publisher (organization `+dbgso+`、repository `+mcp-servers+`、workflow `+release.yml+`) を設定し、GitHub Actions の OIDC で公開する。
+
+[cols="1,3",options="header"]
+|===
+|罠 |対策
+|`+actions/setup-node+` に `+registry-url+` を渡すと、`+.npmrc+` に placeholder の token が入る。pnpm 11 はそれを bearer token として送り、npm は 404 を返す |`+registry-url+` を渡さない。`+.npmrc+` に `+_authToken+` があれば公開の前に失敗させる
+|Trusted Publisher が無い package の公開は `+E404 undefined+` (「package が無い」に見える) になる |公開の前に OIDC の token 交換を package ごとに試し、拒まれたら npm が照合した claim を出す (止めはしない)
+|npm は既にある package にしか Trusted Publisher を付けられない |最初の 1 回だけ token で手で公開する (`+docs/release/npm-bootstrap.md+`、`+scripts/bootstrap-npm-names.mjs+` で名前が空いているか確かめる)
+|===
+
+[[docker]]
+== Docker (ghcr.io)
+
+`+Dockerfile+` を持つパッケージ (`+python-diagrams-mcp+`、`+graph-math-mcp+`) は、version が上がると tag を打ち、tag の push で image を公開する。
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "release.yml" as rel
+participant "git" as git
+participant "docker-release.yml" as dr
+participant "ghcr.io" as ghcr
+
+rel -> rel : Dockerfile のある各 package について\npackage.json の version を HEAD^ と比べる
+rel -> git : 変わっていれば tag <name>-v<version> を push\n(既にあれば何もしない)
+git -> dr : on push tags: *-mcp-v*
+dr -> dr : tag から package 名と version を取り出す
+dr -> ghcr : 同じ version が既にあれば拒む
+dr -> dr : QEMU + Buildx\nlinux/amd64, linux/arm64
+dr -> ghcr : push (ghcr.io/dbgso/<name>:<version> と :latest)
+@enduml
+----
+
+[[gpr]]
+== GitHub Packages (試し公開)
+
+npm の公開とは別に、1 パッケージを手で GitHub Packages に出せる。`+private: true+` の package でもよい (公開する写しの中でだけ `+private+` を外す)。
+
+[source,bash]
+----
+gh workflow run gpr-release.yml -f package=ast-file-mcp -f tag=dev
+----
+
+* 名前は `+@dbgso/<package 名>+`、版は `+0.0.0-<tag>.<時刻>.<sha>+`、dist-tag は `+<tag>+` (既定 `+snapshot+`)。
+* repo が public なので、公開した package も public になる。
+* `+dependencies+` に `+workspace:+` の package が残っているもの (tsup で bundle していないもの) は拒む。公開しても install できないため。
+* 読むときも `+read:packages+` の token が要る (`+gh auth refresh -s read:packages+`)。

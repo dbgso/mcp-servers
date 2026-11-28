@@ -1,0 +1,131 @@
+= traceable-chain-mcp (たどれる文書の鎖)
+
+文書を種類 (要求、仕様、設計 …) ごとに作り、どの文書も親へのリンクを必ず持つようにする MCP サーバー。何かが壊れたときに「なぜこう作ったか」を要求までたどれるようにする。
+
+[[types]]
+== 文書の種類と親
+
+既定の種類。矢印は「子 → 親 (requires)」。`+test+` と `+proposal+` は複数の種類のどれかを親にできる。
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "requirement\n(業務の要求。根)" as req
+rectangle "spec\n(技術仕様)" as spec
+rectangle "design\n(実装の設計)" as design
+rectangle "implementation\n(実装のメモ)" as impl
+rectangle "test\n(試験の計画・結果)" as test
+rectangle "proposal\n(判断の案)" as prop
+rectangle "adr\n(Architecture Decision Record)" as adr
+
+spec --> req
+design --> spec
+impl --> design
+test --> spec
+test --> design
+prop --> req
+prop --> spec
+prop --> design
+prop --> impl
+adr --> prop
+@enduml
+----
+
+種類と親の決まりは `+chain.config.yaml+` で変えられる (例: `+epic+` → `+story+` → `+task+`)。置き場も同じファイルの `+storage.basePath+` で変えられ、既定は `+./docs/chain/+`。
+
+[[document]]
+== 文書の形
+
+1 文書 1 ファイルの Markdown で、ファイル名は ULID。
+
+[source,markdown]
+----
+---
+id: 01HQXK3V7M...
+type: spec
+requires: 01HQXK2A8N...
+title: OAuth2 Integration
+created: 2024-01-15T10:30:00Z
+updated: 2024-01-15T10:30:00Z
+---
+
+## Overview
+...
+----
+
+[[tools]]
+== ツール
+
+[cols="1,1,3",options="header"]
+|===
+|ツール |operation |中身
+|`+chain_describe+` |— |操作の一覧と引数
+|`+chain_query+` |`+read+`、`+list+`、`+trace+`、`+validate+` |読む。`+trace+` は先祖 (`+up+`) か子孫 (`+down+`) をたどる。`+validate+` は全文書のリンクを確かめる
+|`+chain_mutate+` |`+create+`、`+update+`、`+delete+`、`+link+` |書く。根でない種類は親が無いと作れない。子がいる文書は消せない
+|===
+
+[[create]]
+== 作るときの検査
+
+[plantuml]
+----
+@startuml
+start
+:chain_mutate(create, type, requires, title, content);
+if (type が設定にある?) then (いいえ)
+  :エラー;
+  stop
+endif
+if (type は根 (requires: null)?) then (はい)
+  :ULID を振って保存;
+  stop
+endif
+if (requires がある?) then (いいえ)
+  :エラー: この種類は親が要る;
+  stop
+endif
+if (親の文書がある?) then (いいえ)
+  :エラー: 親が無い;
+  stop
+endif
+if (親の type が許された種類?) then (いいえ)
+  :エラー: spec の親は requirement だけ、など;
+  stop
+endif
+:ULID を振って保存;
+stop
+@enduml
+----
+
+[[trace]]
+== たどる
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "エージェント" as ai
+participant "chain_query" as q
+database "docs/chain" as store
+
+ai -> q : trace(id: design の id, direction: up)
+q -> store : design を読む
+q -> store : requires の spec を読む
+q -> store : requires の requirement を読む
+q --> ai : design → spec → requirement の木
+ai -> q : trace(id: spec の id, direction: down)
+q -> store : spec を requires に持つ文書を探す
+q --> ai : spec の下の design / test / proposal
+@enduml
+----
+
+[cols="1,1",options="header"]
+|===
+|たどれないと |たどれると
+|なぜこれを作ったのか分からない |要求までさかのぼれる
+|この仕様を変えると何に響くか分からない |実装まで下にたどれる
+|この判断は記録されているか分からない |ADR が案 (proposal) につながっている
+|===
+
+この repo では `+packages/traceable-chain-mcp/docs/chain/+` (サーバー自身の要求・仕様・設計) と `+docs/chain/+` に文書がある。

@@ -1,0 +1,49 @@
+# docs/ja をサイトにする Antora の playbook。直接ではなく ./build.sh から使う
+# (build.sh が docs/ja を Antora の構成に並べ替えて build/content に置き、git の repo にする)。
+# パスの ~+ は Antora を実行したディレクトリ (build.sh が docs-site に cd してから呼ぶ)。
+# 仕組みは dbgso/cloud-foundation の docs/site と同じ。
+site:
+  title: mcp-servers
+  start_page: ja::index.adoc
+  # 見た目のテンプレート (supplemental-ui、private-static-site の templates/antora の写し) の partial が読む値 (partial の中では camelCase)
+  keys:
+    issue_repo: dbgso/mcp-servers
+    repo_url: https://github.com/dbgso/mcp-servers
+
+content:
+  sources:
+    - url: ~+/build/content
+      branches: HEAD
+      start_paths: [ja]
+
+ui:
+  bundle:
+    url: https://gitlab.com/antora/antora-ui-default/-/jobs/artifacts/HEAD/raw/build/ui-bundle.zip?job=bundle-stable
+    snapshot: true
+  supplemental_files: ~+/supplemental-ui
+
+antora:
+  extensions:
+    - require: '@antora/lunr-extension'
+      languages: [en, ja]
+
+runtime:
+  fetch: true
+  log:
+    failure_level: warn
+
+output:
+  dir: ~+/build/site
+
+asciidoc:
+  attributes:
+    # PlantUML の図は、閲覧のときにサイトの CloudFront の /api/kroki (認証の後ろの Kroki の Lambda。
+    # dbgso/private-static-site が管理) が SVG にする。ページには <img src="/api/kroki/plantuml/svg/..."> が
+    # 入るだけで、build のときにはどこにも送らない。手元で図まで見たいときは build.sh に KROKI_SERVER_URL を渡す。
+    #
+    # Antora は :// の無い画像の target をサイトの中の画像として探し、見つからないと error にする。
+    # なので一旦、決して解決されない domain (.invalid) の URL にしておき、build.sh が出来上がった HTML の
+    # 中で /api/kroki に書き換える (書き換え忘れても、図のソースは外に出ない)
+    kroki-server-url: https://kroki.invalid/api/kroki
+    kroki-default-format: svg
+  extensions: [asciidoctor-kroki]

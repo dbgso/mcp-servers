@@ -1,0 +1,93 @@
+= このドキュメント
+
+このドキュメント (`+docs/ja/*.adoc+`) をサイトにする仕組み。dbgso/cloud-foundation、dbgso/private-static-site の docs と同じ形 (Antora + Kroki + private static site) にしている。
+
+[[layout]]
+== 置き場所
+
+[cols="2,4",options="header"]
+|===
+|パス |中身
+|`+docs/ja/*.adoc+` |ページ。GitHub 上でもそのまま読めるよう平らに置く。`+nav.adoc+` が左の目次
+|`+docs-site/+` |サイトにする道具 (`+build.sh+`、Antora の playbook、見た目の supplemental-ui、図の検査)
+|`+.github/workflows/docs-site.yml+` |ビルドと deploy
+|`+.github/actions/private-site-deploy/+` |deploy の action (dbgso/private-static-site の写し)
+|===
+
+道具を `+docs/site/+` ではなく `+docs-site/+` に置いているのは、`+docs/+` が `+interactive-instruction-mcp+` の文書の置き場で、中の `+.md+` を全部文書として読むから。`+docs/+` の下に `+node_modules+` や `+README.md+` を置くと文書の一覧に混ざる。`+.adoc+` は読まれないので、ページは `+docs/ja/+` に置ける。
+
+[[build]]
+== ビルドと図
+
+[plantuml]
+----
+@startuml
+left to right direction
+folder "docs/ja/*.adoc" as src
+rectangle "docs-site/build.sh" as build
+folder "build/content\n(ja/antora.yml +\nmodules/ROOT/{pages,nav.adoc})\nを git の repo にする" as content
+rectangle "Antora\n+ asciidoctor-kroki\n+ lunr (検索)" as antora
+folder "build/site\n(図は <img src=\"/api/kroki/...\">)" as site
+rectangle "private static site\n(S3 + CloudFront、ログインの後ろ)" as pss
+rectangle "/api/kroki\n(Kroki の Lambda)" as kroki
+actor "見る人" as viewer
+
+src --> build
+build --> content : Antora の構成に並べ替えた写し
+content --> antora
+antora --> site
+site --> pss : docs-site.yml が deploy
+viewer --> pss : ページを開く
+pss --> kroki : 図の URL
+kroki --> viewer : SVG
+@enduml
+----
+
+* 図は PlantUML のソースのままページに書く。build のときにはどこにも送らず、閲覧のときにサイトの `+/api/kroki+` (認証の後ろ) が SVG にする。
+* Antora は `+://+` の無い画像をサイトの中の画像として探すので、playbook では一旦 `+https://kroki.invalid/api/kroki+` (決して解決されない domain) にしておき、build の後で HTML の `+src+` を `+/api/kroki/+` に書き換える。
+* シーケンス図には必ず `+autonumber+` を入れる (本文から番号で指せるように)。`+docs-site/check-plantuml-rules.sh+` が確かめる。
+* 図が全部描けるかは、Kroki の Lambda と同じ版の image (`+docs-site/kroki/Dockerfile+`) を立てて `+docs-site/check-diagrams.sh+` で確かめる。CI も同じことをする。
+* `+docs-site/kroki/Dockerfile+` は dependabot の対象にしていない。勝手に上がると Lambda とずれるので、private-static-site の Kroki を上げたときに、ここの tag と digest も手で合わせる。`+docs-site/+` の npm は dependabot が上げるが、`+asciidoctor-kroki+` と `+@antora/*+` の major は Antora と組み合わせを揃えて手で上げる。
+
+手元でビルドする:
+
+[source,bash]
+----
+cd docs-site
+npm ci
+./build.sh                                             # build/site にできる
+docker build -t docs-kroki kroki && docker run -d --rm -p 8000:8000 docs-kroki
+./check-diagrams.sh http://localhost:8000              # 全部の図が描けるか
+KROKI_SERVER_URL=http://localhost:8000 ./build.sh      # 図まで手元で見る
+----
+
+[[deploy]]
+== deploy
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "PR / main への push" as gh
+participant "docs-site.yml\nbuild job" as build
+participant "docs-site.yml\ndeploy job" as deploy
+participant "deploy role\n(OIDC)" as role
+participant "S3 + CloudFront" as site
+
+gh -> build : docs/ja/** などの変更
+build -> build : PlantUML の決まりの検査
+build -> build : build.sh
+build -> build : 同じ版の Kroki で全部の図を描く
+build -> deploy : artifact (build/site)
+deploy -> role : AssumeRoleWithWebIdentity
+alt main
+  deploy -> site : サイトのルートに sync
+else PR
+  deploy -> site : pr-preview/pr-<番号>/ に sync
+  deploy -> gh : プレビューと本番との差分の URL を PR にコメント
+end
+gh -> site : PR を閉じたらプレビューを消す
+@enduml
+----
+
+deploy 先は repository variables (`+PSS_DOCS_ROLE_ARN+`、`+PSS_DOCS_BUCKET+`、`+PSS_DOCS_URL+`) で渡す。値は dbgso/private-static-site の `+terraform output private_static_site_deployments+` の、このサイトの分。未設定の間は build だけして、出来上がりを artifact に置く。

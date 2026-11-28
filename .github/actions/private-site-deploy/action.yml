@@ -1,0 +1,152 @@
+name: Deploy to private static site
+description: >
+  Syncs a local directory to, or removes a prefix from, the private static site (S3 + CloudFront)
+  provisioned by the terraform in this repository. Viewing the site requires a login.
+  The caller job needs `permissions: id-token: write`.
+
+inputs:
+  mode:
+    description: sync (replace the prefix with source_dir) / remove (delete everything under the prefix)
+    required: false
+    default: sync
+  source_dir:
+    description: Local directory to deploy, relative to the workspace. Required for mode=sync.
+    required: false
+    default: ''
+  subdir:
+    description: Destination prefix in the bucket (e.g. docs). Empty means the bucket root, which mode=remove rejects.
+    required: false
+    default: ''
+  role_to_assume:
+    description: IAM role assumed via OIDC
+    required: true
+  bucket:
+    description: Destination S3 bucket
+    required: true
+  site_url:
+    description: Base URL of the site
+    required: true
+  aws_region:
+    description: AWS region
+    required: false
+    default: ap-northeast-1
+
+outputs:
+  url:
+    description: URL of the deployed content (mode=sync only)
+    value: ${{ steps.publish.outputs.url }}
+
+runs:
+  using: composite
+  steps:
+    # NOTE: Inputs are checked before assuming the role, so a bad call fails with a clear message
+    # instead of an AWS error. Composite actions do not enforce `required` on their own.
+    - name: Validate inputs
+      id: validate
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        SOURCE_DIR: ${{ inputs.source_dir }}
+        SUBDIR: ${{ inputs.subdir }}
+        ROLE_TO_ASSUME: ${{ inputs.role_to_assume }}
+        BUCKET: ${{ inputs.bucket }}
+        SITE_URL: ${{ inputs.site_url }}
+      run: |
+        set -euo pipefail
+
+        missing=()
+        [ -n "$ROLE_TO_ASSUME" ] || missing+=(role_to_assume)
+        [ -n "$BUCKET" ] || missing+=(bucket)
+        [ -n "$SITE_URL" ] || missing+=(site_url)
+        if [ "${#missing[@]}" -gt 0 ]; then
+          echo "::error::Missing required inputs: ${missing[*]}"
+          exit 1
+        fi
+
+        case "$MODE" in
+          sync)
+            if [ -z "$SOURCE_DIR" ] || [ ! -d "${GITHUB_WORKSPACE}/${SOURCE_DIR}" ]; then
+              echo "::error::source_dir not found: '$SOURCE_DIR'"
+              exit 1
+            fi
+            ;;
+          remove)
+            if [ -z "$SUBDIR" ]; then
+              echo "::error::mode=remove requires subdir, so the whole bucket is never deleted"
+              exit 1
+            fi
+            ;;
+          *)
+            echo "::error::mode must be sync or remove: '$MODE'"
+            exit 1
+            ;;
+        esac
+
+        # NOTE: `sync --delete` and `rm --recursive` remove everything under the prefix, so only a
+        # relative sub-path is allowed. '..' or an absolute path could delete other content in the bucket.
+        if [ -n "$SUBDIR" ]; then
+          subdir_ok=1
+          case "$SUBDIR" in
+            /*|*/) subdir_ok=0 ;;
+          esac
+          set -f
+          old_ifs="$IFS"
+          IFS='/'
+          for part in $SUBDIR; do
+            case "$part" in
+              ''|.|..) subdir_ok=0 ;;
+            esac
+          done
+          IFS="$old_ifs"
+          set +f
+          if [ "$subdir_ok" -ne 1 ]; then
+            echo "::error::subdir must be a relative sub-path without '.', '..', empty segments or a trailing slash: '$SUBDIR'"
+            exit 1
+          fi
+          echo "dest=s3://${BUCKET}/${SUBDIR}/" >> "$GITHUB_OUTPUT"
+          echo "url=${SITE_URL%/}/${SUBDIR}/" >> "$GITHUB_OUTPUT"
+        else
+          echo "dest=s3://${BUCKET}/" >> "$GITHUB_OUTPUT"
+          echo "url=${SITE_URL%/}/" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: ${{ inputs.role_to_assume }}
+        aws-region: ${{ inputs.aws_region }}
+
+    # NOTE: No CloudFront invalidation. The site caps the edge TTL at 60 seconds, so new content
+    # shows up within a minute without one. The deploy role still has cloudfront:CreateInvalidation
+    # for manual use.
+    - name: Publish to S3
+      id: publish
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        SOURCE_DIR: ${{ inputs.source_dir }}
+        SUBDIR: ${{ inputs.subdir }}
+        DEST: ${{ steps.validate.outputs.dest }}
+        URL: ${{ steps.validate.outputs.url }}
+      run: |
+        set -euo pipefail
+
+        if [ "$MODE" = "remove" ]; then
+          aws s3 rm "$DEST" --recursive --only-show-errors
+          echo "Removed: ${DEST}"
+          exit 0
+        fi
+
+        # NOTE: Syncing to the bucket root with --delete would also delete the PR previews under
+        # pr-preview/, because they are not in source_dir. Leave them alone; mode=remove cleans them up.
+        exclude=()
+        if [ -z "${SUBDIR}" ]; then
+          exclude=(--exclude 'pr-preview/*')
+        fi
+
+        echo "::group::aws s3 sync -> ${DEST}"
+        aws s3 sync "${GITHUB_WORKSPACE}/${SOURCE_DIR}" "$DEST" --delete --no-progress "${exclude[@]}"
+        echo "::endgroup::"
+
+        echo "url=${URL}" >> "$GITHUB_OUTPUT"
+        echo "Deployed: ${URL}"

@@ -1,0 +1,184 @@
+= mcp-firewall と cli-to-mcp (関所)
+
+`+mcp-firewall+` は任意の MCP サーバーを子プロセスとして包み、ツールの呼び出しをルールで allow / deny / ask (人の承認) に振り分ける。`+cli-to-mcp+` は任意の CLI を 1 つのツールで実行するサーバーで、それ自体は何も止めないので、`+mcp-firewall+` で包んで使う。
+
+[[proxy]]
+== 仕組み
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "MCP クライアント" as client
+package "mcp-firewall (MCP サーバー)" {
+  rectangle "proxy_execute\n(toolName, args)" as exec
+  rectangle "rule engine\n(優先度順、glob、条件)" as engine
+  rectangle "pending store\n(ask の待ち)" as pending
+  rectangle "audit log\n(JSON Lines)" as audit
+  rectangle "proxy_rule_* / proxy_status /\nproxy_pending / proxy_approve / proxy_reject" as mgmt
+  file "rules.json" as rules
+}
+rectangle "包まれたサーバー\n(子プロセス、stdio)\n例: @playwright/mcp、cli-to-mcp" as target
+
+client --> exec
+client --> mgmt
+exec --> engine
+engine --> rules : 読む
+mgmt --> rules : 実行中に足す・変える・消す
+exec --> pending : ask
+exec --> audit : 判定と結果
+exec --> target : allow のときだけ呼ぶ
+@enduml
+----
+
+クライアントに見えるのは `+mcp-firewall+` のツールだけで、包んだサーバーのツールは `+proxy_execute+` の説明に一覧として載る。包んだサーバーを直接呼ぶ経路は無い。
+
+[cols="1,3",options="header"]
+|===
+|ツール |中身
+|`+proxy_execute+` |包んだサーバーのツールを、ルールを通して呼ぶ
+|`+proxy_rule_list+` / `+_add+` / `+_remove+` / `+_update+` |ルールの一覧と、実行中の変更 (ファイルにも保存する)
+|`+proxy_rule_test+` |呼ばずに、ある呼び出しがどう判定されるかを見る
+|`+proxy_set_default+` / `+proxy_status+` |どのルールにも当たらないときの動き / 状態
+|`+proxy_pending+` / `+proxy_approve+` / `+proxy_reject+` |ask で待っている呼び出しの一覧 / 承認 (通知の token) / 却下
+|===
+
+[[rules]]
+== ルールの評価
+
+[plantuml]
+----
+@startuml
+start
+:proxy_execute(toolName, args);
+if (toolName が包んだサーバーにある?) then (いいえ)
+  :エラー (使えるツールの一覧);
+  stop
+endif
+:ルールを priority の高い順に見て、\ntoolPattern (glob) が合い conditions が\n全部合う (AND) 最初のルールを探す;
+if (見つかった?) then (はい)
+  :そのルールの action;
+else (いいえ)
+  :defaultAction;
+endif
+switch (action)
+case (allow)
+  :包んだサーバーのツールを呼ぶ;
+case (deny)
+  if (dry-run?) then (はい)
+    :stderr に記録して、呼ぶ\n(結果に [DRY-RUN NOTE]);
+  else (いいえ)
+    :[BLOCKED] を返す;
+  endif
+case (ask)
+  :待ちに入れ、通知に token を出す;
+  :request id を返す;
+endswitch
+:audit log に書く;
+stop
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|条件の operator |例
+|`+equals+` |`+{ "param": "options.profile", "operator": "equals", "value": "prod" }+`
+|`+contains+` |`+{ "param": "args", "operator": "contains", "value": "--force" }+` (配列ならどれかの要素)
+|`+matches+` (正規表現) |`+{ "param": "url", "operator": "matches", "value": "^https?://(?!localhost)" }+`
+|`+exists+` |`+{ "param": "force", "operator": "exists" }+`
+|===
+
+`+param+` は `+options.profile+` のような入れ子、`+args[0]+` のような配列の添字、`+options.volume[1]+` の組み合わせで書ける。
+
+[[ask]]
+== ask (人の承認)
+
+[plantuml]
+----
+@startuml
+autonumber
+actor "人" as human
+participant "エージェント" as ai
+participant "mcp-firewall" as fw
+participant "デスクトップ通知" as notify
+participant "包んだサーバー" as target
+
+ai -> fw : proxy_execute(browser_click, { ref: "delete-btn" })
+fw -> fw : ask のルールに当たる
+fw -> notify : token
+fw --> ai : 承認が要る (request id)
+notify -> human : token
+ai -> human : 何をしようとしているか説明
+human -> ai : token を伝える (または却下)
+ai -> fw : proxy_approve(requestId, approvalToken)
+fw -> target : 元の呼び出し
+target --> fw : 結果
+fw --> ai : 結果
+@enduml
+----
+
+[[cli-to-mcp]]
+== cli-to-mcp
+
+`+cli_execute+` で任意のコマンドを実行する。フラグを `+options+` の object で渡せるのが要点で、文字列の引数を解析しなくても、`+mcp-firewall+` のルールが `+options.profile+` のような項目で判定できる。
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "cli_execute({\n  command: \"aws\",\n  args: [\"s3\", \"ls\"],\n  options: { profile: \"dev\",\n    recursive: true,\n    exclude: [\"*.log\", \"*.tmp\"] }\n})" as call
+rectangle "aws s3 ls --profile dev --recursive\n  --exclude *.log --exclude *.tmp" as cmd
+call --> cmd : 1 文字の key は -k、それ以上は --key\ntrue はフラグだけ、false は省く\n配列はフラグを繰り返す
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|ツール |中身
+|`+cli_execute+` |`+command+`、`+args+` (文字列か配列)、`+options+`
+|`+cli_help+` |コマンド (と subcommand) の help
+|`+cli_status+` |作業 directory と timeout
+|===
+
+[[presets]]
+== 組み合わせと preset
+
+[plantuml]
+----
+@startuml
+left to right direction
+rectangle "Claude Code" as client
+rectangle "mcp-firewall\n--rules-file ./packages/cli-to-mcp/aws-rules.json" as fw1
+rectangle "cli-to-mcp" as cli
+rectangle "mcp-firewall\n--rules-file ./packages/mcp-firewall/playwright-rules.json" as fw2
+rectangle "@playwright/mcp" as pw
+rectangle "aws / git / docker …" as cmd
+rectangle "ブラウザ" as browser
+
+client --> fw1 : cli-proxy
+fw1 --> cli
+cli --> cmd
+client --> fw2 : playwright-proxy
+fw2 --> pw
+pw --> browser
+@enduml
+----
+
+この repo の `+.mcp.json+` は上の 2 つ (`+cli-proxy+`、`+playwright-proxy+`) を登録している。ルールのファイルの代わりに、同梱の preset も使える (`+--preset <名前>+`、一覧は `+--list-presets+`)。
+
+[cols="1,3",options="header"]
+|===
+|preset |中身
+|`+playwright-safe+` |削除などの危険なボタン、外部サイトへの移動、JavaScript の実行を止める
+|`+cli-aws-guard+` |本番の profile と、壊す操作を止める
+|`+cli-git-safe+` |main への force push を止める
+|`+cli-docker-safe+` |privileged の container を止める
+|===
+
+[[debug]]
+== ルールを作るとき
+
+* `+--dry-run+` (設定の `+dryRun: true+`): 止めずに記録だけする。止めるはずだった呼び出しは stderr に出て、結果に `+[DRY-RUN NOTE]+` が付く。
+* `+--audit-log ./audit.jsonl+`: 全呼び出しの判定 (`+timestamp+`、`+toolName+`、`+args+`、`+action+`、`+ruleId+`、`+reason+`、`+result+`) を JSON Lines で残す。
+* `+proxy_rule_test+`: 実際に呼ばずに判定だけを見る。
+* Ctrl+C は子プロセスにも伝わる。

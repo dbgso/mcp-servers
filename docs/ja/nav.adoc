@@ -1,0 +1,18 @@
+* xref:index.adoc[mcp-servers: 自分用の MCP サーバー集]
+** xref:packages.adoc[]
+* 共通の仕組み
+** xref:architecture.adoc[]
+** xref:approval.adoc[]
+* 文書と作業の管理
+** xref:interactive-instruction.adoc[]
+** xref:interactive-pdca.adoc[]
+** xref:traceable-chain.adoc[]
+* ツール
+** xref:code-tools.adoc[]
+** xref:diagram-tools.adoc[]
+** xref:data-tools.adoc[]
+** xref:firewall.adoc[]
+* 開発と運用
+** xref:dev-loop.adoc[]
+** xref:ci-release.adoc[]
+** xref:docs-site.adoc[]

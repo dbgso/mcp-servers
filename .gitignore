@@ -8,3 +8,6 @@ tmp
 .claude/session-setup.done
 # Throwaway keypair for the SSH tunnel smoke test (ci/db/gen-ssh-key.sh).
 ci/ssh/
+
+# docs site (docs-site/build.sh の出力)
+docs-site/build/

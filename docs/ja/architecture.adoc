@@ -1,0 +1,259 @@
+= サーバーの共通の形
+
+この repo のサーバーは、ツールの数を少なくし、1 つのツールの中で操作 (operation / action) を切り替える。その形と、形を揃えるための共有ライブラリ `+mcp-shared+` の中身。
+
+[[why-few-tools]]
+== なぜツールを少なくするか
+
+MCP クライアントはセッションの最初に全サーバーの `+tools/list+` を読み、ツールの名前・説明・`+inputSchema+` を毎回コンテキストに載せる。ツールが 14 個あって schema が 7 KB あれば、使わないセッションでもその分を払う。
+
+そこで、ツールは「何ができるかを返す `+describe+`」と「実行する 1 つのツール」に寄せ、操作ごとの詳しい説明は `+describe+` を呼んだときだけ返す。`+interactive-instruction-mcp+` はこれで `+inputSchema+` を 4,647 文字から 146 文字にした (1 セッションあたり約 1,150 token)。
+
+[plantuml]
+----
+@startuml
+autonumber
+participant "エージェント" as ai
+participant "MCP クライアント" as client
+participant "サーバー" as server
+
+client -> server : tools/list
+server --> client : describe と execute だけ\n(schema は空の object)
+ai -> client : describe()
+client -> server : tools/call describe
+server --> ai : 操作の一覧 (分類ごと)
+ai -> client : describe(operation: "grep")
+client -> server : tools/call describe
+server --> ai : その操作の説明と引数の JSON Schema
+ai -> client : execute(operation: "grep", params: {...})
+client -> server : tools/call execute
+server -> server : params を操作の zod schema で検証
+server --> ai : 結果 (または、直し方を書いたエラー)
+@enduml
+----
+
+[[tool-surface]]
+== ツールの見せ方 (policy__mcp-tool-surface)
+
+`+docs/policy/mcp-tool-surface.md+` の 4 つの決まり。従わないサーバーは「違うやり方」ではなく「欠陥」として扱い、直す作業の一覧をその文書の中に持つ。
+
+[cols="1,3",options="header"]
+|===
+|決まり |理由
+|`+inputSchema+` に引数を書かない (`+z.object({}).passthrough()+`) |1 ツールに操作が複数あると、1 つの schema にまとめる方法はどれも何かを間違える。フィールドを合成すると最初の宣言の意味が全操作に広がり、discriminated union は SDK 1.26.0 では空の object として公開される
+|どのサーバーも `+describe+` を持つ |引数の説明の置き場がそこしかないため
+|名前は接頭辞なしの `+describe+` |クライアントからは `+mcp__<server>__describe+` と見えるので、サーバー名は既に名前空間になっている
+|検証は handler が自分の schema でする |`+describe+` の例が handler の schema で通ることをテストで確かめる。`+describe+` がずれないようにできるのはこのテストだけ
+|===
+
+[[passthrough]]
+=== 空の shape ではなく passthrough
+
+`+z.object({})+` と `+z.object({}).passthrough()+` はどちらも空の `+properties+` を公開するが、動きは逆になる。空の shape では SDK が handler に渡す前に引数を全部捨てる。passthrough は `+additionalProperties: true+` を公開し、全部を渡す。
+
+[[loose-args]]
+=== 引数は文字列で届く
+
+schema に型が無いので、クライアントは引数を型に直せず、文字列で送る。Claude Code は `+recursive: true+` を `+"true"+`、`+depth: 2+` を `+"2"+`、配列を `+'["a"]'+` として送る。そこで handler の schema では boolean / number / array を `+mcp-shared+` の `+looseBoolean+` / `+looseNumber+` / `+looseArray+` で包む。包み忘れは独自 lint `+custom/no-strict-scalar-in-untyped-args+` が報告する (対象の directory は `+.oxlintrc.json+` で指定)。
+
+[plantuml]
+----
+@startuml
+start
+:クライアントがツールを呼ぶ\n(recursive: true);
+:schema に型が無いので\n文字列 "true" で送る;
+:handler の zod schema で検証;
+if (looseBoolean で包んである?) then (はい)
+  :"true" を true に戻す;
+  :操作を実行;
+else (いいえ)
+  :z.boolean() が文字列を拒む;
+  :ドキュメントどおりの呼び出しが失敗する;
+endif
+stop
+@enduml
+----
+
+[[conformance]]
+=== 今どこまで従っているか
+
+`+docs/policy/mcp-tool-surface.md+` の測定 (各サーバーを起動して `+tools/list+` を読んだもの)。
+
+[cols="2,1,1,1",options="header"]
+|===
+|サーバー |describe |inputSchema |ツール数
+|`+interactive-instruction-mcp+` |`+describe+` |146 B |2
+|`+git-repo-explorer-mcp+` |`+git_describe+` |360 B |2
+|`+traceable-chain-mcp+` |`+chain_describe+` |497 B |3
+|`+kroki-mcp+` |`+kroki_describe+` |629 B |2
+|`+duckdb-mcp+` |`+duckdb_describe+` |1,500 B |3
+|`+cli-to-mcp+` |なし (`+cli_help+`) |1,026 B |3
+|`+ast-typescript-mcp+` |なし |363 B |1
+|`+interactive-pdca-mcp+` |なし |6,401 B |2
+|`+ast-file-mcp+` |なし |7,014 B |14
+|===
+
+完全に従っているのは `+interactive-instruction-mcp+` だけ。直す順番 (費用の大きい順) は `+ast-file-mcp+` → `+interactive-pdca-mcp+` → `+ast-typescript-mcp+` / `+cli-to-mcp+` → 接頭辞付きの 4 つの改名 → 残りの schema から引数を抜く。
+
+[[mcp-shared]]
+== mcp-shared の中身
+
+入口を分けていて、`+mcp-shared+` 本体を import しただけでは DuckDB や通知 (node-notifier)、loopback の HTTP サーバーは読み込まれない。本体に import を 1 つ足すと、全サーバーがその分を払う。
+
+[plantuml]
+----
+@startuml
+skinparam componentStyle rectangle
+package "mcp-shared" {
+  component "本体 (mcp-shared)" as core {
+    [describe / execute の factory] as factory
+    [BaseActionHandler / ActionRegistry] as action
+    [ToolRegistry / BaseToolHandler] as reg
+    [wrapResponse (reminder)] as wrap
+    [looseBoolean / looseNumber / looseArray] as loose
+    [paginate / diffStructures / errorResponse] as util
+  }
+  component "mcp-shared/approval" as approval {
+    [TokenApprovalStrategy] as token
+    [HTML の承認画面] as html
+    [deliberation gate] as delib
+  }
+  component "mcp-shared/tunnel" as tunnel {
+    [SSH bastion] as ssh
+    [AWS SSM port forward] as ssm
+  }
+  component "mcp-shared/duckdb" as duck
+  component "mcp-shared/workflow" as wf
+}
+[@modelcontextprotocol/sdk] as sdk
+[zod / zod-to-json-schema] as zod
+[node-notifier] as notifier
+[@duckdb/node-api] as duckapi
+
+core --> sdk
+core --> zod
+approval --> notifier
+duck --> duckapi
+@enduml
+----
+
+[cols="1,3",options="header"]
+|===
+|入口 |使っているサーバー
+|本体 |ほぼ全部
+|`+mcp-shared/approval+` |`+interactive-instruction-mcp+` (deliberation gate)、`+interactive-pdca-mcp+` と `+mcp-firewall+` (通知の token) (xref:approval.adoc[])
+|`+mcp-shared/tunnel+` |`+db-read-mcp+`、`+db-codegen-mcp+` (xref:data-tools.adoc#tunnel[トンネル])
+|`+mcp-shared/duckdb+` |`+duckdb-mcp+`
+|`+mcp-shared/workflow+` |状態機械の基盤。`+interactive-instruction-mcp+` の下書きの昇格 (`+draft-workflow.ts+`) が使う
+|===
+
+[[two-shapes]]
+== 2 つの組み立て方
+
+操作を 1 つのツールにまとめる方法が 2 つある。
+
+[plantuml]
+----
+@startuml
+hide empty members
+
+package "operation 型 (describe / execute の組)" {
+  interface "Operation<TArgs, TCtx>" as Operation {
+    id
+    summary
+    detail
+    category
+    argsSchema
+    mutates
+    approval
+    preview()
+    execute()
+  }
+  class OperationRegistry
+  class "DescribeHandler\n(<prefix>_describe)" as Describe
+  class "ExecuteHandler\n(<prefix>_execute)" as Execute
+  OperationRegistry o-- "*" Operation
+  Describe --> OperationRegistry : 一覧と schema
+  Execute --> OperationRegistry : 実行
+}
+
+package "action 型 (1 ツール + action 引数)" {
+  abstract class "BaseActionHandler<TArgs, TCtx>" as BaseAction {
+    action
+    schema
+    help
+    doExecute()
+  }
+  class ActionRegistry
+  ActionRegistry o-- "*" BaseAction
+}
+
+abstract class BaseToolHandler
+class ToolRegistry
+Describe --|> BaseToolHandler
+Execute --|> BaseToolHandler
+ToolRegistry o-- "*" BaseToolHandler
+
+note bottom of OperationRegistry
+  createDescribeExecuteHandlers({ prefix, registry, buildContext })
+  が describe と execute の 2 つの handler を返す
+end note
+note bottom of ActionRegistry
+  instruction(action: "list") や plan(action: "add") のように
+  1 つのツールが action で handler を選ぶ
+end note
+@enduml
+----
+
+[cols="1,2,2",options="header"]
+|===
+|型 |使っているサーバー |特徴
+|operation 型 |factory を使うのは `+db-read-mcp+`、`+db-codegen-mcp+` (`+mcp-shared-db+` / `+mcp-shared-db-codegen+` の tools-factory 経由)。`+git-repo-explorer-mcp+`、`+kroki-mcp+`、`+duckdb-mcp+`、`+traceable-chain-mcp+` は同じ形を自前の registry で持つ |`+createDescribeExecuteHandlers+` が、未知の操作には使える id の一覧を、引数の誤りには `+describe+` の呼び方を返す。`+approval+` を付けた操作は実行の前に止まる
+|action 型 |`+interactive-instruction-mcp+` (`+instruction+`)、`+interactive-pdca-mcp+` (`+plan+` / `+approve+`)、`+mcp-lab+` (`+execute+`) |handler 1 つが 1 ファイル・1 クラス。`+help+` に自分の説明を持つ
+|===
+
+[[execute-flow]]
+=== execute の中の流れ
+
+[plantuml]
+----
+@startuml
+start
+:execute(operation, params);
+if (operation が registry にある?) then (いいえ)
+  :使える operation の一覧を\nエラーで返す;
+  stop
+endif
+if (params が操作の argsSchema で通る?) then (いいえ)
+  :どの項目がなぜ駄目かと\ndescribe の呼び方を返す;
+  stop
+endif
+:buildContext(params)\n(DB の client などを用意);
+if (操作に approval がある?) then (はい)
+  :preview() で変更を計算;
+  if (その変更に対する承認がある?) then (いいえ)
+    :承認を求めて止まる;
+    stop
+  endif
+endif
+:execute(args, ctx);
+:結果を返す;
+stop
+@enduml
+----
+
+[[reminder]]
+== 応答に付ける reminder
+
+文書を扱うサーバー (`+interactive-instruction-mcp+`、`+interactive-pdca-mcp+`) は、応答の末尾に reminder を付けられる (`+wrapResponse+`)。エージェントが 1 時間前に読んだ内容を信じ続けないように、読み直しを促す。
+
+[cols="1,3",options="header"]
+|===
+|起動時の引数 |付く文
+|`+--remind-mcp+` |作業の前にこの MCP で文書を確かめること
+|`+--remind-organize+` |1 ファイル 1 話題に分け、階層で整理すること
+|`+--topic-for-every-task <id>+` |その文書は `+--info-expires+` 秒 (既定 60 秒) しか有効でないので読み直すこと。毎回の作業で戻ってきてほしい文書を 1 つ指す
+|`+--reminder <文>+` |任意の文
+|===
+
+この repo の `+.mcp.json+` は `+interactive-instruction-mcp+` と `+interactive-pdca-mcp+` を `+--remind-mcp --topic-for-every-task every-task+` で起動している。
