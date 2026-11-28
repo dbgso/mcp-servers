@@ -4,7 +4,12 @@ type: spec
 title: Mutate操作仕様
 requires: 01KM7NM0AJHBXNE98J4VBX7DYX
 created: 2026-03-21T07:47:27.088Z
-updated: 2026-03-21T07:47:27.088Z
+updated: 2026-11-28T08:27:31.605Z
+baseline:
+  01KM7NM0AJHBXNE98J4VBX7DYX:
+    parent: e5701f24f3e3450a
+    self: 9076e4a33123dc9e
+    at: 2026-11-28T08:27:31.605Z
 ---
 
 ## 概要

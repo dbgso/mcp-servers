@@ -4,7 +4,12 @@ type: proposal
 title: AIガイドラインの調査
 requires: 01KM7R98HJXBX0W3884H7P0APV
 created: 2026-03-21T08:32:34.222Z
-updated: 2026-03-21T08:32:34.222Z
+updated: 2026-11-28T08:27:31.601Z
+baseline:
+  01KM7R98HJXBX0W3884H7P0APV:
+    parent: fbb741967519216a
+    self: e447b2bd65e63834
+    at: 2026-11-28T08:27:31.601Z
 ---
 
 ## 調査項目

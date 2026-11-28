@@ -2,10 +2,12 @@ import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Operation, OperationContext } from "./types.js";
 import { getErrorMessage } from "mcp-shared";
+import { reviewOperations } from "./review-ops.js";
 
 const createArgsSchema = z.object({
   type: z.string().describe("Document type"),
-  requires: z.string().optional().describe("Parent document ID (required for non-root types)"),
+  requires: z.union([z.string(), z.array(z.string())]).optional()
+    .describe("Parent document ID, or IDs when it realizes several (required for non-root types)"),
   title: z.string().describe("Document title"),
   content: z.string().describe("Document content (markdown)"),
 });
@@ -15,7 +17,8 @@ export class CreateOp implements Operation<CreateArgs> {
   readonly id = "create";
   readonly summary = "Create a new document";
   readonly detail = `Create a new document with enforced dependency.
-The 'requires' field is mandatory for non-root types.
+The 'requires' field is mandatory for non-root types. The links are confirmed
+at creation: the document is taken to be written against its parents as they are now.
 
 Examples:
   operation: "create"
@@ -67,7 +70,11 @@ export class UpdateOp implements Operation<UpdateArgs> {
   readonly id = "update";
   readonly summary = "Update a document";
   readonly detail = `Update an existing document's title or content.
-The document type and dependencies cannot be changed.
+The document type cannot be changed; use link/unlink for parents.
+
+An update does not touch any baseline, so afterwards \`check\` reports:
+- self_changed on this document's links upward: confirm it still satisfies its parents
+- parent_changed on its children: each has to be re-read against the new version
 
 Examples:
   operation: "update"
@@ -153,9 +160,10 @@ type LinkArgs = z.infer<typeof linkArgsSchema>;
 
 export class LinkOp implements Operation<LinkArgs> {
   readonly id = "link";
-  readonly summary = "Link document to a parent";
-  readonly detail = `Add a dependency link from an existing document to a parent.
-Validates that the parent type is allowed for this document type.
+  readonly summary = "Link document to a(nother) parent";
+  readonly detail = `Add a parent link to an existing document. Existing parents are kept, so
+a document can realize several parents. Validates the parent type and rejects
+links that would make a cycle. The new link is confirmed as it is made.
 
 Examples:
   operation: "link"
@@ -189,4 +197,4 @@ Examples:
 
 export const linkOp = new LinkOp();
 
-export const mutateOperations = [createOp, updateOp, deleteOp, linkOp];
+export const mutateOperations: Operation[] = [createOp, updateOp, deleteOp, linkOp, ...reviewOperations];

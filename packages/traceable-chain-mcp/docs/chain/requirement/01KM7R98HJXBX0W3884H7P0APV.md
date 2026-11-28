@@ -2,8 +2,14 @@
 id: 01KM7R98HJXBX0W3884H7P0APV
 type: requirement
 title: AIガイドラインとしてのウォーターフォール強制
+requires: 01M8GM8GSWDMEHTNCBJ6B6TZR1
 created: 2026-03-21T08:30:43.762Z
-updated: 2026-03-21T08:30:43.762Z
+updated: 2026-11-28T08:27:31.547Z
+baseline:
+  01M8GM8GSWDMEHTNCBJ6B6TZR1:
+    parent: d624f26aae73e451
+    self: fbb741967519216a
+    at: 2026-11-28T08:27:31.546Z
 ---
 
 ## 背景

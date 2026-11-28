@@ -238,7 +238,7 @@ describe("Integration: MCP Tool Handlers", () => {
         expect(linkResult.isError).toBeFalsy();
         const linked = JSON.parse(linkResult.content[0].text as string).document;
         expect(linked.id).toBe(spec.id); // ID preserved
-        expect(linked.requires).toBe(req2.id);
+        expect(linked.requires).toEqual([req1.id, req2.id]);
       });
     });
 

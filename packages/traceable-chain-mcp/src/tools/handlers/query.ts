@@ -13,7 +13,7 @@ type QueryArgs = z.infer<typeof QuerySchema>;
 
 export class ChainQueryHandler extends BaseToolHandler<QueryArgs> {
   readonly name = "chain_query";
-  readonly description = "Execute read-only operations: read, list, trace, validate. No approval required.";
+  readonly description = "Execute read-only operations: read, list, trace, validate, check, impact. No approval required.";
   readonly schema = QuerySchema;
   readonly inputSchema = {
     type: "object" as const,

@@ -4,7 +4,12 @@ type: proposal
 title: researchタイプの調査
 requires: 01KM7R981JTNEZJGT28967YBRT
 created: 2026-03-21T08:32:33.823Z
-updated: 2026-03-21T08:32:33.823Z
+updated: 2026-11-28T08:27:31.599Z
+baseline:
+  01KM7R981JTNEZJGT28967YBRT:
+    parent: 2dc0d875f971f7be
+    self: 226418a8fd71d4ca
+    at: 2026-11-28T08:27:31.599Z
 ---
 
 ## 調査項目

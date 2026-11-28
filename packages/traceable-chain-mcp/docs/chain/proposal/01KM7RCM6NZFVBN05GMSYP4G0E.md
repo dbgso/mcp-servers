@@ -4,7 +4,12 @@ type: proposal
 title: draftモードの調査
 requires: 01KM7R98A372HAJWV0TWKXA10G
 created: 2026-03-21T08:32:34.005Z
-updated: 2026-03-21T08:32:34.005Z
+updated: 2026-11-28T08:27:31.600Z
+baseline:
+  01KM7R98A372HAJWV0TWKXA10G:
+    parent: c51ecf20502b80fe
+    self: 2e63fc04a6469946
+    at: 2026-11-28T08:27:31.600Z
 ---
 
 ## 調査項目

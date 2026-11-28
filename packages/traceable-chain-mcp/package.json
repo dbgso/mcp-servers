@@ -2,11 +2,12 @@
   "name": "traceable-chain-mcp",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP server for traceable document chains with enforced dependencies",
+  "description": "MCP server and CLI for traceable decision chains: philosophy → requirement → spec → design → implementation → code, with drift detection",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "traceable-chain-mcp": "dist/index.js"
+    "traceable-chain-mcp": "dist/index.js",
+    "traceable-chain": "dist/bin/traceable-chain.js"
   },
   "files": [
     "dist"
@@ -17,7 +18,8 @@
     "test:watch": "vitest",
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "cli": "tsx src/bin/traceable-chain.ts"
   },
   "keywords": [
     "mcp",
