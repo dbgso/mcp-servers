@@ -1,0 +1,9 @@
+id: C-0006
+kind: C
+fields:
+  condition: 同じ種別の決まりを同時に 2 件足したとき、どちらも別の id で残る
+refs:
+  - id: DEF-0001
+    version: 34d877205a12
+  - id: P-0006
+    version: 1dce8028f9a2

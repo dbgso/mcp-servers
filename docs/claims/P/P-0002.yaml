@@ -1,0 +1,10 @@
+id: P-0002
+kind: P
+fields:
+  modality: must
+  statement: 上流がなくて書けなかったことは、足りない上流として残る
+refs:
+  - id: DEF-0002
+    version: 163e74d7f2ca
+  - id: DEF-0003
+    version: efa17bde05bb

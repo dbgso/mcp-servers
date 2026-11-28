@@ -1,0 +1,8 @@
+id: S-0006
+kind: S
+fields:
+  behavior: 決まりは 1 件 1 ファイル (<root>/<種別>/<id>.yaml) で持つ。新しい id のファイルは、既にあれば作らず、次の
+    id で作り直す
+refs:
+  - id: C-0006
+    version: a3dad17ca94c

@@ -1,0 +1,14 @@
+id: GAP-0003
+kind: GAP
+needs: P
+under:
+  - DEF-0001
+want: 同時に足された決まりが失われないことを、原則として決めていない
+draft:
+  kind: C
+  fields:
+    condition: 同じ種別の決まりを同時に 2 件足したとき、どちらも別の id で残る
+  refs:
+    - DEF-0001
+status: resolved
+resolvedBy: C-0006

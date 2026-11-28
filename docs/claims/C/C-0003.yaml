@@ -1,0 +1,9 @@
+id: C-0003
+kind: C
+fields:
+  condition: 決まりが足されたとき、その種別を足りないとしていて、その決まりと同じ上流の下にある足りない上流がすべて分かる
+refs:
+  - id: P-0003
+    version: cd4ae22a047e
+  - id: DEF-0003
+    version: efa17bde05bb

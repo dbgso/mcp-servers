@@ -1,0 +1,10 @@
+id: P-0003
+kind: P
+fields:
+  modality: must
+  statement: 上流が足されたら、それで書けるようになった足りない上流が分かる
+refs:
+  - id: DEF-0002
+    version: 163e74d7f2ca
+  - id: DEF-0003
+    version: efa17bde05bb

@@ -1,0 +1,12 @@
+id: P-0004
+kind: P
+fields:
+  modality: must
+  statement: 上流の版が変わったら、古い版を前提にした決まりがすべて分かる
+refs:
+  - id: DEF-0001
+    version: 34d877205a12
+  - id: DEF-0002
+    version: 163e74d7f2ca
+  - id: DEF-0004
+    version: e784241f4f89

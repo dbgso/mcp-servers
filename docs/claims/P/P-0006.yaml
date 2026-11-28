@@ -1,0 +1,8 @@
+id: P-0006
+kind: P
+fields:
+  modality: must_not
+  statement: 同時に足された決まりが、他の決まりを上書きして失わせる
+refs:
+  - id: DEF-0001
+    version: 34d877205a12

@@ -1,0 +1,8 @@
+id: S-0007
+kind: S
+fields:
+  behavior: 'claim-chain-mcp check <root> は execute(action: "check")
+    と同じ関数で検査し、警告以外の指摘が 1 件でもあれば終了コード 1 で終わる'
+refs:
+  - id: C-0007
+    version: 091fa5dbf362

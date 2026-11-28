@@ -1,0 +1,9 @@
+id: C-0004
+kind: C
+fields:
+  condition: 決まりが指したときの上流の版と、上流の今の版が違う決まりが、すべて一覧に出る
+refs:
+  - id: P-0004
+    version: e3f72aaf6801
+  - id: DEF-0004
+    version: e784241f4f89
