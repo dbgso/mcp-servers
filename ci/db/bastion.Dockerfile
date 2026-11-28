@@ -37,6 +37,9 @@ RUN printf '%s\n' \
 # authorized_keys. A mounted file keeps the host's ownership, and sshd refuses
 # an authorized_keys it does not consider the user's own -- which would make
 # this depend on whichever uid the CI runner happens to use.
+# The single quotes are the point: these lines are the script's text, and its
+# variables expand when it runs, not here.
+# hadolint ignore=SC2016
 RUN printf '%s\n' \
       '#!/bin/sh' \
       'set -eu' \

@@ -41,6 +41,24 @@ jobs:
       # directory (outside each package's tsconfig.json) is type-checked here
       # with its own scripts/tsconfig.json. One without it fails the job.
       - run: pnpm typecheck:scripts
+      # The DB drivers a package installs come from the catalog, and a peer's
+      # floor is the catalog version -- the one db-smoke runs against real
+      # engines. Without this, a bump in one place leaves the others claiming
+      # versions nothing here has run.
+      - run: pnpm lint:deps
+      # A downloaded binary rather than the Docker image: the image would be one
+      # more pull from Docker Hub, which rate-limits. Checked against the
+      # release's published sha256. Settings in .hadolint.yaml.
+      - name: hadolint (ci/db Dockerfiles)
+        env:
+          HADOLINT_VERSION: v2.14.0
+          HADOLINT_SHA256: 6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          echo "${HADOLINT_SHA256}  $RUNNER_TEMP/hadolint" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/hadolint"
+          "$RUNNER_TEMP/hadolint" ci/db/*.Dockerfile
       # Scoped by .jscpd.json to the smoke scripts, which grew a second copy of
       # everything once per engine before the shared kit existed.
       - name: Copy-paste check
