@@ -24,6 +24,10 @@
  * - addEventListener / removeEventListener callbacks
  * - Node.js callbacks: exec/execFile/spawn/fork
  * - Timer callbacks: setTimeout/setInterval/setImmediate
+ *
+ * Also exempt: template literal tags, `(strings: TemplateStringsArray,
+ * ...values)`. The language calls a tag with exactly that shape; there is no
+ * params object it could be given instead.
  */
 
 // Methods that take a callback whose signature is fixed by the API.
@@ -246,6 +250,23 @@ module.exports = {
     }
 
     /**
+     * Whether the function is a template literal tag: a first parameter typed
+     * `TemplateStringsArray` and a rest parameter after it.
+     */
+    function isTemplateTag(node) {
+      const [first, second] = node.params;
+      const annotation = first && first.typeAnnotation && first.typeAnnotation.typeAnnotation;
+      return (
+        node.params.length === 2 &&
+        second.type === 'RestElement' &&
+        annotation &&
+        annotation.type === 'TSTypeReference' &&
+        annotation.typeName &&
+        annotation.typeName.name === 'TemplateStringsArray'
+      );
+    }
+
+    /**
      * Check function parameters
      */
     function checkFunction(node) {
@@ -266,6 +287,11 @@ module.exports = {
 
       // Skip callbacks whose signature is fixed by the API receiving them
       if (isExternalCallback(node)) {
+        return;
+      }
+
+      // Skip template literal tags, whose signature the language fixes
+      if (isTemplateTag(node)) {
         return;
       }
 

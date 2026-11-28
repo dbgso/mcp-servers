@@ -305,13 +305,14 @@ describe("stack integration: read ops drive the SQL builder + Postgres dialect e
 
     expect(pg.calls).toHaveLength(1);
     expect(pg.calls[0].sql).toBe(
-      `SELECT ${buildSelectAllUsersSql()} FROM "users" WHERE "meta" #>> $2 = $1 LIMIT $3`,
+      `SELECT ${buildSelectAllUsersSql()} FROM "users" WHERE "meta" #>> $1 = $2 LIMIT $3`,
     );
-    // Order: value placeholder allocated first ($1), then segments ($2),
-    // then limit ($3). The segments arrive as a JS array which pg coerces
-    // to a text[] over the wire.
-    expect(pg.calls[0].values).toEqual(["x", ["foo", "bar"], 100]);
-    expect(Array.isArray((pg.calls[0].values as unknown[])[1])).toBe(true);
+    // Order: segments ($1), value ($2), limit ($3) -- placeholders numbered
+    // left to right, because the dialect allocates each one as it emits it.
+    // The segments arrive as a JS array which pg coerces to a text[] over
+    // the wire.
+    expect(pg.calls[0].values).toEqual([["foo", "bar"], "x", 100]);
+    expect(Array.isArray((pg.calls[0].values as unknown[])[0])).toBe(true);
     expect(data.path).toBe("$.foo.bar");
     expect(data.count).toBe(1);
     expect((data.rows as Record<string, unknown>[])[0].name).toBe("[REDACTED]");
