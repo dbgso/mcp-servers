@@ -16,8 +16,8 @@ catalogs:
       specifier: 1.26.0
       version: 1.26.0
     '@types/node':
-      specifier: 22.15.21
-      version: 22.15.21
+      specifier: 26.6.6
+      version: 26.6.6
     '@vitest/coverage-v8':
       specifier: 4.0.18
       version: 4.0.18
@@ -73,10 +73,10 @@ importers:
     devDependencies:
       '@changesets/cli':
         specifier: 'catalog:'
-        version: 2.29.8(@types/node@22.15.21)
+        version: 2.29.8(@types/node@26.6.6)
       '@types/node':
         specifier: 'catalog:'
-        version: 22.15.21
+        version: 26.6.6
       jscpd:
         specifier: 'catalog:'
         version: 5.4.3
@@ -122,7 +122,7 @@ importers:
         version: 4.0.4
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -131,7 +131,7 @@ importers:
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/ast-typescript-mcp:
     dependencies:
@@ -153,7 +153,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -162,7 +162,7 @@ importers:
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/cli-to-mcp:
     dependencies:
@@ -175,7 +175,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-firewall:
         specifier: workspace:*
         version: link:../mcp-firewall
@@ -184,7 +184,7 @@ importers:
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/db-codegen-mcp:
     dependencies:
@@ -197,7 +197,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -212,7 +212,7 @@ importers:
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/db-read-mcp:
     dependencies:
@@ -222,7 +222,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -243,7 +243,7 @@ importers:
         version: link:../mcp-shared-secrets
       mysql2:
         specifier: 'catalog:'
-        version: 3.22.3(@types/node@22.15.21)
+        version: 3.22.3(@types/node@26.6.6)
       pg:
         specifier: 'catalog:'
         version: 8.11.0
@@ -252,7 +252,7 @@ importers:
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/duckdb-mcp:
     dependencies:
@@ -268,7 +268,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -277,7 +277,7 @@ importers:
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/git-repo-explorer-mcp:
     dependencies:
@@ -293,7 +293,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -302,7 +302,7 @@ importers:
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/graph-math-mcp: {}
 
@@ -326,7 +326,7 @@ importers:
         version: 8.0.0
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -341,7 +341,7 @@ importers:
         version: 4.19.4
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/interactive-pdca-mcp:
     dependencies:
@@ -357,10 +357,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/kroki-mcp:
     dependencies:
@@ -373,7 +373,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -382,7 +382,7 @@ importers:
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-firewall:
     dependencies:
@@ -404,7 +404,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       git-repo-explorer-mcp:
         specifier: workspace:*
         version: link:../git-repo-explorer-mcp
@@ -416,7 +416,7 @@ importers:
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-lab:
     dependencies:
@@ -429,7 +429,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -441,7 +441,7 @@ importers:
         version: 4.19.4
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared:
     dependencies:
@@ -466,10 +466,10 @@ importers:
         version: 8.0.5
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-db:
     dependencies:
@@ -485,13 +485,13 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared-db-postgres:
         specifier: workspace:*
         version: link:../mcp-shared-db-postgres
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-db-codegen:
     dependencies:
@@ -510,13 +510,13 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mysql2:
         specifier: 'catalog:'
-        version: 3.22.3(@types/node@22.15.21)
+        version: 3.22.3(@types/node@26.6.6)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-db-core:
     dependencies:
@@ -529,10 +529,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-db-mysql:
     dependencies:
@@ -548,7 +548,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -560,10 +560,10 @@ importers:
         version: link:../mcp-shared-secrets
       mysql2:
         specifier: 'catalog:'
-        version: 3.22.3(@types/node@22.15.21)
+        version: 3.22.3(@types/node@26.6.6)
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-db-postgres:
     dependencies:
@@ -579,7 +579,7 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       mcp-shared:
         specifier: workspace:*
         version: link:../mcp-shared
@@ -594,7 +594,7 @@ importers:
         version: 8.11.0
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-db-sql:
     dependencies:
@@ -607,10 +607,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-dynamodb:
     dependencies:
@@ -632,28 +632,28 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-graph-viz:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/mcp-shared-secrets:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   packages/python-diagrams-mcp: {}
 
@@ -680,10 +680,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   scripts:
     devDependencies:
@@ -692,10 +692,10 @@ importers:
         version: 1.26.0(supports-color@7.2.0)(zod@3.25.76)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
+        version: 4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       vitest:
         specifier: 'catalog:'
-        version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+        version: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
       yaml:
         specifier: 'catalog:'
         version: 2.8.2
@@ -1849,11 +1849,11 @@ packages:
   '@types/node@12.20.55':
     resolution: {integrity: sha512-J8xLz7q2OFulZ2cyGTLE1TbbZcjpno7FaN6zdJNrgAdrJ+DZzh/uFR6YrTb4C+nXakvud8Q4+rbhoIWlYQbUFQ==}
 
-  '@types/node@22.15.21':
-    resolution: {integrity: sha512-EV/37Td6c+MgKAbkcLG6vqZ2zEYHD7bvSrzqqs2RIhbA6w3x+Dqz8MZM3sP6kGTeLrdoOgKZe+Xja7tUB2DNkQ==}
-
   '@types/node@22.19.10':
     resolution: {integrity: sha512-tF5VOugLS/EuDlTBijk0MqABfP8UxgYazTLo3uIn3b4yJgg26QRbVYJYsDtHrjdDUIRfP70+VfhTTc+CE1yskw==}
+
+  '@types/node@26.6.6':
+    resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
@@ -3216,6 +3216,9 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
+  undici-types@8.9.0:
+    resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
+
   unified@11.0.5:
     resolution: {integrity: sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==}
 
@@ -3828,7 +3831,7 @@ snapshots:
     dependencies:
       '@changesets/types': 6.1.0
 
-  '@changesets/cli@2.29.8(@types/node@22.15.21)':
+  '@changesets/cli@2.29.8(@types/node@26.6.6)':
     dependencies:
       '@changesets/apply-release-plan': 7.0.14
       '@changesets/assemble-release-plan': 6.0.9
@@ -3844,7 +3847,7 @@ snapshots:
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@changesets/write': 0.4.0
-      '@inquirer/external-editor': 1.0.3(@types/node@22.15.21)
+      '@inquirer/external-editor': 1.0.3(@types/node@26.6.6)
       '@manypkg/get-packages': 1.1.3
       ansi-colors: 4.1.3
       ci-info: 3.9.0
@@ -4134,12 +4137,12 @@ snapshots:
     dependencies:
       hono: 4.11.9
 
-  '@inquirer/external-editor@1.0.3(@types/node@22.15.21)':
+  '@inquirer/external-editor@1.0.3(@types/node@26.6.6)':
     dependencies:
       chardet: 2.1.1
       iconv-lite: 0.7.2
     optionalDependencies:
-      '@types/node': 22.15.21
+      '@types/node': 26.6.6
 
   '@isaacs/cliui@9.0.0': {}
 
@@ -4671,17 +4674,17 @@ snapshots:
 
   '@types/node@12.20.55': {}
 
-  '@types/node@22.15.21':
-    dependencies:
-      undici-types: 6.21.0
-
   '@types/node@22.19.10':
     dependencies:
       undici-types: 6.21.0
 
+  '@types/node@26.6.6':
+    dependencies:
+      undici-types: 8.9.0
+
   '@types/unist@3.0.3': {}
 
-  '@vitest/coverage-v8@4.0.18(vitest@4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2))':
+  '@vitest/coverage-v8@4.0.18(vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
       '@vitest/utils': 4.0.18
@@ -4693,21 +4696,7 @@ snapshots:
       obug: 2.1.1
       std-env: 3.10.0
       tinyrainbow: 3.0.3
-      vitest: 4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2)
-
-  '@vitest/coverage-v8@4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))':
-    dependencies:
-      '@bcoe/v8-coverage': 1.0.2
-      '@vitest/utils': 4.0.18
-      ast-v8-to-istanbul: 0.3.11
-      istanbul-lib-coverage: 3.2.2
-      istanbul-lib-report: 3.0.1
-      istanbul-reports: 3.2.0
-      magicast: 0.5.2
-      obug: 2.1.1
-      std-env: 3.10.0
-      tinyrainbow: 3.0.3
-      vitest: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+      vitest: 4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   '@vitest/expect@4.0.18':
     dependencies:
@@ -4718,21 +4707,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.0.3
 
-  '@vitest/mocker@4.0.18(vite@7.3.1(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2))':
+  '@vitest/mocker@4.0.18(vite@7.3.1(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))':
     dependencies:
       '@vitest/spy': 4.0.18
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.1(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2)
-
-  '@vitest/mocker@4.0.18(vite@7.3.1(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))':
-    dependencies:
-      '@vitest/spy': 4.0.18
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 7.3.1(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
 
   '@vitest/pretty-format@4.0.18':
     dependencies:
@@ -5615,9 +5596,9 @@ snapshots:
 
   ms@2.1.3: {}
 
-  mysql2@3.22.3(@types/node@22.15.21):
+  mysql2@3.22.3(@types/node@26.6.6):
     dependencies:
-      '@types/node': 22.15.21
+      '@types/node': 26.6.6
       aws-ssl-profiles: 1.1.2
       denque: 2.1.0
       generate-function: 2.3.1
@@ -6175,6 +6156,8 @@ snapshots:
 
   undici-types@6.21.0: {}
 
+  undici-types@8.9.0: {}
+
   unified@11.0.5:
     dependencies:
       '@types/unist': 3.0.3
@@ -6224,7 +6207,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite@7.3.1(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2):
+  vite@7.3.1(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2):
     dependencies:
       esbuild: 0.27.3
       fdir: 6.5.0(picomatch@4.0.3)
@@ -6233,29 +6216,15 @@ snapshots:
       rollup: 4.57.1
       tinyglobby: 0.2.15
     optionalDependencies:
-      '@types/node': 22.15.21
+      '@types/node': 26.6.6
       fsevents: 2.3.3
       tsx: 4.19.4
       yaml: 2.8.2
 
-  vite@7.3.1(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2):
-    dependencies:
-      esbuild: 0.27.3
-      fdir: 6.5.0(picomatch@4.0.3)
-      picomatch: 4.0.3
-      postcss: 8.5.6
-      rollup: 4.57.1
-      tinyglobby: 0.2.15
-    optionalDependencies:
-      '@types/node': 22.19.10
-      fsevents: 2.3.3
-      tsx: 4.19.4
-      yaml: 2.8.2
-
-  vitest@4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2):
+  vitest@4.0.18(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2):
     dependencies:
       '@vitest/expect': 4.0.18
-      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2))
+      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2))
       '@vitest/pretty-format': 4.0.18
       '@vitest/runner': 4.0.18
       '@vitest/snapshot': 4.0.18
@@ -6272,47 +6241,10 @@ snapshots:
       tinyexec: 1.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vite: 7.3.1(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@26.6.6)(tsx@4.19.4)(yaml@2.8.2)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 22.15.21
-    transitivePeerDependencies:
-      - jiti
-      - less
-      - lightningcss
-      - msw
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - terser
-      - tsx
-      - yaml
-
-  vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2):
-    dependencies:
-      '@vitest/expect': 4.0.18
-      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
-      '@vitest/pretty-format': 4.0.18
-      '@vitest/runner': 4.0.18
-      '@vitest/snapshot': 4.0.18
-      '@vitest/spy': 4.0.18
-      '@vitest/utils': 4.0.18
-      es-module-lexer: 1.7.0
-      expect-type: 1.3.0
-      magic-string: 0.30.21
-      obug: 2.1.1
-      pathe: 2.0.3
-      picomatch: 4.0.3
-      std-env: 3.10.0
-      tinybench: 2.9.0
-      tinyexec: 1.0.2
-      tinyglobby: 0.2.15
-      tinyrainbow: 3.0.3
-      vite: 7.3.1(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@types/node': 22.19.10
+      '@types/node': 26.6.6
     transitivePeerDependencies:
       - jiti
       - less

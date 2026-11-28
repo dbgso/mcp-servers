@@ -14,7 +14,7 @@ catalog:
   '@duckdb/node-api': 1.5.2-r.1
   '@changesets/cli': 2.29.8
   '@modelcontextprotocol/sdk': 1.26.0
-  '@types/node': 22.15.21
+  '@types/node': 26.6.6
   '@vitest/coverage-v8': 4.0.18
   jscpd: 5.4.3
   # The database drivers the smoke tests run against (ci.yml `db-smoke`).
