@@ -21,7 +21,7 @@ catalog:
   # Declared as devDependencies of the packages that load them, so a bump here
   # is what the smoke job exercises against real engines.
   mysql2: 3.22.3
-  'node-notifier': 10.0.1
+  'node-notifier': 12.1.0
   oxlint: 1.63.0
   oxlint-tsgolint: 7.0.2003
   pg: 8.11.0
