@@ -18,7 +18,8 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke": "tsx scripts/smoke-test-mysql.ts ../../ci/db/smoke-mysql.env"
   },
   "license": "MIT",
   "engines": {
@@ -30,7 +31,7 @@
     "mcp-shared-db-sql": "workspace:*"
   },
   "peerDependencies": {
-    "mysql2": ">=3.0.0"
+    "mysql2": ">=3.22.3"
   },
   "peerDependenciesMeta": {
     "mysql2": {
@@ -42,6 +43,7 @@
     "mcp-shared": "workspace:*",
     "mcp-shared-db-codegen": "workspace:*",
     "mcp-shared-secrets": "workspace:*",
+    "mysql2": "catalog:",
     "vitest": "catalog:"
   }
 }

@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/syncpack/schema.json",
+  "versionGroups": [
+    {
+      "label": "DB driver peers: one range per driver (the floor itself is checked against the catalog by scripts/check-peer-floors.mjs)",
+      "dependencies": ["pg", "mysql2"],
+      "dependencyTypes": ["peer"],
+      "preferVersion": "highestSemver"
+    },
+    {
+      "label": "DB drivers installed by a package come from the catalog, which is what the smoke tests run",
+      "dependencies": ["pg", "mysql2"],
+      "dependencyTypes": ["prod", "dev"]
+    },
+    { "label": "Other dependencies are not checked yet", "dependencies": ["**"], "isIgnored": true }
+  ],
+  "semverGroups": [
+    {
+      "label": "A peer is a floor, not a pin",
+      "dependencies": ["pg", "mysql2"],
+      "dependencyTypes": ["peer"],
+      "range": ">="
+    }
+  ]
+}

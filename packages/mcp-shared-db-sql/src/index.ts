@@ -6,6 +6,10 @@ export type {
   DialectExplainResult,
 } from "./dialect.js";
 
+// Typed SQL fragments — how a dialect hands back SQL it contributes.
+export { asQuotedIdent, ident, RawIdent, SqlFragment, sqlFragment } from "./fragment.js";
+export type { QuotedIdent } from "./fragment.js";
+
 // Param accumulator — exposed for adapters that want to use it directly.
 export { ParamBuilderImpl } from "./param-builder.js";
 

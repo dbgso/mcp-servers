@@ -1,0 +1,16 @@
+{
+  "$comment": "Copy-paste detection for the database smoke tests (`pnpm lint:duplication`, run in CI's lint job). Scoped to the code that was found duplicated in review: the per-engine smoke scripts and the kit they share. Widening it to the whole repository is a separate decision -- it would start by reporting what is already there.",
+  "path": [
+    "ci/db",
+    "packages/db-read-mcp/scripts",
+    "packages/mcp-shared-db-mysql/scripts",
+    "packages/mcp-shared-db-postgres/scripts"
+  ],
+  "format": ["typescript"],
+  "minLines": 5,
+  "minTokens": 50,
+  "threshold": 0,
+  "reporters": ["console"],
+  "absolute": false,
+  "gitignore": true
+}

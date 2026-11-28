@@ -177,6 +177,24 @@
       "rules": {
         "custom/no-strict-scalar-in-untyped-args": "error"
       }
+    },
+    {
+      "files": [
+        "packages/*/scripts/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\./[^.]",
+                "message": "A script may import its own package's ../src, the shared ci/db kit, and other packages by name (their built entry) -- not another package's source by relative path."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

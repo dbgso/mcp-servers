@@ -47,6 +47,32 @@ jobs:
       # The custom rules (eslint-rules/) are checked against valid / invalid
       # examples. A rule that silently stops reporting leaves `pnpm lint` green.
       - run: pnpm test:lint-rules
+      # tsx strips types without checking them, so every packages/*/scripts
+      # directory (outside each package's tsconfig.json) is type-checked here
+      # with its own scripts/tsconfig.json. One without it fails the job.
+      - run: pnpm typecheck:scripts
+      # The DB drivers a package installs come from the catalog, and a peer's
+      # floor is the catalog version -- the one db-smoke runs against real
+      # engines. Without this, a bump in one place leaves the others claiming
+      # versions nothing here has run.
+      - run: pnpm lint:deps
+      # A downloaded binary rather than the Docker image: the image would be one
+      # more pull from Docker Hub, which rate-limits. Checked against the
+      # release's published sha256. Settings in .hadolint.yaml.
+      - name: hadolint (ci/db Dockerfiles)
+        env:
+          HADOLINT_VERSION: v2.14.0
+          HADOLINT_SHA256: 6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          echo "${HADOLINT_SHA256}  $RUNNER_TEMP/hadolint" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/hadolint"
+          "$RUNNER_TEMP/hadolint" ci/db/*.Dockerfile
+      # Scoped by .jscpd.json to the smoke scripts, which grew a second copy of
+      # everything once per engine before the shared kit existed.
+      - name: Copy-paste check
+        run: pnpm lint:duplication
       # A changeset is published verbatim inside the package's CHANGELOG.md, and
       # nobody reads a generated file before it ships. This is the one chance to
       # catch markdown that will say something else once prettier has resolved
@@ -115,3 +141,81 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: ${{ matrix.package.name }}
           fail_ci_if_error: false
+
+  # Separate job, not a step in `test`: it needs two database servers and an
+  # SSH bastion, which no other job pays for. Runs in parallel, so it costs
+  # wall-clock only if it is the slower of the two.
+  #
+  # The drivers come from the lockfile like everything else (the `pg` and
+  # `mysql2` catalog entries), so a dependency update to either is exercised
+  # here against a real engine rather than only against `vi.mock`.
+  db-smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-pnpm
+
+      # Before the bastion starts: compose mounts the public key into it.
+      - name: Generate the bastion keypair
+        run: ./ci/db/gen-ssh-key.sh
+
+      # `--wait` blocks on each service's healthcheck, so nothing here polls or
+      # sleeps. Postgres answers on its unix socket while the seed is still
+      # running, which is why its healthcheck goes over TCP.
+      - name: Start Postgres, MySQL and the SSH bastion
+        run: docker compose -f compose.yaml up -d --wait postgres mysql bastion
+
+      # The smoke scripts import their own package's source directly, and every
+      # other workspace package through its built entry (enforced by the
+      # no-restricted-imports override in .oxlintrc.json), so the dependencies
+      # have to be built.
+      - name: Build
+        run: pnpm build
+
+      # So a run's log says which driver versions it actually proved, without
+      # having to reconstruct them from the lockfile at that commit.
+      - name: Driver versions under test
+        run: pnpm -r list pg mysql2 --depth 0
+
+      # Each asserts nothing about a particular schema: it introspects, picks a
+      # table, probes a real value out of it, and runs every read operation
+      # against what it found. The seed exists to give it something to find.
+      - name: Postgres smoke test
+        run: pnpm --filter mcp-shared-db-postgres smoke
+
+      - name: MySQL smoke test
+        run: pnpm --filter mcp-shared-db-mysql smoke
+
+      # The read-only guarantee is a property of the session, so no unit test
+      # can reach it: these issue a write on a guarded connection and require
+      # the engine to refuse it with its read-only error code. Each probe is
+      # first run unguarded and must succeed, so a probe that fails for some
+      # other reason cannot pass. Both are harmless if the guard is missing
+      # -- a temporary table that dies with the connection, and an UPDATE whose
+      # WHERE clause matches nothing.
+      - name: Read-only guarantee (Postgres)
+        run: pnpm --filter db-read-mcp smoke:readonly:pg
+
+      - name: Read-only guarantee (MySQL)
+        run: pnpm --filter db-read-mcp smoke:readonly:mysql
+
+      # Drives the real `ssh` binary against a real server. The URL names the
+      # database by a hostname only the bastion can resolve, so a tunnel that
+      # is not actually carrying the connection cannot pass by reaching the
+      # database some other way.
+      - name: SSH tunnel (Postgres through a bastion)
+        run: pnpm --filter db-read-mcp smoke:tunnel
+
+      # The unit tests for this run against rows the test wrote itself. A real
+      # driver decides the shape of a row -- numerics arrive as strings, JSON
+      # as objects -- and the policy has to hold for whatever comes back.
+      - name: Field visibility policy (Postgres)
+        run: pnpm --filter db-read-mcp smoke:visibility
+
+      - name: Database logs on failure
+        if: failure()
+        run: docker compose -f compose.yaml logs --no-color --tail=100 postgres mysql bastion
