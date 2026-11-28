@@ -13,24 +13,24 @@ allowBuilds:
 catalog:
   '@duckdb/node-api': 1.5.2-r.1
   '@changesets/cli': 2.29.8
-  '@modelcontextprotocol/sdk': 1.26.0
+  '@modelcontextprotocol/sdk': 1.32.2
   '@types/node': 22.15.21
   '@vitest/coverage-v8': 4.0.18
   jscpd: 5.4.3
   # The database drivers the smoke tests run against (ci.yml `db-smoke`).
   # Declared as devDependencies of the packages that load them, so a bump here
   # is what the smoke job exercises against real engines.
-  mysql2: 3.22.3
+  mysql2: 3.24.6
   'node-notifier': 10.0.1
-  oxlint: 1.63.0
-  oxlint-tsgolint: 7.0.2003
-  pg: 8.11.0
+  oxlint: 1.94.0
+  oxlint-tsgolint: 7.0.2007
+  pg: 8.23.1
   syncpack: 15.3.3
   tsup: 8.5.0
-  tsx: 4.19.4
+  tsx: 4.23.15
   typescript: 5.8.3
   ulid: 2.3.0
   vitest: 4.0.18
-  yaml: 2.8.2
+  yaml: 2.9.1
   zod: 3.25.76
-  zod-to-json-schema: 3.25.1
+  zod-to-json-schema: 3.25.2
