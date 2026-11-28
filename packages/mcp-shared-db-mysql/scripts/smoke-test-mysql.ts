@@ -128,16 +128,19 @@ interface PickedTable {
  * also note whether there's a datetime column (for findByRange) and a
  * json column (for findByJsonPath). Picks the first table that matches.
  */
-async function pickTable(
-  introspector: MysqlIntrospector,
-  schema: string,
-): Promise<PickedTable | null> {
+async function pickTable({
+  introspector,
+  schema,
+}: {
+  introspector: MysqlIntrospector;
+  schema: string;
+}): Promise<PickedTable | null> {
   const tables = await introspector.listTables(schema);
   for (const t of tables) {
     try {
       const raw = await introspector.introspectTable({ schema, table: t.name });
-      if (raw.primaryKey.length !== 1) continue;
-      const pkColumn = raw.primaryKey[0]!;
+      const [pkColumn, ...otherPk] = raw.primaryKey;
+      if (pkColumn === undefined || otherPk.length > 0) continue;
       const scalar = raw.columns.find(
         (c) =>
           c.name !== pkColumn &&
@@ -222,7 +225,7 @@ async function main(): Promise<void> {
         console.log(`[smoke] tables in ${targetSchema} (${tables.length}):`,
           tables.slice(0, 10).map((t) => t.name));
 
-        const picked = await pickTable(introspector, targetSchema);
+        const picked = await pickTable({ introspector, schema: targetSchema });
         if (!picked) {
           console.warn("[smoke] no table with a single-column PK + scalar column found; skipping data-source ops");
           console.log("[smoke] OK (introspect-only)");

@@ -9,8 +9,9 @@
   "scripts": {
     "build": "pnpm -r build",
     "clean": "pnpm -r --parallel exec sh -c 'rm -rf dist tsconfig.tsbuildinfo'",
-    "typecheck": "pnpm build && pnpm -r --parallel exec sh -c '[ -f tsconfig.json ] || exit 0; exec tsc --noEmit'",
-    "lint": "oxlint --type-aware packages/*/src",
+    "typecheck": "pnpm build && pnpm -r --parallel exec sh -c '[ -f tsconfig.json ] || exit 0; tsc --noEmit && { [ ! -f tsconfig.scripts.json ] || tsc -p tsconfig.scripts.json; }'",
+    "typecheck:scripts": "pnpm -r --parallel exec sh -c '[ ! -f tsconfig.scripts.json ] || exec tsc -p tsconfig.scripts.json'",
+    "lint": "oxlint --type-aware packages/*/src packages/*db*/scripts",
     "test": "pnpm -r test",
     "coverage": "pnpm -r --parallel exec vitest run --coverage",
     "dev": "pnpm -r --parallel dev",

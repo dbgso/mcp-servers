@@ -37,6 +37,9 @@ jobs:
       # and rules like require-array-sort-compare report what a build resolves.
       - run: pnpm build
       - run: pnpm lint
+      # tsx strips types without checking them, so the smoke scripts (which
+      # are outside each package's tsconfig.json) are type-checked here.
+      - run: pnpm typecheck:scripts
       # A changeset is published verbatim inside the package's CHANGELOG.md, and
       # nobody reads a generated file before it ships. This is the one chance to
       # catch markdown that will say something else once prettier has resolved

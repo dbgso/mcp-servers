@@ -129,16 +129,19 @@ interface PickedTable {
  * Pick a table to exercise: must have a single-column PK and at least one
  * other scalar column, so findByEq and findByPk have something to work with.
  */
-async function pickTable(
-  introspector: PostgresIntrospector,
-  schema: string,
-): Promise<PickedTable | null> {
+async function pickTable({
+  introspector,
+  schema,
+}: {
+  introspector: PostgresIntrospector;
+  schema: string;
+}): Promise<PickedTable | null> {
   const tables = await introspector.listTables(schema);
   for (const t of tables) {
     try {
       const raw = await introspector.introspectTable({ schema, table: t.name });
-      if (raw.primaryKey.length !== 1) continue;
-      const pkColumn = raw.primaryKey[0]!;
+      const [pkColumn, ...otherPk] = raw.primaryKey;
+      if (pkColumn === undefined || otherPk.length > 0) continue;
       const scalar = raw.columns.find(
         (c) =>
           c.name !== pkColumn &&
@@ -215,7 +218,7 @@ async function main(): Promise<void> {
           tables.slice(0, 10).map((t) => t.name),
         );
 
-        const picked = await pickTable(introspector, targetSchema);
+        const picked = await pickTable({ introspector, schema: targetSchema });
         if (!picked) {
           console.warn(
             "[smoke] no table with a single-column PK + scalar column found; skipping data-source ops",
