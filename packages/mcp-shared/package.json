@@ -67,7 +67,7 @@
   },
   "dependencies": {
     "@duckdb/node-api": "catalog:",
-    "node-notifier": "10.0.1",
+    "node-notifier": "12.1.0",
     "zod": "catalog:",
     "zod-to-json-schema": "catalog:"
   }
