@@ -657,6 +657,19 @@ importers:
 
   packages/python-diagrams-mcp: {}
 
+  packages/shared/primitives:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.0.18(vitest@4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2))
+      vitest:
+        specifier: 'catalog:'
+        version: 4.0.18(@types/node@22.15.21)(tsx@4.19.4)(yaml@2.8.2)
+
   packages/traceable-chain-mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
