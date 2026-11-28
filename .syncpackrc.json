@@ -2,7 +2,7 @@
   "$schema": "./node_modules/syncpack/schema.json",
   "versionGroups": [
     {
-      "label": "DB driver peers: one range per driver (the floor itself is checked against the catalog by scripts/check-peer-floors.mjs)",
+      "label": "DB driver peers: one range per driver (scripts/check-peer-floors.mjs checks that range admits the catalog version)",
       "dependencies": ["pg", "mysql2"],
       "dependencyTypes": ["peer"],
       "preferVersion": "highestSemver"

@@ -41,10 +41,10 @@ jobs:
       # directory (outside each package's tsconfig.json) is type-checked here
       # with its own scripts/tsconfig.json. One without it fails the job.
       - run: pnpm typecheck:scripts
-      # The DB drivers a package installs come from the catalog, and a peer's
-      # floor is the catalog version -- the one db-smoke runs against real
-      # engines. Without this, a bump in one place leaves the others claiming
-      # versions nothing here has run.
+      # The DB drivers a package installs come from the catalog, and every
+      # peer range on them admits the catalog version -- the one db-smoke runs
+      # against real engines. A floor may sit below it, so a catalog bump does
+      # not force the floors up.
       - run: pnpm lint:deps
       # A downloaded binary rather than the Docker image: the image would be one
       # more pull from Docker Hub, which rate-limits. Checked against the
