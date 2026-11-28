@@ -11,7 +11,7 @@ import {
 import { defaultDeps } from "../deps/default.js";
 import { getSource, allSources } from "../sources/registry.js";
 import type { PollOutcome, SourceDeps, SourceState, WatchSource } from "../sources/types.js";
-import { systemClock, type Clock } from "./clock.js";
+import { raceSleep, systemClock, type Clock } from "./clock.js";
 import { nextSleepMs, remainingMs, resolveIntervalMs } from "./schedule.js";
 import { WaitError, type Watch, type WatchSpec, type WatchStatus } from "./types.js";
 
@@ -148,12 +148,9 @@ export class WatchManager {
     const pending = records.map((record) => record.settled);
     const settled = params.mode === "any" ? Promise.race(pending) : Promise.all(pending);
 
-    const outcome = await Promise.race([
-      settled.then(() => "settled" as const),
-      this.clock.sleep(limit).then(() => "blocked" as const),
-    ]);
+    const outcome = await raceSleep({ clock: this.clock, ms: limit, work: settled.then(() => "settled" as const) });
 
-    return { watches: records.map((record) => record.watch), blocked: outcome === "blocked" };
+    return { watches: records.map((record) => record.watch), blocked: outcome === "slept" };
   }
 
   /** Create a watch and block on it in one call. */
@@ -254,8 +251,9 @@ export class WatchManager {
       // A poll that never returns (an endpoint that stops answering, a hung
       // `gh`) must not hold the watch past its deadline, so the poll races the
       // time left. The poll itself carries on in the background; its result is
-      // ignored once the watch has settled.
-      await Promise.race([this.pollOnce(record), this.clock.sleep(this.remaining(record))]);
+      // ignored once the watch has settled. The deadline sleep is dropped as
+      // soon as the poll returns, so no timer is left behind per poll.
+      await raceSleep({ clock: this.clock, ms: this.remaining(record), work: this.pollOnce(record) });
       if (record.watch.status !== "waiting") return;
 
       const remaining = this.remaining(record);
@@ -264,13 +262,16 @@ export class WatchManager {
         return;
       }
 
-      await this.clock.sleep(
-        nextSleepMs({
+      // Waking on settle lets a cancelled watch drop its interval timer at once
+      await raceSleep({
+        clock: this.clock,
+        ms: nextSleepMs({
           baseIntervalMs: record.watch.intervalMs,
           consecutiveErrors: record.watch.consecutiveErrors,
           remainingMs: remaining,
         }),
-      );
+        work: record.settled,
+      });
     }
   }
 

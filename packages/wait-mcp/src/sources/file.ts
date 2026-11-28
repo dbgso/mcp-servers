@@ -81,7 +81,7 @@ export const fileSource: WatchSource<Config> = {
   id: "file",
   summary: "Wait for a local file to appear, disappear, change or match",
   detail: `Polls the file system with stat/read only, inside the directories in WAIT_MCP_FILE_ROOTS
-(default: the server's working directory). Symlinks that lead outside them are refused.
+(unset: the file source is refused). Symlinks that lead outside them are refused.
 
 \`changed\` compares against the mtime and size recorded at the first poll, so it never fires on the
 poll that established the baseline. The other conditions are absolute and can fire immediately.
@@ -103,15 +103,17 @@ Examples:
       throw new Error('config.pattern is required when until="matches"');
     }
 
-    const path = checkFilePath({ policy: deps.policy, file: config.path });
+    const requested = checkFilePath({ policy: deps.policy, file: config.path });
     // A symlink inside a root can still point outside it
-    const real = await deps.realPath(path);
+    const real = await deps.realPath(requested);
     if (real !== null) {
       const roots = await Promise.all(deps.policy.fileRoots.map(async (root) => (await deps.realPath(root)) ?? root));
       if (!roots.some((root) => isInside({ root, target: real }))) {
-        throw new Error(`"${path}" resolves to "${real}", outside the directories the file source may read`);
+        throw new Error(`"${requested}" resolves to "${real}", outside the directories the file source may read`);
       }
     }
+    // Read the checked real path, so a symlink swapped after the check is not followed
+    const path = real ?? requested;
     const stat = await deps.statFile(path);
     const previous = state as FileState | undefined;
     const baseline = previous === undefined ? stat : previous.baseline;

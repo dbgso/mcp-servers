@@ -18,9 +18,9 @@ function envOf(values: Record<string, string>) {
 }
 
 describe("loadAccessPolicy", () => {
-  it("closes http and limits files to the working directory by default", () => {
+  it("closes both http and file by default", () => {
     const policy = loadAccessPolicy({ env: envOf({}), cwd: "/work/project" });
-    expect(policy).toEqual({ httpHosts: [], fileRoots: ["/work/project"], returnHttpBody: false, cwd: "/work/project" });
+    expect(policy).toEqual({ httpHosts: [], fileRoots: [], returnHttpBody: false, cwd: "/work/project" });
   });
 
   it("reads the lists and the body opt-in from the environment", () => {
@@ -64,6 +64,24 @@ describe("checkHttpUrl", () => {
 
   it("allows any host with *", () => {
     expect(() => checkHttpUrl({ policy: { ...strict, httpHosts: ["*"] }, url: "https://anything.test" })).not.toThrow();
+    expect(() => checkHttpUrl({ policy: { ...strict, httpHosts: ["*"] }, url: "https://203.0.113.7/" })).not.toThrow();
+  });
+
+  it.each([
+    "http://169.254.169.254/latest/meta-data/",
+    "http://127.0.0.1:8080/",
+    "http://0.0.0.0/",
+    "http://[::1]/",
+    "http://[fe80::1]/",
+    "http://[::ffff:169.254.169.254]/",
+  ])("does not let * cover the local IP literal in %s", (url) => {
+    expect(() => checkHttpUrl({ policy: { ...strict, httpHosts: ["*"] }, url })).toThrow(/not allowed/);
+  });
+
+  it("allows a local IP literal that is listed exactly", () => {
+    expect(() =>
+      checkHttpUrl({ policy: { ...strict, httpHosts: ["*", "127.0.0.1"] }, url: "http://127.0.0.1:8080/" }),
+    ).not.toThrow();
   });
 });
 
@@ -78,6 +96,12 @@ describe("checkFilePath", () => {
 
   it.each(["../secrets.env", "/etc/passwd", "/work/project-other/x"])("refuses %s", (file) => {
     expect(() => checkFilePath({ policy: strict, file })).toThrow(/outside the directories/);
+  });
+
+  it("says how to open file when no directory is allowed", () => {
+    expect(() => checkFilePath({ policy: { ...strict, fileRoots: [] }, file: "build.log" })).toThrow(
+      /No directory is allowed for the file source: set WAIT_MCP_FILE_ROOTS/,
+    );
   });
 
   it("treats a sibling with the same prefix as outside", () => {
@@ -104,6 +128,20 @@ describe("the policy at the sources", () => {
     );
   });
 
+  it("refuses a matches watch on .env under the default policy", async () => {
+    const policy = loadAccessPolicy({ env: envOf({}), cwd: "/work/project" });
+    const manager = new WatchManager({
+      clock: new ManualClock(),
+      deps: createFakeDeps({
+        policy,
+        files: { "/work/project/.env": { stat: { mtimeMs: 1, size: 10 }, content: "SECRET=abc" } },
+      }),
+    });
+    const config = { path: ".env", until: "matches", pattern: "^SECRET=a" };
+    expect(() => manager.create({ source: "file", config })).toThrow(/Refused for source "file": No directory is allowed/);
+    await expect(manager.checkOnce({ source: "file", config })).rejects.toThrow(/No directory is allowed/);
+  });
+
   it("refuses a Slack token_env that is not SLACK_*", () => {
     expect(() => strictManager().create({ source: "slack", config: { channel: "C1", token_env: "GITHUB_TOKEN" } })).toThrow(
       /must be an environment variable named SLACK_\*/,
@@ -128,6 +166,20 @@ describe("the policy at the sources", () => {
     });
     const outcome = await fileSource.poll({
       config: { path: "build.log", until: "matches", pattern: "SUCCESS" },
+      state: undefined,
+      deps,
+    });
+    expect(outcome.satisfied).toBe(true);
+  });
+
+  it("stats and reads the checked real path, not the link", async () => {
+    const deps = createFakeDeps({
+      policy: strict,
+      files: { "/work/project/out/real.log": { stat: { mtimeMs: 1, size: 4 }, content: "DONE" } },
+    });
+    deps.realPath = async (path) => (path === "/work/project/link.log" ? "/work/project/out/real.log" : path);
+    const outcome = await fileSource.poll({
+      config: { path: "link.log", until: "matches", pattern: "DONE" },
       state: undefined,
       deps,
     });

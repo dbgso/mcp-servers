@@ -202,7 +202,7 @@ Slack Web API（`conversations.replies` / `conversations.history`）を HTTP で
 | `until` | `"exists"` \| `"missing"` \| `"changed"` \| `"matches"` | `"exists"` | 終了条件 |
 | `pattern` | string? | なし | `until: "matches"` のとき必須。内容に対する正規表現 |
 
-既定間隔 5 秒、下限 1 秒。`path` は `WAIT_MCP_FILE_ROOTS` のいずれかの配下でなければ拒否する（既定はサーバーの起動ディレクトリ）。ポーリング時にも symlink を解決した実パスで同じ確認をする。`changed` は watch 作成時点の mtime とサイズからの変化を検出する。
+既定間隔 5 秒、下限 1 秒。`path` は `WAIT_MCP_FILE_ROOTS` のいずれかの配下でなければ拒否する（既定は空なので、設定しない限り file source は使えない。起動ディレクトリには `.env` などがあることが多く、`matches` の正規表現で中身を読み出せてしまうため）。ポーリング時にも symlink を解決した実パスで同じ確認をし、確認した実パスを stat / 読み込みする。`changed` は watch 作成時点の mtime とサイズからの変化を検出する。
 
 ## 設定（環境変数）
 
@@ -211,8 +211,8 @@ Slack Web API（`conversations.replies` / `conversations.history`）を HTTP で
 | `WAIT_MCP_MAX_BLOCK_MS` | 240000 | `max_block_ms` の既定値 |
 | `WAIT_MCP_MAX_WATCHES` | 50 | 同時に `waiting` でいられる watch の上限 |
 | `SLACK_BOT_TOKEN` | なし | `slack` source の既定トークン |
-| `WAIT_MCP_HTTP_ALLOW_HOSTS` | なし（すべて拒否） | `http` source が叩いてよい host のカンマ区切り。完全一致、`*.example.com`（サブドメイン）、`*`（すべて）を書ける |
-| `WAIT_MCP_FILE_ROOTS` | 起動ディレクトリ | `file` source が読んでよいディレクトリのカンマ区切り |
+| `WAIT_MCP_HTTP_ALLOW_HOSTS` | なし（すべて拒否） | `http` source が叩いてよい host のカンマ区切り。完全一致、`*.example.com`（サブドメイン）、`*`（すべて）を書ける。`*` は loopback / link-local / `0.0.0.0` の IP リテラルを含まない（使うなら完全一致で書く） |
+| `WAIT_MCP_FILE_ROOTS` | なし（すべて拒否） | `file` source が読んでよいディレクトリのカンマ区切り（相対パスは起動ディレクトリ基準） |
 | `WAIT_MCP_HTTP_RETURN_BODY` | 無効 | `1` / `true` で `http` の応答本文を結果に含める |
 
 `gh` CLI の認証はサーバー側の `gh auth` に従う。
@@ -221,8 +221,8 @@ Slack Web API（`conversations.replies` / `conversations.history`）を HTTP で
 
 config は AI が組み立てるので、何にアクセスできるかは起動時の環境変数でだけ広げられる。
 
-- `http`: `WAIT_MCP_HTTP_ALLOW_HOSTS` の host だけ。リダイレクトで別 host に飛ばない。
-- `file`: `WAIT_MCP_FILE_ROOTS` の配下だけ。symlink で外に出るパスも拒否する。
+- `http`: `WAIT_MCP_HTTP_ALLOW_HOSTS` の host だけ。リダイレクトで別 host に飛ばない。判定は URL の host 名で行うので、許可した host 名が DNS で内部 IP を引く場合までは防げない。
+- `file`: `WAIT_MCP_FILE_ROOTS` の配下だけ（既定は閉じている）。symlink で外に出るパスも拒否する。
 - `slack`: `token_env` は `SLACK_*` に限る（他の秘密の環境変数をトークンとして送らせない）。
 - 境界の外を指す config は watch 作成時（`until` / `watch` / `check`）に `Refused for source ...` のエラーで返す。
 

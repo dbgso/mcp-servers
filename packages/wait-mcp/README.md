@@ -68,13 +68,13 @@ A call that reaches its block limit returns `status: "waiting"` with a ready-mad
 | `WAIT_MCP_MAX_BLOCK_MS` | 240000 | How long one call may block before answering "still waiting" |
 | `WAIT_MCP_MAX_WATCHES` | 50 | Maximum number of simultaneously waiting watches |
 | `SLACK_BOT_TOKEN` | — | Token for the `slack` source (`token_env` may only name `SLACK_*` variables) |
-| `WAIT_MCP_HTTP_ALLOW_HOSTS` | — (none allowed) | Comma-separated hosts the `http` source may call: exact, `*.example.com`, or `*` |
-| `WAIT_MCP_FILE_ROOTS` | server cwd | Comma-separated directories the `file` source may read |
+| `WAIT_MCP_HTTP_ALLOW_HOSTS` | — (none allowed) | Comma-separated hosts the `http` source may call: exact, `*.example.com`, or `*` (which excludes loopback and link-local IP literals) |
+| `WAIT_MCP_FILE_ROOTS` | — (none allowed) | Comma-separated directories the `file` source may read (relative to the server cwd) |
 | `WAIT_MCP_HTTP_RETURN_BODY` | off | `1` / `true` to include the HTTP response body in results |
 
 GitHub access uses the `gh` CLI's own authentication.
 
-The `http` source does not work until `WAIT_MCP_HTTP_ALLOW_HOSTS` is set, and it never follows redirects. Watches outside these limits are refused when they are created.
+The `http` and `file` sources do not work until `WAIT_MCP_HTTP_ALLOW_HOSTS` / `WAIT_MCP_FILE_ROOTS` are set, and `http` never follows redirects. Watches outside these limits are refused when they are created.
 
 ## Documentation
 

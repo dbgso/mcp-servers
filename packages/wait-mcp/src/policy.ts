@@ -17,7 +17,7 @@ export interface AccessPolicy {
    * `*` for any host. Empty means the `http` source is refused.
    */
   httpHosts: string[];
-  /** Directories the `file` source may look inside (absolute). */
+  /** Directories the `file` source may look inside (absolute). Empty means the `file` source is refused. */
   fileRoots: string[];
   /** Whether `http` returns the start of the response body in `details`. */
   returnHttpBody: boolean;
@@ -40,24 +40,35 @@ function splitList(raw: string | undefined): string[] {
  * Read the policy from the server's environment.
  *
  * - `WAIT_MCP_HTTP_ALLOW_HOSTS`: comma-separated; unset means no host.
- * - `WAIT_MCP_FILE_ROOTS`: comma-separated; unset means the working directory.
+ * - `WAIT_MCP_FILE_ROOTS`: comma-separated, relative to the working directory;
+ *   unset means no directory (the working directory usually holds `.env`).
  * - `WAIT_MCP_HTTP_RETURN_BODY`: `1` / `true` to include the body excerpt.
  */
 export function loadAccessPolicy(params: { env: (name: string) => string | undefined; cwd: string }): AccessPolicy {
   const { env, cwd } = params;
-  const roots = splitList(env(FILE_ROOTS_ENV));
   return {
     httpHosts: splitList(env(HTTP_HOSTS_ENV)).map((host) => host.toLowerCase()),
-    fileRoots: (roots.length > 0 ? roots : [cwd]).map((root) => path.resolve(cwd, root)),
+    fileRoots: splitList(env(FILE_ROOTS_ENV)).map((root) => path.resolve(cwd, root)),
     returnHttpBody: /^(1|true)$/i.test(env(RETURN_HTTP_BODY_ENV)?.trim() ?? ""),
     cwd,
   };
 }
 
+/**
+ * Loopback, link-local (cloud metadata) and unspecified IP literals. `*` does
+ * not cover them; they must be listed exactly. Hostnames that resolve to such
+ * addresses are not caught here.
+ */
+function isLocalIpLiteral(host: string): boolean {
+  const bare = host.replace(/^\[|\]$/g, "");
+  if (/^(127|0)\.\d+\.\d+\.\d+$/.test(bare) || /^169\.254\.\d+\.\d+$/.test(bare)) return true;
+  return bare === "::1" || bare === "::" || /^fe[89ab][0-9a-f]:/i.test(bare) || /^::ffff:/i.test(bare);
+}
+
 function hostAllowed(params: { host: string; allowed: string[] }): boolean {
   const { host, allowed } = params;
   return allowed.some((entry) => {
-    if (entry === "*") return true;
+    if (entry === "*") return !isLocalIpLiteral(host);
     if (entry.startsWith("*.")) return host.endsWith(entry.slice(1));
     return host === entry;
   });
@@ -95,6 +106,11 @@ export function isInside(params: { root: string; target: string }): boolean {
 export function checkFilePath(params: { policy: AccessPolicy; file: string }): string {
   const { policy, file } = params;
   const resolved = path.resolve(policy.cwd, file);
+  if (policy.fileRoots.length === 0) {
+    throw new Error(
+      `No directory is allowed for the file source: set ${FILE_ROOTS_ENV} (comma-separated directories) where the server is started.`,
+    );
+  }
   if (!policy.fileRoots.some((root) => isInside({ root, target: resolved }))) {
     throw new Error(
       `path "${resolved}" is outside the directories the file source may read (${policy.fileRoots.join(", ")}; ${FILE_ROOTS_ENV}).`,

@@ -112,7 +112,7 @@ source は自分の状態を持たない。差分検出に必要な基準（最�
 
 ### 時間の扱い
 
-現在時刻と待機は `Clock`（`now()` / `sleep(ms)`）にのみ依存させ、既定実装は `Date.now` と `setTimeout`。テストは手動で時刻を進められる `ManualClock` を注入する。`sleep` を偽物にできることで、30 分の待機を含むシナリオもミリ秒で検証できる。実時間に依存したテストもフェイクタイマーの巻き戻しも要らない。
+現在時刻と待機は `Clock`（`now()` / `sleep({ ms, signal })`）にのみ依存させ、既定実装は `Date.now` と `setTimeout`。テストは手動で時刻を進められる `ManualClock` を注入する。`sleep` を偽物にできることで、30 分の待機を含むシナリオもミリ秒で検証できる。実時間に依存したテストもフェイクタイマーの巻き戻しも要らない。
 
 ### 間隔とバックオフ
 
@@ -122,6 +122,7 @@ source は自分の状態を持たない。差分検出に必要な基準（最�
 - `nextIntervalMs(baseMs, consecutiveErrors)`: 連続エラー数に対して `base * 2^errors` を返し、5 分で頭打ち。エラー 0 なら `base`。
 - `remainingMs(startedAt, timeoutMs, now)`: 残り時間。0 以下なら期限切れ。
 - 次の sleep は `min(nextIntervalMs, remainingMs)` とし、期限をまたいで眠らない。
+- poll と期限、join と block 上限のように sleep を何かと競わせるときは `raceSleep` を使い、勝負がついたら `AbortSignal` で sleep の timer を消す。間隔の sleep も watch の終了で起きるので、終わった watch の timer は残らない。
 
 連続エラーが上限（5）に達したら `failed`。成功した poll は連続エラー数を 0 に戻す。
 

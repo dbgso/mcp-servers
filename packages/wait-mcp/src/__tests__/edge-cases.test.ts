@@ -14,7 +14,7 @@ import { createFakeDeps } from "./helpers.js";
 describe("system clock", () => {
   it("sleeps in real time and reports the wall clock", async () => {
     const before = systemClock.now();
-    await systemClock.sleep(1);
+    await systemClock.sleep({ ms: 1 });
     expect(systemClock.now()).toBeGreaterThanOrEqual(before);
   });
 });

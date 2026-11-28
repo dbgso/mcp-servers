@@ -330,8 +330,8 @@ describe("ManualClock", () => {
     const clock = new ManualClock(1_000);
     const woken: string[] = [];
 
-    void clock.sleep(500).then(() => woken.push("short"));
-    void clock.sleep(2_000).then(() => woken.push("long"));
+    void clock.sleep({ ms: 500 }).then(() => woken.push("short"));
+    void clock.sleep({ ms: 2_000 }).then(() => woken.push("long"));
     expect(clock.pending).toBe(2);
 
     await clock.advance(600);

@@ -1,13 +1,43 @@
 /** Time source used by the polling loops, injected so tests never wait in real time. */
 export interface Clock {
   now(): number;
-  sleep(ms: number): Promise<void>;
+  /** Resolve after `ms`, or as soon as `signal` aborts (dropping the timer). */
+  sleep(params: { ms: number; signal?: AbortSignal }): Promise<void>;
 }
 
 export const systemClock: Clock = {
   now: () => Date.now(),
-  sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  sleep: ({ ms, signal }: { ms: number; signal?: AbortSignal }) =>
+    new Promise<void>((resolve) => {
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+      function onAbort(): void {
+        clearTimeout(timer);
+        resolve();
+      }
+      signal?.addEventListener("abort", onAbort, { once: true });
+    }),
 };
+
+/**
+ * Race `work` against a sleep of `ms`, and drop the sleep once the race is
+ * decided so no timer outlives it.
+ */
+export async function raceSleep<T>(params: { clock: Clock; ms: number; work: Promise<T> }): Promise<T | "slept"> {
+  const { clock, ms, work } = params;
+  const controller = new AbortController();
+  try {
+    return await Promise.race([work, clock.sleep({ ms, signal: controller.signal }).then(() => "slept" as const)]);
+  } finally {
+    controller.abort();
+  }
+}
 
 interface Waiter {
   dueAt: number;
@@ -34,9 +64,23 @@ export class ManualClock implements Clock {
     return this.current;
   }
 
-  sleep(ms: number): Promise<void> {
+  sleep(params: { ms: number; signal?: AbortSignal }): Promise<void> {
+    const { ms, signal } = params;
     return new Promise<void>((resolve) => {
-      this.waiters.add({ dueAt: this.current + ms, resolve });
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
+      const waiter: Waiter = { dueAt: this.current + ms, resolve };
+      this.waiters.add(waiter);
+      signal?.addEventListener(
+        "abort",
+        () => {
+          this.waiters.delete(waiter);
+          resolve();
+        },
+        { once: true },
+      );
     });
   }
 
