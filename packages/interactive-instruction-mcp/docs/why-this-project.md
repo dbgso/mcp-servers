@@ -1,3 +1,11 @@
+---
+description: "Why the project exists: documentation an agent maintains rather than a human transcribes"
+whenToUse:
+  - questioning the premise
+  - writing about the project
+  - deciding what belongs in the corpus
+---
+
 # Concept
 
 MCP server that enables AI agents to autonomously manage documentation.

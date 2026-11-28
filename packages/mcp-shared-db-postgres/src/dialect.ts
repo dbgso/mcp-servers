@@ -11,7 +11,10 @@
  * - `parseExplainResult` walks the JSON plan tree and pulls out the leading
  *   node's row / cost estimate plus a one-line summary.
  */
-import type { Dialect, DialectExplainResult } from "mcp-shared-db-sql";
+import { asQuotedIdent, ident, sqlFragment } from "mcp-shared-db-sql";
+import type { Dialect, DialectExplainResult, QuotedIdent, SqlFragment } from "mcp-shared-db-sql";
+
+type JsonPathEqualsInput = Parameters<Dialect["jsonPathEquals"]>[0];
 
 interface PgPlan {
   "Node Type"?: string;
@@ -69,20 +72,20 @@ function summarisePgPlan(plan: PgPlan): string {
   return parts.join(" ");
 }
 
-export const postgresDialect: Dialect = {
-  quoteIdent(name: string): string {
-    return `"${name.replace(/"/g, '""')}"`;
-  },
+export class PostgresDialect implements Dialect {
+  quoteIdent(name: string): QuotedIdent {
+    return asQuotedIdent(`"${name.replace(/"/g, '""')}"`);
+  }
   placeholder(index: number): string {
     return `$${index}`;
-  },
-  jsonPathEquals({ columnSql, path, valuePlaceholder, params }) {
-    const segmentsPh = params.add(path.segments);
-    return `${columnSql} #>> ${segmentsPh} = ${valuePlaceholder}`;
-  },
+  }
+  jsonPathEquals({ columnSql, path, value }: JsonPathEqualsInput): SqlFragment {
+    // Segments travel as a JS array; `pg` serialises that as a `text[]`.
+    return sqlFragment`${ident(columnSql)} #>> ${path.segments} = ${value}`;
+  }
   explainPrefix(): string {
     return "EXPLAIN (FORMAT JSON)";
-  },
+  }
   parseExplainResult(rows: unknown[]): DialectExplainResult {
     // Defensive: the QueryFn contract is `unknown[]`, but real-world driver
     // mishaps (a badly-formed query result, an unexpected adapter return
@@ -118,5 +121,7 @@ export const postgresDialect: Dialect = {
       planSummary: summarisePgPlan(scan),
       raw: plan,
     };
-  },
-};
+  }
+}
+
+export const postgresDialect = new PostgresDialect();

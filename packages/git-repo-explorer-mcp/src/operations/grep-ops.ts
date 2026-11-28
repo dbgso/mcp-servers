@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { GitOperation } from "./types.js";
+import type { GitOperation, GitOperationContext } from "./types.js";
 import { gitGrep } from "../git-repo-manager.js";
 
 const grepArgsSchema = z.object({
@@ -13,19 +13,19 @@ const grepArgsSchema = z.object({
 });
 type GrepArgs = z.infer<typeof grepArgsSchema>;
 
-export const grepOp: GitOperation<GrepArgs> = {
-  id: "grep",
-  summary: "Search code in repository with pattern",
-  detail: `Execute git grep to search code. Regular expressions are supported.
+export class GrepOp implements GitOperation<GrepArgs> {
+  readonly id = "grep";
+  readonly summary = "Search code in repository with pattern";
+  readonly detail = `Execute git grep to search code. Regular expressions are supported.
 
 Examples:
   operation: "grep"
   params: { pattern: "TODO" }
   params: { repo_url: "git@github.com:org/repo.git", pattern: "fetchUser", ref: "main", path: "packages/common-lib/src" }
-  params: { pattern: "console\\.log", ignore_case: true, max_count: 50 }`,
-  category: "Search",
-  argsSchema: grepArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { pattern: "console\\.log", ignore_case: true, max_count: 50 }`;
+  readonly category = "Search";
+  readonly argsSchema = grepArgsSchema;
+  async execute(args: GrepArgs, ctx: GitOperationContext): Promise<CallToolResult> {
     const result = await gitGrep({
       repoPath: ctx.repoPath,
       pattern: args.pattern,
@@ -40,7 +40,9 @@ Examples:
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
-  },
-};
+  }
+}
+
+export const grepOp = new GrepOp();
 
 export const grepOperations = [grepOp];

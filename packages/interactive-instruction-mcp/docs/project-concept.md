@@ -1,3 +1,14 @@
+---
+description: "What this server is: an MCP server that lets an agent maintain a documentation corpus"
+whenToUse:
+  - understanding what the package is for
+  - explaining it to someone
+  - deciding whether it fits a problem
+relatedDocs:
+  - why-this-project
+  - architecture
+---
+
 # Project Concept
 
 MCP Interactive Instruction is a Model Context Protocol (MCP) server that provides AI assistants with interactive access to markdown documentation.

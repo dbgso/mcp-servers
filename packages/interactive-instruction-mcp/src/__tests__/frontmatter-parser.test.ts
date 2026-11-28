@@ -132,8 +132,12 @@ description: After relatedDocs
       expect(result.description).toBe("After relatedDocs");
     });
 
-    it("should skip lines without colon or with colon at start (line 92 false branch)", () => {
-      // This tests when colonIndex <= 0: no colon or colon at position 0
+    it("keeps what it can read out of malformed frontmatter", () => {
+      // The line parser this replaced skipped junk lines individually. A YAML
+      // parser sees the block as a whole, so a stray line swallows the keys
+      // that follow it -- here `whenToUse` becomes part of an invented key.
+      // What matters is that the document does not vanish from the corpus over
+      // one bad line: the keys before the damage still read.
       const content = `---
 description: Valid description
 :invalidKeyStartsWithColon
@@ -146,7 +150,7 @@ whenToUse:
 
       const result = parseFrontmatter(content);
       expect(result.description).toBe("Valid description");
-      expect(result.whenToUse).toEqual(["Valid use"]);
+      expect(result.whenToUse).toBeUndefined();
     });
 
     it("should handle single inline whenToUse value", () => {

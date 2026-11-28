@@ -1,3 +1,10 @@
+---
+description: How to check whether an agent can actually find a rule that has been written down
+whenToUse:
+  - adding a rule and wanting to know it will be found
+  - investigating why a convention was ignored
+---
+
 # Rule Discovery Testing with Sub Agents
 
 Method to verify if documentation rules are discoverable by AI agents.

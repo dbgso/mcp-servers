@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { GitOperation } from "./types.js";
+import type { GitOperation, GitOperationContext } from "./types.js";
 import { gitLsFiles } from "../git-repo-manager.js";
 
 const lsFilesArgsSchema = z.object({
@@ -11,19 +11,19 @@ const lsFilesArgsSchema = z.object({
 });
 type LsFilesArgs = z.infer<typeof lsFilesArgsSchema>;
 
-export const lsFilesOp: GitOperation<LsFilesArgs> = {
-  id: "ls_files",
-  summary: "List files in repository",
-  detail: `List files in the repository at specified ref. Filter by path directory or glob pattern.
+export class LsFilesOp implements GitOperation<LsFilesArgs> {
+  readonly id = "ls_files";
+  readonly summary = "List files in repository";
+  readonly detail = `List files in the repository at specified ref. Filter by path directory or glob pattern.
 
 Examples:
   operation: "ls_files"
   params: { path: "packages/common-lib/src" }
   params: { repo_url: "git@github.com:org/repo.git", ref: "main", pattern: "**/*.ts" }
-  params: { path: "src/lib", pattern: "**/*.test.ts" }`,
-  category: "File",
-  argsSchema: lsFilesArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { path: "src/lib", pattern: "**/*.test.ts" }`;
+  readonly category = "File";
+  readonly argsSchema = lsFilesArgsSchema;
+  async execute(args: LsFilesArgs, ctx: GitOperationContext): Promise<CallToolResult> {
     const ref = args.ref ?? "HEAD";
     const files = await gitLsFiles({
       repoPath: ctx.repoPath,
@@ -42,7 +42,9 @@ Examples:
         }, null, 2),
       }],
     };
-  },
-};
+  }
+}
+
+export const lsFilesOp = new LsFilesOp();
 
 export const lsFilesOperations = [lsFilesOp];

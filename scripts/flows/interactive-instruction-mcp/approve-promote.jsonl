@@ -1,0 +1,19 @@
+# The deliberation gate, which needs two identical calls in ONE session --
+# the thing `mcp-test.sh` cannot express, since it exits between calls.
+#
+#   node scripts/mcp-session.mjs interactive-instruction-mcp \
+#     scripts/flows/interactive-instruction-mcp/approve-promote.jsonl
+
+{"server": {"args": ["{{TMPDIR}}"]}}
+
+{"tools": true, "label": "the two tools this server offers"}
+
+{"call": "instruction", "label": "add a draft", "args": {"action": "add", "id": "gate-demo", "content": "# Gate\n\nThe document being promoted.", "description": "A draft to carry through the gate", "whenToUse": ["exercising the gate"]}, "expect": ["created successfully"]}
+
+{"call": "instruction", "label": "record the self-review", "args": {"action": "approve", "id": "gate-demo", "notes": "reviewed: one topic, ready"}, "expect": ["gate-demo"]}
+
+{"call": "instruction", "label": "promote: first attempt is refused on purpose", "args": {"action": "approve", "id": "gate-demo", "explanation": "This is the note we agreed to keep."}, "expect": ["Not Yet -- Tell the User First"]}
+
+{"call": "instruction", "label": "promote: the identical repeat goes through", "args": {"action": "approve", "id": "gate-demo", "explanation": "This is the note we agreed to keep."}, "expectNot": ["Not Yet -- Tell the User First"]}
+
+{"call": "instruction", "label": "the promoted document carries none of the workflow fields", "args": {"action": "read_meta", "id": "gate-demo"}, "expect": ["approvedAt"], "expectNot": ["selfReviewNotes", "**[Draft]**"]}

@@ -6,6 +6,13 @@ import { writeFileSync, unlinkSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const CLI_TO_MCP_DIR = join(import.meta.dirname, "../../dist");
+// Reached by path, but declared as a workspace devDependency all the same: the
+// declaration is what tells pnpm this package's tests cannot run until
+// `mcp-firewall` has been built. Without it `pnpm --filter cli-to-mcp... build`
+// leaves that dist absent, the spawn below fails, and the suite reports
+// "MCP error -32000: Connection closed" -- which is what it did the first time
+// CI gave each package its own runner. Building the whole workspace had been
+// hiding it.
 const MCP_FIREWALL_DIR = join(import.meta.dirname, "../../../mcp-firewall/dist");
 
 describe("cli-to-mcp with mcp-firewall", () => {

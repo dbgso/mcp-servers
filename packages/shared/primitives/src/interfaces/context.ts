@@ -19,7 +19,7 @@ import type { Whitelist } from "./whitelist.js";
 export interface ToolContext<
   TCore extends Whitelist<string>,
   TReader = Record<string, never>,
-  TExtras extends Record<string, unknown | undefined> = Record<string, unknown | undefined>,
+  TExtras extends Record<string, unknown> = Record<string, unknown>,
 > {
   readonly whitelist: TCore;
   readonly reader: TReader;

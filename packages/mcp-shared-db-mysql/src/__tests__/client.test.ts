@@ -32,12 +32,31 @@ describe("urlToConnectionOptions", () => {
     });
   });
 
+  it("leaves the host unset for a URL that names none", () => {
+    // `mysql:///db` is how a socket connection is written. Passing
+    // `host: ""` to mysql2 is not the same as leaving it out -- the default
+    // is what selects the socket.
+    const opts = urlToConnectionOptions("mysql:///appdb");
+
+    expect(opts.host).toBeUndefined();
+    expect(opts.database).toBe("appdb");
+  });
+
   it("decodes percent-encoded credentials", () => {
     const opts = urlToConnectionOptions(
       "mysql://us%40er:p%40ss@h/db",
     );
     expect(opts.user).toBe("us@er");
     expect(opts.password).toBe("p@ss");
+  });
+
+  it("keeps a credential that is not valid percent-encoding", () => {
+    // A password written straight into an env file can contain a bare `%`.
+    // Rejecting it, or passing the raw `%zz` through a decoder that throws,
+    // would fail the connection rather than the credential.
+    const opts = urlToConnectionOptions("mysql://user:pa%zzss@h/db");
+
+    expect(opts.password).toBe("pa%zzss");
   });
 
   it("forces multipleStatements:false even when the URL asks for true", () => {

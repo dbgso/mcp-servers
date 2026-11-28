@@ -11,6 +11,7 @@
   "files": [
     "dist"
   ],
+  "ciShards": 3,
   "scripts": {
     "build": "tsc --noEmit && tsup && node ../../scripts/verify-bundle.mjs .",
     "test": "vitest run",
@@ -47,7 +48,7 @@
     "@modelcontextprotocol/sdk": "catalog:",
     "glob": "11.0.0",
     "ts-morph": "25.0.0",
-    "yaml": "2.8.2",
+    "yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

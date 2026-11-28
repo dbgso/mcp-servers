@@ -1,3 +1,13 @@
+---
+description: Code used in more than one place is extracted, not copied
+whenToUse:
+  - noticing the same code twice
+  - deciding where shared code goes
+  - reading a copied-content lint finding
+relatedDocs:
+  - coding__types
+---
+
 # Shared Code
 
 Code used in multiple files must be extracted to common modules. Duplicate code is prohibited.

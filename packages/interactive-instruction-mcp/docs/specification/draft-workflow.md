@@ -1,116 +1,52 @@
+---
+description: The states a draft passes through and what moves it between them
+whenToUse:
+  - understanding why a draft cannot be promoted yet
+  - reading a workflow state in frontmatter
+  - changing the approval flow
+---
+
 # Draft Workflow Specification
 
-State machine for draft approval process.
-
-## State Diagram
-
-```mermaid
-stateDiagram-v2
-    [*] --> editing
-    
-    editing --> self_review: 🤖 add/update
-    self_review --> user_reviewing: 🤖 approve with notes
-    user_reviewing --> pending_approval: 👤 user confirms
-    pending_approval --> applied: 👤 user provides token
-    applied --> [*]
-    
-    self_review --> self_review: 🤖 update
-    user_reviewing --> self_review: 🤖 update
-    pending_approval --> self_review: 🤖 update
-```
-
-**Legend:** 🤖 = AI action, 👤 = User permission required
-
-## Sequence Diagram
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant AI
-    participant Tool as draft tool
-    participant File as _mcp_drafts/
-    participant Memory as Workflow State
-    participant User
-
-    rect rgb(240, 248, 255)
-        Note over AI,Memory: Phase 1: Create Draft
-        AI->>+Tool: add(id, content)
-        Tool->>File: create draft file
-        Tool->>Memory: state = self_review
-        Tool-->>-AI: Draft created
-    end
-
-    rect rgb(255, 250, 240)
-        Note over AI,Memory: Phase 2: Self Review
-        AI->>+Tool: approve(notes)
-        Tool->>Memory: state = user_reviewing
-        Tool-->>-AI: Explain to user
-    end
-
-    rect rgb(240, 255, 240)
-        Note over AI,User: Phase 3: User Review
-        activate AI
-        AI->>User: Explains content
-        User-->>AI: Confirms understanding
-        deactivate AI
-        
-        AI->>+Tool: approve(confirmed)
-        Tool->>Memory: state = pending_approval
-        Tool->>User: Desktop notification with token
-        Tool-->>-AI: Show diff/summary
-    end
-
-    rect rgb(255, 240, 245)
-        Note over User,Memory: Phase 4: Final Approval
-        User-->>AI: Provides token
-        
-        AI->>+Tool: approve(token)
-        Tool->>Memory: validate token
-        Tool->>File: move to docs/
-        Tool->>Memory: state = applied
-        Tool-->>-AI: Success
-    end
-```
+The state a draft is in, and what moves it.
 
 ## States
 
-| State | Description |
-|-------|-------------|
-| `editing` | Initial state, draft is being created/edited |
-| `self_review` | AI must review content before explaining |
-| `user_reviewing` | AI must explain to user in own words |
-| `pending_approval` | Waiting for user's approval token |
-| `applied` | Draft promoted to confirmed doc |
+| State | What it means |
+|-------|---------------|
+| `editing` | The draft exists and has not been submitted for review |
+| `self_review` | `add` or `update` has run; the agent's own review is not recorded yet |
+| `user_reviewing` | The self-review is recorded; the change has not been explained to the user |
+| `pending_approval` | Explained once and refused once; the identical repeat will promote it |
+| `applied` | Promoted. The workflow entry is deleted at this point |
 
 ## Transitions
 
-### Forward (AI actions)
+| From | To | Trigger |
+|------|----|---------|
+| `editing` | `self_review` | `instruction(action: "add", ...)` or `update` on the draft |
+| `self_review` | `user_reviewing` | `instruction(action: "approve", id, notes: "<self-review>")` |
+| `user_reviewing` | `pending_approval` | `instruction(action: "approve", id, explanation: "...")` -- refused, on purpose |
+| `pending_approval` | `applied` | The identical call repeated |
+| any | `editing` | `instruction(action: "set_status", id, status: "editing")` |
 
-| From | To | Trigger | Actor |
-|------|----|---------|-------|
-| editing | self_review | `add` / `update` | 🤖 AI |
-| self_review | user_reviewing | `approve(notes)` | 🤖 AI |
+There is no approval token and no notification. The first `approve` carrying an
+`explanation` is refused and shows what would change; only an identical repeat
+goes through. The refusal is an ordinary response, not an error: being refused
+is a step in the operation rather than a failure of it.
 
-### Forward (User permission)
+`set_status` accepts `editing` and nothing else. It discards the workflow entry,
+so the draft starts its review over.
 
-| From | To | Trigger | Actor |
-|------|----|---------|-------|
-| user_reviewing | pending_approval | `approve(confirmed: true)` | 👤 User confirms AI's explanation |
-| pending_approval | applied | `approve(approvalToken)` | 👤 User provides token |
+## What the state is stored in
 
-### Reset (AI actions)
+Process memory backed by a directory outside the corpus, scoped per documents
+directory (`MCP_DRAFT_PERSIST_DIR`). It is deleted on promotion: a later draft
+reusing the same id starts from `editing` rather than inheriting a state it
+never earned.
 
-| From | To | Trigger | Actor |
-|------|----|---------|-------|
-| self_review | self_review | `update` | 🤖 AI |
-| user_reviewing | self_review | `update` | 🤖 AI |
-| pending_approval | self_review | `update` | 🤖 AI |
-
-## Constraints
-
-- Content is NOT shown at `user_reviewing` state
-- Diff/summary shown only after `confirmed: true`
-- Token validation required before `applied`
-- Content update resets workflow to `self_review`
-
-See `design__approval-flow` for rationale.
+The frontmatter mirrors it (`status`, `selfReviewNotes`, `confirmedAt`) while the
+draft is alive, and promotion removes those keys from the published document --
+they exist to run the approval conversation, not to be read by anyone after it.
+`approvedAt` is added instead, because when a document joined the corpus is a
+fact about the document.

@@ -16,15 +16,16 @@ import {
   RenameHandler,
   ApplyHandler,
   ApproveHandler,
+  ReadMetaHandler,
+  LintHandler,
 } from "../tools/instruction/handlers/index.js";
 import { draftWorkflowManager } from "../workflows/draft-workflow.js";
 
-// Import mocked functions from mcp-shared (mocked globally in vitest-setup.ts)
-import { requestApproval, validateApproval } from "mcp-shared/approval";
+import { resetMutationGatesForTesting } from "../services/mutation-gate.js";
+import { isRefusal, throughGate } from "./helpers/gate.js";
 
-// Get references to the mocked functions
-const mockRequestApproval = vi.mocked(requestApproval);
-const mockValidateApproval = vi.mocked(validateApproval);
+/** Shared across a batch: one run covers the whole set of drafts. */
+const BATCH_EXPLANATION = "These drafts record the conventions we just settled.";
 
 const tempBase = path.join(process.cwd(), "src/__tests__/temp-integration");
 const docsDir = tempBase; // Single directory for both docs and drafts
@@ -116,7 +117,8 @@ describe("Integration Tests", () => {
           context: context,
         });
 
-        // ListHandler filters out drafts from public listing by design.
+        // The ordinary listing leaves drafts out; `list(drafts: true)` is how they
+        // are enumerated. See docs/chain/spec/01M3ENJT7B4DJ90YDN1EK6454S.md.
         // Verify drafts exist by reading them directly.
         const read1 = await readHandler.execute({
           rawParams: { action: "read", id: "draft1" },
@@ -261,16 +263,7 @@ describe("Integration Tests", () => {
     beforeEach(() => {
       approveHandler = new ApproveHandler();
 
-      mockRequestApproval.mockResolvedValue({
-        token: "mock-token-12345",
-        fallbackPath: "/tmp/mock-pending.txt",
-      });
-      mockValidateApproval.mockImplementation(({ providedToken }) => {
-        if (providedToken === "valid-token") {
-          return { valid: true };
-        }
-        return { valid: false, reason: "Invalid token" };
-      });
+      resetMutationGatesForTesting();
     });
 
     afterEach(() => {
@@ -313,7 +306,8 @@ describe("Integration Tests", () => {
           context: context,
         });
 
-        // ListHandler filters out drafts from public listing by design.
+        // The ordinary listing leaves drafts out; `list(drafts: true)` is how they
+        // are enumerated. See docs/chain/spec/01M3ENJT7B4DJ90YDN1EK6454S.md.
         // Verify drafts exist by reading them directly.
         const read1 = await readHandler.execute({
           rawParams: { action: "read", id: "ready1" },
@@ -503,7 +497,7 @@ describe("Integration Tests", () => {
 
       it("should error when applying non-existent pending update", async () => {
         const result = await applyHandler.execute({
-          rawParams: { action: "apply", id: "non-existent" },
+          rawParams: { action: "apply", id: "non-existent", explanation: "test: applies the staged update" },
           context: context,
         });
 
@@ -660,17 +654,7 @@ describe("Integration Tests", () => {
       batchTestIds = [];
       approveHandler = new ApproveHandler();
 
-      // Setup mock implementations for batch tests
-      mockRequestApproval.mockResolvedValue({
-        token: "mock-token-12345",
-        fallbackPath: "/tmp/mock-pending.txt",
-      });
-      mockValidateApproval.mockImplementation(({ providedToken }) => {
-        if (providedToken === "valid-token") {
-          return { valid: true };
-        }
-        return { valid: false, reason: "Invalid token" };
-      });
+      resetMutationGatesForTesting();
     });
 
     afterEach(() => {
@@ -720,11 +704,11 @@ describe("Integration Tests", () => {
 
         // Create multiple drafts
         await addHandler.execute({
-          rawParams: { action: "add", id: id1, content: "# Batch 1\n\nFirst batch draft." },
+          rawParams: { action: "add", id: id1, content: "# Batch 1\n\nFirst batch draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await addHandler.execute({
-          rawParams: { action: "add", id: id2, content: "# Batch 2\n\nSecond batch draft." },
+          rawParams: { action: "add", id: id2, content: "# Batch 2\n\nSecond batch draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
 
@@ -732,18 +716,15 @@ describe("Integration Tests", () => {
         await progressToState(id1, "user_reviewing");
         await progressToState(id2, "user_reviewing");
 
-        // Batch confirm - should transition all to pending_approval
+        // First attempt - refused, and it moves all of them to
+        // pending_approval so the repeat lands where it expects to.
         const confirmResult = await approveHandler.execute({
-          rawParams: { action: "approve", ids: `${id1},${id2}`, confirmed: true },
+          rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
-        expect(confirmResult.isError).toBeFalsy();
-        expect(confirmResult.content[0].text).toContain("Batch Approval Requested");
-        expect(confirmResult.content[0].text).toContain("2 drafts");
-
-        // Verify single notification was sent
-        expect(mockRequestApproval).toHaveBeenCalledTimes(1);
+        expect(isRefusal(confirmResult)).toBe(true);
+        expect(confirmResult.content[0].text).toContain("2 draft(s)");
 
         // Verify all in pending_approval
         const status1 = await draftWorkflowManager.getStatus({ id: id1 });
@@ -757,11 +738,11 @@ describe("Integration Tests", () => {
         const id2 = getBatchId("batch-draft");
 
         await addHandler.execute({
-          rawParams: { action: "add", id: id1, content: "# Batch 1\n\nFirst draft." },
+          rawParams: { action: "add", id: id1, content: "# Batch 1\n\nFirst draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await addHandler.execute({
-          rawParams: { action: "add", id: id2, content: "# Batch 2\n\nSecond draft." },
+          rawParams: { action: "add", id: id2, content: "# Batch 2\n\nSecond draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
 
@@ -770,50 +751,69 @@ describe("Integration Tests", () => {
         await progressToState(id2, "self_review");
 
         const result = await approveHandler.execute({
-          rawParams: { action: "approve", ids: `${id1},${id2}`, confirmed: true },
+          rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain(id2);
         expect(result.content[0].text).toContain("self_review");
+      });
 
-        // Verify no notification was sent
-        expect(mockRequestApproval).not.toHaveBeenCalled();
+      it("promotes the whole batch on the repeat", async () => {
+        const id1 = getBatchId("batch-draft");
+        const id2 = getBatchId("batch-draft");
+
+        for (const [id, title] of [[id1, "Batch 1"], [id2, "Batch 2"]]) {
+          await addHandler.execute({
+            rawParams: { action: "add", id, content: `# ${title}\n\nBody.`, description: "Batch test draft", whenToUse: ["Testing batches"] },
+            context: context,
+          });
+          await progressToState(id, "user_reviewing");
+        }
+
+        const { response } = await throughGate(() =>
+          approveHandler.execute({
+            rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: BATCH_EXPLANATION },
+            context: context,
+          })
+        );
+
+        expect(response.isError).toBeFalsy();
+        expect(await reader.getDocumentContent(id1)).toContain("Batch 1");
+        expect(await reader.getDocumentContent(id2)).toContain("Batch 2");
       });
     });
 
-    describe("2. Batch notification verification", () => {
-      it("should call requestApproval with correct batch info", async () => {
+    describe("2. What the caller is shown", () => {
+      it("names every draft it is about to promote", async () => {
         const id1 = getBatchId("batch-draft");
         const id2 = getBatchId("batch-draft");
 
         await addHandler.execute({
-          rawParams: { action: "add", id: id1, content: "# Doc 1\n\nFirst doc." },
+          rawParams: { action: "add", id: id1, content: "# Doc 1\n\nFirst doc.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await addHandler.execute({
-          rawParams: { action: "add", id: id2, content: "# Doc 2\n\nSecond doc." },
+          rawParams: { action: "add", id: id2, content: "# Doc 2\n\nSecond doc.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
 
         await progressToState(id1, "user_reviewing");
         await progressToState(id2, "user_reviewing");
 
-        await approveHandler.execute({
-          rawParams: { action: "approve", ids: `${id1},${id2}`, confirmed: true },
+        const refused = await approveHandler.execute({
+          rawParams: { action: "approve", ids: `${id1},${id2}`, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
-        // Verify requestApproval was called with batch info
-        expect(mockRequestApproval).toHaveBeenCalledWith(
-          expect.objectContaining({
-            request: expect.objectContaining({
-              operation: "Batch Draft Approval",
-              description: expect.stringContaining("2 drafts"),
-            }),
-          })
-        );
+        // The preview is the only thing the caller reads before committing, so
+        // it has to name what is in the batch. There is no notification to
+        // carry that any more.
+        const text = refused.content[0].text as string;
+        expect(text).toContain("2 draft(s)");
+        expect(text).toContain(id1);
+        expect(text).toContain(id2);
       });
     });
 
@@ -822,18 +822,18 @@ describe("Integration Tests", () => {
         const id = getBatchId("batch-draft");
 
         await addHandler.execute({
-          rawParams: { action: "add", id, content: "# Single\n\nSingle draft." },
+          rawParams: { action: "add", id, content: "# Single\n\nSingle draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await progressToState(id, "user_reviewing");
 
         const result = await approveHandler.execute({
-          rawParams: { action: "approve", ids: id, confirmed: true },
+          rawParams: { action: "approve", ids: id, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
-        expect(result.isError).toBeFalsy();
-        expect(result.content[0].text).toContain("1 drafts");
+        expect(isRefusal(result)).toBe(true);
+        expect(result.content[0].text).toContain("1 draft(s)");
       });
 
       it("should handle whitespace in ids parameter", async () => {
@@ -841,11 +841,11 @@ describe("Integration Tests", () => {
         const id2 = getBatchId("batch-draft");
 
         await addHandler.execute({
-          rawParams: { action: "add", id: id1, content: "# WS1\n\nDraft with whitespace." },
+          rawParams: { action: "add", id: id1, content: "# WS1\n\nDraft with whitespace.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await addHandler.execute({
-          rawParams: { action: "add", id: id2, content: "# WS2\n\nAnother draft." },
+          rawParams: { action: "add", id: id2, content: "# WS2\n\nAnother draft.", description: "Batch test draft", whenToUse: ["Testing batches"] },
           context: context,
         });
         await progressToState(id1, "user_reviewing");
@@ -853,13 +853,186 @@ describe("Integration Tests", () => {
 
         // IDs with extra whitespace
         const result = await approveHandler.execute({
-          rawParams: { action: "approve", ids: `  ${id1} , ${id2}  `, confirmed: true },
+          rawParams: { action: "approve", ids: `  ${id1} , ${id2}  `, explanation: BATCH_EXPLANATION },
           context: context,
         });
 
-        expect(result.isError).toBeFalsy();
-        expect(result.content[0].text).toContain("2 drafts");
+        expect(isRefusal(result)).toBe(true);
+        expect(result.content[0].text).toContain("2 draft(s)");
       });
+    });
+  });
+  // ============================================================
+  // D. Metadata leaves the corpus only when it is asked for
+  // ============================================================
+  describe("D. Where metadata is read", () => {
+    let approveHandler: ApproveHandler;
+    let readMetaHandler: ReadMetaHandler;
+
+    /** The document part of an answer, without the next-action suggestions. */
+    function body(result: { content: { type: string; text?: string }[] }): string {
+      return result.content.map((c) => c.text ?? "").join("\n").split("**Next actions:**")[0];
+    }
+
+    beforeEach(() => {
+      approveHandler = new ApproveHandler();
+      readMetaHandler = new ReadMetaHandler();
+      resetMutationGatesForTesting();
+    });
+
+    it("carries a document from draft to promoted without ever printing its frontmatter", async () => {
+      // The whole lifecycle in one test, because the leak reported as #50 was
+      // not in any single step: `add` writes the metadata, `approve` writes
+      // the review notes, and it was `read` -- three steps later -- that put
+      // them in front of a reader.
+      const id = "lifecycle-metadata";
+
+      await addHandler.execute({
+        rawParams: {
+          action: "add",
+          id,
+          content: "# Lifecycle\n\nThe prose a reader wants.",
+          description: "What the lifecycle document is for",
+          whenToUse: ["reviewing the lifecycle"],
+        },
+        context,
+      });
+
+      // As a draft: prose only.
+      const draftRead = await readHandler.execute({
+        rawParams: { action: "read", id },
+        context,
+      });
+      expect(body(draftRead)).toContain("The prose a reader wants.");
+      expect(body(draftRead)).not.toContain("description:");
+      expect(body(draftRead)).not.toContain("whenToUse:");
+
+      // The metadata is still readable -- through the action that is for it.
+      const draftMeta = await readMetaHandler.execute({
+        rawParams: { action: "read_meta", id },
+        context,
+      });
+      expect(draftMeta.content[0].text).toContain("**[Draft]**");
+      expect(draftMeta.content[0].text).toContain("What the lifecycle document is for");
+      expect(draftMeta.content[0].text).toContain("reviewing the lifecycle");
+
+      // Record a self-review, which writes `selfReviewNotes` into the draft.
+      await approveHandler.execute({
+        rawParams: { action: "approve", id, notes: "reviewed: one topic, ready" },
+        context,
+      });
+
+      const reviewedRead = await readHandler.execute({
+        rawParams: { action: "read", id },
+        context,
+      });
+      expect(body(reviewedRead)).not.toContain("selfReviewNotes");
+      expect(body(reviewedRead)).not.toContain("reviewed: one topic");
+      expect(body(reviewedRead)).not.toContain("status:");
+
+      // Promote it, past the gate.
+      const explanation = "This records the lifecycle, and belongs at the top level.";
+      await throughGate(() =>
+        approveHandler.execute({
+          rawParams: { action: "approve", id, explanation, force: true },
+          context,
+        })
+      );
+
+      // Promoted: the workflow fields are gone from the file itself.
+      const promotedFile = await fs.readFile(path.join(docsDir, `${id}.md`), "utf-8");
+      expect(promotedFile).not.toContain("selfReviewNotes");
+      expect(promotedFile).not.toContain("status:");
+      expect(promotedFile).toContain("description:");
+
+      // And `read` still answers with prose alone.
+      const promotedRead = await readHandler.execute({
+        rawParams: { action: "read", id },
+        context,
+      });
+      expect(body(promotedRead)).toContain("The prose a reader wants.");
+      expect(body(promotedRead)).not.toContain("description:");
+      expect(body(promotedRead)).not.toContain("approvedAt:");
+
+      // With the metadata still one action away.
+      const promotedMeta = await readMetaHandler.execute({
+        rawParams: { action: "read_meta", id },
+        context,
+      });
+      expect(promotedMeta.content[0].text).toContain("What the lifecycle document is for");
+      expect(promotedMeta.content[0].text).not.toContain("**[Draft]**");
+      // The one field promotion writes is readable again -- in the action for
+      // metadata, marked as a record rather than as something to set.
+      expect(promotedMeta.content[0].text).toContain("## Also recorded");
+      expect(promotedMeta.content[0].text).toContain("approvedAt");
+    });
+  });
+  // ============================================================
+  // E. A rule says the same thing at write time and in `lint`
+  // ============================================================
+  describe("E. Write-time lint", () => {
+    /**
+     * The point of sharing the checks is that the two calls cannot drift: a
+     * document `add` passed and `lint` later objects to is the failure this
+     * section exists to catch, and it is invisible in either handler's own
+     * tests.
+     */
+    it("reports on the way in what lint reports about the corpus", async () => {
+      process.env.IIMCP_LINT_MAX_LINES = "20";
+      const approveHandler = new ApproveHandler();
+      const lintHandler = new LintHandler();
+      resetMutationGatesForTesting();
+
+      const id = "write-time-lint";
+      const longBody = Array.from({ length: 50 }, (_, i) => `Line ${i + 1}.`).join("\n");
+
+      try {
+        const added = await addHandler.execute({
+          rawParams: {
+            action: "add",
+            id,
+            content: longBody,
+            description: "A document that is over the limit on the day it is written",
+            whenToUse: ["reviewing write-time lint"],
+          },
+          context,
+        });
+
+        // Said at the moment the author could still act on it...
+        expect(added.isError).toBeFalsy();
+        expect(added.content[0].text).toContain("document-too-large");
+
+        // ...and the document is saved regardless.
+        await approveHandler.execute({
+          rawParams: { action: "approve", id, notes: "reviewed: long on purpose" },
+          context,
+        });
+        await throughGate(() =>
+          approveHandler.execute({
+            rawParams: {
+              action: "approve",
+              id,
+              explanation: "This is the long document we agreed to keep whole.",
+              force: true,
+            },
+            context,
+          })
+        );
+        expect(await reader.getDocumentContent(id)).toContain("Line 50.");
+
+        // And `lint` says the same thing about it, from the same code.
+        const linted = await lintHandler.execute({
+          rawParams: { action: "lint" },
+          context,
+        });
+        const report = linted.content[0].text as string;
+        expect(report).toContain(`**${id}**`);
+        expect(report).toContain("document-too-large");
+        expect(report).toContain("max recommended: 20");
+      } finally {
+        delete process.env.IIMCP_LINT_MAX_LINES;
+        await draftWorkflowManager.delete({ id }).catch(() => {});
+      }
     });
   });
 });

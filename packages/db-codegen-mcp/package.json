@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
-    "pg": "8.11.0"
+    "pg": "catalog:"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",

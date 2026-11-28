@@ -1,0 +1,75 @@
+# Combinatorial model for `instruction(action: "approve")`.
+#
+# `approve` is the only way a document enters the corpus, and it is a state
+# machine with five states crossed with four optional arguments. Enumerating
+# the failure paths by hand -- which is how its tests were written -- leaves no
+# evidence about the combinations nobody thought of. This model is that
+# evidence: every pair of values below appears in at least one generated case.
+#
+# Regenerating (only needed when this file changes):
+#
+#   pict src/__tests__/models/approve.pict /o:2 \
+#     /e:src/__tests__/models/approve.seed.tsv \
+#     > src/__tests__/models/approve.cases.tsv
+#
+# The seed file pins two rows pairwise generation happened not to pick: every
+# condition for promotion met except the repeat the deliberation gate wants.
+# Without them, weakening the gate to a single attempt passes unnoticed --
+# found by mutating the batch explanation guard and seeing which mutations the
+# generated set did and did not catch.
+#
+# `force` was a factor here until it was removed from the action. Its column was
+# deleted from the generated cases rather than regenerated: dropping a factor from
+# a pairwise set leaves a pairwise set over the ones that remain, so the guarantee
+# in the paragraph above still holds. Duplicate rows the deletion created were
+# removed. The next change to this model should regenerate properly.
+#
+# PICT is Microsoft's pairwise generator (github.com/microsoft/pict, `make`).
+# It is deliberately not a dependency: its npm wrapper clones and compiles the
+# tool on every install. The generated cases are committed instead, so CI needs
+# nothing, and a change to the model shows up as a diff in the case list.
+
+# Where the draft's workflow entry stands when the call arrives.
+state: editing, self_review, user_reviewing, pending_approval, missing
+
+# Whether the draft file is on disk. A workflow entry can outlive its file.
+draft: present, absent
+
+# The self-review the caller records. Required to leave self_review.
+notes: given, omitted
+
+# What the caller told the user. Required to promote.
+explanation: given, omitted
+
+# Skips the consecutive-approval warning.
+
+# One draft, or a batch under a single explanation.
+mode: single, batch
+
+# Where the draft is promoted to. `targetId` is the argument that used to be
+# read again after the human handed over a token, so that an approval for
+# "create a new note" could be spent overwriting any promoted document. It is
+# bound into the approval now, and the preview says OVERWRITE -- which is the
+# guarantee this factor is here to hold.
+target: same, other_free, other_occupied
+
+# Whether the caller repeats the identical call, which is what the
+# deliberation gate requires before it lets a write through.
+attempts: once, repeated
+
+# `notes` and `targetId` are single-promotion arguments, and this exclusion is
+# how the suite came to miss that. The comment here used to read "the batch path
+# takes neither", stated as though something enforced it -- and nothing did: the
+# handler destructured both and passed neither on, so a batch carrying one was
+# answered as though it had been applied. The one model whose purpose is the
+# combinations nobody thought of was configured never to generate them.
+#
+# They are legal inputs with defined behaviour now (refused, before anything is
+# promoted), so this constraint should go and the set be regenerated. Until PICT
+# is at hand, `handler-guards.test.ts` covers the three refusals directly.
+IF [mode] = "batch" THEN [notes] = "omitted" AND [target] = "same";
+
+# A missing workflow entry and a present state are the same situation for a
+# draft that is not on disk: there is nothing to promote either way. Keep the
+# pairs that say something.
+IF [draft] = "absent" THEN [attempts] = "once";

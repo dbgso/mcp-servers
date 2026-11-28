@@ -1091,10 +1091,10 @@ Content`;
 
     it.each(emptyFieldTestCases)(
       "should show placeholders for empty $phase phase fields",
-      async ({ taskId, taskOutput }) => {
+      async ({ phase, taskId, taskOutput }) => {
         await planReader.addTask({
           id: taskId,
-          title: `Empty ${taskOutput.phase} Task`,
+          title: `Empty ${phase} Task`,
           content: "",
           parent: "",
           dependencies: [],

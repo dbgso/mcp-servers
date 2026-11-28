@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { GitOperation } from "./types.js";
+import type { GitOperation, GitOperationContext } from "./types.js";
 import { gitDiff } from "../git-repo-manager.js";
 
 const diffArgsSchema = z.object({
@@ -11,19 +11,19 @@ const diffArgsSchema = z.object({
 });
 type DiffArgs = z.infer<typeof diffArgsSchema>;
 
-export const diffOp: GitOperation<DiffArgs> = {
-  id: "diff",
-  summary: "Show diff between two refs",
-  detail: `Show diff between two refs with git diff. Optionally filter by path.
+export class DiffOp implements GitOperation<DiffArgs> {
+  readonly id = "diff";
+  readonly summary = "Show diff between two refs";
+  readonly detail = `Show diff between two refs with git diff. Optionally filter by path.
 
 Examples:
   operation: "diff"
   params: { ref_from: "main", ref_to: "develop" }
   params: { repo_url: "git@github.com:org/repo.git", ref_from: "v1.0.0", ref_to: "v2.0.0", path: "src/" }
-  params: { ref_from: "HEAD~5", ref_to: "HEAD" }`,
-  category: "History",
-  argsSchema: diffArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { ref_from: "HEAD~5", ref_to: "HEAD" }`;
+  readonly category = "History";
+  readonly argsSchema = diffArgsSchema;
+  async execute(args: DiffArgs, ctx: GitOperationContext): Promise<CallToolResult> {
     const output = await gitDiff({
       repoPath: ctx.repoPath,
       refFrom: args.ref_from,
@@ -48,7 +48,9 @@ Examples:
     return {
       content: [{ type: "text", text: output }],
     };
-  },
-};
+  }
+}
+
+export const diffOp = new DiffOp();
 
 export const diffOperations = [diffOp];

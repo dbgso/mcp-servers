@@ -1,3 +1,10 @@
+---
+description: Types and interfaces live in shared files, not inline in implementations
+whenToUse:
+  - declaring a type
+  - deciding where an interface belongs
+---
+
 # Type Definitions
 
 Type and interface definitions should be placed in common files, not inline in implementation files.
