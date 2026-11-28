@@ -9,6 +9,7 @@ import {
 } from "./evaluate/issue.js";
 import { repoSlug, runGhJson } from "./gh.js";
 import type { PollOutcome, WatchSource } from "./types.js";
+import { asText } from "./text.js";
 
 const configSchema = z.object({
   repo: z.string().optional().describe("owner/name (default: repository of cwd)"),
@@ -33,8 +34,8 @@ export function parseIssue(payload: unknown): IssueSnapshot {
   const record = payload as { state?: unknown; title?: unknown; labels?: unknown[] } | null;
   const labels = Array.isArray(record?.labels) ? record.labels : [];
   return {
-    state: String(record?.state ?? "open"),
-    title: String(record?.title ?? ""),
+    state: asText({ value: record?.state, fallback: "open" }),
+    title: asText({ value: record?.title, fallback: "" }),
     labels: labels.map((label) => String((label as { name?: unknown })?.name ?? label)),
   };
 }
@@ -48,8 +49,8 @@ export function parseComments(payload: unknown): IssueComment[] {
     const record = comment as { id?: unknown; user?: { login?: unknown }; body?: unknown };
     return {
       id: Number(record.id ?? 0),
-      login: String(record.user?.login ?? "unknown"),
-      body: String(record.body ?? ""),
+      login: asText({ value: record.user?.login, fallback: "unknown" }),
+      body: asText({ value: record.body, fallback: "" }),
     };
   });
 }

@@ -18,6 +18,7 @@ import type {
   EngineStrategy,
   OpenStrategyArgs,
 } from "./types.js";
+import { SqlEngineConnection } from "./engine-connection.js";
 
 const URL_SCHEME = /^postgres(ql)?:\/\//i;
 
@@ -31,12 +32,43 @@ function buildInsecureWarning(): string {
   return "[db-read-mcp] WARNING: connecting without SSL — append `sslmode=require` to DBREAD_URL when bypassing the SSH bastion.";
 }
 
-export const postgresStrategy: EngineStrategy = {
-  engine: "postgres",
+/**
+ * Put the session behind the two guards the read-only server depends on: a
+ * bounded statement runtime, and a transaction default of read-only.
+ *
+ * Exported so the guarantee can be tested against a real engine. Read-only is
+ * a property of the *session*, so nothing observable through `DataSource`
+ * proves it -- the only way to know is to issue a write on the same
+ * connection and be refused. That needs the raw client, which the strategy
+ * deliberately does not hand out, so the smoke test calls this instead and
+ * gets the same session the strategy would have built.
+ */
+export async function applyPostgresSessionGuards(args: {
+  client: PgQueryClient;
+  env: NodeJS.ProcessEnv;
+}): Promise<void> {
+  // Treat empty / whitespace-only env values as "unset" so a stray
+  // `DBREAD_STATEMENT_TIMEOUT=` in a dotenv file doesn't poison the SET.
+  const timeout =
+    args.env.DBREAD_STATEMENT_TIMEOUT?.trim() || DEFAULT_STATEMENT_TIMEOUT;
+  await args.client.query(
+    "SELECT set_config('statement_timeout', $1, false)",
+    [timeout],
+  );
+  // `set_config(...)` is a function call, so this stays legal even after
+  // `default_transaction_read_only = on` flips on for the session — only
+  // INSERT/UPDATE/DELETE would error, and the op layer never emits those.
+  await args.client.query(
+    "SELECT set_config('default_transaction_read_only', 'on', false)",
+  );
+}
+
+export class PostgresStrategy implements EngineStrategy {
+  readonly engine = "postgres";
 
   matches(url: string): boolean {
     return URL_SCHEME.test(url);
-  },
+  }
 
   detectInsecureTls(args: DetectInsecureTlsArgs): string | null {
     // Any tunnel (SSH bastion / SSM port forward) encrypts the hop the
@@ -46,7 +78,7 @@ export const postgresStrategy: EngineStrategy = {
     const explicitlyEncrypted =
       sslmode !== undefined && ENCRYPTED_SSLMODE_RE.test(sslmode);
     return explicitlyEncrypted ? null : buildInsecureWarning();
-  },
+  }
 
   async open(args: OpenStrategyArgs): Promise<EngineConnection> {
     const { url: tunneledUrl, tunnel } = await resolveTunneledUrl({
@@ -63,22 +95,10 @@ export const postgresStrategy: EngineStrategy = {
       client.on("error", (err) => {
         console.error("[db-read-mcp] pg client error:", err.message);
       });
-      const env = args.env ?? process.env;
-      // Treat empty / whitespace-only env values as "unset" so a stray
-      // `DBREAD_STATEMENT_TIMEOUT=` in a dotenv file doesn't poison the SET.
-      const timeout =
-        env.DBREAD_STATEMENT_TIMEOUT?.trim() || DEFAULT_STATEMENT_TIMEOUT;
-      await client.query(
-        "SELECT set_config('statement_timeout', $1, false)",
-        [timeout],
-      );
-      // `set_config(...)` is a function call, so this stays legal even
-      // after `default_transaction_read_only = on` flips on for the
-      // session — only INSERT/UPDATE/DELETE would error, and the op layer
-      // never emits those.
-      await client.query(
-        "SELECT set_config('default_transaction_read_only', 'on', false)",
-      );
+      await applyPostgresSessionGuards({
+        client,
+        env: args.env ?? process.env,
+      });
     } catch (err) {
       if (client) await client.end().catch(() => undefined);
       if (tunnel) await tunnel.close().catch(() => undefined);
@@ -89,12 +109,8 @@ export const postgresStrategy: EngineStrategy = {
       client: connectedClient,
       tableMetadata: args.tableMetadata,
     });
-    return {
-      dataSource,
-      async close(): Promise<void> {
-        await connectedClient.end();
-        if (tunnel) await tunnel.close();
-      },
-    };
-  },
-};
+    return new SqlEngineConnection({ dataSource, client: connectedClient, tunnel });
+  }
+}
+
+export const postgresStrategy = new PostgresStrategy();

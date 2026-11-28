@@ -2,6 +2,7 @@ import { z } from "zod";
 import { tryParseJson } from "./evaluate/json-path.js";
 import { describeMessage, latestTs, selectNewMessages, type SlackMessage } from "./evaluate/slack.js";
 import type { PollOutcome, WatchSource } from "./types.js";
+import { asOptionalText, asText } from "./text.js";
 
 const DEFAULT_TOKEN_ENV = "SLACK_BOT_TOKEN";
 
@@ -40,9 +41,9 @@ export function parseSlackPayload(body: string): SlackMessage[] {
   return messages.map((message) => {
     const record = message as { ts?: unknown; user?: unknown; text?: unknown };
     return {
-      ts: String(record.ts ?? "0"),
-      user: record.user === undefined ? undefined : String(record.user),
-      text: record.text === undefined ? undefined : String(record.text),
+      ts: asText({ value: record.ts, fallback: "0" }),
+      user: asOptionalText(record.user),
+      text: asOptionalText(record.text),
     };
   });
 }

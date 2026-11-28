@@ -20,34 +20,18 @@ export interface DocumentFrontmatter {
   relatedDocs?: string[];
   status?: DraftStatus;
   selfReviewNotes?: string;
+  /**
+   * Why this document is deliberately longer than the size check allows.
+   *
+   * A reason rather than a flag: the point is that the next reader can tell a
+   * considered exception from a warning nobody got to.
+   */
+  sizeExemption?: string;
   confirmedAt?: string;
   approvedAt?: string;
 }
 
 // Draft tool types
-export interface DraftActionParams {
-  action?: string;
-  id?: string;
-  ids?: string;
-  content?: string;
-  description?: string;
-  whenToUse?: string[];
-  relatedDocs?: string[];
-  newId?: string;
-  targetId?: string;
-  approvalToken?: string;
-  notes?: string;
-  confirmed?: boolean;
-  force?: boolean;
-  status?: DraftStatus;
-}
-
-export interface DraftActionContext {
-  reader: MarkdownReader;
-  config: ReminderConfig;
-}
-
-export type DraftActionHandler = ActionHandler<DraftActionParams, DraftActionContext>;
 
 // Apply tool types
 export interface ApplyActionParams {

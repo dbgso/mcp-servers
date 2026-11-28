@@ -5,6 +5,10 @@ whenToUse:
   - Creating changesets for version bumps
   - Adding a new package to npm registry
   - Understanding monorepo release strategy
+relatedDocs:
+  - release__npm-oidc
+  - release__npm-bootstrap
+  - release__docker-package
 ---
 
 # Release Configuration
@@ -96,9 +100,13 @@ try to publish an ignored package whose version is ahead of the registry.
 
 ## Nothing publishes unless it is marked publishable
 
-**Every package in this repository currently has `private: true`**, so a push to
-`main` publishes nothing. That is the intended resting state: publishing is an
-opt-in, per package, and removing `private` is the act of opting in.
+**Almost every package in this repository has `private: true`.** Two have opted
+in -- `mcp-interactive-instruction` and `kroki-mcp` -- and a push to `main`
+publishes those two, and only when their version is ahead of npm. That is the
+intended resting state: publishing is an opt-in, per package, and removing
+`private` is the act of opting in. `node scripts/bootstrap-npm-names.mjs`, or
+`jq -r 'select(.private != true) | .name' packages/*/package.json`, says which
+packages are currently opted in.
 
 It matters because `changeset publish` decides what to publish by comparing each
 package's version against the registry, not by looking at which changesets were
@@ -113,6 +121,26 @@ intent rather than mechanism:
   published to npm at all;
 - a server that will be published, but is not ready yet.
 
+### A package published before Trusted Publishing was set up
+
+Opting in is two separate things, and having one does not imply the other: no
+`private`, and a Trusted Publisher on npm. A package published by hand long
+enough ago has the first and not the second, and nothing says so until a release
+runs -- the publish fails with `E404 undefined`, which reads as "no such
+package" about a package that plainly exists.
+
+That is what `mcp-interactive-instruction` did on the 2.0.0 release: 1.2.0 went
+to npm in February 2026 and 2.0.0 was cut in September, `private` had been gone
+the whole time, and the OIDC exchange answered 404 because no Trusted Publisher
+had ever been attached. The fix is the
+same as step 2 below, done against the existing package, and then re-running the
+release -- the versions are already correct on `main`, so `changeset publish`
+simply tries again.
+
+The `Check whether npm accepts our OIDC identity` step reports this before the
+build, per package, with the claims npm matched against. Read it when a release
+fails at publish.
+
 ### Releasing a package for the first time
 
 1. Confirm the name is available and yours — `node scripts/bootstrap-npm-names.mjs`
@@ -123,12 +151,76 @@ intent rather than mechanism:
    [npm bootstrap](./release/npm-bootstrap.md). Only the first publish of a
    package needs a token: npm can only attach a Trusted Publisher to a package
    that already exists.
-3. Remove `private: true` from that package's `package.json`.
-4. From then on it is the standard flow, and nothing here is special again: a
-   changeset bumps it, the version PR merges, the release workflow publishes it.
+3. Remove `private: true` from that package's `package.json`, with its version
+   set to the one already on npm (the `0.0.0` placeholder), and add a changeset
+   for it in the same PR.
+4. From then on it is the standard flow, and nothing here is special again: the
+   version PR bumps it and writes its CHANGELOG, the merge publishes it.
 
-Check the version before step 3 — removing `private` publishes whatever is in
-`package.json` on the next push to `main`, not the next patch bump.
+## Nothing publishes without a changeset
+
+`changeset publish` does not look at changesets either: it publishes any
+non-private package whose version is not on npm. Left alone, a hand-edited
+version — or removing `private` from a package at an unpublished version —
+would reach npm on the next push to `main` with no changeset behind it.
+
+`pnpm release` therefore runs `scripts/verify-changelog-gate.mjs` before
+`changeset publish`. For every package about to be published (not private, version
+not on npm), its `CHANGELOG.md` must contain the `## <version>` section that
+`changeset version` writes. If any package lacks one, the release fails and
+**nothing** is published. A registry error also fails the release rather than
+guessing.
+
+To fix a failure, put the version back to the published one and add a changeset;
+the version PR produces the CHANGELOG entry.
+
+## Trying a package via GitHub Packages
+
+`.github/workflows/gpr-release.yml` publishes one package to GitHub Packages on
+demand, independent of the npm release. It works for `private: true` packages
+too — `private` is dropped only in the published copy, so the npm guard above
+stays intact.
+
+### Publish
+
+```bash
+gh workflow run gpr-release.yml -f package=ast-file-mcp
+gh workflow run gpr-release.yml -f package=ast-file-mcp -f tag=dev
+```
+
+- Name: `@dbgso/<package name>`, version `0.0.0-<tag>.<timestamp>.<sha>`, dist-tag `<tag>`
+- The job summary shows the ready-to-run `npx` command
+- **Published packages are public.** GitHub Packages takes visibility from the
+  linked repository, and this repository is public; npm's `access` has no
+  effect. Delete snapshots you no longer need from the package settings
+- Packages that still list a `workspace:` package in `dependencies` (not bundled
+  with tsup) are rejected: the published copy could not be installed
+
+### Use
+
+Reading GitHub Packages always needs a token with `read:packages`, even for
+public packages. Add the scope once (interactive):
+
+```bash
+gh auth refresh -s read:packages
+```
+
+Run directly:
+
+```bash
+npx --yes \
+  --@dbgso:registry=https://npm.pkg.github.com \
+  --//npm.pkg.github.com/:_authToken=$(gh auth token) \
+  @dbgso/ast-file-mcp@snapshot
+```
+
+Or configure `~/.npmrc` once and use plain `npx @dbgso/<name>@<tag>` (e.g. in an
+MCP client config):
+
+```ini
+@dbgso:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
 
 ## Commands
 

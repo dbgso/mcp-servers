@@ -1,3 +1,11 @@
+---
+description: A tool wanted during development gets added to ast-*-mcp while the want is fresh, and improved by being used.
+whenToUse:
+  - Wishing a tool existed while working
+  - Deciding whether an improvement belongs in ast-*-mcp
+  - Reviewing whether the AST tools still fit how they are used
+---
+
 # AST Tool Evolution Policy
 
 Continuously enhance AST tools (ast-typescript-mcp, ast-file-mcp) through MCP server development.

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { evaluateCheckRuns, type CheckRequirement, type CheckRun } from "./evaluate/check-runs.js";
 import { repoSlug, runGh, runGhJson } from "./gh.js";
 import type { PollOutcome, SourceDeps, SourceState, WatchSource } from "./types.js";
+import { asText } from "./text.js";
 
 const configSchema = z.object({
   repo: z.string().optional().describe("owner/name (default: repository of cwd)"),
@@ -30,9 +31,9 @@ export function parseCheckRuns(payload: unknown): CheckRun[] {
   return runs.map((run) => {
     const record = run as { name?: unknown; status?: unknown; conclusion?: unknown };
     return {
-      name: String(record.name ?? "unnamed"),
-      status: String(record.status ?? "queued"),
-      conclusion: record.conclusion === null || record.conclusion === undefined ? null : String(record.conclusion),
+      name: asText({ value: record.name, fallback: "unnamed" }),
+      status: asText({ value: record.status, fallback: "queued" }),
+      conclusion: record.conclusion === null || record.conclusion === undefined ? null : asText({ value: record.conclusion, fallback: "" }),
     };
   });
 }

@@ -80,7 +80,7 @@ export function toFsPath(input: string): string {
 
 interface ModuleWithExport<TKey extends string, TValue> {
   // Index signature so we can type-narrow without casting through any.
-  [key: string]: TValue | unknown;
+  [key: string]: unknown;
   default?: { [k in TKey]?: TValue } | TValue;
 }
 
@@ -127,13 +127,13 @@ function isJsonExt(filePath: string): boolean {
   return path.extname(filePath).toLowerCase() === ".json";
 }
 
-interface LoadJsonParams<T> {
+interface LoadJsonParams {
   filePath: string;
   jsonReader: JsonReader;
   what: string;
 }
 
-async function loadJson<T>(params: LoadJsonParams<T>): Promise<T> {
+async function loadJson<T>(params: LoadJsonParams): Promise<T> {
   const { filePath, jsonReader, what } = params;
   const fsPath = toFsPath(filePath);
   let raw: string;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { resolve, dirname, relative } from "node:path";
+import { resolve, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { jsonResponse, errorResponse } from "mcp-shared";

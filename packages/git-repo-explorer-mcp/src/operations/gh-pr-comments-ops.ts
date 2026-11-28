@@ -101,10 +101,10 @@ const prCommentsArgsSchema = z.object({
 });
 type PrCommentsArgs = z.infer<typeof prCommentsArgsSchema>;
 
-export const prCommentsOp: GitOperation<PrCommentsArgs> = {
-  id: "pr_comments",
-  summary: "Get PR review comments classified as human or bot (requires gh CLI)",
-  detail: `Fetch PR review comments and classify each as human or bot/AI.
+export class PrCommentsOp implements GitOperation<PrCommentsArgs> {
+  readonly id = "pr_comments";
+  readonly summary = "Get PR review comments classified as human or bot (requires gh CLI)";
+  readonly detail = `Fetch PR review comments and classify each as human or bot/AI.
 Use filter to get only human or bot comments. Results are cached.
 Requires gh CLI to be installed and authenticated.
 
@@ -115,10 +115,10 @@ Examples:
   operation: "pr_comments"
   params: { repo: "dbgso/mcp-servers", pr_number: 123 }
   params: { repo: "dbgso/mcp-servers", pr_number: 123, filter: "bot" }
-  params: { repo: "dbgso/mcp-servers", pr_number: 123, filter: "human", limit: 20 }`,
-  category: "GitHub",
-  argsSchema: prCommentsArgsSchema,
-  execute: async (args): Promise<CallToolResult> => {
+  params: { repo: "dbgso/mcp-servers", pr_number: 123, filter: "human", limit: 20 }`;
+  readonly category = "GitHub";
+  readonly argsSchema = prCommentsArgsSchema;
+  async execute(args: PrCommentsArgs): Promise<CallToolResult> {
     if (!(await isGhAvailable())) {
       return errorResponse(
         "gh CLI is not installed or not authenticated. Run `gh auth login` first.",
@@ -212,7 +212,9 @@ Examples:
       from_cache: fromCache,
       cache_age_seconds: cacheAge,
     });
-  },
-};
+  }
+}
+
+export const prCommentsOp = new PrCommentsOp();
 
 export const prCommentsOperations = [prCommentsOp];

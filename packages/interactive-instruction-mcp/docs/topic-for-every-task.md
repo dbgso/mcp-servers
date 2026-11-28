@@ -1,3 +1,17 @@
+---
+description: What to read before starting any task in this package
+whenToUse:
+  - starting a task here
+  - onboarding
+  - finding the conventions that apply
+relatedDocs:
+  - coding-rules
+  - testing__verification
+  - contributing
+  - project-concept
+  - ai-workflow__rule-discovery
+---
+
 # Topic for Every Task
 
 Essential reading before starting any task.

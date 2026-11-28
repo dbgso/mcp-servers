@@ -2,7 +2,30 @@
  * Workflow State Machine Types
  */
 
-import type { ApprovalOptions } from "../utils/approval/core.js";
+import type { ApprovalOptions, ApprovalRequest, ApprovalResult } from "../utils/approval/core.js";
+
+/**
+ * How a `requiresApproval` transition asks for, and proves, approval.
+ *
+ * Injected rather than imported. The engine used to call
+ * `utils/approval/core.js` directly, which put `node-notifier` in the module
+ * graph of everything that imported `mcp-shared/workflow` -- including servers
+ * that gate nothing on a token and deliberately carry no notifier. The
+ * dependency was invisible: nothing in the workflow API mentioned
+ * notifications, and the bundle check was what found it.
+ *
+ * `mcp-shared/approval` exports `tokenWorkflowApproval`, which is this
+ * interface over the token flow. A caller that wants the old behaviour passes
+ * it; a caller that passes nothing cannot use `requiresApproval` at all, and is
+ * told so rather than silently proceeding.
+ */
+export interface WorkflowApproval {
+  request(params: {
+    request: ApprovalRequest;
+    options?: ApprovalOptions;
+  }): Promise<{ fallbackPath: string }>;
+  validate(params: { requestId: string; providedToken: string }): ApprovalResult;
+}
 
 /**
  * Precondition validator interface (Strategy pattern)
@@ -82,26 +105,47 @@ export interface SerializedWorkflowState<TState extends string, TContext> {
   updatedAt: string;
 }
 
+function isString(value: unknown): boolean {
+  return typeof value === "string";
+}
+
+function isObject(value: unknown): boolean {
+  return typeof value === "object" && value !== null;
+}
+
+function isStringArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every(isString);
+}
+
+/**
+ * What each field of a serialized state has to look like.
+ *
+ * A table rather than a conjunction because the interface above is the thing
+ * being checked: a field added there and forgotten here is easier to spot as a
+ * missing row than as a missing `&&`.
+ */
+const SERIALIZED_STATE_FIELDS: Record<string, (value: unknown) => boolean> = {
+  workflowId: isString,
+  instanceId: isString,
+  currentState: isString,
+  context: isObject,
+  visitedStates: isStringArray,
+  createdAt: isString,
+  updatedAt: isString,
+};
+
 /**
  * Type guard to validate serialized workflow state structure
  */
 export function isSerializedWorkflowState(
   value: unknown
 ): value is SerializedWorkflowState<string, unknown> {
-  if (typeof value !== "object" || value === null) {
+  if (!isObject(value)) {
     return false;
   }
   const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.workflowId === "string" &&
-    typeof obj.instanceId === "string" &&
-    typeof obj.currentState === "string" &&
-    typeof obj.context === "object" &&
-    obj.context !== null &&
-    Array.isArray(obj.visitedStates) &&
-    obj.visitedStates.every((s) => typeof s === "string") &&
-    typeof obj.createdAt === "string" &&
-    typeof obj.updatedAt === "string"
+  return Object.entries(SERIALIZED_STATE_FIELDS).every(([field, matches]) =>
+    matches(obj[field])
   );
 }
 
@@ -161,6 +205,8 @@ export interface WorkflowInstanceOptions<TState extends string = string> {
   instanceId?: string;
   persistDir?: string;
   approvalOptions?: ApprovalOptions;
+  /** Required by any transition with `requiresApproval`. See `WorkflowApproval`. */
+  approval?: WorkflowApproval;
   /** Restore from saved state */
   restoredState?: TState;
   restoredVisitedStates?: TState[];

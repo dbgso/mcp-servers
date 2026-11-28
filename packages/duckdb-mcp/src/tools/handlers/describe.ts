@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BaseToolHandler, jsonResponse, errorResponse, getErrorMessage } from "mcp-shared";
+import { BaseToolHandler, jsonResponse, errorResponse } from "mcp-shared";
 import { sanitizeDuckDBError, describeFile } from "mcp-shared/duckdb";
 import type { ToolResponse } from "mcp-shared";
 

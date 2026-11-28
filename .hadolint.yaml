@@ -1,0 +1,7 @@
+# hadolint (CI lint job). Dockerfiles: ci/db/*.Dockerfile.
+ignored:
+  # Pin versions in apk add. The base image is digest-pinned instead; Alpine's
+  # repositories drop superseded package versions, so an `=version` pin breaks
+  # the build the next time the package is patched rather than making it
+  # reproducible.
+  - DL3018

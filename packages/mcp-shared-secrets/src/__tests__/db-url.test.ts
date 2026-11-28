@@ -126,6 +126,22 @@ describe("composeDbUrlFromResolver", () => {
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0]?.[0]).toContain(PREFIX);
     });
+
+    it("warns on stderr when given nowhere else to warn", async () => {
+      // The caller that hits this is the one that did not think about it, so
+      // the default has to reach someone. stderr rather than stdout: a server
+      // speaking JSON-RPC over stdout would be corrupted by a warning in it.
+      process.env[`${PREFIX}_URL`] = "postgres://ignored:ignored@old:1/old";
+      const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+      const resolver = await buildResolver();
+
+      const { source } = composeDbUrlFromResolver({ resolver, prefix: PREFIX });
+
+      expect(source).toBe("parts");
+      expect(stderr).toHaveBeenCalledTimes(1);
+      expect(stderr.mock.calls[0]?.[0]).toContain(`${PREFIX}_URL`);
+      stderr.mockRestore();
+    });
   });
 
   describe("fallback to URL", () => {

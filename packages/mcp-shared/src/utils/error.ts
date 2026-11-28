@@ -4,6 +4,29 @@
  * Provides polymorphic error message extraction without instanceof checks.
  */
 
+/** `null` and `undefined` stringify to "null"/"undefined", which tells a reader nothing. */
+function isNullish(value: unknown): boolean {
+  return value === null || value === undefined;
+}
+
+/**
+ * Duck typing rather than `instanceof`: an error that crossed a realm boundary,
+ * or came from a second copy of a library, fails `instanceof Error` while still
+ * carrying a usable message. `in` throws on a primitive, so the object check
+ * has to come first.
+ */
+function messageOf(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  return readMessage(error);
+}
+
+function readMessage(error: object): string | undefined {
+  if (!("message" in error)) return undefined;
+  const { message } = error;
+  if (typeof message !== "string") return undefined;
+  return message;
+}
+
 /**
  * Extract error message from unknown error value.
  *
@@ -17,21 +40,10 @@
  * ```
  */
 export function getErrorMessage(error: unknown): string {
-  if (error === null || error === undefined) {
+  if (isNullish(error)) {
     return "Unknown error";
   }
-
-  // Duck typing: check for message property
-  if (
-    typeof error === "object" &&
-    "message" in error &&
-    typeof (error as { message: unknown }).message === "string"
-  ) {
-    return (error as { message: string }).message;
-  }
-
-  // Fallback to string conversion
-  return String(error);
+  return messageOf(error) ?? String(error);
 }
 
 /**

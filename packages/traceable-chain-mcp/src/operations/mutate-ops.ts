@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { Operation } from "./types.js";
+import type { Operation, OperationContext } from "./types.js";
 import { getErrorMessage } from "mcp-shared";
 
 const createArgsSchema = z.object({
@@ -11,18 +11,18 @@ const createArgsSchema = z.object({
 });
 type CreateArgs = z.infer<typeof createArgsSchema>;
 
-export const createOp: Operation<CreateArgs> = {
-  id: "create",
-  summary: "Create a new document",
-  detail: `Create a new document with enforced dependency.
+export class CreateOp implements Operation<CreateArgs> {
+  readonly id = "create";
+  readonly summary = "Create a new document";
+  readonly detail = `Create a new document with enforced dependency.
 The 'requires' field is mandatory for non-root types.
 
 Examples:
   operation: "create"
   params: { type: "requirement", title: "User Auth", content: "..." }
-  params: { type: "spec", requires: "01HQXK2A8N...", title: "Auth Spec", content: "..." }`,
-  argsSchema: createArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { type: "spec", requires: "01HQXK2A8N...", title: "Auth Spec", content: "..." }`;
+  readonly argsSchema = createArgsSchema;
+  async execute(args: CreateArgs, ctx: OperationContext): Promise<CallToolResult> {
     try {
       const doc = await ctx.manager.create({
         type: args.type,
@@ -51,8 +51,10 @@ Examples:
         isError: true,
       };
     }
-  },
-};
+  }
+}
+
+export const createOp = new CreateOp();
 
 const updateArgsSchema = z.object({
   id: z.string().describe("Document ID to update"),
@@ -61,18 +63,18 @@ const updateArgsSchema = z.object({
 });
 type UpdateArgs = z.infer<typeof updateArgsSchema>;
 
-export const updateOp: Operation<UpdateArgs> = {
-  id: "update",
-  summary: "Update a document",
-  detail: `Update an existing document's title or content.
+export class UpdateOp implements Operation<UpdateArgs> {
+  readonly id = "update";
+  readonly summary = "Update a document";
+  readonly detail = `Update an existing document's title or content.
 The document type and dependencies cannot be changed.
 
 Examples:
   operation: "update"
   params: { id: "01HQXK3V7M...", title: "New Title" }
-  params: { id: "01HQXK3V7M...", content: "Updated content..." }`,
-  argsSchema: updateArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { id: "01HQXK3V7M...", content: "Updated content..." }`;
+  readonly argsSchema = updateArgsSchema;
+  async execute(args: UpdateArgs, ctx: OperationContext): Promise<CallToolResult> {
     try {
       const doc = await ctx.manager.update({
         id: args.id,
@@ -101,24 +103,26 @@ Examples:
         isError: true,
       };
     }
-  },
-};
+  }
+}
+
+export const updateOp = new UpdateOp();
 
 const deleteArgsSchema = z.object({
   id: z.string().describe("Document ID to delete"),
 });
 type DeleteArgs = z.infer<typeof deleteArgsSchema>;
 
-export const deleteOp: Operation<DeleteArgs> = {
-  id: "delete",
-  summary: "Delete a document",
-  detail: `Delete a document. Will fail if other documents depend on it.
+export class DeleteOp implements Operation<DeleteArgs> {
+  readonly id = "delete";
+  readonly summary = "Delete a document";
+  readonly detail = `Delete a document. Will fail if other documents depend on it.
 
 Examples:
   operation: "delete"
-  params: { id: "01HQXK3V7M..." }`,
-  argsSchema: deleteArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { id: "01HQXK3V7M..." }`;
+  readonly argsSchema = deleteArgsSchema;
+  async execute(args: DeleteArgs, ctx: OperationContext): Promise<CallToolResult> {
     try {
       await ctx.manager.delete(args.id);
       return {
@@ -136,8 +140,10 @@ Examples:
         isError: true,
       };
     }
-  },
-};
+  }
+}
+
+export const deleteOp = new DeleteOp();
 
 const linkArgsSchema = z.object({
   id: z.string().describe("Document ID to link"),
@@ -145,17 +151,17 @@ const linkArgsSchema = z.object({
 });
 type LinkArgs = z.infer<typeof linkArgsSchema>;
 
-export const linkOp: Operation<LinkArgs> = {
-  id: "link",
-  summary: "Link document to a parent",
-  detail: `Add a dependency link from an existing document to a parent.
+export class LinkOp implements Operation<LinkArgs> {
+  readonly id = "link";
+  readonly summary = "Link document to a parent";
+  readonly detail = `Add a dependency link from an existing document to a parent.
 Validates that the parent type is allowed for this document type.
 
 Examples:
   operation: "link"
-  params: { id: "01HQXK3V7M...", parent_id: "01HQXK2A8N..." }`,
-  argsSchema: linkArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { id: "01HQXK3V7M...", parent_id: "01HQXK2A8N..." }`;
+  readonly argsSchema = linkArgsSchema;
+  async execute(args: LinkArgs, ctx: OperationContext): Promise<CallToolResult> {
     try {
       const doc = await ctx.manager.link({ id: args.id, parentId: args.parent_id });
       return {
@@ -178,7 +184,9 @@ Examples:
         isError: true,
       };
     }
-  },
-};
+  }
+}
+
+export const linkOp = new LinkOp();
 
 export const mutateOperations = [createOp, updateOp, deleteOp, linkOp];

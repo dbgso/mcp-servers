@@ -1,7 +1,13 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc"],
-  "jsPlugins": ["./eslint-rules/index.js"],
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc"
+  ],
+  "jsPlugins": [
+    "./eslint-rules/index.js"
+  ],
   "ignorePatterns": [
     "node_modules/**",
     "**/node_modules/**",
@@ -17,7 +23,12 @@
     "builtin": true
   },
   "rules": {
-    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_"
+      }
+    ],
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "prefer-const": "error",
@@ -26,19 +37,77 @@
       {
         "maxParams": 1,
         "ignoreConstructors": true,
-        "ignoreMethods": ["execute", "action", "check"]
+        "ignoreMethods": [
+          "execute",
+          "action",
+          "check"
+        ]
       }
     ],
+    "custom/implement-interface-with-class": "warn",
     "no-useless-escape": "off",
     "typescript/no-this-alias": "off",
-    "unicorn/prefer-string-starts-ends-with": "off"
+    "unicorn/prefer-string-starts-ends-with": "off",
+    "custom/no-branching-literal": [
+      "error",
+      {
+        "maxLines": 3
+      }
+    ],
+    "complexity": [
+      "warn",
+      3
+    ],
+    "typescript/unbound-method": "error",
+    "typescript/no-base-to-string": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-useless-default-assignment": "error",
+    "typescript/no-redundant-type-constituents": "error",
+    "typescript/restrict-template-expressions": "error",
+    "typescript/no-misused-spread": "error",
+    "custom/no-arrow-class-method": "error"
   },
   "overrides": [
     {
-      "files": ["packages/**/__tests__/**/*.ts", "packages/**/*.test.ts"],
+      "files": [
+        "packages/**/__tests__/**",
+        "packages/**/*.test.ts",
+        "packages/**/*.test.mjs"
+      ],
       "rules": {
         "custom/single-params-object": "off",
-        "typescript/no-non-null-assertion": "off"
+        "custom/implement-interface-with-class": "off",
+        "typescript/no-non-null-assertion": "off",
+        "complexity": "off",
+        "custom/no-branching-literal": "off",
+        "typescript/unbound-method": "off",
+        "custom/no-arrow-class-method": "off"
+      }
+    },
+    {
+      "files": [
+        "packages/interactive-instruction-mcp/src/tools/instruction/handlers/**"
+      ],
+      "rules": {
+        "custom/no-strict-scalar-in-untyped-args": "error"
+      }
+    },
+    {
+      "files": [
+        "packages/*/scripts/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\./[^.]",
+                "message": "A script may import its own package's ../src, the shared ci/db kit, and other packages by name (their built entry) -- not another package's source by relative path."
+              }
+            ]
+          }
+        ]
       }
     }
   ]

@@ -114,7 +114,24 @@ describe("MarkdownReader", () => {
 
       expect(result.success, `addDocument failed: ${result.error}`).toBe(true);
       const saved = await reader.getDocumentContent(id);
-      expect(saved).toBe(content);
+      // A write terminates the file. These cases used to assert the bytes
+      // through unchanged, which is what #51 was: a document written through
+      // the MCP had no trailing newline while every hand-edited one did, so a
+      // metadata-only change showed the last line of the body in `git diff`.
+      expect(saved).toBe(`${content}\n`);
+    });
+
+    it.each([
+      ["already-terminated", "# Doc\n\nBody.\n"],
+      ["several-newlines", "# Doc\n\nBody.\n\n\n"],
+    ])("leaves %s as it is", async (id, content) => {
+      // Exactly one newline is added when it is missing, and nothing is
+      // trimmed: an author who put blank lines at the end meant them.
+      const reader = new MarkdownReader(tempDir);
+
+      await reader.addDocument({ id, content });
+
+      expect(await reader.getDocumentContent(id)).toBe(content);
     });
 
     type AddDocumentErrorTestCase = {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { GitOperation } from "./types.js";
+import type { GitOperation, GitOperationContext } from "./types.js";
 import { gitShow } from "../git-repo-manager.js";
 
 const showArgsSchema = z.object({
@@ -10,10 +10,10 @@ const showArgsSchema = z.object({
 });
 type ShowArgs = z.infer<typeof showArgsSchema>;
 
-export const showOp: GitOperation<ShowArgs> = {
-  id: "show",
-  summary: "Show commit details or file content",
-  detail: `Show commit details or file content with git show.
+export class ShowOp implements GitOperation<ShowArgs> {
+  readonly id = "show";
+  readonly summary = "Show commit details or file content";
+  readonly detail = `Show commit details or file content with git show.
 If path is specified, shows the file content at that ref.
 If path is omitted, shows the commit details (including diff).
 
@@ -24,10 +24,10 @@ Examples:
 
   File content:
   params: { ref: "main", path: "src/lib/mcp/index.ts" }
-  params: { repo_url: "git@github.com:org/repo.git", ref: "HEAD", path: "package.json" }`,
-  category: "File",
-  argsSchema: showArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { repo_url: "git@github.com:org/repo.git", ref: "HEAD", path: "package.json" }`;
+  readonly category = "File";
+  readonly argsSchema = showArgsSchema;
+  async execute(args: ShowArgs, ctx: GitOperationContext): Promise<CallToolResult> {
     const output = await gitShow({
       repoPath: ctx.repoPath,
       ref: args.ref,
@@ -42,7 +42,9 @@ Examples:
           : output,
       }],
     };
-  },
-};
+  }
+}
+
+export const showOp = new ShowOp();
 
 export const showOperations = [showOp];

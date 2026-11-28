@@ -16,10 +16,43 @@ import {
   LinkRemoveHandler,
   LintHandler,
   SetStatusHandler,
-  UpdateMetaHandler,
+  ReadMetaHandler,
+  GraphHandler,
+  BacklinksHandler,
 } from "./handlers/index.js";
 
 export { ActionRegistry };
+
+/**
+ * Every action this tool has, in one place.
+ *
+ * `InstructionAction` is derived from it below, and the next-action
+ * suggestions are typed against that -- so an action name can only be
+ * suggested if a handler for it is registered here, and a rename is a compile
+ * error everywhere it was not applied rather than a broken example a caller
+ * finds at runtime.
+ */
+export const HANDLERS = [
+  new ListHandler(),
+  new ReadHandler(),
+  new AddHandler(),
+  new UpdateHandler(),
+  new DeleteHandler(),
+  new ApproveHandler(),
+  new RenameHandler(),
+  new ApplyHandler(),
+  new CancelHandler(),
+  new LinkAddHandler(),
+  new LinkRemoveHandler(),
+  new LintHandler(),
+  new SetStatusHandler(),
+  new ReadMetaHandler(),
+  new GraphHandler(),
+  new BacklinksHandler(),
+] as const;
+
+/** The action names, read off the handlers rather than restated. */
+export type InstructionAction = (typeof HANDLERS)[number]["action"];
 
 /**
  * Create and initialize the action registry with all handlers.
@@ -27,22 +60,7 @@ export { ActionRegistry };
 export function createActionRegistry(): ActionRegistry<InstructionContext> {
   const registry = new ActionRegistry<InstructionContext>();
 
-  registry.registerAll([
-    new ListHandler(),
-    new ReadHandler(),
-    new AddHandler(),
-    new UpdateHandler(),
-    new DeleteHandler(),
-    new ApproveHandler(),
-    new RenameHandler(),
-    new ApplyHandler(),
-    new CancelHandler(),
-    new LinkAddHandler(),
-    new LinkRemoveHandler(),
-    new LintHandler(),
-    new SetStatusHandler(),
-    new UpdateMetaHandler(),
-  ]);
+  registry.registerAll([...HANDLERS]);
 
   return registry;
 }
