@@ -8,6 +8,7 @@
  * this interface; `mcp-shared-db-sql` itself stays free of any engine
  * dependency.
  */
+import type { QuotedIdent, SqlFragment } from "./fragment.js";
 
 /**
  * A normalised JSON path. The operations layer hands the builder a string
@@ -36,16 +37,6 @@ export interface ParamBuilder {
 }
 
 /**
- * Literal SQL interleaved with the values to bind, in the order they appear.
- * `sql.length === values.length + 1` — the builder alternates the two, so the
- * binding order is the array order and cannot disagree with the text.
- */
-export interface JsonPathFragment {
-  sql: string[];
-  values: unknown[];
-}
-
-/**
  * Normalised result of an EXPLAIN call. Matches `ExplainResult` in
  * `mcp-shared-db` — re-declared here only to keep the SQL package free of
  * a dependency on the operations layer's interfaces.
@@ -63,7 +54,7 @@ export interface DialectExplainResult {
  */
 export interface Dialect {
   /** Quote an identifier (table / column name) safely for this engine. */
-  quoteIdent(name: string): string;
+  quoteIdent(name: string): QuotedIdent;
   /**
    * Build a parameter placeholder for the given 1-based index. Postgres
    * returns `$N`; MySQL/SQLite return `?` and ignore the index.
@@ -74,25 +65,23 @@ export interface Dialect {
    * `columnSql` against `value`, as literal SQL interleaved with the values to
    * bind.
    *
-   * Returned as parts rather than a finished string on purpose. The dialect
-   * gets no `ParamBuilder`, so it cannot allocate a placeholder at all, and
-   * the one thing that used to go wrong here -- allocating in an order other
-   * than the one the fragment emits -- has no way to be expressed. `?`-style
-   * engines bind positionally, so a misordered allocation silently gave a
-   * placeholder its neighbour's value, and Postgres hid it because numbered
-   * placeholders carry their own position.
-   *
-   * `sql` must hold exactly one more element than `values`: the builder joins
-   * them alternately, starting and ending with SQL.
+   * Returned as a `SqlFragment` (built with the `sqlFragment` tag) rather
+   * than a finished string on purpose. The dialect gets no `ParamBuilder`,
+   * so it cannot allocate a placeholder at all, and the one thing that used
+   * to go wrong here -- allocating in an order other than the one the
+   * fragment emits -- has no way to be expressed. `?`-style engines bind
+   * positionally, so a misordered allocation silently gave a placeholder its
+   * neighbour's value, and Postgres hid it because numbered placeholders
+   * carry their own position.
    */
   jsonPathEquals(input: {
     /** Already-quoted column reference (output of `quoteIdent`). */
-    columnSql: string;
+    columnSql: QuotedIdent;
     /** Normalised JSON path with helper segments. */
     path: JsonPathInput;
     /** Comparison value. */
     value: unknown;
-  }): JsonPathFragment;
+  }): SqlFragment;
   /**
    * SQL prefix that, when prepended to a `SELECT`, returns the planner's
    * cost estimate instead of executing the query for real. Engine-specific:

@@ -9,7 +9,8 @@
  * before it reaches us, so `parseJsonPath` only needs to drop the leading
  * sentinel and split on `.`.
  */
-import type { Dialect, JsonPathFragment, JsonPathInput, ParamBuilder } from "./dialect.js";
+import type { Dialect, JsonPathInput, ParamBuilder } from "./dialect.js";
+import type { SqlFragment } from "./fragment.js";
 import { ParamBuilderImpl } from "./param-builder.js";
 
 export interface BuiltSql {
@@ -112,15 +113,11 @@ export interface BuildFindByJsonPathParams {
 
 /**
  * Join a dialect's SQL parts and values alternately, allocating a placeholder
- * for each value as it is reached.
+ * for each value as it is reached. A `SqlFragment` always has one more part
+ * than it has values, so there is no mismatch to check for.
  */
-function interleave(input: { fragment: JsonPathFragment; params: ParamBuilder }): string {
+function interleave(input: { fragment: SqlFragment; params: ParamBuilder }): string {
   const { sql, values } = input.fragment;
-  if (sql.length !== values.length + 1) {
-    throw new Error(
-      `dialect returned ${sql.length} SQL parts for ${values.length} values; expected ${values.length + 1}`,
-    );
-  }
   let out = "";
   for (const [i, part] of sql.entries()) {
     if (i > 0) out += input.params.add(values[i - 1]);

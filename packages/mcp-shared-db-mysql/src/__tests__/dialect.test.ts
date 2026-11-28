@@ -25,7 +25,7 @@ describe("mysqlDialect.jsonPathEquals", () => {
     // a separately-bound value. A regression that interpolates path.raw
     // straight into the SQL would break this assertion.
     const fragment = mysqlDialect.jsonPathEquals({
-      columnSql: "`meta`",
+      columnSql: mysqlDialect.quoteIdent("meta"),
       path: { raw: "$.foo.bar", segments: ["foo", "bar"] },
       value: "z",
     });
@@ -42,7 +42,7 @@ describe("mysqlDialect.jsonPathEquals", () => {
 
   it("binds the root path '$' too", () => {
     const fragment = mysqlDialect.jsonPathEquals({
-      columnSql: "`meta`",
+      columnSql: mysqlDialect.quoteIdent("meta"),
       path: { raw: "$", segments: [] },
       value: 1,
     });

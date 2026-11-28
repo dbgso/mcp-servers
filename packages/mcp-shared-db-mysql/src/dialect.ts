@@ -17,7 +17,8 @@
  *   that mysql2 returns and walks the plan tree to find the worst-case scan
  *   width across all leaves.
  */
-import type { Dialect, DialectExplainResult, JsonPathFragment } from "mcp-shared-db-sql";
+import { asQuotedIdent, ident, sqlFragment } from "mcp-shared-db-sql";
+import type { Dialect, DialectExplainResult, QuotedIdent, SqlFragment } from "mcp-shared-db-sql";
 
 type JsonPathEqualsInput = Parameters<Dialect["jsonPathEquals"]>[0];
 
@@ -140,20 +141,17 @@ function parseExplainPayload(value: unknown): MysqlExplainPlan | null {
 }
 
 export class MysqlDialect implements Dialect {
-  quoteIdent(name: string): string {
-    return `\`${name.replace(/`/g, "``")}\``;
+  quoteIdent(name: string): QuotedIdent {
+    return asQuotedIdent(`\`${name.replace(/`/g, "``")}\``);
   }
   placeholder(): string {
     return "?";
   }
-  jsonPathEquals({ columnSql, path, value }: JsonPathEqualsInput): JsonPathFragment {
+  jsonPathEquals({ columnSql, path, value }: JsonPathEqualsInput): SqlFragment {
     // The path is a bound value, never interpolated into the SQL — the
     // op-layer Zod regex is defense-in-depth; this is the load-bearing
     // defence. Lock-tested in dialect.test.ts.
-    return {
-      sql: [`JSON_UNQUOTE(JSON_EXTRACT(${columnSql}, `, ")) = ", ""],
-      values: [path.raw, value],
-    };
+    return sqlFragment`JSON_UNQUOTE(JSON_EXTRACT(${ident(columnSql)}, ${path.raw})) = ${value}`;
   }
   explainPrefix(): string {
     return "EXPLAIN FORMAT=JSON";

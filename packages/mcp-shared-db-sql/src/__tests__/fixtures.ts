@@ -8,16 +8,17 @@
  *   and a JSON op that consumes the raw `$.foo.bar` path as a single literal.
  */
 import type { Dialect } from "../dialect.js";
+import { asQuotedIdent, ident, sqlFragment } from "../fragment.js";
 
 export const pgFakeDialect: Dialect = {
   quoteIdent(name) {
-    return `"${name.replace(/"/g, '""')}"`;
+    return asQuotedIdent(`"${name.replace(/"/g, '""')}"`);
   },
   placeholder(index) {
     return `$${index}`;
   },
   jsonPathEquals({ columnSql, path, value }) {
-    return { sql: [`${columnSql} #>> `, " = ", ""], values: [path.segments, value] };
+    return sqlFragment`${ident(columnSql)} #>> ${path.segments} = ${value}`;
   },
   explainPrefix() {
     return "EXPLAIN (FORMAT JSON)";
@@ -38,7 +39,7 @@ export const pgFakeDialect: Dialect = {
 
 export const mysqlFakeDialect: Dialect = {
   quoteIdent(name) {
-    return `\`${name.replace(/`/g, "``")}\``;
+    return asQuotedIdent(`\`${name.replace(/`/g, "``")}\``);
   },
   placeholder() {
     return "?";
@@ -48,7 +49,7 @@ export const mysqlFakeDialect: Dialect = {
     // interpolated `path.raw` instead, which meant no builder test ever
     // exercised `?` ordering -- and a swapped bind went unnoticed until a
     // real MySQL rejected the statement.
-    return { sql: [`JSON_EXTRACT(${columnSql}, `, ") = ", ""], values: [path.raw, value] };
+    return sqlFragment`JSON_EXTRACT(${ident(columnSql)}, ${path.raw}) = ${value}`;
   },
   explainPrefix() {
     return "EXPLAIN FORMAT=JSON";

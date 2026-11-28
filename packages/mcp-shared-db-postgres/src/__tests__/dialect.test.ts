@@ -25,7 +25,7 @@ describe("postgresDialect.placeholder", () => {
 describe("postgresDialect.jsonPathEquals", () => {
   it("emits #>> with the segments array bound before the value", () => {
     const fragment = postgresDialect.jsonPathEquals({
-      columnSql: '"meta"',
+      columnSql: postgresDialect.quoteIdent("meta"),
       path: { raw: "$.foo.bar", segments: ["foo", "bar"] },
       value: "z",
     });
@@ -37,7 +37,7 @@ describe("postgresDialect.jsonPathEquals", () => {
 
   it("passes empty segments array for the root path", () => {
     const fragment = postgresDialect.jsonPathEquals({
-      columnSql: '"meta"',
+      columnSql: postgresDialect.quoteIdent("meta"),
       path: { raw: "$", segments: [] },
       value: "z",
     });
