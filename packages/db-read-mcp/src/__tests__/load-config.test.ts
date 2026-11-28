@@ -14,10 +14,9 @@
  * `importer` and against the existing TS fixture.
  */
 import { promises as fsp } from "node:fs";
-import os from "node:os";
+import os, { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { homedir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   expandHome,

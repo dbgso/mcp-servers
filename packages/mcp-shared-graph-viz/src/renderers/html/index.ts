@@ -4,9 +4,8 @@ import { buildLayoutSpec, resolveLayout } from "../../layouts/index.js";
 import { resolveTheme } from "../../theme.js";
 import { buildDocument } from "./document.js";
 import { buildCytoscapeStyle } from "./style.js";
-import type { Renderer } from "../types.js";
+import type { Renderer, RenderParams } from "../types.js";
 import type { HtmlRendererOptions } from "./types.js";
-import type { RenderParams } from "../types.js";
 
 export const DEFAULT_CYTOSCAPE_URL =
   "https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.34.2/cytoscape.min.js";

@@ -76,6 +76,6 @@ describe("resolveLaunch", () => {
     const result = resolveLaunch({ worktree: "/wt", tsx: TSX, ...request });
 
     expect(result.ok).toBe(false);
-    expect(result.ok === false && result.error).toContain(message);
+    expect(!result.ok && result.error).toContain(message);
   });
 });

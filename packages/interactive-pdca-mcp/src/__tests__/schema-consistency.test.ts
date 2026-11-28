@@ -7,7 +7,7 @@
  * Rule: Every handler schema field MUST exist in inputSchema (plan/index.ts)
  */
 import { describe, it, expect } from "vitest";
-import { z } from "zod";
+import type { z } from "zod";
 import { INPUT_SCHEMA_FIELDS } from "../tools/plan/input-schema-fields.js";
 import {
   ListHandler,

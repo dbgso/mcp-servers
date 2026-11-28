@@ -226,12 +226,16 @@ function setupSignalHandlers(): void {
   const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
   for (const signal of signals) {
-    process.on(signal, async () => {
-      console.error(`\n[mcp-firewall] Received ${signal}, shutting down...`);
-      if (cleanup) {
-        await cleanup();
-      }
-      process.exit(0);
+    // The listener's return value is ignored, so the async work is started
+    // explicitly rather than handing `process.on` a promise it will drop.
+    process.on(signal, () => {
+      void (async () => {
+        console.error(`\n[mcp-firewall] Received ${signal}, shutting down...`);
+        if (cleanup) {
+          await cleanup();
+        }
+        process.exit(0);
+      })();
     });
   }
 }

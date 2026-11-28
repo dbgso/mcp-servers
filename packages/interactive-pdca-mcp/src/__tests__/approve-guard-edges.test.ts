@@ -13,7 +13,6 @@ import { FeedbackHandler } from "../tools/approve/handlers/feedback-handler.js";
 import { DeletionHandler } from "../tools/approve/handlers/deletion-handler.js";
 import type {
   ApproveActionContext,
-  ApproveActionParams,
   FeedbackReader,
   PlanReader,
   PlanReporter,
@@ -85,7 +84,7 @@ describe("confirming feedback", () => {
     },
   ])("refuses a call with $name", async ({ params, expected }) => {
     const result = await new FeedbackHandler().execute({
-      actionParams: params as ApproveActionParams,
+      actionParams: params,
       context,
     });
 

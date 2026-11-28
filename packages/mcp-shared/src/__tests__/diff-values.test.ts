@@ -23,7 +23,7 @@ const item = (params: {
     kind: "function",
     line: params.line ?? 1,
     ...(params.properties === undefined ? {} : { properties: params.properties }),
-  }) as DiffableItem;
+  });
 
 /** The `details` of the one modified entry, in detailed mode. */
 function detailsOf(params: { a: Record<string, unknown>; b: Record<string, unknown> }): string {

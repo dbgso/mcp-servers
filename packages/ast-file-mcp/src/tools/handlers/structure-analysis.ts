@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { stat } from "node:fs/promises";
-import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, BaseToolHandler, type ToolResponse } from "mcp-shared";
 import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
 import type {
   FileMetrics,
@@ -142,7 +140,7 @@ export class StructureAnalysisHandler extends BaseToolHandler<StructureAnalysisA
 
     return {
       filePath,
-      fileType: handler.fileType as "markdown" | "asciidoc",
+      fileType: handler.fileType,
       metrics,
       sections,
       warnings,

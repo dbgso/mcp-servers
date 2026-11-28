@@ -1,0 +1,6 @@
+# zizmor (security linting for workflows) configuration, used by lint-workflows.yml.
+rules:
+  # Asks for `$/...` instead of `./.github/actions/...` for actions in this repository.
+  # actionlint cannot read `$/` yet, and `./` only ever runs the code that was checked out.
+  self-repository:
+    disable: true

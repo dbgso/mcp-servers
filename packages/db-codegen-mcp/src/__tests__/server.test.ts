@@ -402,9 +402,9 @@ describe("db-codegen-mcp server", () => {
       vi.spyOn(Server.prototype, "connect").mockResolvedValue(undefined);
       // The argv form uses real loadEnvFile (which throws on missing path),
       // so we pass an argv that has no --env-file to drive the branch.
-      await startServer([]);
       // Resolver was built internally; nothing to assert beyond no-throw +
       // server connect (covered by the spy above).
+      await expect(startServer([])).resolves.toBeUndefined();
     });
 
     it("forwards toolsConfig through startServer", async () => {

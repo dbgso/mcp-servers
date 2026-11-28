@@ -135,14 +135,8 @@ async function startServer(params: { dir: string }): Promise<Server> {
       return;
     }
     readFile(join(dir, name))
-      .then((body) => {
-        res.writeHead(200, { "content-type": "text/html" });
-        res.end(body);
-      })
-      .catch(() => {
-        res.writeHead(404, { "content-type": "text/plain" });
-        res.end("not found");
-      });
+      .then((body) => res.writeHead(200, { "content-type": "text/html" }).end(body))
+      .catch(() => res.writeHead(404, { "content-type": "text/plain" }).end("not found"));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   return server;

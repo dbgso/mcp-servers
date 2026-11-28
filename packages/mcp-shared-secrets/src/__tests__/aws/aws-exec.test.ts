@@ -19,8 +19,8 @@ function makeFakeExecFile(result: {
   err?: NodeJS.ErrnoException & { stdout?: string; stderr?: string };
   stdout?: string;
   stderr?: string;
-}): { fn: ExecFileFn; calls: Array<{ command: string; args: readonly string[] }> } {
-  const calls: Array<{ command: string; args: readonly string[] }> = [];
+}): { fn: ExecFileFn; calls: { command: string; args: readonly string[] }[] } {
+  const calls: { command: string; args: readonly string[] }[] = [];
   const fn = ((command: string, args: readonly string[], _opts: unknown, cb: unknown) => {
     calls.push({ command, args });
     const callback = cb as (
@@ -150,7 +150,7 @@ describe("awsExec", () => {
       stderr?: string;
     };
     err.stderr = stderr;
-    const { fn } = makeFakeExecFile({ err: err as NodeJS.ErrnoException });
+    const { fn } = makeFakeExecFile({ err: err });
     await expect(awsExec({ args: ["ssm"], options: { spawnFn: fn } })).rejects.toThrow(
       /AWS SSO session expired/,
     );
@@ -163,7 +163,7 @@ describe("awsExec", () => {
     };
     err.stderr = "An error occurred (AccessDenied): not allowed";
     err.stdout = "";
-    const { fn } = makeFakeExecFile({ err: err as NodeJS.ErrnoException });
+    const { fn } = makeFakeExecFile({ err: err });
     await expect(awsExec({ args: ["ssm"], options: { spawnFn: fn } })).rejects.toThrow(
       /aws CLI failed.*AccessDenied/s,
     );

@@ -12,6 +12,7 @@
     "typecheck": "pnpm build && pnpm -r --parallel exec sh -c '[ -f tsconfig.json ] || exit 0; exec tsc --noEmit' && pnpm typecheck:scripts",
     "typecheck:scripts": "node scripts/typecheck-package-scripts.mjs",
     "lint:deps": "syncpack lint && node scripts/check-peer-floors.mjs",
+    "test:lint-rules": "node --test eslint-rules/__tests__/*.test.mjs",
     "lint": "oxlint --type-aware packages/*/src packages/*/scripts ci/db",
     "test": "pnpm -r test",
     "coverage": "pnpm -r --parallel exec vitest run --coverage",

@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse, paginate } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, paginate, BaseToolHandler, type ToolResponse } from "mcp-shared";
 import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
 
 const ReadDirectorySchema = z.object({
@@ -89,7 +87,7 @@ export class ReadDirectoryHandler extends BaseToolHandler<ReadDirectoryArgs> {
     const adocHandler = new AsciidocHandler();
 
     let files;
-    let errors: Array<{ filePath: string; error: string }> = [];
+    let errors: { filePath: string; error: string }[] = [];
 
     if (pattern) {
       // If pattern specified, use the appropriate handler

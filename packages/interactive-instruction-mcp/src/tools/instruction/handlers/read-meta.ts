@@ -1,11 +1,9 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import type { InstructionContext } from "../types.js";
-import { errorResponse, formatNextActions, textResponse } from "../types.js";
+import { type InstructionContext, errorResponse, formatNextActions, textResponse } from "../types.js";
 import { DRAFT_PREFIX, isInternalDocument } from "../../../constants.js";
 import type { DocumentFrontmatter, MarkdownSummary } from "../../../types/index.js";
-import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
-import { frontmatterErrors, rawFrontmatter } from "../../../utils/frontmatter-parser.js";
+import { parseFrontmatter, frontmatterErrors, rawFrontmatter } from "../../../utils/frontmatter-parser.js";
 import { buildGraph } from "./graph.js";
 import {
   isDescriptionMissing,

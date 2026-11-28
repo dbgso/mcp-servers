@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { jsonResponse, errorResponse, paginate } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, paginate, BaseToolHandler, type ToolResponse } from "mcp-shared";
 import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
 
 const TopicIndexSchema = z.object({
@@ -94,7 +92,7 @@ export class TopicIndexHandler extends BaseToolHandler<TopicIndexArgs> {
     const adocHandler = new AsciidocHandler();
 
     let files;
-    let errors: Array<{ filePath: string; error: string }> = [];
+    let errors: { filePath: string; error: string }[] = [];
 
     // Read files based on pattern
     if (pattern) {
@@ -174,18 +172,18 @@ export class TopicIndexHandler extends BaseToolHandler<TopicIndexArgs> {
       // GitHub-flavored markdown anchor generation
       return text
         .toLowerCase()
-        .replace(/[^\w\s\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf-]/g, "") // Keep alphanumeric, CJK, hyphens
+        .replace(/[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF-]/g, "") // Keep alphanumeric, CJK, hyphens
         .replace(/\s+/g, "-") // Spaces to hyphens
         .replace(/-+/g, "-") // Collapse multiple hyphens
         .replace(/^-|-$/g, ""); // Trim hyphens
-    } else {
+    }
       // AsciiDoc anchor: _text_with_underscores
       return "_" + text
         .toLowerCase()
-        .replace(/[^\w\s\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/g, "")
+        .replace(/[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, "")
         .replace(/\s+/g, "_")
         .replace(/_+/g, "_")
         .replace(/^_|_$/g, "");
-    }
+    
   }
 }

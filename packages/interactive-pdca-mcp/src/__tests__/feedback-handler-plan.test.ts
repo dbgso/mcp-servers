@@ -18,7 +18,7 @@ describe("FeedbackHandler (plan)", () => {
     mockFeedbackReader = {
       listFeedback: vi.fn().mockResolvedValue([]),
       getFeedback: vi.fn().mockResolvedValue(null),
-    } as unknown as FeedbackReader;
+    };
 
     mockContext = {
       planReader: mockPlanReader,
@@ -282,6 +282,10 @@ describe("FeedbackHandler (plan)", () => {
         expect(text).toContain("Please fix the bug");
         expect(text).toContain("No interpretation yet");
         expect(text).toContain('plan(action: "interpret"');
+        // The hint has to carry the real ids. It was once a plain string, which
+        // printed the placeholders literally and still matched the two lines above.
+        expect(text).toContain('id: "task-1", feedback_id: "fb-001"');
+        expect(text).not.toMatch(/\$\{\w+\}/);
       });
 
       it("should show draft feedback with interpretation ready for approval", async () => {

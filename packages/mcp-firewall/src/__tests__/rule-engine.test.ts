@@ -455,7 +455,7 @@ describe("RuleEngine", () => {
           action: "deny",
           toolPattern: "api_call",
           // Cast to test non-string value edge case
-          conditions: [{ param: "data", operator: "contains", value: 123 as unknown as string }],
+          conditions: [{ param: "data", operator: "contains", value: 123 }],
         };
         const store = createMockRuleStore([rule], "allow");
         const engine = new RuleEngine(store);
@@ -471,7 +471,7 @@ describe("RuleEngine", () => {
           action: "deny",
           toolPattern: "api_call",
           // Cast to test non-string value edge case
-          conditions: [{ param: "data", operator: "matches", value: 123 as unknown as string }],
+          conditions: [{ param: "data", operator: "matches", value: 123 }],
         };
         const store = createMockRuleStore([rule], "allow");
         const engine = new RuleEngine(store);

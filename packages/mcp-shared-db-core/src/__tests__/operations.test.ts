@@ -121,7 +121,7 @@ describe("describeTableOp", () => {
         sparse: {
           tableName: "sparse",
           primaryKey: [],
-          fields: {} as never,
+          fields: {},
         },
       },
     };

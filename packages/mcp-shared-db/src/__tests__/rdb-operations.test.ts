@@ -742,7 +742,7 @@ describe("explain_sql operation", () => {
       args: {
         sql: "SELECT 1",
         ...(verbose !== undefined && { verbose }),
-      } as Record<string, unknown>,
+      },
       ctx,
     });
     const data = parse(result);

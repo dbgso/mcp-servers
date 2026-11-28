@@ -1,15 +1,31 @@
 name: Lint Workflows
 
+# GitHub Actions workflows / composite actions and shell scripts.
+#   actionlint: mistakes in how a workflow is written (expression types, inputs that do not exist; `run:` goes through shellcheck)
+#   zizmor:     security mistakes (unpinned actions, expressions expanded into `run:`, checkout credentials left behind).
+#               Configured in .github/zizmor.yml
+#   shellcheck: the repository's *.sh
+# Tool versions are pinned to releases at least seven days old.
 on:
   pull_request:
     paths:
       - '.github/**'
+      - '**/*.sh'
+
+permissions:
+  contents: read
 
 jobs:
   actionlint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # reviewdog's github-pr-check reporter writes a check run
+      checks: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       # `fail_level` matters more than it looks. The default lets reviewdog
       # annotate and still exit 0, so this job went green while carrying five
@@ -17,7 +33,16 @@ jobs:
       # passing branch, and how reading "Lint Workflows success" led to the
       # conclusion that there was nothing to fix. A check that cannot go red
       # reports; it does not check.
-      - uses: reviewdog/action-actionlint@v1
+      - uses: reviewdog/action-actionlint@ae857e78c1b42b3d0a49637181b09d3d56d402b4 # v1.84.1
         with:
           reporter: github-pr-check
           fail_level: error
+
+      - name: zizmor
+        run: pipx run zizmor==1.32.0 --format github .
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # The runner's preinstalled shellcheck
+      - name: shellcheck
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck

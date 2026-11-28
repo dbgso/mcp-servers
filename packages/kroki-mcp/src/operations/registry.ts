@@ -4,13 +4,13 @@ import { describeOperation } from "./describe-ops.js";
 /**
  * All registered operations
  */
-export const allOperations: Operation<unknown>[] = [
-  describeOperation as Operation<unknown>,
+export const allOperations: Operation[] = [
+  describeOperation as Operation,
 ];
 
 /**
  * Get operation by ID
  */
-export function getOperation(id: string): Operation<unknown> | undefined {
+export function getOperation(id: string): Operation | undefined {
   return allOperations.find(op => op.id === id);
 }

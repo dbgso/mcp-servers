@@ -175,7 +175,7 @@ describe("the parent a type requires", () => {
     const result = await manager.validateParent({ type: "test" });
 
     expect(result.valid).toBe(false);
-    expect(result.valid === false && result.error).toContain("spec or requirement");
+    expect(!result.valid && result.error).toContain("spec or requirement");
   });
 });
 

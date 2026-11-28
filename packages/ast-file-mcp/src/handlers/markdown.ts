@@ -4,11 +4,16 @@ import { resolve, dirname, join, extname } from "node:path";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkStringify from "remark-stringify";
-import type { Root as MdastRoot, Heading, Code, List, Link, Text, ListItem } from "mdast";
-import type { GoToDefinitionResult, DefinitionLocation } from "mcp-shared";
+import type { Root as MdastRoot, Heading, Code, List, Link, Text, ListItem, RootContent } from "mdast";
+import {
+  type GoToDefinitionResult,
+  type DefinitionLocation,
+  diffStructures,
+  displayText,
+  getErrorMessage,
+} from "mcp-shared";
 import { BaseHandler } from "./base.js";
 import { headingToDiffable } from "./heading-diff.js";
-import { diffStructures, displayText, getErrorMessage } from "mcp-shared";
 import type {
   AstReadResult,
   HeadingSummary,
@@ -29,7 +34,6 @@ import type {
   Section,
   WriteSectionsParams,
 } from "../types/index.js";
-import type { RootContent } from "mdast";
 
 export class MarkdownHandler extends BaseHandler {
   readonly extensions = ["md", "markdown"];
@@ -38,7 +42,7 @@ export class MarkdownHandler extends BaseHandler {
   async read(filePath: string): Promise<AstReadResult> {
     const content = await readFile(filePath, "utf-8");
     const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = processor.parse(content);
 
     return {
       filePath,
@@ -55,7 +59,7 @@ export class MarkdownHandler extends BaseHandler {
     const { filePath, queryType, options } = params;
     const content = await readFile(filePath, "utf-8");
     const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = processor.parse(content);
 
     if (options?.heading) {
       const sectionAst = this.getSection({ ast, headingText: options.heading });
@@ -217,11 +221,11 @@ export class MarkdownHandler extends BaseHandler {
     for (let i = 0; i < children.length; i++) {
       const node = children[i];
       if (node.type === "heading") {
-        const text = this.extractText(node as Heading);
+        const text = this.extractText(node);
         if (startIdx === -1 && text === headingText) {
           startIdx = i;
-          targetDepth = (node as Heading).depth;
-        } else if (startIdx !== -1 && (node as Heading).depth <= targetDepth) {
+          targetDepth = (node).depth;
+        } else if (startIdx !== -1 && (node).depth <= targetDepth) {
           endIdx = i;
           break;
         }
@@ -245,7 +249,7 @@ export class MarkdownHandler extends BaseHandler {
     const { filePath, maxDepth } = params;
     const content = await readFile(filePath, "utf-8");
     const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = processor.parse(content);
     return this.getHeadings({ ast, maxDepth });
   }
 
@@ -255,7 +259,7 @@ export class MarkdownHandler extends BaseHandler {
   async getLinksFromFile(filePath: string): Promise<LinkSummary[]> {
     const content = await readFile(filePath, "utf-8");
     const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = processor.parse(content);
     return this.getLinks(ast);
   }
 
@@ -323,7 +327,7 @@ export class MarkdownHandler extends BaseHandler {
     const { filePath, line, column } = params;
     const content = await readFile(filePath, "utf-8");
     const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = processor.parse(content);
 
     // Find the node at the given position
     const link = this.findLinkAtPosition({ ast, line, column });
@@ -378,7 +382,7 @@ export class MarkdownHandler extends BaseHandler {
         if (anchor) {
           // File with heading reference
           const targetContent = await readFile(targetPath, "utf-8");
-          const targetAst = processor.parse(targetContent) as MdastRoot;
+          const targetAst = processor.parse(targetContent);
           const targetHeading = this.findHeadingBySlug({ ast: targetAst, slug: anchor });
 
           if (targetHeading) {
@@ -484,7 +488,7 @@ export class MarkdownHandler extends BaseHandler {
     const { ast, slug } = params;
     for (const node of ast.children) {
       if (node.type === "heading") {
-        const heading = node as Heading;
+        const heading = node;
         const headingText = this.extractText(heading);
         if (this.toSlug(headingText) === slug || this.toSlug(headingText) === this.toSlug(slug)) {
           return heading;
@@ -528,7 +532,7 @@ export class MarkdownHandler extends BaseHandler {
     const { startFile: startFilePath, maxDepth = 10 } = params;
     const visited = new Set<string>();
     const files: FileSummary[] = [];
-    const errors: Array<{ filePath: string; error: string }> = [];
+    const errors: { filePath: string; error: string }[] = [];
 
     const crawlFile = async (params: {
       filePath: string;
@@ -549,7 +553,7 @@ export class MarkdownHandler extends BaseHandler {
       try {
         const content = await readFile(normalizedPath, "utf-8");
         const processor = unified().use(remarkParse);
-        const ast = processor.parse(content) as MdastRoot;
+        const ast = processor.parse(content);
 
         const headings = this.getHeadings({ ast });
         const links = this.getLinks(ast);
@@ -644,7 +648,7 @@ export class MarkdownHandler extends BaseHandler {
     const { filePath, maxDepth } = params;
     const content = await readFile(filePath, "utf-8");
     const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = processor.parse(content);
 
     const headings = this.getHeadings({ ast, maxDepth });
 
@@ -670,17 +674,17 @@ export class MarkdownHandler extends BaseHandler {
   async readDirectory(params: {
     directory: string;
     pattern?: string;
-  }): Promise<{ files: FileSummary[]; errors: Array<{ filePath: string; error: string }> }> {
+  }): Promise<{ files: FileSummary[]; errors: { filePath: string; error: string }[] }> {
     const { directory, pattern } = params;
     const filePaths = await this.findFiles({ directory, pattern });
     const files: FileSummary[] = [];
-    const errors: Array<{ filePath: string; error: string }> = [];
+    const errors: { filePath: string; error: string }[] = [];
 
     for (const filePath of filePaths) {
       try {
         const content = await readFile(filePath, "utf-8");
         const processor = unified().use(remarkParse);
-        const ast = processor.parse(content) as MdastRoot;
+        const ast = processor.parse(content);
 
         files.push({
           filePath,
@@ -710,7 +714,7 @@ export class MarkdownHandler extends BaseHandler {
     const { filePath, checkExternal = false, timeout = 5000 } = params;
     const content = await readFile(filePath, "utf-8");
     const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = processor.parse(content);
     const links = this.getLinks(ast);
 
     const valid: LinkCheckItem[] = [];
@@ -872,8 +876,8 @@ export class MarkdownHandler extends BaseHandler {
     const contentA = await readFile(filePathA, "utf-8");
     const contentB = await readFile(filePathB, "utf-8");
     const processor = unified().use(remarkParse);
-    const astA = processor.parse(contentA) as MdastRoot;
-    const astB = processor.parse(contentB) as MdastRoot;
+    const astA = processor.parse(contentA);
+    const astB = processor.parse(contentB);
 
     const headingsA = this.getHeadings({ ast: astA });
     const headingsB = this.getHeadings({ ast: astB });
@@ -908,7 +912,7 @@ export class MarkdownHandler extends BaseHandler {
     const { filePath, level = 1 } = params;
     const content = await readFile(filePath, "utf-8");
     const processor = unified().use(remarkParse);
-    const ast = processor.parse(content) as MdastRoot;
+    const ast = processor.parse(content);
 
     const preamble: RootContent[] = [];
     const sections: Section<RootContent>[] = [];

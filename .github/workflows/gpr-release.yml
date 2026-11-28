@@ -43,7 +43,9 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
         with:
           registry-url: ${{ env.REGISTRY }}
@@ -52,7 +54,7 @@ jobs:
       - name: Resolve package name
         id: pkg
         run: |
-          PKG_DIR="packages/${{ inputs.package }}"
+          PKG_DIR="packages/${INPUTS_PACKAGE}"
           if [ ! -d "$PKG_DIR" ]; then
             echo "::error::Package directory not found: $PKG_DIR"
             exit 1
@@ -65,7 +67,7 @@ jobs:
             | map(. // {}) | add | to_entries[]
             | select(.value | startswith("workspace:")) | .key' "${PKG_DIR}/package.json")
           if [ -n "$UNRESOLVABLE" ]; then
-            echo "::error::${{ inputs.package }} depends on workspace packages that are not bundled: $(echo "$UNRESOLVABLE" | paste -sd ' ')"
+            echo "::error::${INPUTS_PACKAGE} depends on workspace packages that are not bundled: $(echo "$UNRESOLVABLE" | paste -sd ' ')"
             exit 1
           fi
 
@@ -74,24 +76,32 @@ jobs:
             echo "name=${PKG_NAME}"
             echo "dir=${PKG_DIR}"
           } >> "$GITHUB_OUTPUT"
+        env:
+          INPUTS_PACKAGE: ${{ inputs.package }}
 
       - name: Build
-        run: pnpm --filter "...${{ steps.pkg.outputs.name }}..." build
+        run: pnpm --filter "...${STEPS_PKG_OUTPUTS_NAME}..." build
+        env:
+          STEPS_PKG_OUTPUTS_NAME: ${{ steps.pkg.outputs.name }}
 
       - name: Test
-        run: pnpm --filter "...${{ steps.pkg.outputs.name }}..." test
+        run: pnpm --filter "...${STEPS_PKG_OUTPUTS_NAME}..." test
+        env:
+          STEPS_PKG_OUTPUTS_NAME: ${{ steps.pkg.outputs.name }}
 
       - name: Publish to GitHub Packages
         id: publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STEPS_PKG_OUTPUTS_DIR: ${{ steps.pkg.outputs.dir }}
+          INPUT_TAG: ${{ inputs.tag || 'snapshot' }}
         run: |
-          TAG="${{ inputs.tag || 'snapshot' }}"
+          TAG="${INPUT_TAG}"
           SHORT_SHA="${GITHUB_SHA:0:7}"
           TIMESTAMP="$(date +%Y%m%d%H%M%S)"
           PRE_VERSION="0.0.0-${TAG}.${TIMESTAMP}.${SHORT_SHA}"
 
-          PKG_DIR="${{ steps.pkg.outputs.dir }}"
+          PKG_DIR="${STEPS_PKG_OUTPUTS_DIR}"
 
           ORIGINAL_NAME=$(jq -r .name "${PKG_DIR}/package.json")
           SCOPED_NAME="${SCOPE}/${ORIGINAL_NAME}"

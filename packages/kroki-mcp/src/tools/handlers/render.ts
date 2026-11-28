@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { writeFile } from "node:fs/promises";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
-import { getErrorMessage } from "mcp-shared";
+import { BaseToolHandler, type ToolResponse, getErrorMessage } from "mcp-shared";
 import { getAllTools, getTool } from "../../diagrams/registry.js";
 
 const RenderSchema = z.object({
@@ -88,7 +86,7 @@ export class KrokiRenderHandler extends BaseToolHandler<RenderArgs> {
         return {
           content: [{ type: "text", text: svg }],
         };
-      } else {
+      }
         // PNG/PDF - return as base64 or save to file
         const buffer = await response.arrayBuffer();
 
@@ -111,7 +109,7 @@ export class KrokiRenderHandler extends BaseToolHandler<RenderArgs> {
             },
           ],
         };
-      }
+      
     } catch (error) {
       return {
         content: [{ type: "text", text: `Failed to render diagram: ${getErrorMessage(error)}` }],

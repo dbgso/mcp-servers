@@ -16,5 +16,10 @@ module.exports = {
     'no-branching-literal': require('./no-branching-literal'),
     'no-strict-scalar-in-untyped-args': require('./no-strict-scalar-in-untyped-args'),
     'no-arrow-class-method': require('./no-arrow-class-method'),
+    // Carried over from dbgso/private-static-site (tools/oxlint-plugin).
+    'no-focused-or-skipped-tests': require('./no-focused-or-skipped-tests'),
+    'similar-tests-each': require('./similar-tests-each'),
+    'no-secret-in-log': require('./no-secret-in-log'),
+    'no-insecure-random': require('./no-insecure-random'),
   },
 };

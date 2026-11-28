@@ -142,7 +142,7 @@ describe("a binary response", () => {
   it("is written as bytes, not as base64 text", async () => {
     // A PNG saved through the text path is a corrupt file that still opens in
     // an editor, which is the kind of failure nobody notices until later.
-    respondWith({ bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) });
+    respondWith({ bytes: new Uint8Array([0x89, 0x50, 0x4E, 0x47]) });
     const outputPath = join(dir, "diagram.png");
 
     const result = await handler.execute({
@@ -154,7 +154,7 @@ describe("a binary response", () => {
 
     expect(text(result)).toBe(`Saved to ${outputPath}`);
     const written = await readFile(outputPath);
-    expect([...written]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect([...written]).toEqual([0x89, 0x50, 0x4E, 0x47]);
   });
 });
 

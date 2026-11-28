@@ -52,7 +52,7 @@ function mentions(params: { action: string; param: string; help: string }): bool
   );
 }
 
-describe("describe", () => {
+describe("the help text against the schemas", () => {
   it.each(HANDLERS.map((handler) => ({ action: handler.action })))(
     "shows at least one example of $action",
     ({ action }) => {

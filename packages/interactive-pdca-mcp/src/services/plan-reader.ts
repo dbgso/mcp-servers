@@ -139,8 +139,8 @@ export class PlanReader implements IPlanReader {
     })();
 
     return {
-      id: metadata.id as string,
-      title: metadata.title as string,
+      id: metadata.id,
+      title: metadata.title,
       status: metadata.status as TaskStatus,
       parent: (metadata.parent as string) || "",
       dependencies: (metadata.dependencies as string[]) || [],

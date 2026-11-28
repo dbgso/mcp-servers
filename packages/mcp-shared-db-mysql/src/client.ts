@@ -144,6 +144,8 @@ export async function createMysqlClient(url: string): Promise<MysqlQueryClient> 
   const options = urlToConnectionOptions(url);
   // Cast through unknown — mysql2 ships its own .d.ts but we duck-type the
   // narrow subset we use to keep the surface easy to mock.
+  // `as string` keeps tsc from resolving the specifier (and asking for its @types package).
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion
   const mod = (await import("mysql2/promise" as string)) as unknown as Mysql2Module;
   const create = mod.createConnection ?? mod.default?.createConnection;
   if (!create) {

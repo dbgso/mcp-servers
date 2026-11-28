@@ -21,8 +21,7 @@
  */
 import { loadEnvFile } from "mcp-shared-secrets";
 import { createDatabaseTools } from "mcp-shared-db";
-import type { SelectableFieldsMap } from "mcp-shared-db-core";
-import type { RdbTableMetadataMap } from "mcp-shared-db-core";
+import type { RdbTableMetadataMap, SelectableFieldsMap } from "mcp-shared-db-core";
 import { postgresStrategy } from "../src/strategies/pg.js";
 import { check, envFileArg, SMOKE_ORDERS, smokeOrdersMetadata } from "../../../ci/db/smoke-kit.mjs";
 

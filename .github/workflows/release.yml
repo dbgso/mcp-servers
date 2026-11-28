@@ -16,11 +16,14 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # The Docker tagging step compares each version against the previous
           # commit, so the parent has to be fetched.
           fetch-depth: 2
+          # Kept: changesets/action pushes the version branch and the tag step below pushes tags,
+          # both with the token checkout leaves behind.
+          persist-credentials: true # zizmor: ignore[artipacked]
       # Deliberately no `registry-url`. Passing one makes actions/setup-node
       # write `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` into an
       # .npmrc and export NODE_AUTH_TOKEN as its placeholder,
@@ -117,7 +120,7 @@ jobs:
       # replaces the `catalog:` and `workspace:` specifiers with real versions.
       - name: Create Release Pull Request or Publish
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
           version: pnpm run version
           publish: pnpm release

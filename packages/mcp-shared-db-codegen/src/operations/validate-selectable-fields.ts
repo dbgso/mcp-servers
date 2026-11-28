@@ -47,7 +47,7 @@ async function readSelectableFields(filePath: string): Promise<SelectableFieldsM
     return JSON.parse(buf) as SelectableFieldsMap;
   } catch (err) {
     throw new Error(
-      `Failed to parse selectable_fields_path '${filePath}': ${(err as Error).message}`,
+      `Failed to parse selectable_fields_path '${filePath}': ${(err as Error).message}`, { cause: err },
     );
   }
 }

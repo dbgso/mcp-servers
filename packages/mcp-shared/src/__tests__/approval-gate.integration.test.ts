@@ -7,10 +7,9 @@ import {
 } from "../tools/index.js";
 import { jsonResponse } from "../utils/mcp-response.js";
 import { TokenApprovalStrategy } from "../utils/approval/token.js";
-import { HtmlApprovalStrategy } from "../utils/approval/html.js";
+import { HtmlApprovalStrategy, stopHtmlServer } from "../utils/approval/html.js";
 import * as approvalMod from "../utils/approval/core.js";
 // stopHtmlServer only; the registration comes from ../approval.js above.
-import { stopHtmlServer } from "../utils/approval/html.js";
 
 /**
  * Integration coverage for the approval gate.

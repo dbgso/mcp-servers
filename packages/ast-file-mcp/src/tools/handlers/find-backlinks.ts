@@ -2,9 +2,7 @@ import { z } from "zod";
 import { resolve, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { jsonResponse, errorResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import { jsonResponse, errorResponse, BaseToolHandler, type ToolResponse } from "mcp-shared";
 import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
 import type { Backlink, FindBacklinksResult, LinkSummary } from "../../types/index.js";
 
@@ -312,19 +310,19 @@ export class FindBacklinksHandler extends BaseToolHandler<FindBacklinksArgs> {
       // GitHub-flavored markdown anchor generation
       return text
         .toLowerCase()
-        .replace(/[^\w\s\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf-]/g, "")
+        .replace(/[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF-]/g, "")
         .replace(/\s+/g, "-")
         .replace(/-+/g, "-")
         .replace(/^-|-$/g, "");
-    } else {
+    }
       // AsciiDoc anchor: _text_with_underscores
       return "_" + text
         .toLowerCase()
-        .replace(/[^\w\s\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/g, "")
+        .replace(/[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, "")
         .replace(/\s+/g, "_")
         .replace(/_+/g, "_")
         .replace(/^_|_$/g, "");
-    }
+    
   }
 
   /**

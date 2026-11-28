@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BaseActionHandler, looseBoolean, type ToolResponse } from "mcp-shared";
-import type { InstructionContext } from "../types.js";
 import {
+  type InstructionContext,
   errorResponse,
   formatNextActions,
   textResponse,

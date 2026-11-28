@@ -240,7 +240,7 @@ describe("preview_selectable_fields_json operation", () => {
     expect(data.users.fields.id).toEqual({ select: "redact" });
     expect(data.users.fields.email).toEqual({ select: "redact" });
     // Make sure the formatter never auto-marks the legacy pii flag.
-    const text = result.content[0].text as string;
+    const text = result.content[0].text;
     expect(text).not.toContain('"pii"');
     // Operator must hand-edit anything to "expose".
     expect(text).not.toContain('"expose"');

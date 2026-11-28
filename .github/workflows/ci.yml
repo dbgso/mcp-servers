@@ -9,6 +9,9 @@ on:
 # A new push supersedes the one before it, and 22 test jobs per run is enough
 # that letting both sets finish is a way to sit behind the concurrency cap for no
 # reason. `main` is excluded: those runs are the record of what was merged.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -22,14 +25,18 @@ jobs:
     outputs:
       matrix: ${{ steps.list.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - id: list
         run: echo "matrix=$(node scripts/ci-test-matrix.mjs)" >> "$GITHUB_OUTPUT"
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
       # `pnpm lint` is type-aware, and a workspace package's types come from its
       # built `dist/*.d.ts`. Unbuilt, every cross-package type is an error type
@@ -37,6 +44,9 @@ jobs:
       # and rules like require-array-sort-compare report what a build resolves.
       - run: pnpm build
       - run: pnpm lint
+      # The custom rules (eslint-rules/) are checked against valid / invalid
+      # examples. A rule that silently stops reporting leaves `pnpm lint` green.
+      - run: pnpm test:lint-rules
       # tsx strips types without checking them, so every packages/*/scripts
       # directory (outside each package's tsconfig.json) is type-checked here
       # with its own scripts/tsconfig.json. One without it fails the job.
@@ -76,7 +86,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm build
 
@@ -94,7 +106,9 @@ jobs:
         matrix.package.shards > 1 && format(' {0}/{1}', matrix.package.shard, matrix.package.shards) || ''
       }})
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
 
       # Only where the emulator is actually used. It is ten seconds, which is
@@ -122,7 +136,7 @@ jobs:
           }}
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: ${{ matrix.package.name }}

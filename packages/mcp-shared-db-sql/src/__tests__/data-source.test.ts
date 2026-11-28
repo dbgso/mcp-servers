@@ -113,7 +113,7 @@ describe("createSqlDataSource", () => {
     });
 
     // Same bound values + LIMIT as findByRange would have used.
-    const args = (query as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+    const args = (query as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       sql: string;
       values: unknown[];
     };
@@ -157,7 +157,7 @@ describe("createSqlDataSource", () => {
       params: [123],
     });
 
-    const args = (query as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+    const args = (query as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       sql: string;
       values: unknown[];
     };
@@ -320,7 +320,7 @@ describe("createSqlDataSource", () => {
         tableMetadata: remappedMetadata,
       });
       await invoke(ds);
-      const args = (query as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+      const args = (query as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
         sql: string;
       };
       expect(args.sql).toContain('"app_users"');

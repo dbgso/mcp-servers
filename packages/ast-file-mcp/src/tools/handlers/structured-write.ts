@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { jsonResponse } from "mcp-shared";
-import { BaseToolHandler } from "mcp-shared";
-import type { ToolResponse } from "mcp-shared";
+import { jsonResponse, BaseToolHandler, type ToolResponse } from "mcp-shared";
 import { MarkdownHandler, AsciidocHandler } from "../../handlers/index.js";
 
 const StructuredWriteSchema = z.object({
