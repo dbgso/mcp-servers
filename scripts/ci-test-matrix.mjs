@@ -50,13 +50,40 @@ async function hasCoverageThresholds(dir) {
   return false;
 }
 
-const matrix = [];
-for (const name of (await fs.readdir(packagesDir)).sort()) {
-  const dir = path.join(packagesDir, name);
-  const manifest = await fs
+async function readManifest(dir) {
+  return fs
     .readFile(path.join(dir, "package.json"), "utf-8")
     .then(JSON.parse)
     .catch(() => null);
+}
+
+/**
+ * Every package under packages/, with the name CI filters it by.
+ *
+ * A directory without a package.json is a grouping (packages/shared/ holds
+ * packages/shared/primitives and packages/shared/<area>/<engine>, per
+ * pnpm-workspace.yaml), so it is searched one level further down rather than
+ * skipped -- skipping it would leave a nested package's tests out of CI with
+ * the run still green. Top-level packages keep their directory name, which is
+ * what the check names have always been; nested ones use their package name.
+ */
+async function findPackages(dir, depth = 0) {
+  const found = [];
+  for (const entry of (await fs.readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!entry.isDirectory() || entry.name === "node_modules") continue;
+    const child = path.join(dir, entry.name);
+    const manifest = await readManifest(child);
+    if (manifest !== null) {
+      found.push({ dir: child, name: depth === 0 ? entry.name : manifest.name, manifest });
+    } else if (depth < 2) {
+      found.push(...(await findPackages(child, depth + 1)));
+    }
+  }
+  return found;
+}
+
+const matrix = [];
+for (const { dir, name, manifest } of await findPackages(packagesDir)) {
   if (manifest?.scripts?.test === undefined) continue;
 
   const shards = manifest.ciShards ?? 1;
