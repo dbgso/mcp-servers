@@ -15,7 +15,7 @@ catalog:
   '@changesets/cli': 2.29.8
   '@modelcontextprotocol/sdk': 1.26.0
   '@types/node': 22.15.21
-  '@vitest/coverage-v8': 4.0.18
+  '@vitest/coverage-v8': 5.1.1
   jscpd: 5.4.3
   # The database drivers the smoke tests run against (ci.yml `db-smoke`).
   # Declared as devDependencies of the packages that load them, so a bump here
