@@ -31,7 +31,7 @@ const NODE_COUNT = 12;
 const GROUPS = ["alpha", "beta", "gamma"];
 
 function sampleGraph(params: { positioned: boolean }) {
-  const nodes = Array.from({ length: NODE_COUNT }, (_, i) => ({
+  const nodes = [...Array(NODE_COUNT).keys()].map((i) => ({
     id: `n${i}`,
     label: `Node ${i}`,
     group: GROUPS[i % GROUPS.length],
@@ -40,7 +40,7 @@ function sampleGraph(params: { positioned: boolean }) {
       : {}),
   }));
   const edges = [
-    ...Array.from({ length: NODE_COUNT - 1 }, (_, i) => ({
+    ...[...Array(NODE_COUNT - 1).keys()].map((i) => ({
       source: `n${i}`,
       target: `n${i + 1}`,
     })),
@@ -125,6 +125,7 @@ async function stopChrome(params: { chrome?: ChildProcess }): Promise<void> {
 
 async function startServer(params: { dir: string }): Promise<Server> {
   const { dir } = params;
+  // eslint-disable-next-line custom/single-params-object -- Node's request handler signature is fixed as (req, res)
   const server = createServer((req, res) => {
     // The query string is a cache-buster, not part of the filename. Forgetting
     // this once made an empty 404 page look like a page with no warnings.
@@ -206,11 +207,12 @@ async function checkLayout(params: {
   const { name, port, cdpPort } = params;
   const session = await openSession({ cdpPort });
   try {
-    await session.send("Runtime.enable");
-    await session.send("Network.enable");
-    await session.send("Network.setCacheDisabled", { cacheDisabled: true });
-    await session.send("Page.navigate", {
-      url: `http://127.0.0.1:${port}/${name}.html?v=${Date.now()}`,
+    await session.send({ method: "Runtime.enable" });
+    await session.send({ method: "Network.enable" });
+    await session.send({ method: "Network.setCacheDisabled", params: { cacheDisabled: true } });
+    await session.send({
+      method: "Page.navigate",
+      params: { url: `http://127.0.0.1:${port}/${name}.html?v=${Date.now()}` },
     });
     await delay(SETTLE_MS);
 
@@ -270,7 +272,7 @@ async function checkLayout(params: {
 }
 
 interface Session {
-  send: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+  send: (args: { method: string; params?: Record<string, unknown> }) => Promise<unknown>;
   evaluate: (params: { expression: string }) => Promise<string | undefined>;
   errors: string[];
   close: () => void;
@@ -311,7 +313,13 @@ async function openSession(params: { cdpPort: number }): Promise<Session> {
   });
   await new Promise<void>((resolve) => socket.addEventListener("open", () => resolve()));
 
-  const send = (method: string, methodParams: Record<string, unknown> = {}): Promise<unknown> =>
+  const send = ({
+    method,
+    params: methodParams = {},
+  }: {
+    method: string;
+    params?: Record<string, unknown>;
+  }): Promise<unknown> =>
     new Promise((resolve) => {
       const id = (nextId += 1);
       pending.set(id, resolve);
@@ -320,7 +328,10 @@ async function openSession(params: { cdpPort: number }): Promise<Session> {
 
   const evaluate = async (evalParams: { expression: string }): Promise<string | undefined> => {
     const answered = await Promise.race([
-      send("Runtime.evaluate", { expression: evalParams.expression, returnByValue: true }),
+      send({
+        method: "Runtime.evaluate",
+        params: { expression: evalParams.expression, returnByValue: true },
+      }),
       delay(LAYOUT_TIMEOUT_MS).then(() => undefined),
     ]);
     const result = answered as { result?: { result?: { value?: string } } } | undefined;
