@@ -16,7 +16,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # The Docker tagging step compares each version against the previous
           # commit, so the parent has to be fetched.
@@ -117,7 +117,7 @@ jobs:
       # replaces the `catalog:` and `workspace:` specifiers with real versions.
       - name: Create Release Pull Request or Publish
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
           version: pnpm run version
           publish: pnpm release
