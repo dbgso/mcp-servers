@@ -21,6 +21,12 @@ catalogs:
     '@vitest/coverage-v8':
       specifier: 4.0.18
       version: 4.0.18
+    jscpd:
+      specifier: 5.4.3
+      version: 5.4.3
+    mysql2:
+      specifier: 3.22.3
+      version: 3.22.3
     node-notifier:
       specifier: 10.0.1
       version: 10.0.1
@@ -30,6 +36,12 @@ catalogs:
     oxlint-tsgolint:
       specifier: 7.0.2003
       version: 7.0.2003
+    pg:
+      specifier: 8.11.0
+      version: 8.11.0
+    syncpack:
+      specifier: 15.3.3
+      version: 15.3.3
     tsup:
       specifier: 8.5.0
       version: 8.5.0
@@ -65,12 +77,18 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.15.21
+      jscpd:
+        specifier: 'catalog:'
+        version: 5.4.3
       oxlint:
         specifier: 'catalog:'
         version: 1.63.0(oxlint-tsgolint@7.0.2003)
       oxlint-tsgolint:
         specifier: 'catalog:'
         version: 7.0.2003
+      syncpack:
+        specifier: 'catalog:'
+        version: 15.3.3
       tsx:
         specifier: 'catalog:'
         version: 4.19.4
@@ -174,7 +192,7 @@ importers:
         specifier: 'catalog:'
         version: 1.26.0(supports-color@7.2.0)(zod@3.25.76)
       pg:
-        specifier: 8.11.0
+        specifier: 'catalog:'
         version: 8.11.0
     devDependencies:
       '@vitest/coverage-v8':
@@ -201,12 +219,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.26.0(supports-color@7.2.0)(zod@3.25.76)
-      mysql2:
-        specifier: '>=3.0.0'
-        version: 3.22.3(@types/node@22.19.10)
-      pg:
-        specifier: 8.11.0
-        version: 8.11.0
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
@@ -229,6 +241,12 @@ importers:
       mcp-shared-secrets:
         specifier: workspace:*
         version: link:../mcp-shared-secrets
+      mysql2:
+        specifier: 'catalog:'
+        version: 3.22.3(@types/node@22.15.21)
+      pg:
+        specifier: 'catalog:'
+        version: 8.11.0
       tsup:
         specifier: 'catalog:'
         version: 8.5.0(postcss@8.5.6)(supports-color@7.2.0)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.2)
@@ -484,7 +502,7 @@ importers:
         specifier: workspace:*
         version: link:../mcp-shared-db-core
       pg:
-        specifier: 8.11.0
+        specifier: 'catalog:'
         version: 8.11.0
       zod:
         specifier: 'catalog:'
@@ -494,8 +512,8 @@ importers:
         specifier: 'catalog:'
         version: 4.0.18(vitest@4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2))
       mysql2:
-        specifier: '>=3.0.0'
-        version: 3.22.3(@types/node@22.19.10)
+        specifier: 'catalog:'
+        version: 3.22.3(@types/node@22.15.21)
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
@@ -527,9 +545,6 @@ importers:
       mcp-shared-db-sql:
         specifier: workspace:*
         version: link:../mcp-shared-db-sql
-      mysql2:
-        specifier: '>=3.0.0'
-        version: 3.22.3(@types/node@22.19.10)
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
@@ -543,6 +558,9 @@ importers:
       mcp-shared-secrets:
         specifier: workspace:*
         version: link:../mcp-shared-secrets
+      mysql2:
+        specifier: 'catalog:'
+        version: 3.22.3(@types/node@22.15.21)
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
@@ -558,9 +576,6 @@ importers:
       mcp-shared-db-sql:
         specifier: workspace:*
         version: link:../mcp-shared-db-sql
-      pg:
-        specifier: '>=8.11.0'
-        version: 8.11.0
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
@@ -574,6 +589,9 @@ importers:
       mcp-shared-secrets:
         specifier: workspace:*
         version: link:../mcp-shared-secrets
+      pg:
+        specifier: 'catalog:'
+        version: 8.11.0
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
@@ -678,6 +696,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@types/node@22.19.10)(tsx@4.19.4)(yaml@2.8.2)
+      yaml:
+        specifier: 'catalog:'
+        version: 2.8.2
 
 packages:
 
@@ -1710,6 +1731,9 @@ packages:
   '@smithy/smithy-client@4.12.13':
     resolution: {integrity: sha512-y/Pcj1V9+qG98gyu1gvftHB7rDpdh+7kIBIggs55yGm3JdtBV8GT8IFF3a1qxZ79QnaJHX9GXzvBG6tAd+czJA==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with
+        this version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/types@4.14.1':
     resolution: {integrity: sha512-59b5HtSVrVR/eYNei3BUj3DCPKD/G7EtDDe7OEJE7i7FtQFugYo6MxbotS8mVJkLNVf8gYaAlEBwwtJ9HzhWSg==}
@@ -2404,6 +2428,55 @@ packages:
     resolution: {integrity: sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==}
     hasBin: true
 
+  jscpd-darwin-arm64@5.4.3:
+    resolution: {integrity: sha512-2Zu6FrML6exhznj4hryUrnfVRM6dmfH0N7nldeY09cs7fA2TRQD+xzo5wA7SIqzhRDaUo0CBPBNVJz/XFmUEbg==}
+    cpu: [arm64]
+    os: [darwin]
+
+  jscpd-darwin-x64@5.4.3:
+    resolution: {integrity: sha512-Y4KykQqxMtVEV3pdjtfYbzONCmLOEgAyX8d2fUbwLW+uH/IZqUVCIwB3LrgCVv4Y+b/7mbOsdrGuIragTGpC/Q==}
+    cpu: [x64]
+    os: [darwin]
+
+  jscpd-linux-arm64-gnu@5.4.3:
+    resolution: {integrity: sha512-08d2DKt9BELglfZj0ZfhEs7I4gxiAk9Iflgjnsd0z4pB1OjWA4+DGDbfWmGOf6W2sVMDpwkVoa5Q5DWaOMPyoA==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  jscpd-linux-arm64-musl@5.4.3:
+    resolution: {integrity: sha512-YbgJ7tQzztL441UCKX6UVN6n8zXc7eEwuJ4MHCdFtTf5w6EGpfFDi7+lgBi+MtwampG2k1PoltCYYiRZyPg4/g==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  jscpd-linux-x64-gnu@5.4.3:
+    resolution: {integrity: sha512-BbL0HypadbjpxNfK/KY4CfpD4sCd2zf9HpFnGwwOjdryjdTG098isft/95BiS/XvZjVT3p6lwLf5ToI97OoqCg==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  jscpd-linux-x64-musl@5.4.3:
+    resolution: {integrity: sha512-0DlkzVDuuZ83JRZMOc4Fd2tBFKIrtXDHkHvxdF6d4HK+b954PZxuKhwBMArg76CtVSOQcuiICd/zxU9HtdT+mg==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  jscpd-windows-arm64-msvc@5.4.3:
+    resolution: {integrity: sha512-BUD8kCzLyXUomw3vWRDbaBcIPByX6yU3VyqsKSf7/sjzr8y9ZmTRcn0cwmCV2WChrzD5JF4HeQl+hZlb7+s8lg==}
+    cpu: [arm64]
+    os: [win32]
+
+  jscpd-windows-x64-msvc@5.4.3:
+    resolution: {integrity: sha512-qYSVGZE2WP0NNdZU1S8DsfcCDpjwKSExvsUd86c4Vx9eWwZdw1i+V7h/9FWazo3PxEa+FzPLsCD5YjVawaarRA==}
+    cpu: [x64]
+    os: [win32]
+
+  jscpd@5.4.3:
+    resolution: {integrity: sha512-2Ult/j407sgAx4Z8kW4nOB3wfGwvtyKyPN9XE+tbvNEP/QemBN8pijKtG6zC+8nfMuIiiWjNcez7VZo5ZjJRtA==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   json-schema-traverse@1.0.0:
     resolution: {integrity: sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==}
 
@@ -2998,6 +3071,51 @@ packages:
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
     engines: {node: '>=8'}
+
+  syncpack-darwin-arm64@15.3.3:
+    resolution: {integrity: sha512-sFnHOUT7ZYShxAXfzK8zIxNvY5ciW6c71fHYOJIgZ8Ry25IMWkaGfyLc894wxIPaYTbgEmeeZN6BV7G5Gu27mA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  syncpack-darwin-x64@15.3.3:
+    resolution: {integrity: sha512-gtWysFMwG3W8ieF8+aLMy1qVkehdy40hc02LGEjckmejZxtjDbTKE9vDhBAaXcLbqIsvQ1ImEymHU5N2I4llWQ==}
+    cpu: [x64]
+    os: [darwin]
+
+  syncpack-linux-arm64-musl@15.3.3:
+    resolution: {integrity: sha512-mvj6TGhdwO5bHo1cM638esCx9+7ur0BA+RTdg+YiOD/CZJMP8iMj6ruF8htFNPEOKpAEOmfkOVKNs4yCbvkgyQ==}
+    cpu: [arm64]
+    os: [linux]
+
+  syncpack-linux-arm64@15.3.3:
+    resolution: {integrity: sha512-6hlHPrG+V457fpKEURqshNLaFQENkC416IZ4ngFY+2uBjFsmlA7ax4p4EJlFsxuHiQbx/4Yo27pVXmNJEs/bZQ==}
+    cpu: [arm64]
+    os: [linux]
+
+  syncpack-linux-x64-musl@15.3.3:
+    resolution: {integrity: sha512-7KHIb9b9VCSyQq2GwoshVU9Pt/2qCqhOPusuwkXadI+p1qW7fK5FukjZbG0Y4VRa6mszrD2W28OxWAswwrn1lQ==}
+    cpu: [x64]
+    os: [linux]
+
+  syncpack-linux-x64@15.3.3:
+    resolution: {integrity: sha512-DcnZPKFGEFoktzIrufGGwk2ARTEhlvII6yQsETCaO/Z1xagOjJquxiDvagKnb4GQsQQCuih2ouzQZFCiKImrXA==}
+    cpu: [x64]
+    os: [linux]
+
+  syncpack-windows-arm64@15.3.3:
+    resolution: {integrity: sha512-6pPWh3+uTO7g1FF8ugC+UqektaNXphdmDXqG3rWepFdCS+DrWj/7Gfbtlx/zISTdx//T7zoZZ2fvW4fzN/6ztQ==}
+    cpu: [arm64]
+    os: [win32]
+
+  syncpack-windows-x64@15.3.3:
+    resolution: {integrity: sha512-9CrrEzXE/MdWJuxyB7JvR1b6kiTNQPZh1dDJbWiRgtpNyCbEiddM1/viOsyaufftWDrQFV6RCGQzqCvWEas45g==}
+    cpu: [x64]
+    os: [win32]
+
+  syncpack@15.3.3:
+    resolution: {integrity: sha512-MC99meBhgc/E5xbB5mFUS99wj4bquTbKLKHLXYh3qPbmPZl2HD8KA4ls29a9Xv67oZ03isCaJaqSl+JIfXIfpA==}
+    engines: {node: '>=14.17.0'}
+    hasBin: true
 
   term-size@2.2.1:
     resolution: {integrity: sha512-wK0Ri4fOGjv/XPy8SBHZChl8CM7uMc5VML7SqiQ0zG7+J5Vr+RMQDoHa2CNT6KHUnTGIXH34UDMkPzAUyapBZg==}
@@ -5195,6 +5313,41 @@ snapshots:
     dependencies:
       argparse: 2.0.1
 
+  jscpd-darwin-arm64@5.4.3:
+    optional: true
+
+  jscpd-darwin-x64@5.4.3:
+    optional: true
+
+  jscpd-linux-arm64-gnu@5.4.3:
+    optional: true
+
+  jscpd-linux-arm64-musl@5.4.3:
+    optional: true
+
+  jscpd-linux-x64-gnu@5.4.3:
+    optional: true
+
+  jscpd-linux-x64-musl@5.4.3:
+    optional: true
+
+  jscpd-windows-arm64-msvc@5.4.3:
+    optional: true
+
+  jscpd-windows-x64-msvc@5.4.3:
+    optional: true
+
+  jscpd@5.4.3:
+    optionalDependencies:
+      jscpd-darwin-arm64: 5.4.3
+      jscpd-darwin-x64: 5.4.3
+      jscpd-linux-arm64-gnu: 5.4.3
+      jscpd-linux-arm64-musl: 5.4.3
+      jscpd-linux-x64-gnu: 5.4.3
+      jscpd-linux-x64-musl: 5.4.3
+      jscpd-windows-arm64-msvc: 5.4.3
+      jscpd-windows-x64-msvc: 5.4.3
+
   json-schema-traverse@1.0.0: {}
 
   json-schema-typed@8.0.2: {}
@@ -5462,9 +5615,9 @@ snapshots:
 
   ms@2.1.3: {}
 
-  mysql2@3.22.3(@types/node@22.19.10):
+  mysql2@3.22.3(@types/node@22.15.21):
     dependencies:
-      '@types/node': 22.19.10
+      '@types/node': 22.15.21
       aws-ssl-profiles: 1.1.2
       denque: 2.1.0
       generate-function: 2.3.1
@@ -5891,6 +6044,41 @@ snapshots:
   supports-color@7.2.0:
     dependencies:
       has-flag: 4.0.0
+
+  syncpack-darwin-arm64@15.3.3:
+    optional: true
+
+  syncpack-darwin-x64@15.3.3:
+    optional: true
+
+  syncpack-linux-arm64-musl@15.3.3:
+    optional: true
+
+  syncpack-linux-arm64@15.3.3:
+    optional: true
+
+  syncpack-linux-x64-musl@15.3.3:
+    optional: true
+
+  syncpack-linux-x64@15.3.3:
+    optional: true
+
+  syncpack-windows-arm64@15.3.3:
+    optional: true
+
+  syncpack-windows-x64@15.3.3:
+    optional: true
+
+  syncpack@15.3.3:
+    optionalDependencies:
+      syncpack-darwin-arm64: 15.3.3
+      syncpack-darwin-x64: 15.3.3
+      syncpack-linux-arm64: 15.3.3
+      syncpack-linux-arm64-musl: 15.3.3
+      syncpack-linux-x64: 15.3.3
+      syncpack-linux-x64-musl: 15.3.3
+      syncpack-windows-arm64: 15.3.3
+      syncpack-windows-x64: 15.3.3
 
   term-size@2.2.1: {}
 

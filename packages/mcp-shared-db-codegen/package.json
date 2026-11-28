@@ -27,11 +27,11 @@
   "dependencies": {
     "mcp-shared": "workspace:*",
     "mcp-shared-db-core": "workspace:*",
-    "pg": "8.11.0",
+    "pg": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "mysql2": ">=3.0.0"
+    "mysql2": ">=3.22.3"
   },
   "peerDependenciesMeta": {
     "mysql2": {
@@ -40,7 +40,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
-    "mysql2": ">=3.0.0",
+    "mysql2": "catalog:",
     "vitest": "catalog:"
   }
 }
