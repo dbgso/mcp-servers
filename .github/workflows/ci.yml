@@ -37,6 +37,15 @@ jobs:
       # and rules like require-array-sort-compare report what a build resolves.
       - run: pnpm build
       - run: pnpm lint
+      # The smoke scripts and their kit run under `tsx`, which strips types
+      # without checking them, so nothing else here would see a type error in
+      # them before the db-smoke job tripped over it at run time.
+      - name: Type-check the smoke scripts
+        run: pnpm exec tsc -p tsconfig.scripts.json
+      # Scoped by .jscpd.json to the smoke scripts, which grew a second copy of
+      # everything once per engine before the shared kit existed.
+      - name: Copy-paste check
+        run: pnpm lint:duplication
       # A changeset is published verbatim inside the package's CHANGELOG.md, and
       # nobody reads a generated file before it ships. This is the one chance to
       # catch markdown that will say something else once prettier has resolved
@@ -129,7 +138,10 @@ jobs:
       - name: Start Postgres, MySQL and the SSH bastion
         run: docker compose -f compose.yaml up -d --wait postgres mysql bastion
 
-      # The smoke scripts import the libraries' build output, not their source.
+      # The smoke scripts import their own package's source directly, and every
+      # other workspace package through its built entry (enforced by the
+      # no-restricted-imports override in .oxlintrc.json), so the dependencies
+      # have to be built.
       - name: Build
         run: pnpm build
 

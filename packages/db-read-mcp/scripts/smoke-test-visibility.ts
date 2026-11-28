@@ -24,28 +24,17 @@ import { createDatabaseTools } from "mcp-shared-db";
 import type { SelectableFieldsMap } from "mcp-shared-db-core";
 import type { RdbTableMetadataMap } from "mcp-shared-db-core";
 import { postgresStrategy } from "../src/strategies/pg.js";
+import { check, envFileArg, SMOKE_ORDERS, smokeOrdersMetadata } from "../../../ci/db/smoke-kit.mjs";
 
-function check(condition: boolean, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(`assertion failed: ${message}`);
-  }
-}
+const TABLE = SMOKE_ORDERS;
 
-const TABLE = "smoke_orders";
-
-const tableMetadata: RdbTableMetadataMap = {
-  [TABLE]: {
-    tableName: TABLE,
-    primaryKey: ["id"],
-    fields: {
-      id: { type: "number", nullable: false },
-      status: { type: "string", nullable: false },
-      amount: { type: "number", nullable: false },
-      placed_at: { type: "datetime", nullable: false },
-      attributes: { type: "json", nullable: false },
-    },
+const tableMetadata: RdbTableMetadataMap = smokeOrdersMetadata({
+  extraFields: {
+    amount: { type: "number", nullable: false },
+    placed_at: { type: "datetime", nullable: false },
+    attributes: { type: "json", nullable: false },
   },
-};
+});
 
 // One column per verdict, so a single read exercises all three.
 const selectableFields: SelectableFieldsMap = {
@@ -74,10 +63,7 @@ function parseResult(result: McpTextResult): Record<string, unknown> {
 }
 
 async function main(): Promise<void> {
-  const envFile = process.argv[2];
-  if (!envFile) {
-    throw new Error("Usage: tsx scripts/smoke-test-visibility.ts <env-file>");
-  }
+  const envFile = envFileArg({ script: "smoke-test-visibility.ts" });
   loadEnvFile(envFile);
   const url = process.env.DBREAD_URL;
   if (!url) throw new Error(`${envFile} does not define DBREAD_URL`);

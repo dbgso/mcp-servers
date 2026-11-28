@@ -19,31 +19,14 @@ import * as path from "node:path";
 import { loadEnvFile } from "mcp-shared-secrets";
 import type { RdbTableMetadataMap } from "mcp-shared-db-core";
 import { postgresStrategy } from "../src/strategies/pg.js";
+import { check, envFileArg, SMOKE_ORDERS, smokeOrdersMetadata } from "../../../ci/db/smoke-kit.mjs";
 
-function check(condition: boolean, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(`assertion failed: ${message}`);
-  }
-}
+const TABLE = SMOKE_ORDERS;
 
-const TABLE = "smoke_orders";
-
-const tableMetadata: RdbTableMetadataMap = {
-  [TABLE]: {
-    tableName: TABLE,
-    primaryKey: ["id"],
-    fields: {
-      id: { type: "number", nullable: false },
-      status: { type: "string", nullable: false },
-    },
-  },
-};
+const tableMetadata: RdbTableMetadataMap = smokeOrdersMetadata({ extraFields: {} });
 
 async function main(): Promise<void> {
-  const envFile = process.argv[2];
-  if (!envFile) {
-    throw new Error("Usage: tsx scripts/smoke-test-tunnel.ts <env-file>");
-  }
+  const envFile = envFileArg({ script: "smoke-test-tunnel.ts" });
   loadEnvFile(envFile);
 
   const url = process.env.DBREAD_URL;
