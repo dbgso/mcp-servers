@@ -17,7 +17,10 @@
  *   that mysql2 returns and walks the plan tree to find the worst-case scan
  *   width across all leaves.
  */
-import type { Dialect, DialectExplainResult } from "mcp-shared-db-sql";
+import { asQuotedIdent, ident, sqlFragment } from "mcp-shared-db-sql";
+import type { Dialect, DialectExplainResult, QuotedIdent, SqlFragment } from "mcp-shared-db-sql";
+
+type JsonPathEqualsInput = Parameters<Dialect["jsonPathEquals"]>[0];
 
 interface MysqlScanLeaf {
   table_name?: string;
@@ -137,23 +140,22 @@ function parseExplainPayload(value: unknown): MysqlExplainPlan | null {
   return null;
 }
 
-export const mysqlDialect: Dialect = {
-  quoteIdent(name: string): string {
-    return `\`${name.replace(/`/g, "``")}\``;
-  },
+export class MysqlDialect implements Dialect {
+  quoteIdent(name: string): QuotedIdent {
+    return asQuotedIdent(`\`${name.replace(/`/g, "``")}\``);
+  }
   placeholder(): string {
     return "?";
-  },
-  jsonPathEquals({ columnSql, path, valuePlaceholder, params }) {
-    // Bind the path — never interpolate `path.raw` into the SQL. The
-    // op-layer Zod regex is defense-in-depth; the bind is the load-bearing
+  }
+  jsonPathEquals({ columnSql, path, value }: JsonPathEqualsInput): SqlFragment {
+    // The path is a bound value, never interpolated into the SQL — the
+    // op-layer Zod regex is defense-in-depth; this is the load-bearing
     // defence. Lock-tested in dialect.test.ts.
-    const pathPh = params.add(path.raw);
-    return `JSON_UNQUOTE(JSON_EXTRACT(${columnSql}, ${pathPh})) = ${valuePlaceholder}`;
-  },
+    return sqlFragment`JSON_UNQUOTE(JSON_EXTRACT(${ident(columnSql)}, ${path.raw})) = ${value}`;
+  }
   explainPrefix(): string {
     return "EXPLAIN FORMAT=JSON";
-  },
+  }
   parseExplainResult(rows: unknown[]): DialectExplainResult {
     if (!Array.isArray(rows)) {
       return {
@@ -192,8 +194,10 @@ export const mysqlDialect: Dialect = {
       planSummary: summariseLeaf(worst),
       raw: plan,
     };
-  },
-};
+  }
+}
+
+export const mysqlDialect = new MysqlDialect();
 
 function pickWorstLeaf(
   leaves: MysqlScanLeaf[],

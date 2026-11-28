@@ -1,79 +1,129 @@
 import { z } from "zod";
 import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { requestApproval, validateApproval, getApprovalRequestedMessage, getApprovalRejectionMessage } from "mcp-shared/approval";
 import type { InstructionContext } from "../types.js";
 import { formatNextActions, errorResponse, textResponse } from "../types.js";
 import { DRAFT_PREFIX } from "../../../constants.js";
+import { gateMutation } from "../../../services/mutation-gate.js";
+import { resolveVersions, refuseAmbiguousId } from "./document-versions.js";
 
 const schema = z.object({
   action: z.literal("rename"),
   id: z.string(),
   newId: z.string(),
-  confirmed: z.boolean().optional(),
-  approvalToken: z.string().optional(),
+  explanation: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Why this document should move, in your own words, as you told the user. Required for a promoted document, and identical across every attempt."
+    ),
 });
 
 type Args = z.infer<typeof schema>;
 
 
-interface PendingRename {
-  oldId: string;
+/**
+ * Binds a rename to both ends of the move. `destinationOccupied` is in here so
+ * that a document appearing at the destination mid-run fails the match rather
+ * than the rename silently meaning something different.
+ */
+async function buildRenameWhat(params: {
+  reader: InstructionContext["reader"];
+  id: string;
   newId: string;
-  timestamp: number;
+}): Promise<string> {
+  const { reader, id, newId } = params;
+  const destinationOccupied = await reader.documentExists(newId);
+  return [
+    `rename: ${id}`,
+    `to: ${newId}`,
+    `destinationOccupied: ${destinationOccupied ? "yes" : "no"}`,
+  ].join("\n");
 }
 
-const pendingRenames = new Map<string, PendingRename>();
+/** `renameDocument` reports failure without always saying why. */
+function renameFailure(error: string | undefined): ToolResponse {
+  return errorResponse(`Error: ${error ?? "Unknown error"}`);
+}
+
+function refuseMissingDocument(params: { id: string; newId: string }): ToolResponse {
+  const { id } = params;
+  return errorResponse(`Document "${id}" not found (neither as draft nor promoted).` +
+    formatNextActions([{
+      action: "list",
+      description: "View all documents",
+      example: `instruction(action: "list")`,
+    }]));
+}
+
+/**
+ * Optional in the schema because a draft rename has nothing to explain; for a
+ * promoted document it is the key the run is built on.
+ */
+function refuseMissingExplanation(params: { id: string; newId: string }): ToolResponse {
+  const { id, newId } = params;
+  return errorResponse(
+    `Renaming the promoted document "${id}" needs an \`explanation\`: why it should move, in the words you used with the user.` +
+    formatNextActions([{
+      action: "rename",
+      description: "Say why, then repeat the identical call",
+      example: `instruction(action: "rename", id: "${id}", newId: "${newId}", explanation: "<why it should move>")`,
+    }]));
+}
+
+function refuseOccupiedDestination(newId: string): ToolResponse {
+  return errorResponse(`Error: Document "${newId}" already exists. Choose a different name or delete the existing document first.`);
+}
+
+/**
+ * The backlink list rides on the refusal rather than being a `confirmed` step of
+ * its own: seeing which documents get edited and being asked to explain the move
+ * are the same moment.
+ */
+function renamePreview(params: { id: string; newId: string; backlinks: { id: string }[] }): string {
+  const { id, newId, backlinks } = params;
+  return [
+    `## Renaming ${id} → ${newId}`,
+    "",
+    backlinks.length > 0
+      ? `**${backlinks.length} document(s) link to it and will be edited to point at the new id:**\n${backlinks
+          .map((doc) => `- ${doc.id}`)
+          .join("\n")}`
+      : "Nothing links to it.",
+  ].join("\n");
+}
+
+/** Only reported when there were any: an empty list would read as a failure. */
+function backlinkSection(updated: string[] | undefined): string {
+  if (updated && updated.length > 0) {
+    return `\n\n**Updated backlinks:**\n${updated.map((b) => `- ${b}`).join("\n")}`;
+  }
+  return "";
+}
 
 export class RenameHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "rename";
-  readonly help = "Rename a document (draft or promoted). Promoted renames require approval.";
+  readonly help = `Rename a document (draft or promoted).
+
+A draft rename is immediate. Renaming a promoted document rewrites every
+backlink to it, so the first attempts are refused with the list of documents
+that would be edited; repeat the identical call, with the same \`explanation\`,
+to go through.`;
   readonly schema = schema;
 
   protected async doExecute(params: {
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, newId, confirmed, approvalToken } = params.args;
+    const { id, newId, explanation } = params.args;
     const { reader } = params.context;
 
-    // P1: draft/promoted同名存在ガード
-    const draftExists = await reader.documentExists(DRAFT_PREFIX + id);
-    const promotedExists = await reader.documentExists(id);
-    if (draftExists && promotedExists) {
-      return errorResponse(`Both draft and promoted versions of "${id}" exist. Delete or promote the draft first, then retry.`);
-    }
-
-    // Draft rename - no approval needed
-    if (draftExists) {
-      return this.renameDraft({ reader, id, newId });
-    }
-
-    // Check promoted document exists
-    if (!promotedExists) {
-      return errorResponse(`Document "${id}" not found (neither as draft nor promoted).` +
-        formatNextActions([{
-          action: "list",
-          description: "View all documents",
-          example: `instruction(action: "list")`,
-        }]));
-    }
-
-    // Preview mode
-    if (!confirmed && !approvalToken) {
-      return this.showPreview({ reader, id, newId });
-    }
-
-    // Request approval
-    if (confirmed && !approvalToken) {
-      return this.requestRenameApproval({ reader, id, newId });
-    }
-
-    // Apply with token
-    if (approvalToken) {
-      return this.applyRename({ reader, id, newId, approvalToken });
-    }
-
-    return errorResponse("Unexpected state");
+    const versions = await resolveVersions({ reader, id });
+    if (versions === "ambiguous") return refuseAmbiguousId(id);
+    // A draft rename is immediate: nothing links to a draft by its plain id.
+    if (versions === "draft") return this.renameDraft({ reader, id, newId });
+    if (versions === "missing") return refuseMissingDocument({ id, newId });
+    return this.renamePromoted({ reader, id, newId, explanation });
   }
 
   private async renameDraft(params: {
@@ -97,7 +147,7 @@ export class RenameHandler extends BaseActionHandler<Args, InstructionContext> {
     });
 
     if (!result.success) {
-      return errorResponse(`Error: ${result.error ?? "Unknown error"}`);
+      return renameFailure(result.error);
     }
 
     return textResponse(
@@ -109,108 +159,49 @@ export class RenameHandler extends BaseActionHandler<Args, InstructionContext> {
     );
   }
 
-  private async showPreview(params: {
+  /**
+   * The gated path.
+   *
+   * The backlink list rides on the refusal rather than being a `confirmed`
+   * step of its own: seeing which documents get edited and being asked to
+   * explain the move are the same moment.
+   */
+  private async renamePromoted(params: {
     reader: InstructionContext["reader"];
     id: string;
     newId: string;
+    explanation: string | undefined;
   }): Promise<ToolResponse> {
-    const { reader, id, newId } = params;
-    const backlinks = await reader.findBacklinks(id);
+    const { reader, id, newId, explanation } = params;
 
-    let text = `## Rename Preview
+    if (explanation === undefined) return refuseMissingExplanation({ id, newId });
 
-**From:** ${id}
-**To:** ${newId}
-`;
-
-    if (backlinks.length > 0) {
-      text += `
-**Backlinks to update (${backlinks.length}):**
-${backlinks.map((doc) => `- ${doc.id}`).join("\n")}
-`;
+    // Checked before the run starts rather than after it passes. It is also
+    // part of the bound `what` below, so a destination that appears mid-run
+    // breaks the key instead of quietly changing what the rename means.
+    if (await reader.documentExists(newId)) {
+      return refuseOccupiedDestination(newId);
     }
 
-    return textResponse(
-      text +
-      formatNextActions([{
-        action: "rename",
-        description: "Confirm rename",
-        example: `instruction(action: "rename", id: "${id}", newId: "${newId}", confirmed: true)`,
-      }]),
-    );
-  }
-
-  private async requestRenameApproval(params: {
-    reader: InstructionContext["reader"];
-    id: string;
-    newId: string;
-  }): Promise<ToolResponse> {
-    const { reader, id, newId } = params;
     const backlinks = await reader.findBacklinks(id);
-    const requestId = `instruction::rename::${id}::${newId}`;
+    const preview = renamePreview({ id, newId, backlinks });
 
-    pendingRenames.set(requestId, {
-      oldId: id,
-      newId,
-      timestamp: Date.now(),
+    return gateMutation({
+      operation: "rename",
+      subject: `instruction::rename::${id}::${newId}`,
+      what: await buildRenameWhat({ reader, id, newId }),
+      explanation,
+      preview,
+      work: () => this.applyRename({ reader, id, newId }),
     });
-
-    const approvalResult = await requestApproval({
-      request: {
-        id: requestId,
-        operation: "Rename document",
-        description: `Rename "${id}" to "${newId}"${backlinks.length > 0 ? ` (updates ${backlinks.length} backlinks)` : ""}`,
-      },
-    });
-
-    return textResponse(
-      `# Approval Requested
-
-**Rename:** ${id} → ${newId}
-${backlinks.length > 0 ? `**Backlinks to update:** ${backlinks.length}` : ""}
-
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
-      formatNextActions([{
-        action: "rename",
-        description: "Apply with token from user",
-        example: `instruction(action: "rename", id: "${id}", newId: "${newId}", approvalToken: "<token>")`,
-      }]),
-    );
   }
 
   private async applyRename(params: {
     reader: InstructionContext["reader"];
     id: string;
     newId: string;
-    approvalToken: string;
   }): Promise<ToolResponse> {
-    const { reader, id, newId, approvalToken } = params;
-    const requestId = `instruction::rename::${id}::${newId}`;
-    const pending = pendingRenames.get(requestId);
-
-    if (!pending) {
-      return errorResponse(`No pending rename found for "${id}" → "${newId}". Please start the approval workflow again.` +
-        formatNextActions([{
-          action: "rename",
-          description: "Start rename workflow",
-          example: `instruction(action: "rename", id: "${id}", newId: "${newId}")`,
-        }]));
-    }
-
-    const validation = validateApproval({
-      requestId,
-      providedToken: approvalToken,
-    });
-
-    if (!validation.valid) {
-      return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);
-    }
-
-    // Check if destination already exists
-    const destExists = await reader.documentExists(newId);
-    if (destExists) {
-      return errorResponse(`Error: Document "${newId}" already exists. Choose a different name or delete the existing document first.`);
-    }
+    const { reader, id, newId } = params;
 
     const result = await reader.renameDocument({
       oldId: id,
@@ -218,19 +209,13 @@ ${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
       updateBacklinks: true,
     });
 
-    pendingRenames.delete(requestId);
-
     if (!result.success) {
-      return errorResponse(`Error: ${result.error ?? "Unknown error"}`);
-    }
-
-    let text = `Successfully renamed "${id}" to "${newId}".`;
-    if (result.updatedBacklinks && result.updatedBacklinks.length > 0) {
-      text += `\n\n**Updated backlinks:**\n${result.updatedBacklinks.map((b) => `- ${b}`).join("\n")}`;
+      return renameFailure(result.error);
     }
 
     return textResponse(
-      text +
+      `Successfully renamed "${id}" to "${newId}".` +
+      backlinkSection(result.updatedBacklinks) +
       formatNextActions([
         { action: "read", description: "Read the renamed document", example: `instruction(action: "read", id: "${newId}")` },
         { action: "list", description: "View all documents", example: `instruction(action: "list")` },

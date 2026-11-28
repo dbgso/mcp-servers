@@ -1,3 +1,11 @@
+---
+description: The coverage this package holds itself to, and what is excluded
+whenToUse:
+  - reading a coverage failure
+  - deciding whether a file needs tests
+  - changing a threshold
+---
+
 # Coverage Requirements
 
 Test coverage requirements for different code types.

@@ -62,9 +62,20 @@ describe("validators", () => {
       { name: "success with deep hierarchy", id: "category__sub__item", expectedSuccess: true },
       { name: "error with empty string", id: "", expectedSuccess: false, errorContains: "cannot be empty" },
       { name: "error with whitespace only", id: "   ", expectedSuccess: false, errorContains: "cannot be empty" },
-      { name: "error with spaces in id", id: "my doc", expectedSuccess: false, errorContains: "Invalid document ID" },
-      { name: "error with special characters", id: "my@doc!", expectedSuccess: false, errorContains: "Invalid document ID" },
       { name: "error with single underscore separator", id: "coding_testing", expectedSuccess: true },
+      // The rule this validator enforces is containment, not a character
+      // allowlist. Spaces, punctuation and non-ASCII names all resolve to a
+      // file inside the documents directory, and documents with such names
+      // already exist in the wild -- rejecting them would make them
+      // unwritable. What cannot be allowed is a segment that changes which
+      // directory the path lands in.
+      { name: "success with spaces in id", id: "my doc", expectedSuccess: true },
+      { name: "success with special characters", id: "my@doc!", expectedSuccess: true },
+      { name: "success with a non-ascii id", id: "設計", expectedSuccess: true },
+      { name: "error with parent traversal", id: "..__CLAUDE", expectedSuccess: false, errorContains: "Invalid document ID" },
+      { name: "error with traversal mid-path", id: "notes__..__..__escaped", expectedSuccess: false, errorContains: "Invalid document ID" },
+      { name: "error with a path separator", id: "a/b", expectedSuccess: false, errorContains: "path separator" },
+      { name: "error with a null byte", id: "a\0b", expectedSuccess: false, errorContains: "null byte" },
     ])("$name", ({ id, expectedSuccess, errorContains }) => {
       const validator = new ValidIdValidator({ id });
       const result = validator.validate();

@@ -4,7 +4,6 @@
  * This runs before each test file to set up global mocks.
  */
 
-import { vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -32,31 +31,13 @@ for (const dir of [PERSIST_DIR, PENDING_DIR, DIFF_DIR]) {
   await fs.mkdir(dir, { recursive: true }).catch(() => {});
 }
 
-// Nothing clears the approval directory here. `requestApproval` skips the file
-// entirely once VITEST is set, so no test ever writes one -- but a developer's
-// own MCP server, running on the same machine, does. Deleting it took a live
-// pending approval away from a session that had nothing to do with the tests.
-
-// Mock node-notifier to prevent desktop notifications
-vi.mock("node-notifier", () => ({
-  default: {
-    notify: vi.fn(),
-  },
-  notify: vi.fn(),
-}));
-
-// Global mock for mcp-shared to prevent real notifications
-vi.mock("mcp-shared/approval", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("mcp-shared/approval")>();
-  return {
-    ...actual,
-    requestApproval: vi.fn().mockResolvedValue({
-      token: "mock-token-global",
-      fallbackPath: "/tmp/mock-pending.txt",
-    }),
-    validateApproval: vi.fn().mockReturnValue({ valid: true }),
-    resendApprovalNotification: vi.fn().mockReturnValue(true),
-    getApprovalRequestedMessage: vi.fn().mockReturnValue("Approval requested (mocked)."),
-    getApprovalRejectionMessage: vi.fn().mockReturnValue("Approval rejected (mocked)."),
-  };
-});
+// Nothing in this package requests an approval any more: every gated mutation
+// goes through the deliberation gate, which is process memory and needs no
+// directory, no notifier and no token. What used to live here -- a node-notifier
+// mock to stop real desktop notifications, spies over `requestApproval` /
+// `validateApproval`, and `MCP_APPROVAL_TEST_TOKEN` so tests could know the
+// token the gate minted -- has no subject left.
+//
+// Tests that exercise a gate call `resetMutationGatesForTesting()` instead: a
+// gate outlives a single case, so a run opened by one test would otherwise let
+// the next one through on its first attempt.

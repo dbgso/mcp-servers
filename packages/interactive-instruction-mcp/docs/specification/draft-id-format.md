@@ -1,65 +1,55 @@
-# Draft ID Format Specification
+---
+description: What a document id may contain, and how it maps to a path
+whenToUse:
+  - validating or generating an id
+  - debugging a path that resolved wrongly
+  - working with the draft prefix
+---
 
-This document defines the format rules for draft IDs used in the interactive-instruction-mcp package.
+# Document ID Format Specification
 
-## ID Format Rules
+An id is how every action names a document, and it is also a path fragment --
+which is why it is validated rather than trusted.
 
-Draft IDs must follow these rules:
+## Rules
 
-| Rule | Description | Valid | Invalid |
-|------|-------------|-------|---------|
-| Characters | Alphanumeric, hyphens, underscores only | `my-draft_01` | `my draft!` |
-| Case | Lowercase recommended | `api-design` | `API-Design` |
-| Length | Non-empty, reasonable length | `overview` | (empty string) |
-| Start/End | Should start/end with alphanumeric | `my-draft` | `-draft-` |
+| Rule | Valid | Invalid |
+|------|-------|---------|
+| Alphanumerics, hyphens, underscores | `my-doc_01` | `my doc!` |
+| Non-empty | `overview` | `` |
+| No path separator | `api__v2` | `api/v2` |
+| No traversal | `notes` | `..__home__.claude__CLAUDE` |
 
-## Hierarchy Separator
+The last row is the reason this is a specification and not a style guide. An id
+resolves to a file path, so one containing `..` reached outside the documents
+directory entirely -- and since nothing about `update` names the file it will
+write, that was an undisclosed overwrite of any `.md` file the process could
+reach.
 
-The double underscore (`__`) is used as a hierarchy separator. It maps directly to `/` in the file path.
+Lowercase is a convention, not a rule.
 
-| ID | File Path |
-|----|-----------|
+## Hierarchy
+
+`__` maps to a directory separator:
+
+| Id | Path |
+|----|------|
 | `overview` | `overview.md` |
 | `specification__draft-workflow` | `specification/draft-workflow.md` |
-| `design__approval-flow` | `design/approval-flow.md` |
 | `api__v2__endpoints` | `api/v2/endpoints.md` |
 
-## Reserved Prefixes
+The separator is segment-aware everywhere it is tested: `_mcp_draftsy__topic` is
+an ordinary document that happens to begin with the same letters as the internal
+directory.
 
-| Prefix | Purpose |
-|--------|---------|
-| `_mcp_drafts__` | Auto-added for draft files. Drafts are stored in `docs/_mcp_drafts/` directory. |
+## The draft prefix
 
-When you create a draft with ID `specification__draft-id-format`, the file is stored at:
-```
-docs/_mcp_drafts/specification/draft-id-format.md
-```
+A draft is stored under `_mcp_drafts__{id}`, which is `_mcp_drafts/{id}.md` on
+disk. **That prefix is storage, not a name.** Every action takes the plain id,
+`relatedDocs` holds plain ids, and `lint` prints the plain id with `(draft)`
+after it. The prefixed form is accepted where a caller might plausibly paste it
+back, and produces the same answer.
 
-## File Extension
+## The extension
 
-The `.md` extension is always auto-added. Do not include it in the ID.
-
-| Input ID | Resulting File |
-|----------|----------------|
-| `overview` | `overview.md` |
-| `overview.md` | `overview.md.md` (incorrect) |
-
-## Examples
-
-### Simple ID
-```
-ID: overview
-Path: docs/_mcp_drafts/overview.md
-```
-
-### Nested ID
-```
-ID: specification__draft-workflow
-Path: docs/_mcp_drafts/specification/draft-workflow.md
-```
-
-### Deeply Nested ID
-```
-ID: design__patterns__approval-flow
-Path: docs/_mcp_drafts/design/patterns/approval-flow.md
-```
+`.md` is added on write and must not be part of the id.

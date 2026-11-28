@@ -2,9 +2,49 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { BaseToolHandler } from "./base-handler.js";
 import type { Operation, OperationRegistry } from "./operation.js";
+import type { ApprovalStrategy } from "../utils/approval/strategy.js";
 import { errorResponse } from "../utils/mcp-response.js";
 import { contentHash } from "../utils/content-hash.js";
 import type { ToolResponse } from "./types.js";
+
+function formatCategorySection<TCtx>(params: {
+  category: string;
+  ops: Operation<unknown, TCtx>[];
+}): string[] {
+  const { category, ops } = params;
+  return [`## ${category}`, ...ops.map((op) => `- **${op.id}** — ${op.summary}`), ""];
+}
+
+/**
+ * The listing is what a caller needs to recover from a bad id, so the available
+ * ids go in the error rather than only in the describe tool.
+ */
+function unknownOperationError<TCtx>(params: {
+  registry: OperationRegistry<TCtx>;
+  operation: string;
+}): ToolResponse {
+  const { registry, operation } = params;
+  const available = registry.all().map((o) => o.id).join(", ");
+  return errorResponse(`Unknown operation: "${operation}".\nAvailable: ${available}`);
+}
+
+function invalidParamsError(params: {
+  operation: string;
+  error: z.ZodError;
+  describeToolName: string;
+}): ToolResponse {
+  const { operation, error, describeToolName } = params;
+  const issues = error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`).join("\n");
+  return errorResponse(
+    `Invalid params for "${operation}":\n${issues}\n\n` +
+      `Use \`${describeToolName}({ operation: "${operation}" })\` for the schema.`,
+  );
+}
+
+/** The schema defaults `params` to `{}`; this covers a caller that bypasses it. */
+function operationParams(args: { params?: Record<string, unknown> }): Record<string, unknown> {
+  return args.params ?? {};
+}
 
 /**
  * Build the markdown listing of operations grouped by category.
@@ -29,11 +69,7 @@ function formatOperationList<TCtx>(params: {
   const grouped = params.registry.byCategory();
   const categoryNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
   for (const cat of categoryNames) {
-    lines.push(`## ${cat}`);
-    for (const op of grouped[cat]) {
-      lines.push(`- **${op.id}** — ${op.summary}`);
-    }
-    lines.push("");
+    lines.push(...formatCategorySection({ category: cat, ops: grouped[cat] }));
   }
   return lines.join("\n");
 }
@@ -108,10 +144,7 @@ class DescribeHandler<TCtx> extends BaseToolHandler<{ operation?: string }> {
     if (args.operation) {
       const op = this.registry.get(args.operation);
       if (!op) {
-        const available = this.registry.all().map((o) => o.id).join(", ");
-        return errorResponse(
-          `Unknown operation: "${args.operation}".\nAvailable: ${available}`,
-        );
+        return unknownOperationError({ registry: this.registry, operation: args.operation });
       }
       return formatOperationDetail({ op, executeToolName: this.executeToolName });
     }
@@ -195,34 +228,45 @@ class ExecuteHandler<TCtx> extends BaseToolHandler<{
   }): Promise<ToolResponse> {
     const op = this.registry.get(args.operation);
     if (!op) {
-      const available = this.registry.all().map((o) => o.id).join(", ");
-      return errorResponse(
-        `Unknown operation: "${args.operation}".\nAvailable: ${available}`,
-      );
+      return unknownOperationError({ registry: this.registry, operation: args.operation });
     }
 
-    const parsed = op.argsSchema.safeParse(args.params ?? {});
+    const opParams = operationParams(args);
+    const parsed = op.argsSchema.safeParse(opParams);
     if (!parsed.success) {
-      const issues = parsed.error.issues
-        .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
-        .join("\n");
-      return errorResponse(
-        `Invalid params for "${args.operation}":\n${issues}\n\n` +
-          `Use \`${this.describeToolName}({ operation: "${args.operation}" })\` for the schema.`,
-      );
+      return invalidParamsError({
+        operation: args.operation,
+        error: parsed.error,
+        describeToolName: this.describeToolName,
+      });
     }
 
-    const ctx = await this.buildContext(args.params ?? {});
+    const ctx = await this.buildContext(opParams);
+    return this.runGated({ op, args: parsed.data, ctx, execArgs: args });
+  }
+
+  /**
+   * The gate and the call belong together: an approval-gated op must not reach
+   * `execute` on the same pass that asks for approval.
+   */
+  private async runGated(params: {
+    op: Operation<unknown, TCtx>;
+    args: unknown;
+    ctx: TCtx;
+    execArgs: { approvalToken?: string; why?: string };
+  }): Promise<ToolResponse> {
+    const { op, args, ctx, execArgs } = params;
 
     // Approval gate: an approval-gated op cannot run until a human approves the
     // exact, tool-computed change. The approval is content-bound to `what`, so a
     // param change after approval invalidates it and re-prompts.
-    if (op.approval !== undefined) {
-      const gate = await this.gateApproval({ op, args: parsed.data, ctx, execArgs: args });
+    const strategy = op.approval;
+    if (strategy !== undefined) {
+      const gate = await this.gateApproval({ op, strategy, args, ctx, execArgs });
       if (gate) return gate; // not yet approved → instructions returned to caller
     }
 
-    return op.execute({ args: parsed.data, ctx });
+    return op.execute({ args, ctx });
   }
 
   /**
@@ -231,13 +275,12 @@ class ExecuteHandler<TCtx> extends BaseToolHandler<{
    */
   private async gateApproval(params: {
     op: Operation<unknown, TCtx>;
+    strategy: ApprovalStrategy;
     args: unknown;
     ctx: TCtx;
     execArgs: { approvalToken?: string; why?: string };
   }): Promise<ToolResponse | null> {
-    const { op, args, ctx, execArgs } = params;
-    const strategy = op.approval;
-    if (strategy === undefined) return null; // not gated (defensive; caller pre-checks)
+    const { op, strategy, args, ctx, execArgs } = params;
     if (!op.preview) {
       return errorResponse(
         `Operation "${op.id}" is approval-gated but defines no preview(); ` +
@@ -255,12 +298,28 @@ class ExecuteHandler<TCtx> extends BaseToolHandler<{
     });
     if (validation.valid) return null;
 
+    return this.requestApproval({ op, strategy, requestId, what, why: execArgs.why });
+  }
+
+  /**
+   * Asks for approval and returns the instructions for retrying. The retry line
+   * has to name the token for a token strategy and must not for the others, or
+   * the caller is told to pass something the strategy will reject.
+   */
+  private async requestApproval(params: {
+    op: Operation<unknown, TCtx>;
+    strategy: ApprovalStrategy;
+    requestId: string;
+    what: string;
+    why?: string;
+  }): Promise<ToolResponse> {
+    const { op, strategy, requestId, what, why } = params;
     const presented = await strategy.present({
       id: requestId,
       operation: `${this.name} ${op.id}`,
       description: op.summary,
       what,
-      why: execArgs.why ?? op.summary,
+      why: why ?? op.summary,
     });
 
     const retryHint = strategy.kind === "token" ? `, approvalToken: "<token>"` : ``;
@@ -301,6 +360,26 @@ export interface CreateDescribeExecuteOptions<TCtx> {
   preamble?: string;
 }
 
+function operationsListTitle<TCtx>(opts: CreateDescribeExecuteOptions<TCtx>): string {
+  const titleCase = opts.prefix.charAt(0).toUpperCase() + opts.prefix.slice(1);
+  return opts.listTitle ?? `${titleCase} Operations`;
+}
+
+/** Defaults so a caller only writes the prose it actually wants to change. */
+function toolDescriptions<TCtx>(
+  opts: CreateDescribeExecuteOptions<TCtx>,
+): { describe: string; execute: string } {
+  const { prefix } = opts;
+  return {
+    describe:
+      opts.describeDescription ??
+      `List/inspect ${prefix} operations. Call without args for the full listing, or pass operation=<id> for one op's schema.`,
+    execute:
+      opts.executeDescription ??
+      `Execute a ${prefix} operation. Use ${prefix}_describe to discover ops and parameters.`,
+  };
+}
+
 /**
  * Build a describe/execute MCP tool pair backed by an OperationRegistry.
  *
@@ -312,24 +391,21 @@ export function createDescribeExecuteHandlers<TCtx>(
 ): [BaseToolHandler<{ operation?: string }>, BaseToolHandler<{ operation: string; params?: Record<string, unknown> }>] {
   const describeName = `${opts.prefix}_describe`;
   const executeName = `${opts.prefix}_execute`;
-  const titleCase = opts.prefix.charAt(0).toUpperCase() + opts.prefix.slice(1);
-  const listTitle = opts.listTitle ?? `${titleCase} Operations`;
+  const descriptions = toolDescriptions(opts);
 
   const describe = new DescribeHandler(
     opts.registry,
     describeName,
-    opts.describeDescription ??
-      `List/inspect ${opts.prefix} operations. Call without args for the full listing, or pass operation=<id> for one op's schema.`,
+    descriptions.describe,
     executeName,
-    listTitle,
+    operationsListTitle(opts),
     opts.preamble,
   );
 
   const execute = new ExecuteHandler(
     opts.registry,
     executeName,
-    opts.executeDescription ??
-      `Execute a ${opts.prefix} operation. Use ${describeName} to discover ops and parameters.`,
+    descriptions.execute,
     opts.buildContext,
     describeName,
   );

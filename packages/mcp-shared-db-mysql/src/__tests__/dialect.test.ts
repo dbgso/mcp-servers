@@ -24,33 +24,29 @@ describe("mysqlDialect.jsonPathEquals", () => {
     // value MUST go through params.add() and appear in the build() output as
     // a separately-bound value. A regression that interpolates path.raw
     // straight into the SQL would break this assertion.
-    const params = new ParamBuilderImpl(mysqlDialect);
-    const valuePh = params.add("z");
     const fragment = mysqlDialect.jsonPathEquals({
-      columnSql: "`meta`",
+      columnSql: mysqlDialect.quoteIdent("meta"),
       path: { raw: "$.foo.bar", segments: ["foo", "bar"] },
-      valuePlaceholder: valuePh,
-      params,
+      value: "z",
     });
-    expect(fragment).toBe(
-      "JSON_UNQUOTE(JSON_EXTRACT(`meta`, ?)) = ?",
-    );
-    expect(params.build()).toEqual(["z", "$.foo.bar"]);
+    expect(fragment.sql).toEqual([
+      "JSON_UNQUOTE(JSON_EXTRACT(`meta`, ",
+      ")) = ",
+      "",
+    ]);
+    // The path is a value, not text spliced into the SQL. Path first, then
+    // value: `?` binds by position, and the builder places one placeholder per
+    // seam, so this list is the mapping.
+    expect(fragment.values).toEqual(["$.foo.bar", "z"]);
   });
 
   it("binds the root path '$' too", () => {
-    const params = new ParamBuilderImpl(mysqlDialect);
-    const valuePh = params.add(1);
     const fragment = mysqlDialect.jsonPathEquals({
-      columnSql: "`meta`",
+      columnSql: mysqlDialect.quoteIdent("meta"),
       path: { raw: "$", segments: [] },
-      valuePlaceholder: valuePh,
-      params,
+      value: 1,
     });
-    expect(fragment).toBe(
-      "JSON_UNQUOTE(JSON_EXTRACT(`meta`, ?)) = ?",
-    );
-    expect(params.build()).toEqual([1, "$"]);
+    expect(fragment.values).toEqual(["$", 1]);
   });
 });
 
@@ -419,5 +415,146 @@ describe("mysqlDialect.parseExplainResult", () => {
     ];
     const result = mysqlDialect.parseExplainResult(rows);
     expect(result.estimatedRows).toBeNull();
+  });
+  it("skips a nested_loop entry that carries no table", () => {
+    // MySQL puts other operation nodes in `nested_loop` beside the tables.
+    // Reading one as a scan leaf would summarise the plan as a scan of
+    // nothing.
+    const rows = [
+      {
+        EXPLAIN: JSON.stringify({
+          query_block: {
+            nested_loop: [
+              { duplicates_removal: { using_temporary_table: true } },
+              { table: { table_name: "t", access_type: "ALL", rows_examined_per_scan: 10 } },
+            ],
+          },
+        }),
+      },
+    ];
+
+    const result = mysqlDialect.parseExplainResult(rows);
+
+    expect(result.estimatedRows).toBe(10);
+    expect(result.planSummary).toBe("ALL on t");
+  });
+
+  it("skips a table-less nested_loop entry inside a wrapper too", () => {
+    const rows = [
+      {
+        EXPLAIN: JSON.stringify({
+          query_block: {
+            ordering_operation: {
+              nested_loop: [
+                { grouping_operation: { using_temporary_table: false } },
+                { table: { table_name: "t", access_type: "ref", rows_examined_per_scan: 4 } },
+              ],
+            },
+          },
+        }),
+      },
+    ];
+
+    const result = mysqlDialect.parseExplainResult(rows);
+
+    expect(result.planSummary).toBe("ref on t");
+  });
+
+  it("descends a union specification that carries no query_block", () => {
+    const rows = [
+      {
+        EXPLAIN: JSON.stringify({
+          query_block: {
+            union_result: {
+              query_specifications: [
+                {},
+                { query_block: { table: { table_name: "t", rows_examined_per_scan: 7 } } },
+              ],
+            },
+          },
+        }),
+      },
+    ];
+
+    const result = mysqlDialect.parseExplainResult(rows);
+
+    expect(result.estimatedRows).toBe(7);
+  });
+
+  it("summarises a leaf with no table name at all", () => {
+    // A derived table or a materialised subquery has an access type and rows
+    // but no name to report.
+    const rows = [
+      {
+        EXPLAIN: JSON.stringify({
+          query_block: { table: { access_type: "ALL", rows_examined_per_scan: 5 } },
+        }),
+      },
+    ];
+
+    const result = mysqlDialect.parseExplainResult(rows);
+
+    expect(result.planSummary).toBe("ALL");
+  });
+
+  it("prefers a leaf with a row estimate over one without", () => {
+    // A leaf with no estimate is not the worst case -- treating an unknown as
+    // the largest scan would point the reader at the wrong table.
+    const rows = [
+      {
+        EXPLAIN: JSON.stringify({
+          query_block: {
+            nested_loop: [
+              { table: { table_name: "unknown", access_type: "ALL" } },
+              { table: { table_name: "known", access_type: "ALL", rows_examined_per_scan: 2 } },
+            ],
+          },
+        }),
+      },
+    ];
+
+    const result = mysqlDialect.parseExplainResult(rows);
+
+    expect(result.planSummary).toBe("ALL on known");
+    expect(result.estimatedRows).toBe(2);
+  });
+  it("keeps the first leaf when a later one scans fewer rows", () => {
+    const rows = [
+      {
+        EXPLAIN: JSON.stringify({
+          query_block: {
+            nested_loop: [
+              { table: { table_name: "big", access_type: "ALL", rows_examined_per_scan: 900 } },
+              { table: { table_name: "small", access_type: "ref", rows_examined_per_scan: 3 } },
+            ],
+          },
+        }),
+      },
+    ];
+
+    const result = mysqlDialect.parseExplainResult(rows);
+
+    expect(result.planSummary).toBe("ALL on big");
+    expect(result.estimatedRows).toBe(900);
+  });
+
+  it("reports no estimate when no leaf has one", () => {
+    const rows = [
+      {
+        EXPLAIN: JSON.stringify({
+          query_block: {
+            nested_loop: [
+              { table: { table_name: "a", access_type: "ALL" } },
+              { table: { table_name: "b", access_type: "ALL" } },
+            ],
+          },
+        }),
+      },
+    ];
+
+    const result = mysqlDialect.parseExplainResult(rows);
+
+    expect(result.estimatedRows).toBeNull();
+    expect(result.planSummary).toBe("ALL on a");
   });
 });

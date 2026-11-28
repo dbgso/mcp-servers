@@ -773,7 +773,7 @@ describe("explain_sql operation", () => {
     { label: "type mismatch (number)", sql: 123 },
     { label: "missing", sql: undefined },
   ])("rejects $label for sql arg", async ({ sql }) => {
-    const { ctx, fake } = buildCtx();
+    const { fake } = buildCtx();
     // The op uses Zod for arg validation — empty / missing / wrong-type
     // should never reach the dataSource. We invoke through `safeParse` to
     // surface the validation error path here.

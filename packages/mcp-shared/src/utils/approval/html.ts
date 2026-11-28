@@ -59,20 +59,35 @@ function getLiveSession(id: string): HtmlSession | undefined {
   return session;
 }
 
+/** A `@@` line opens a hunk — except the first one, which has nothing to close. */
+function startsNewHunk(params: { line: string; current: string[] }): boolean {
+  const { line, current } = params;
+  return line.startsWith("@@") && current.length > 0;
+}
+
+/** Flush the hunk still being accumulated, falling back to the whole body if there was no `@@` at all. */
+function withTrailingHunk(params: {
+  hunks: string[];
+  current: string[];
+  body: string;
+}): string[] {
+  const { hunks, current, body } = params;
+  if (current.length > 0) hunks.push(current.join("\n"));
+  return hunks.length > 0 ? hunks : [body];
+}
+
 /** Split a unified-diff-ish body into hunks. Non-diff bodies become one hunk. */
 export function splitHunks(body: string): string[] {
-  const lines = body.split("\n");
   const hunks: string[] = [];
   let current: string[] = [];
-  for (const line of lines) {
-    if (line.startsWith("@@") && current.length > 0) {
+  for (const line of body.split("\n")) {
+    if (startsNewHunk({ line, current })) {
       hunks.push(current.join("\n"));
       current = [];
     }
     current.push(line);
   }
-  if (current.length > 0) hunks.push(current.join("\n"));
-  return hunks.length > 0 ? hunks : [body];
+  return withTrailingHunk({ hunks, current, body });
 }
 
 /** The body a human reviews. HTML approval requires a tool-computed `what`. */
@@ -117,6 +132,38 @@ export interface HtmlSubmissionResult {
 }
 
 /**
+ * Every hunk must be ticked. Partial acknowledgment is exactly the
+ * rubber-stamping this screen exists to make expensive.
+ */
+function allHunksAcknowledged(params: {
+  session: HtmlSession;
+  ackedHunkIndexes: number[];
+}): boolean {
+  const { session, ackedHunkIndexes } = params;
+  const acked = new Set(ackedHunkIndexes);
+  return session.hunks.every((_, i) => acked.has(i));
+}
+
+/** Why this submission is refused, or `undefined` to record the approval. */
+function submissionRefusal(params: {
+  session: HtmlSession;
+  sub: HtmlSubmission;
+}): HtmlSubmissionResult["reason"] {
+  const { session, sub } = params;
+  if (!allHunksAcknowledged({ session, ackedHunkIndexes: sub.ackedHunkIndexes })) {
+    return "hunks_not_acknowledged";
+  }
+
+  const validation = validateApproval({
+    requestId: sub.requestId,
+    providedToken: sub.token,
+    currentWhat: reviewBody(session.request),
+  });
+  if (validation.valid) return undefined;
+  return validation.reason;
+}
+
+/**
  * Process a human's approval submission from the HTML page. Requires every hunk
  * acknowledged and a valid, content-bound token. On success the session is
  * marked approved and bound to the reviewed body's hash.
@@ -125,20 +172,11 @@ export function processHtmlApproval(sub: HtmlSubmission): HtmlSubmissionResult {
   const session = getLiveSession(sub.requestId);
   if (!session) return { ok: false, reason: "not_found" };
 
-  const acked = new Set(sub.ackedHunkIndexes);
-  const allAcked = session.hunks.every((_, i) => acked.has(i));
-  if (!allAcked) return { ok: false, reason: "hunks_not_acknowledged" };
-
-  const body = reviewBody(session.request);
-  const validation = validateApproval({
-    requestId: sub.requestId,
-    providedToken: sub.token,
-    currentWhat: body,
-  });
-  if (!validation.valid) return { ok: false, reason: validation.reason };
+  const refusal = submissionRefusal({ session, sub });
+  if (refusal !== undefined) return { ok: false, reason: refusal };
 
   session.approved = true;
-  session.approvedHash = contentHash(body);
+  session.approvedHash = contentHash(reviewBody(session.request));
   return { ok: true };
 }
 
@@ -196,50 +234,97 @@ function parseFormBody(raw: string): { token?: string; ack: number[] } {
   return { token, ack };
 }
 
-// eslint-disable-next-line custom/single-params-object -- Node's request handler signature is fixed as (req, res)
-function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
-  const url = new URL(req.url ?? "/", "http://127.0.0.1");
-  const match = /^\/approve\/([^/]+)$/.exec(url.pathname);
-  if (!match) {
-    res.writeHead(404).end("not found");
-    return;
-  }
-  const id = decodeURIComponent(match[1]);
-  const session = getLiveSession(id);
-  if (!session) {
-    res.writeHead(404).end("unknown approval");
-    return;
-  }
+/** The approval this URL addresses, or `undefined` for any other path. */
+function approvalIdOf(url: string | undefined): string | undefined {
+  const { pathname } = new URL(url ?? "/", "http://127.0.0.1");
+  const match = /^\/approve\/([^/]+)$/.exec(pathname);
+  if (!match) return undefined;
+  return decodeURIComponent(match[1]);
+}
+
+/**
+ * Collect the approval form and answer it.
+ *
+ * Read as it arrives rather than buffered wholesale, so an oversized body is
+ * refused while it is still arriving instead of after it has all been held.
+ */
+function readApprovalSubmission(params: {
+  req: http.IncomingMessage;
+  res: http.ServerResponse;
+  id: string;
+}): void {
+  const { req, res, id } = params;
+  let raw = "";
+  let tooLarge = false;
+  req.on("data", (c) => {
+    if (tooLarge) return;
+    raw += c;
+    if (Buffer.byteLength(raw) > MAX_BODY_BYTES) {
+      tooLarge = true;
+      res.writeHead(413).end("payload too large");
+      req.destroy();
+    }
+  });
+  req.on("end", () => {
+    if (tooLarge) return;
+    const { token, ack } = parseFormBody(raw);
+    const result = processHtmlApproval({ requestId: id, token, ackedHunkIndexes: ack });
+    if (result.ok) {
+      res.writeHead(200, { "content-type": "text/html" }).end("<p>Approved. You may close this tab.</p>");
+    } else {
+      res.writeHead(400, { "content-type": "text/html" }).end(`<p>Rejected: ${result.reason}</p>`);
+    }
+  });
+}
+
+/** Serve the review screen, or take a submission for it. */
+function serveApproval(params: {
+  req: http.IncomingMessage;
+  res: http.ServerResponse;
+  id: string;
+  session: HtmlSession;
+}): void {
+  const { req, res, id, session } = params;
   if (req.method === "GET") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end(renderApprovalPage(session));
     return;
   }
   if (req.method === "POST") {
-    let raw = "";
-    let tooLarge = false;
-    req.on("data", (c) => {
-      if (tooLarge) return;
-      raw += c;
-      if (Buffer.byteLength(raw) > MAX_BODY_BYTES) {
-        tooLarge = true;
-        res.writeHead(413).end("payload too large");
-        req.destroy();
-      }
-    });
-    req.on("end", () => {
-      if (tooLarge) return;
-      const { token, ack } = parseFormBody(raw);
-      const result = processHtmlApproval({ requestId: id, token, ackedHunkIndexes: ack });
-      if (result.ok) {
-        res.writeHead(200, { "content-type": "text/html" }).end("<p>Approved. You may close this tab.</p>");
-      } else {
-        res.writeHead(400, { "content-type": "text/html" }).end(`<p>Rejected: ${result.reason}</p>`);
-      }
-    });
+    readApprovalSubmission({ req, res, id });
     return;
   }
   res.writeHead(405).end("method not allowed");
+}
+
+// eslint-disable-next-line custom/single-params-object -- Node's request handler signature is fixed as (req, res)
+function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const id = approvalIdOf(req.url);
+  if (id === undefined) {
+    res.writeHead(404).end("not found");
+    return;
+  }
+  const session = getLiveSession(id);
+  if (!session) {
+    res.writeHead(404).end("unknown approval");
+    return;
+  }
+  serveApproval({ req, res, id, session });
+}
+
+/** A server is only usable once it exists *and* has had its port resolved into a URL. */
+function runningBaseUrl(): string | undefined {
+  if (server === null || baseUrl === "") return undefined;
+  return baseUrl;
+}
+
+async function startHtmlServer(): Promise<string> {
+  const created = http.createServer(handleRequest);
+  await new Promise<void>((resolve) => created.listen(0, "127.0.0.1", resolve));
+  server = created;
+  const addr = created.address() as AddressInfo;
+  baseUrl = `http://127.0.0.1:${addr.port}`;
+  return baseUrl;
 }
 
 /**
@@ -248,15 +333,9 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
  * server is ever created.
  */
 export async function ensureHtmlServer(): Promise<string> {
-  if (server && baseUrl) return baseUrl;
-  starting ??= (async () => {
-    const created = http.createServer(handleRequest);
-    await new Promise<void>((resolve) => created.listen(0, "127.0.0.1", resolve));
-    server = created;
-    const addr = created.address() as AddressInfo;
-    baseUrl = `http://127.0.0.1:${addr.port}`;
-    return baseUrl;
-  })();
+  const running = runningBaseUrl();
+  if (running !== undefined) return running;
+  starting ??= startHtmlServer();
   return starting;
 }
 
@@ -268,6 +347,25 @@ export async function stopHtmlServer(): Promise<void> {
   starting = null;
   if (!active) return;
   await new Promise<void>((resolve) => active.close(() => resolve()));
+}
+
+/** A session a human actually finished reviewing. An unfinished one authorises nothing. */
+function approvedSession(requestId: string): HtmlSession | undefined {
+  const session = getLiveSession(requestId);
+  if (session === undefined || !session.approved) return undefined;
+  return session;
+}
+
+/**
+ * Whether the change now being executed is byte-identical to the body that was
+ * ticked through. Nothing to compare against is a mismatch, not a pass.
+ */
+function matchesApprovedBody(params: {
+  session: HtmlSession;
+  currentWhat: string | undefined;
+}): boolean {
+  const { session, currentWhat } = params;
+  return currentWhat !== undefined && contentHash(currentWhat) === session.approvedHash;
 }
 
 export class HtmlApprovalStrategy implements ApprovalStrategy {
@@ -296,14 +394,11 @@ notification. The token is not available by any other means.`,
   }
 
   validate(params: { requestId: string; currentWhat?: string }): ApprovalResult {
-    const session = getLiveSession(params.requestId);
-    if (!session || !session.approved) {
+    const session = approvedSession(params.requestId);
+    if (session === undefined) {
       return { valid: false, reason: "not_found" };
     }
-    if (
-      params.currentWhat === undefined ||
-      contentHash(params.currentWhat) !== session.approvedHash
-    ) {
+    if (!matchesApprovedBody({ session, currentWhat: params.currentWhat })) {
       return { valid: false, reason: "content_mismatch" };
     }
     sessions.delete(params.requestId);

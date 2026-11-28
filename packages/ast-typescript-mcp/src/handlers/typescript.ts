@@ -1006,9 +1006,18 @@ export class TypeScriptHandler {
 
   private gitGrep({ gitRoot, symbolName }: { gitRoot: string; symbolName: string }): string[] {
     try {
-      // Search for the symbol in TypeScript files
+      // Search for the symbol in TypeScript files.
+      //
+      // `-w` matches the identifier as a whole word. Without it, looking up a
+      // short name means loading every file that merely contains the letters:
+      // `add` matched 190 files in this repository against 103 for the word,
+      // and each candidate is fully parsed afterwards. It cannot lose a
+      // reference either -- an occurrence of the identifier `add` is always
+      // delimited by characters git counts as non-word, and grep is only
+      // choosing candidates here; whether each one is really a reference is
+      // decided by the symbol resolution below.
       const result = execSync(
-        `git grep -l --untracked "${symbolName}" -- "*.ts" "*.tsx" "*.mts" "*.cts" 2>/dev/null || true`,
+        `git grep -lw --untracked "${symbolName}" -- "*.ts" "*.tsx" "*.mts" "*.cts" 2>/dev/null || true`,
         {
           cwd: gitRoot,
           encoding: "utf-8",

@@ -15,11 +15,17 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # v6 rather than v5: both run on node24, and v6 is the one that knows pnpm 11,
+    # which is what `packageManager` in the root package.json asks for.
     - name: Setup pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@v6
 
+    # `cache: pnpm` stays explicit. v5 caches on its own when `packageManager` is
+    # present, which this repository has, so the automatic behaviour would cover
+    # it -- but saying it here is what makes the ordering above load-bearing on
+    # purpose: pnpm has to exist before setup-node resolves the cache path.
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: ${{ inputs.node-version }}
         cache: pnpm

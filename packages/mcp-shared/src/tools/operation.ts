@@ -60,6 +60,11 @@ export interface Operation<TArgs = unknown, TCtx = unknown> {
   execute: (params: OperationHandlerInput<TArgs, TCtx>) => Promise<ToolResponse>;
 }
 
+/** An op that names no category still has to appear in the listing somewhere. */
+function categoryOf<TCtx>(op: Operation<unknown, TCtx>): string {
+  return op.category ?? "Other";
+}
+
 /**
  * Registry of operations keyed by id. Generic over the shared context type
  * so callers get type-safe access to ctx within their operation bodies.
@@ -86,7 +91,7 @@ export class OperationRegistry<TCtx = unknown> {
   byCategory(): Record<string, Operation<unknown, TCtx>[]> {
     const grouped: Record<string, Operation<unknown, TCtx>[]> = {};
     for (const op of this.operations.values()) {
-      const cat = op.category ?? "Other";
+      const cat = categoryOf(op);
       if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push(op);
     }

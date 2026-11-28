@@ -1,3 +1,11 @@
+---
+description: "How tests are written here: fixtures, naming, and what a test should assert"
+whenToUse:
+  - writing a test
+  - reviewing one
+  - deciding between a unit test and a flow
+---
+
 # Test Patterns
 
 Guidelines for writing consistent and maintainable tests.

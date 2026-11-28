@@ -1,48 +1,63 @@
 import { z } from "zod";
-import { BaseActionHandler, type ToolResponse } from "mcp-shared";
-import { requestApproval, validateApproval, getApprovalRequestedMessage, getApprovalRejectionMessage } from "mcp-shared/approval";
+import { BaseActionHandler, looseArray, type ToolResponse } from "mcp-shared";
 import type { InstructionContext } from "../types.js";
-import { formatNextActions } from "../types.js";
-import {
-  parseFrontmatter,
-  updateFrontmatter,
-} from "../../../utils/frontmatter-parser.js";
-import * as fs from "node:fs/promises";
-import { errorResponse } from "../types.js";
+import { errorResponse, formatNextActions } from "../types.js";
+import { parseFrontmatter } from "../../../utils/frontmatter-parser.js";
 import {
   textResponse,
-  findInvalidDocs,
   calculateNewRelatedDocs,
-  pendingChanges,
+  deliberateLinkChange,
+  loadLinkTarget,
+  refuseMissingDocument,
+  formatRelatedDocs,
+  reportNoChange,
+  writeRelatedDocs,
 } from "./link-shared.js";
 
 const schema = z.object({
   action: z.literal("link_remove"),
   id: z.string().describe("Document ID to remove links from"),
-  relatedDocs: z.array(z.string()).describe("Document IDs to remove from related"),
-  confirmed: z.boolean().optional(),
-  approvalToken: z.string().optional(),
+  relatedDocs: looseArray(z.array(z.string()).describe("Document IDs to remove from related")),
+  explanation: z
+    .string()
+    .min(1)
+    .describe(
+      "What removing these links means and why, in your own words, as you described it to the user. Required, and it must be identical across both attempts.",
+    ),
 });
 
 type Args = z.infer<typeof schema>;
 
 export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContext> {
   readonly action = "link_remove";
-  readonly help = "Remove relatedDocs links from a document's frontmatter.";
+  readonly help = "Remove relatedDocs links from a document's frontmatter. Needs `explanation`, and the identical call repeated.";
   readonly schema = schema;
 
   protected async doExecute(params: {
     args: Args;
     context: InstructionContext;
   }): Promise<ToolResponse> {
-    const { id, relatedDocs, confirmed, approvalToken } = params.args;
+    const { id, relatedDocs, explanation } = params.args;
     const { reader } = params.context;
 
-    // Check if document exists
-    const content = await reader.getDocumentContent(id);
-    if (content === null) {
-      return errorResponse(`Error: Document "${id}" not found.`);
+    const target = await loadLinkTarget({ reader, id });
+    if (target === null) {
+      return refuseMissingDocument(id);
     }
+
+    return this.removeLinks({ reader, id, relatedDocs, explanation, target });
+  }
+
+  /** The change itself, once the document is known to exist. */
+  private async removeLinks(params: {
+    reader: InstructionContext["reader"];
+    id: string;
+    relatedDocs: string[];
+    explanation: string;
+    target: { storageId: string; content: string };
+  }): Promise<ToolResponse> {
+    const { reader, id, relatedDocs, explanation, target } = params;
+    const { storageId, content } = target;
 
     const frontmatter = parseFrontmatter(content);
     const currentRelated = frontmatter.relatedDocs || [];
@@ -55,154 +70,66 @@ export class LinkRemoveHandler extends BaseActionHandler<Args, InstructionContex
     });
 
     if (calcResult.noChange) {
-      return textResponse(
-        calcResult.message +
-        formatNextActions([{
-          action: "read",
-          description: "Read the document",
-          example: `instruction(action: "read", id: "${id}")`,
-        }]),
-      );
+      return reportNoChange({ id, message: calcResult.message });
     }
 
     const newRelated = calcResult.newRelated;
 
-    // Preview mode
-    if (!confirmed && !approvalToken) {
-      return this.showPreview({ id, currentRelated, newRelated, relatedDocs });
-    }
-
-    // Request approval
-    if (confirmed && !approvalToken) {
-      return this.requestLinkApproval({ id, relatedDocs });
-    }
-
-    // Apply with token
-    if (approvalToken) {
-      return this.applyLink({
-        reader,
-        id,
-        approvalToken,
-        content,
-        frontmatter,
-        newRelated,
-      });
-    }
-
-    return errorResponse("Error: Unexpected state");
+    // Every check that can refuse for free has run, so this is the last point
+    // at which refusing costs nothing. The preview is shown by the refusal.
+    return deliberateLinkChange({
+      linkAction: "link_remove",
+      id,
+      newRelated,
+      explanation,
+      preview: this.buildPreview({ id, currentRelated, newRelated, relatedDocs }),
+      work: () => this.applyLink({ reader, id, storageId, content, frontmatter, newRelated }),
+    });
   }
 
-  private showPreview(params: {
+  private buildPreview(params: {
     id: string;
     currentRelated: string[];
     newRelated: string[];
     relatedDocs: string[];
-  }): ToolResponse {
+  }): string {
     const { id, currentRelated, newRelated, relatedDocs } = params;
     const changedDocs = relatedDocs.filter((d) => currentRelated.includes(d));
 
-    return textResponse(
+    return (
       `## Preview: Removing relatedDocs
 
 **Document:** ${id}
 
-**Current relatedDocs:** ${currentRelated.length > 0 ? currentRelated.join(", ") : "(none)"}
+**Current relatedDocs:** ${formatRelatedDocs(currentRelated)}
 
 **Removing:** ${changedDocs.join(", ")}
 
-**New relatedDocs:** ${newRelated.length > 0 ? newRelated.join(", ") : "(none)"}` +
-      formatNextActions([{
-        action: "link_remove",
-        description: "Confirm and proceed",
-        example: `instruction(action: "link_remove", id: "${id}", relatedDocs: ${JSON.stringify(relatedDocs)}, confirmed: true)`,
-      }]),
-    );
-  }
-
-  private async requestLinkApproval(params: {
-    id: string;
-    relatedDocs: string[];
-  }): Promise<ToolResponse> {
-    const { id, relatedDocs } = params;
-    const requestId = `instruction::link_remove::${id}`;
-
-    pendingChanges.set(id, {
-      id,
-      linkAction: "link_remove",
-      relatedDocs,
-      timestamp: Date.now(),
-    });
-
-    const approvalResult = await requestApproval({
-      request: {
-        id: requestId,
-        operation: "Link remove",
-        description: `Remove relatedDocs for "${id}"`,
-      },
-    });
-
-    return textResponse(
-      `# Approval Requested
-
-**Document:** ${id}
-**Action:** remove relatedDocs
-**Changes:** ${relatedDocs.join(", ")}
-
-${getApprovalRequestedMessage(approvalResult.fallbackPath)}` +
-      formatNextActions([{
-        action: "link_remove",
-        description: "Apply with token from user",
-        example: `instruction(action: "link_remove", id: "${id}", relatedDocs: ${JSON.stringify(relatedDocs)}, approvalToken: "<token>")`,
-      }]),
+**New relatedDocs:** ${formatRelatedDocs(newRelated)}`
     );
   }
 
   private async applyLink(params: {
     reader: InstructionContext["reader"];
+    /** What the caller called it, and what the response says. */
     id: string;
-    approvalToken: string;
+    /** Where it is stored, which is the same thing unless it is a draft. */
+    storageId: string;
     content: string;
     frontmatter: ReturnType<typeof parseFrontmatter>;
     newRelated: string[];
   }): Promise<ToolResponse> {
-    const { reader, id, approvalToken, content, frontmatter, newRelated } = params;
-    const requestId = `instruction::link_remove::${id}`;
+    const { reader, id, storageId, content, frontmatter, newRelated } = params;
 
-    const pending = pendingChanges.get(id);
-    if (!pending) {
-      return errorResponse(`Error: No pending change found for "${id}". Please start the approval workflow again.`);
+    const failure = await writeRelatedDocs({ reader, storageId, content, frontmatter, newRelated });
+    if (failure !== null) {
+      return errorResponse(`Error: ${failure.error}`);
     }
-
-    const validation = validateApproval({
-      requestId,
-      providedToken: approvalToken,
-    });
-
-    if (!validation.valid) {
-      return errorResponse(`${getApprovalRejectionMessage()}\n\nReason: ${validation.reason}`);
-    }
-
-    // Apply the change
-    const newFrontmatter = {
-      ...frontmatter,
-      relatedDocs: newRelated.length > 0 ? newRelated : undefined,
-    };
-
-    const newContent = updateFrontmatter({
-      content,
-      frontmatter: newFrontmatter,
-    });
-
-    const filePath = reader.getFilePath(id);
-    await fs.writeFile(filePath, newContent, "utf-8");
-    reader.invalidateCache();
-
-    pendingChanges.delete(id);
 
     return textResponse(
       `Successfully removed relatedDocs for "${id}".
 
-**New relatedDocs:** ${newRelated.length > 0 ? newRelated.join(", ") : "(none)"}` +
+**New relatedDocs:** ${formatRelatedDocs(newRelated)}` +
       formatNextActions([
         { action: "read", description: "Read the document", example: `instruction(action: "read", id: "${id}")` },
         { action: "list", description: "View all documents", example: `instruction(action: "list")` },

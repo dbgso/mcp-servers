@@ -1,0 +1,24 @@
+# Claims the 2.0.0 changeset makes, checked against the server.
+{"server": {"args": ["{{TMPDIR}}"]}}
+
+{"call": "instruction", "label": "startup writes nothing into the documents directory", "args": {"action": "list", "recursive": true}, "expect": ["No markdown documents found"], "expectNot": ["draft-approval", "_mcp-interactive-instruction"]}
+
+{"call": "instruction", "label": "add keeps relatedDocs written in the content's own frontmatter", "args": {"action": "add", "id": "keeper", "content": "---\nrelatedDocs:\n  - other\nowner: someone\n---\n\n# Keeper\n\nBody.", "description": "Keeps what content declared", "whenToUse": ["checking the changeset claim"]}, "expect": ["created successfully"]}
+{"call": "instruction", "label": "  ...and read_meta shows it", "args": {"action": "read_meta", "id": "keeper"}, "expect": ["other"]}
+
+{"call": "instruction", "label": "update accepts relatedDocs on a draft", "args": {"action": "update", "id": "keeper", "relatedDocs": ["replaced"]}, "expect": ["updated successfully"]}
+{"call": "instruction", "label": "  ...and it replaced the list", "args": {"action": "read_meta", "id": "keeper"}, "expect": ["replaced"], "expectNot": ["- other"]}
+
+{"call": "instruction", "label": "set_status only accepts editing", "args": {"action": "set_status", "id": "keeper", "status": "editing"}, "expect": ["keeper"]}
+
+{"call": "instruction", "label": "promotion does not publish the workflow's own fields", "args": {"action": "approve", "id": "keeper", "notes": "reviewed: the changeset claims these are stripped"}, "expect": ["self_review"]}
+{"call": "instruction", "label": "  promote, attempt 1", "args": {"action": "approve", "id": "keeper", "explanation": "Checking what promotion publishes."}, "expect": ["Not Yet"]}
+{"call": "instruction", "label": "  promote, attempt 2", "args": {"action": "approve", "id": "keeper", "explanation": "Checking what promotion publishes."}, "expect": ["promoted"]}
+{"call": "instruction", "label": "  read_meta shows approvedAt and not the review notes", "args": {"action": "read_meta", "id": "keeper"}, "expect": ["approvedAt"], "expectNot": ["selfReviewNotes", "reviewed: the changeset"]}
+
+{"call": "instruction", "label": "apply refuses when nothing is staged", "args": {"action": "apply", "id": "keeper", "explanation": "Nothing to apply."}, "expect": ["No pending update"]}
+
+{"call": "instruction", "label": "delete a promoted document, attempt 1 of 3", "args": {"action": "delete", "id": "keeper", "explanation": "Checking what a delete leaves behind."}, "expect": ["Not Yet"]}
+{"call": "instruction", "label": "  attempt 2 of 3", "args": {"action": "delete", "id": "keeper", "explanation": "Checking what a delete leaves behind."}, "expect": ["Not Yet"]}
+{"call": "instruction", "label": "  attempt 3 removes it, and says where it can be recovered from", "args": {"action": "delete", "id": "keeper", "explanation": "Checking what a delete leaves behind."}, "expect": ["deleted", "version control"]}
+{"call": "instruction", "label": "  and it is gone from every listing", "args": {"action": "list", "recursive": true}, "expectNot": ["keeper"]}

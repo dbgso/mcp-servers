@@ -16,6 +16,14 @@ import type {
 import { dirname, join } from "path";
 import { existsSync } from "fs";
 
+/** One replacement, held until every other one has been worked out. */
+interface TextEdit {
+  sourceFile: SourceFile;
+  start: number;
+  end: number;
+  newText: string;
+}
+
 const ParamsToObjectSchema = z.object({
   file_path: z.string().describe("File containing the function"),
   line: z.number().describe("Line number of the function (1-based)"),
@@ -124,15 +132,18 @@ ts_ast(action: "params_to_object", file_path: "src/foo.ts", line: 10, column: 17
       // Find all references using ts-morph's semantic analysis
       const refs = this.findDirectCallSites(func);
 
-      // Transform definition
-      const defTransform = this.transformDefinition(func, params, dry_run);
+      // Everything is collected before anything is written: see `applyEdits`.
+      // That includes what the response reports -- `func` is one of the nodes
+      // the edits invalidate, so its line is read here rather than after.
+      const definitionLine = func.getStartLineNumber();
+      const defTransform = this.transformDefinition(func, params);
+      const edits: TextEdit[] = [defTransform.edit];
 
-      // Transform call sites
       const callSites: CallSiteResult[] = [];
       const skipped: SkippedResult[] = [];
 
       for (const { callExpr, refNode } of refs) {
-        const result = this.transformCallExpression(callExpr, refNode, paramNames, dry_run);
+        const result = this.transformCallExpression(callExpr, refNode, paramNames);
         if (result.success) {
           callSites.push({
             file: callExpr.getSourceFile().getFilePath(),
@@ -140,6 +151,9 @@ ts_ast(action: "params_to_object", file_path: "src/foo.ts", line: 10, column: 17
             before: result.before!,
             after: result.after!,
           });
+          if (result.edit) {
+            edits.push(result.edit);
+          }
         } else {
           skipped.push({
             file: callExpr.getSourceFile().getFilePath(),
@@ -149,8 +163,8 @@ ts_ast(action: "params_to_object", file_path: "src/foo.ts", line: 10, column: 17
         }
       }
 
-      // Save all modified files if not dry run
       if (!dry_run) {
+        this.applyEdits(edits);
         await project.save();
       }
 
@@ -160,7 +174,7 @@ ts_ast(action: "params_to_object", file_path: "src/foo.ts", line: 10, column: 17
         dryRun: dry_run,
         definition: {
           file: file_path,
-          line: func.getStartLineNumber(),
+          line: definitionLine,
           before: defTransform.before,
           after: defTransform.after,
         },
@@ -335,9 +349,8 @@ ts_ast(action: "params_to_object", file_path: "src/foo.ts", line: 10, column: 17
    */
   private transformDefinition(
     func: FunctionLike,
-    params: ParamInfo[],
-    dryRun: boolean
-  ): { before: string; after: string } {
+    params: ParamInfo[]
+  ): { before: string; after: string; edit: TextEdit } {
     const funcParams = func.getParameters();
     const oldSignature = funcParams.map(p => p.getText()).join(", ");
 
@@ -354,16 +367,15 @@ ts_ast(action: "params_to_object", file_path: "src/foo.ts", line: 10, column: 17
 
     const newSignature = `{ ${destructure} }: { ${typeProps} }`;
 
-    if (!dryRun) {
-      const sourceFile = func.getSourceFile();
-      const paramsStart = funcParams[0].getStart();
-      const paramsEnd = funcParams[funcParams.length - 1].getEnd();
-      sourceFile.replaceText([paramsStart, paramsEnd], newSignature);
-    }
-
     return {
       before: `(${oldSignature})`,
       after: `(${newSignature})`,
+      edit: {
+        sourceFile: func.getSourceFile(),
+        start: funcParams[0].getStart(),
+        end: funcParams[funcParams.length - 1].getEnd(),
+        newText: newSignature,
+      },
     };
   }
 
@@ -373,9 +385,8 @@ ts_ast(action: "params_to_object", file_path: "src/foo.ts", line: 10, column: 17
   private transformCallExpression(
     callExpr: CallExpression,
     _refNode: Identifier,
-    paramNames: string[],
-    dryRun: boolean
-  ): { success: boolean; before?: string; after?: string; reason?: string } {
+    paramNames: string[]
+  ): { success: boolean; before?: string; after?: string; reason?: string; edit?: TextEdit } {
     const callArgs = callExpr.getArguments();
 
     // Check if already transformed (single object literal argument)
@@ -412,17 +423,43 @@ ts_ast(action: "params_to_object", file_path: "src/foo.ts", line: 10, column: 17
     const oldCall = `${calleeName}(${argTexts.join(", ")})`;
     const newCall = `${calleeName}(${newArg})`;
 
-    if (!dryRun) {
-      const sourceFile = callExpr.getSourceFile();
-      const argsStart = callArgs[0].getStart();
-      const argsEnd = callArgs[callArgs.length - 1].getEnd();
-      sourceFile.replaceText([argsStart, argsEnd], newArg);
-    }
-
     return {
       success: true,
       before: oldCall,
       after: newCall,
+      edit: {
+        sourceFile: callExpr.getSourceFile(),
+        start: callArgs[0].getStart(),
+        end: callArgs[callArgs.length - 1].getEnd(),
+        newText: newArg,
+      },
     };
+  }
+
+  /**
+   * Apply every collected edit, last one in a file first.
+   *
+   * Each `replaceText` invalidates every node in that file, so an edit made
+   * from a node collected earlier reads a position that has moved -- which is
+   * how converting a function whose call sites are in the same file used to
+   * fail with "node that was removed or forgotten". Applying by offset, from
+   * the end backwards, leaves every earlier offset where it was.
+   */
+  private applyEdits(edits: TextEdit[]): void {
+    const byFile = new Map<SourceFile, TextEdit[]>();
+    for (const edit of edits) {
+      const existing = byFile.get(edit.sourceFile);
+      if (existing) {
+        existing.push(edit);
+      } else {
+        byFile.set(edit.sourceFile, [edit]);
+      }
+    }
+
+    for (const [sourceFile, fileEdits] of byFile) {
+      for (const edit of [...fileEdits].sort((a, b) => b.start - a.start)) {
+        sourceFile.replaceText([edit.start, edit.end], edit.newText);
+      }
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { GitOperation } from "./types.js";
+import type { GitOperation, GitOperationContext } from "./types.js";
 import { gitLog } from "../git-repo-manager.js";
 
 const logArgsSchema = z.object({
@@ -15,19 +15,19 @@ const logArgsSchema = z.object({
 });
 type LogArgs = z.infer<typeof logArgsSchema>;
 
-export const logOp: GitOperation<LogArgs> = {
-  id: "log",
-  summary: "Get commit history",
-  detail: `Show commit history with git log. Filter by author, date range, or message.
+export class LogOp implements GitOperation<LogArgs> {
+  readonly id = "log";
+  readonly summary = "Get commit history";
+  readonly detail = `Show commit history with git log. Filter by author, date range, or message.
 
 Examples:
   operation: "log"
   params: { ref: "main", max_count: 10 }
   params: { repo_url: "git@github.com:org/repo.git", author: "username", since: "2025-01-01" }
-  params: { path: "src/lib/mcp", grep: "fix", max_count: 20 }`,
-  category: "History",
-  argsSchema: logArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { path: "src/lib/mcp", grep: "fix", max_count: 20 }`;
+  readonly category = "History";
+  readonly argsSchema = logArgsSchema;
+  async execute(args: LogArgs, ctx: GitOperationContext): Promise<CallToolResult> {
     const ref = args.ref ?? "HEAD";
     const output = await gitLog({
       repoPath: ctx.repoPath,
@@ -61,7 +61,9 @@ Examples:
         }, null, 2),
       }],
     };
-  },
-};
+  }
+}
+
+export const logOp = new LogOp();
 
 export const logOperations = [logOp];

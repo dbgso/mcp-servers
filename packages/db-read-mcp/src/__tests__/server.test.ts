@@ -5,6 +5,7 @@ import {
   buildBastionConfig,
   buildDefaultResolver,
   buildReadTools,
+  buildTunnelConfig,
   createServer,
   registerShutdownHooks,
   SECRET_KEYS,
@@ -13,6 +14,7 @@ import {
   startServer,
   type Connection,
   type ConnectParams,
+  type StartServerOptions,
 } from "../server.js";
 import { fakeResolver } from "./fixtures/fake-resolver.js";
 
@@ -591,7 +593,7 @@ describe("db-read-mcp server", () => {
       await expect(startServer({})).rejects.toThrow(/requires CLI arguments/);
     });
 
-    async function runStartServer(extra: Partial<Parameters<typeof startServer>[0]> = {}) {
+    async function runStartServer(extra: Partial<StartServerOptions> = {}) {
       const resolver = fakeResolver({
         cache: { [URL_KEY]: "postgres://u:p@h:5432/d" },
       });
@@ -836,5 +838,104 @@ describe("db-read-mcp server", () => {
         ]),
       ).rejects.toThrow();
     });
+  });
+});
+
+describe("buildTunnelConfig", () => {
+  const SSM_KEYS = [
+    "DBREAD_SSM_TARGET",
+    "DBREAD_SSM_REGION",
+    "DBREAD_SSM_PROFILE",
+    "DBREAD_SSM_DOCUMENT_NAME",
+    "DBREAD_SSM_READY_TIMEOUT_MS",
+  ] as const;
+
+  beforeEach(() => {
+    for (const key of SSM_KEYS) delete process.env[key];
+    delete process.env.DBREAD_BASTION_HOST;
+  });
+
+  afterEach(() => {
+    for (const key of SSM_KEYS) delete process.env[key];
+  });
+
+  it("reports no tunnel when neither signal is set", () => {
+    expect(buildTunnelConfig(fakeResolver({}))).toBeNull();
+  });
+
+  it("picks the bastion when only its host is configured", () => {
+    const spec = buildTunnelConfig(
+      fakeResolver({ cache: { DBREAD_BASTION_HOST: "user@host" } }),
+    );
+
+    expect(spec).toEqual({ bastion: { host: "user@host" } });
+  });
+
+  it("picks SSM from a cached target, mirroring it into the environment", () => {
+    // `ssmConfigFromEnv` reads `process.env`, so a target that came from a
+    // secret store rather than the shell has to be put there first --
+    // otherwise a configured tunnel is silently skipped and the connection is
+    // attempted direct, which is the one failure mode a tunnel exists to
+    // prevent.
+    const spec = buildTunnelConfig(
+      fakeResolver({ cache: { DBREAD_SSM_TARGET: "i-0123456789abcdef0" } }),
+    );
+
+    expect(spec).toEqual({ ssm: expect.objectContaining({ target: "i-0123456789abcdef0" }) });
+    expect(process.env.DBREAD_SSM_TARGET).toBe("i-0123456789abcdef0");
+  });
+
+  it("leaves a value the environment already carries alone", () => {
+    process.env.DBREAD_SSM_TARGET = "i-from-the-shell";
+
+    buildTunnelConfig(fakeResolver({ cache: { DBREAD_SSM_TARGET: "i-from-the-store" } }));
+
+    expect(process.env.DBREAD_SSM_TARGET).toBe("i-from-the-shell");
+  });
+
+  it("refuses to guess when both a bastion and an SSM target are set", () => {
+    process.env.DBREAD_SSM_TARGET = "i-0123456789abcdef0";
+
+    expect(() =>
+      buildTunnelConfig(fakeResolver({ cache: { DBREAD_BASTION_HOST: "user@host" } })),
+    ).toThrow(/at most one/);
+  });
+});
+
+describe("startServer with nothing injected", () => {
+  afterEach(() => {
+    delete process.env.DBREAD_URL;
+    vi.doUnmock("pg");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("builds its own resolver and opens the connection itself", async () => {
+    // Every other startServer test injects a resolver and an opener, so the
+    // defaults -- which is what the published binary actually runs -- had
+    // never been taken.
+    process.env.DBREAD_URL = "postgres://u:p@h:5432/d?sslmode=require";
+    const endFn = vi.fn(async () => {});
+    class FakePgClient {
+      connect = vi.fn(async () => {});
+      end = endFn;
+      query = vi.fn(async () => ({ rows: [] }));
+      on = vi.fn();
+    }
+    vi.resetModules();
+    vi.doMock("pg", () => ({ default: { Client: FakePgClient }, Client: FakePgClient }));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+    vi.spyOn(Server.prototype, "connect").mockResolvedValue(undefined);
+    const { startServer: start } = await import("../server.js");
+
+    await start({
+      cli: { envFile: "/tmp/fake.env", metadata: "/tmp/m.ts", selectableFields: "/tmp/s.ts" },
+      loadEnvFile: vi.fn(),
+      importer: async (spec: string) =>
+        spec.includes("m.ts") ? { tableMetadata } : { selectableFields },
+    });
+
+    expect(Server.prototype.connect).toHaveBeenCalled();
   });
 });

@@ -20,15 +20,17 @@
  * live-tunnel registry, signal handlers) lives in `tunnel-common.ts` so a
  * single SIGINT / SIGTERM tears down every tunnel regardless of kind.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
 import {
+  awaitTunnelReadyOrKill,
+  ChildTunnelHandle,
   expandHome,
   findFreePort,
   isLoopbackHost,
   registerTunnel,
-  unregisterTunnel,
+  spawnTunnelProcess,
+  SpawnedTunnel,
   waitForPort,
-  type TunnelHandle,
 } from "./tunnel-common.js";
 import type { SsmTunnelEnvConfig } from "./ssm-tunnel.js";
 import { createSsmTunnel, type SsmTunnel } from "./ssm-tunnel.js";
@@ -91,13 +93,10 @@ export function buildSshArgs(params: {
   remotePort: number;
   extraSshArgs?: string[];
 }): string[] {
-  const args: string[] = [];
-  if (params.identityFile) {
-    args.push("-i", expandHome(params.identityFile));
-  }
-  // Standard non-interactive flags: no shell, no agent forwarding, no TTY,
-  // exit on tunnel error.
-  args.push(
+  const args = [
+    ...identityArgs(params.identityFile),
+    // Standard non-interactive flags: no shell, no agent forwarding, no TTY,
+    // exit on tunnel error.
     "-N",
     "-T",
     "-o",
@@ -106,20 +105,29 @@ export function buildSshArgs(params: {
     "ServerAliveInterval=30",
     "-o",
     "ServerAliveCountMax=3",
-  );
-  // Non-loopback bind addresses (e.g. 0.0.0.0) need `-g` so other hosts can
-  // connect to the forwarded port. Without it ssh silently restricts the
-  // forward to localhost regardless of the bind_address.
-  if (!isLoopbackHost(params.localBindHost)) {
-    args.push("-g");
-  }
-  args.push(
+    ...bindModeArgs(params.localBindHost),
     "-L",
     `${params.localBindHost}:${params.localPort}:${params.remoteHost}:${params.remotePort}`,
-  );
+  ];
   if (params.extraSshArgs) args.push(...params.extraSshArgs);
   args.push(params.bastionHost);
   return args;
+}
+
+/** No identity file means ssh's own key search, which is the right default. */
+function identityArgs(identityFile: string | undefined): string[] {
+  if (!identityFile) return [];
+  return ["-i", expandHome(identityFile)];
+}
+
+/**
+ * Non-loopback bind addresses (e.g. 0.0.0.0) need `-g` so other hosts can
+ * connect to the forwarded port. Without it ssh silently restricts the forward
+ * to localhost regardless of the bind_address.
+ */
+function bindModeArgs(localBindHost: string): string[] {
+  if (isLoopbackHost(localBindHost)) return [];
+  return ["-g"];
 }
 
 /**
@@ -131,74 +139,85 @@ export function buildSshArgs(params: {
 export async function createSshTunnel(config: SshTunnelConfig): Promise<SshTunnel> {
   const localBindHost = config.localBindHost ?? "127.0.0.1";
   const localPort = config.localPort ?? (await findFreePort(localBindHost));
-  const args = buildSshArgs({
+
+  const child = spawnTunnelProcess({
+    command: "ssh",
+    args: sshArgsFor({ config, localBindHost, localPort }),
+    label: "ssh-tunnel",
+    spawnFn: config.spawnFn,
+  });
+
+  const handle = new ChildTunnelHandle(child);
+  registerTunnel(handle);
+  const tunnel = new SshProcessTunnel({ child, handle, localPort, localBindHost });
+
+  await awaitTunnelReadyOrKill({
+    child,
+    handle,
+    wait: () => awaitSshReady({ config, child, localBindHost, localPort }),
+  });
+
+  return tunnel;
+}
+
+class SshProcessTunnel extends SpawnedTunnel implements SshTunnel {
+  protected async shutdown(): Promise<void> {
+    this.child.kill();
+    // Wait briefly for child to exit so callers can be sure the port is freed.
+    await new Promise<void>((resolve) => {
+      if (this.child.exitCode !== null) return resolve();
+      const timeout = setTimeout(() => resolve(), 1_000);
+      this.child.once("exit", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+  }
+}
+
+/** Optional fields stay absent rather than becoming an explicit `undefined`. */
+function sshArgsFor(params: {
+  config: SshTunnelConfig;
+  localBindHost: string;
+  localPort: number;
+}): string[] {
+  const { config } = params;
+  return buildSshArgs({
     bastionHost: config.bastionHost,
     ...(config.identityFile && { identityFile: config.identityFile }),
-    localBindHost,
-    localPort,
+    localBindHost: params.localBindHost,
+    localPort: params.localPort,
     remoteHost: config.remoteHost,
     remotePort: config.remotePort,
     ...(config.extraSshArgs && { extraSshArgs: config.extraSshArgs }),
   });
+}
 
-  const spawnFn = config.spawnFn ?? spawn;
-  const child = spawnFn("ssh", args);
-  child.unref?.();
-
-  // Surface ssh stderr to the parent so authentication failures are visible.
-  child.stderr?.on("data", (chunk: Buffer) => {
-    process.stderr.write(`[ssh-tunnel] ${chunk}`);
+/** Timeouts are defaulted here so `createSshTunnel` reads as lifecycle only. */
+async function awaitSshReady(params: {
+  config: SshTunnelConfig;
+  child: ChildProcess;
+  localBindHost: string;
+  localPort: number;
+}): Promise<void> {
+  await waitForPort({
+    host: probeHost(params.localBindHost),
+    port: params.localPort,
+    timeoutMs: params.config.readyTimeoutMs ?? 10_000,
+    intervalMs: params.config.probeIntervalMs ?? 200,
+    child: params.child,
+    childLabel: "ssh",
   });
+}
 
-  let active = true;
-  const handle: TunnelHandle = { kill: () => child.kill() };
-  registerTunnel(handle);
-
-  child.once("exit", () => {
-    active = false;
-    unregisterTunnel(handle);
-  });
-
-  try {
-    // Always probe via loopback: a 0.0.0.0 listener is reachable on 127.0.0.1
-    // too, and 0.0.0.0 is not a valid connect target (it means "any interface"
-    // only in the listen context).
-    await waitForPort({
-      host: isLoopbackHost(localBindHost) ? localBindHost : "127.0.0.1",
-      port: localPort,
-      timeoutMs: config.readyTimeoutMs ?? 10_000,
-      intervalMs: config.probeIntervalMs ?? 200,
-      child,
-      childLabel: "ssh",
-    });
-  } catch (err) {
-    child.kill();
-    unregisterTunnel(handle);
-    throw err;
-  }
-
-  return {
-    localPort,
-    localBindHost,
-    get active() {
-      return active;
-    },
-    async close() {
-      if (!active) return;
-      active = false;
-      unregisterTunnel(handle);
-      child.kill();
-      // Wait briefly for child to exit so callers can be sure the port is freed.
-      await new Promise<void>((resolve) => {
-        if (child.exitCode !== null) return resolve();
-        const timeout = setTimeout(() => resolve(), 1_000);
-        child.once("exit", () => {
-          clearTimeout(timeout);
-          resolve();
-        });
-      });
-    },
-  };
+/**
+ * Always probe via loopback: a 0.0.0.0 listener is reachable on 127.0.0.1 too,
+ * and 0.0.0.0 is not a valid connect target (it means "any interface" only in
+ * the listen context).
+ */
+function probeHost(localBindHost: string): string {
+  if (isLoopbackHost(localBindHost)) return localBindHost;
+  return "127.0.0.1";
 }
 
 /**
@@ -262,9 +281,7 @@ export type TunnelOpener = (
 export function bastionTunnelOpener(bastion: BastionConfig): TunnelOpener {
   return (opts) =>
     createSshTunnel({
-      bastionHost: bastion.host,
-      ...(bastion.identityFile && { identityFile: bastion.identityFile }),
-      ...(bastion.extraSshArgs && { extraSshArgs: bastion.extraSshArgs }),
+      ...bastionFields(bastion),
       localBindHost: opts.localBindHost,
       localPort: opts.localPort,
       remoteHost: opts.remoteHost,
@@ -274,6 +291,17 @@ export function bastionTunnelOpener(bastion: BastionConfig): TunnelOpener {
       }),
       ...(opts.spawnFn && { spawnFn: opts.spawnFn }),
     });
+}
+
+/** The bastion's own half of an `SshTunnelConfig`, absent fields left absent. */
+function bastionFields(
+  bastion: BastionConfig,
+): Pick<SshTunnelConfig, "bastionHost" | "identityFile" | "extraSshArgs"> {
+  return {
+    bastionHost: bastion.host,
+    ...(bastion.identityFile && { identityFile: bastion.identityFile }),
+    ...(bastion.extraSshArgs && { extraSshArgs: bastion.extraSshArgs }),
+  };
 }
 
 /**
@@ -339,39 +367,65 @@ export interface ResolvedTunneledUrl {
 export async function resolveTunneledUrl(
   params: ResolveTunneledUrlParams,
 ): Promise<ResolvedTunneledUrl> {
-  if (!params.tunnel) {
+  const spec = params.tunnel;
+  if (!spec) {
     return { url: params.url };
   }
+  return openAndRewrite({ request: params, spec });
+}
 
-  const parsed = new URL(params.url);
-  const remoteHost = parsed.hostname;
-  const remotePort = parsed.port ? Number(parsed.port) : NaN;
-  if (Number.isNaN(remotePort)) {
-    throw new Error(
-      `resolveTunneledUrl requires an explicit port in the URL (got: ${params.url})`,
-    );
-  }
+/**
+ * The tunneling half of {@link resolveTunneledUrl}, split from the
+ * "no tunnel asked for" answer so neither path is read through the other.
+ */
+async function openAndRewrite(args: {
+  request: ResolveTunneledUrlParams;
+  spec: TunnelSpec;
+}): Promise<ResolvedTunneledUrl> {
+  const { request, spec } = args;
+  const parsed = new URL(request.url);
+  const remotePort = requiredPort({ parsed, url: request.url });
 
-  const localBindHost = params.localBindHost ?? "127.0.0.1";
-  const localPort = params.localPort ?? (await findFreePort(localBindHost));
+  const localBindHost = request.localBindHost ?? "127.0.0.1";
+  const localPort = request.localPort ?? (await findFreePort(localBindHost));
 
   // Polymorphic dispatch on tunnel kind. The opener closure encapsulates
   // the kind-specific config; this layer only deals with the common
   // "where to bind / where to forward" opts and the URL rewrite.
-  const tunnel = await pickTunnelOpener(params.tunnel)({
+  const tunnel = await pickTunnelOpener(spec)({
     localBindHost,
     localPort,
-    remoteHost,
+    remoteHost: parsed.hostname,
     remotePort,
-    ...(params.readyTimeoutMs !== undefined && {
-      readyTimeoutMs: params.readyTimeoutMs,
-    }),
-    ...(params.spawnFn && { spawnFn: params.spawnFn }),
+    ...openerOverrides(request),
   });
 
   parsed.hostname = localBindHost;
   parsed.port = String(localPort);
   return { url: parsed.toString(), tunnel };
+}
+
+/**
+ * A tunnel needs somewhere concrete to forward to, so a URL leaning on its
+ * scheme's default port is rejected rather than guessed at.
+ */
+function requiredPort(params: { parsed: URL; url: string }): number {
+  if (params.parsed.port) return Number(params.parsed.port);
+  throw new Error(
+    `resolveTunneledUrl requires an explicit port in the URL (got: ${params.url})`,
+  );
+}
+
+/** Caller-supplied knobs, passed on only when actually set. */
+function openerOverrides(
+  request: ResolveTunneledUrlParams,
+): Pick<TunnelOpenerOpts, "readyTimeoutMs" | "spawnFn"> {
+  return {
+    ...(request.readyTimeoutMs !== undefined && {
+      readyTimeoutMs: request.readyTimeoutMs,
+    }),
+    ...(request.spawnFn && { spawnFn: request.spawnFn }),
+  };
 }
 
 /**
@@ -383,13 +437,21 @@ export async function resolveTunneledUrl(
  *   MYAPP_BASTION_EXTRA_ARGS — optional space-separated extra ssh args
  */
 export function bastionConfigFromEnv(prefix: string): BastionConfig | null {
-  const env = process.env;
-  const host = env[`${prefix}_BASTION_HOST`];
+  const host = process.env[`${prefix}_BASTION_HOST`];
   if (!host) return null;
+  return { host, ...bastionOptionsFromEnv(prefix) };
+}
+
+/**
+ * The optional half of the convention. Separate from the host lookup because
+ * the host is what decides whether there is a bastion at all.
+ */
+function bastionOptionsFromEnv(prefix: string): Omit<BastionConfig, "host"> {
+  const env = process.env;
   const identityFile = env[`${prefix}_BASTION_KEY`];
   const extraArgs = env[`${prefix}_BASTION_EXTRA_ARGS`];
-  const config: BastionConfig = { host };
-  if (identityFile) config.identityFile = identityFile;
-  if (extraArgs) config.extraSshArgs = extraArgs.split(/\s+/).filter(Boolean);
-  return config;
+  return {
+    ...(identityFile && { identityFile }),
+    ...(extraArgs && { extraSshArgs: extraArgs.split(/\s+/).filter(Boolean) }),
+  };
 }

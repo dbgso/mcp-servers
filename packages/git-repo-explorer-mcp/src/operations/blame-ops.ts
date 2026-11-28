@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { GitOperation } from "./types.js";
+import type { GitOperation, GitOperationContext } from "./types.js";
 import { gitBlame } from "../git-repo-manager.js";
 
 interface BlameLine {
@@ -59,18 +59,18 @@ const blameArgsSchema = z.object({
 });
 type BlameArgs = z.infer<typeof blameArgsSchema>;
 
-export const blameOp: GitOperation<BlameArgs> = {
-  id: "blame",
-  summary: "Show line-by-line author and commit info",
-  detail: `Show git blame information for each line in a file. Optionally specify line range.
+export class BlameOp implements GitOperation<BlameArgs> {
+  readonly id = "blame";
+  readonly summary = "Show line-by-line author and commit info";
+  readonly detail = `Show git blame information for each line in a file. Optionally specify line range.
 
 Examples:
   operation: "blame"
   params: { path: "src/lib/mcp/index.ts" }
-  params: { repo_url: "git@github.com:org/repo.git", ref: "main", path: "packages/api/src/handler.ts", line_start: 10, line_end: 30 }`,
-  category: "History",
-  argsSchema: blameArgsSchema,
-  execute: async (args, ctx): Promise<CallToolResult> => {
+  params: { repo_url: "git@github.com:org/repo.git", ref: "main", path: "packages/api/src/handler.ts", line_start: 10, line_end: 30 }`;
+  readonly category = "History";
+  readonly argsSchema = blameArgsSchema;
+  async execute(args: BlameArgs, ctx: GitOperationContext): Promise<CallToolResult> {
     const ref = args.ref ?? "HEAD";
     const output = await gitBlame({
       repoPath: ctx.repoPath,
@@ -93,7 +93,9 @@ Examples:
         }, null, 2),
       }],
     };
-  },
-};
+  }
+}
+
+export const blameOp = new BlameOp();
 
 export const blameOperations = [blameOp];
