@@ -22,14 +22,14 @@ jobs:
     outputs:
       matrix: ${{ steps.list.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: list
         run: echo "matrix=$(node scripts/ci-test-matrix.mjs)" >> "$GITHUB_OUTPUT"
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
       # `pnpm lint` is type-aware, and a workspace package's types come from its
       # built `dist/*.d.ts`. Unbuilt, every cross-package type is an error type
@@ -76,7 +76,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm build
 
@@ -94,7 +94,7 @@ jobs:
         matrix.package.shards > 1 && format(' {0}/{1}', matrix.package.shard, matrix.package.shards) || ''
       }})
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
 
       # Only where the emulator is actually used. It is ten seconds, which is
@@ -140,7 +140,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm

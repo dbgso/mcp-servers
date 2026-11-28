@@ -9,7 +9,7 @@ jobs:
   actionlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # `fail_level` matters more than it looks. The default lets reviewdog
       # annotate and still exit 0, so this job went green while carrying five
