@@ -11,6 +11,7 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "catalog:"
   }
 }

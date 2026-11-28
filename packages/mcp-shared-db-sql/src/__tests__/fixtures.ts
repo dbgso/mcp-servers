@@ -8,17 +8,17 @@
  *   and a JSON op that consumes the raw `$.foo.bar` path as a single literal.
  */
 import type { Dialect } from "../dialect.js";
+import { asQuotedIdent, ident, sqlFragment } from "../fragment.js";
 
 export const pgFakeDialect: Dialect = {
   quoteIdent(name) {
-    return `"${name.replace(/"/g, '""')}"`;
+    return asQuotedIdent(`"${name.replace(/"/g, '""')}"`);
   },
   placeholder(index) {
     return `$${index}`;
   },
-  jsonPathEquals({ columnSql, path, valuePlaceholder, params }) {
-    const segmentsPh = params.add(path.segments);
-    return `${columnSql} #>> ${segmentsPh} = ${valuePlaceholder}`;
+  jsonPathEquals({ columnSql, path, value }) {
+    return sqlFragment`${ident(columnSql)} #>> ${path.segments} = ${value}`;
   },
   explainPrefix() {
     return "EXPLAIN (FORMAT JSON)";
@@ -39,14 +39,17 @@ export const pgFakeDialect: Dialect = {
 
 export const mysqlFakeDialect: Dialect = {
   quoteIdent(name) {
-    return `\`${name.replace(/`/g, "``")}\``;
+    return asQuotedIdent(`\`${name.replace(/`/g, "``")}\``);
   },
   placeholder() {
     return "?";
   },
-  jsonPathEquals({ columnSql, path, valuePlaceholder }) {
-    // MySQL takes the raw `$.foo.bar` literal — no extra placeholders.
-    return `JSON_EXTRACT(${columnSql}, '${path.raw}') = ${valuePlaceholder}`;
+  jsonPathEquals({ columnSql, path, value }) {
+    // Binds the path, like the real dialect. An earlier version of this fake
+    // interpolated `path.raw` instead, which meant no builder test ever
+    // exercised `?` ordering -- and a swapped bind went unnoticed until a
+    // real MySQL rejected the statement.
+    return sqlFragment`JSON_EXTRACT(${ident(columnSql)}, ${path.raw}) = ${value}`;
   },
   explainPrefix() {
     return "EXPLAIN FORMAT=JSON";

@@ -8,6 +8,7 @@
  * this interface; `mcp-shared-db-sql` itself stays free of any engine
  * dependency.
  */
+import type { QuotedIdent, SqlFragment } from "./fragment.js";
 
 /**
  * A normalised JSON path. The operations layer hands the builder a string
@@ -53,28 +54,34 @@ export interface DialectExplainResult {
  */
 export interface Dialect {
   /** Quote an identifier (table / column name) safely for this engine. */
-  quoteIdent(name: string): string;
+  quoteIdent(name: string): QuotedIdent;
   /**
    * Build a parameter placeholder for the given 1-based index. Postgres
    * returns `$N`; MySQL/SQLite return `?` and ignore the index.
    */
   placeholder(index: number): string;
   /**
-   * Build a SQL fragment that compares the JSON value at `path` on the
-   * already-quoted `columnSql` to `valuePlaceholder`. The dialect may call
-   * `params.add(...)` to allocate further placeholders (e.g. Postgres pushes
-   * the segments as a `text[]`).
+   * Describe the comparison of the JSON value at `path` on the already-quoted
+   * `columnSql` against `value`, as literal SQL interleaved with the values to
+   * bind.
+   *
+   * Returned as a `SqlFragment` (built with the `sqlFragment` tag) rather
+   * than a finished string on purpose. The dialect gets no `ParamBuilder`,
+   * so it cannot allocate a placeholder at all, and the one thing that used
+   * to go wrong here -- allocating in an order other than the one the
+   * fragment emits -- has no way to be expressed. `?`-style engines bind
+   * positionally, so a misordered allocation silently gave a placeholder its
+   * neighbour's value, and Postgres hid it because numbered placeholders
+   * carry their own position.
    */
   jsonPathEquals(input: {
     /** Already-quoted column reference (output of `quoteIdent`). */
-    columnSql: string;
+    columnSql: QuotedIdent;
     /** Normalised JSON path with helper segments. */
     path: JsonPathInput;
-    /** Pre-allocated placeholder for the comparison value. */
-    valuePlaceholder: string;
-    /** Used to allocate further placeholders. */
-    params: ParamBuilder;
-  }): string;
+    /** Comparison value. */
+    value: unknown;
+  }): SqlFragment;
   /**
    * SQL prefix that, when prepended to a `SELECT`, returns the planner's
    * cost estimate instead of executing the query for real. Engine-specific:
