@@ -37,11 +37,10 @@ jobs:
       # and rules like require-array-sort-compare report what a build resolves.
       - run: pnpm build
       - run: pnpm lint
-      # The smoke scripts and their kit run under `tsx`, which strips types
-      # without checking them, so nothing else here would see a type error in
-      # them before the db-smoke job tripped over it at run time.
-      - name: Type-check the smoke scripts
-        run: pnpm exec tsc -p tsconfig.scripts.json
+      # tsx strips types without checking them, so every packages/*/scripts
+      # directory (outside each package's tsconfig.json) is type-checked here
+      # with its own scripts/tsconfig.json. One without it fails the job.
+      - run: pnpm typecheck:scripts
       # Scoped by .jscpd.json to the smoke scripts, which grew a second copy of
       # everything once per engine before the shared kit existed.
       - name: Copy-paste check

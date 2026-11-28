@@ -9,7 +9,7 @@
  * package, so a bare import here would resolve against the repository root,
  * which has none of them installed. The types it needs are written
  * structurally instead, and each script passes in its engine's own objects;
- * the type checker confirms they fit (`tsconfig.scripts.json`).
+ * the type checker confirms they fit (ci/db/tsconfig.json, run by `pnpm typecheck:scripts`).
  */
 
 /**
