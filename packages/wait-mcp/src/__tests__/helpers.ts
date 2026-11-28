@@ -6,6 +6,7 @@ import type {
   HttpResponse,
   SourceDeps,
 } from "../sources/types.js";
+import { OPEN_POLICY, type AccessPolicy } from "../policy.js";
 
 export interface FakeFile {
   content?: string;
@@ -18,6 +19,7 @@ export interface FakeDepsOptions {
   files?: Record<string, FakeFile>;
   env?: Record<string, string>;
   now?: () => number;
+  policy?: AccessPolicy;
 }
 
 /** SourceDeps whose I/O is fully scripted by the test. */
@@ -44,8 +46,10 @@ export function createFakeDeps(options: FakeDepsOptions = {}): SourceDeps {
       return file.content;
     },
     statFile: async (path) => files[path]?.stat ?? null,
+    realPath: async (path) => (files[path] === undefined ? null : path),
     env: (name) => options.env?.[name],
     now: options.now ?? (() => 0),
+    policy: options.policy ?? OPEN_POLICY,
   };
 }
 

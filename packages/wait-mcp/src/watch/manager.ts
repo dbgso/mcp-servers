@@ -92,6 +92,7 @@ export class WatchManager {
         `Invalid config for source "${spec.source}":\n${formatConfigIssues(parsed.error as { issues: { path: PropertyKey[]; message: string }[] })}`,
       );
     }
+    this.checkAccess({ source, config: parsed.data });
 
     const active = this.list().filter((watch) => watch.status === "waiting").length;
     if (active >= this.maxWatches) {
@@ -170,6 +171,7 @@ export class WatchManager {
         `Invalid config for source "${params.source}":\n${formatConfigIssues(parsed.error as { issues: { path: PropertyKey[]; message: string }[] })}`,
       );
     }
+    this.checkAccess({ source, config: parsed.data });
     return source.poll({ config: parsed.data, state: undefined, deps: this.deps });
   }
 
@@ -204,6 +206,14 @@ export class WatchManager {
 
   requireWatch(id: string): Watch {
     return this.requireRecord(id).watch;
+  }
+
+  private checkAccess(params: { source: WatchSource; config: unknown }): void {
+    try {
+      params.source.checkAccess?.({ config: params.config, policy: this.deps.policy });
+    } catch (error) {
+      throw new WaitError(`Refused for source "${params.source.id}": ${getErrorMessage(error)}`);
+    }
   }
 
   private requireSource(id: string): WatchSource {

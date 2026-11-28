@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { AccessPolicy } from "../policy.js";
 
 /** Per-watch state a source carries across polls (baselines, resolved refs, ...). */
 export type SourceState = Record<string, unknown> | undefined;
@@ -52,8 +53,12 @@ export interface SourceDeps {
   httpRequest(request: HttpRequest): Promise<HttpResponse>;
   readFileText(path: string): Promise<string>;
   statFile(path: string): Promise<FileStat | null>;
+  /** The path with symlinks resolved, or null when it does not exist. */
+  realPath(path: string): Promise<string | null>;
   env(name: string): string | undefined;
   now(): number;
+  /** What watches may reach (see policy.ts). */
+  policy: AccessPolicy;
 }
 
 export interface WatchSource<TConfig = unknown> {
@@ -64,6 +69,12 @@ export interface WatchSource<TConfig = unknown> {
   defaultIntervalMs: number;
   minIntervalMs: number;
   configSchema: z.ZodType<TConfig>;
+  /**
+   * Throw when the config reaches past the access policy. Called when a watch
+   * is created (and for a one-off check), so a refusal is immediate rather
+   * than a run of failed polls.
+   */
+  checkAccess?(params: { config: TConfig; policy: AccessPolicy }): void;
   // Method syntax for bivariance (allows assignment to WatchSource<unknown>[])
   poll(params: { config: TConfig; state: SourceState; deps: SourceDeps }): Promise<PollOutcome>;
 }

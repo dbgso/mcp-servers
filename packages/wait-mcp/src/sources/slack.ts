@@ -12,7 +12,12 @@ const configSchema = z.object({
   thread_ts: z.string().optional().describe("Thread timestamp; omit to watch the channel itself"),
   match: regexField("Regex the message text must match").optional(),
   from: z.string().optional().describe("Only accept messages from this user ID"),
-  token_env: z.string().optional().describe(`Env var holding the bot token (default: ${DEFAULT_TOKEN_ENV})`),
+  token_env: z
+    .string()
+    // Any other variable would be sent to slack.com as a bearer token
+    .regex(/^SLACK_[A-Z0-9_]+$/, "must be an environment variable named SLACK_*")
+    .optional()
+    .describe(`Env var holding the bot token, named SLACK_* (default: ${DEFAULT_TOKEN_ENV})`),
 });
 
 type Config = z.infer<typeof configSchema>;

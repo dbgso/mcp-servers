@@ -168,7 +168,7 @@ Slack Web API（`conversations.replies` / `conversations.history`）を HTTP で
 | `thread_ts` | string? | なし | 指定するとスレッド返信、省略するとチャンネル新着を監視 |
 | `match` | string? | なし | 本文に対する正規表現 |
 | `from` | string? | なし | 投稿者のユーザー ID |
-| `token_env` | string? | `SLACK_BOT_TOKEN` | トークンを読む環境変数名 |
+| `token_env` | string? | `SLACK_BOT_TOKEN` | トークンを読む環境変数名。`SLACK_` で始まる名前（`SLACK_[A-Z0-9_]+`）だけ受け付ける |
 
 既定間隔 15 秒、下限 5 秒。watch 作成時点で存在したメッセージより後の投稿のうち、`match` / `from` の条件を満たすものが現れたら終了。
 
@@ -192,6 +192,8 @@ Slack Web API（`conversations.replies` / `conversations.history`）を HTTP で
 
 既定間隔 30 秒、下限 5 秒。
 
+`url` の host は `WAIT_MCP_HTTP_ALLOW_HOSTS` に含まれていなければ拒否する（既定は空なので、設定しない限り http source は使えない）。scheme は `http` / `https` のみ。リダイレクトは追わず、3xx はそのままのステータスとして評価する。応答本文は `WAIT_MCP_HTTP_RETURN_BODY` を有効にしたときだけ結果に載せる（`body_matches` などの判定には常に使う）。
+
 ### `file` — ローカルファイルの変化を待つ
 
 | config | 型 | 既定 | 説明 |
@@ -200,7 +202,7 @@ Slack Web API（`conversations.replies` / `conversations.history`）を HTTP で
 | `until` | `"exists"` \| `"missing"` \| `"changed"` \| `"matches"` | `"exists"` | 終了条件 |
 | `pattern` | string? | なし | `until: "matches"` のとき必須。内容に対する正規表現 |
 
-既定間隔 5 秒、下限 1 秒。`changed` は watch 作成時点の mtime とサイズからの変化を検出する。
+既定間隔 5 秒、下限 1 秒。`path` は `WAIT_MCP_FILE_ROOTS` のいずれかの配下でなければ拒否する（既定はサーバーの起動ディレクトリ）。ポーリング時にも symlink を解決した実パスで同じ確認をする。`changed` は watch 作成時点の mtime とサイズからの変化を検出する。
 
 ## 設定（環境変数）
 
@@ -209,8 +211,20 @@ Slack Web API（`conversations.replies` / `conversations.history`）を HTTP で
 | `WAIT_MCP_MAX_BLOCK_MS` | 240000 | `max_block_ms` の既定値 |
 | `WAIT_MCP_MAX_WATCHES` | 50 | 同時に `waiting` でいられる watch の上限 |
 | `SLACK_BOT_TOKEN` | なし | `slack` source の既定トークン |
+| `WAIT_MCP_HTTP_ALLOW_HOSTS` | なし（すべて拒否） | `http` source が叩いてよい host のカンマ区切り。完全一致、`*.example.com`（サブドメイン）、`*`（すべて）を書ける |
+| `WAIT_MCP_FILE_ROOTS` | 起動ディレクトリ | `file` source が読んでよいディレクトリのカンマ区切り |
+| `WAIT_MCP_HTTP_RETURN_BODY` | 無効 | `1` / `true` で `http` の応答本文を結果に含める |
 
 `gh` CLI の認証はサーバー側の `gh auth` に従う。
+
+## アクセスの境界
+
+config は AI が組み立てるので、何にアクセスできるかは起動時の環境変数でだけ広げられる。
+
+- `http`: `WAIT_MCP_HTTP_ALLOW_HOSTS` の host だけ。リダイレクトで別 host に飛ばない。
+- `file`: `WAIT_MCP_FILE_ROOTS` の配下だけ。symlink で外に出るパスも拒否する。
+- `slack`: `token_env` は `SLACK_*` に限る（他の秘密の環境変数をトークンとして送らせない）。
+- 境界の外を指す config は watch 作成時（`until` / `watch` / `check`）に `Refused for source ...` のエラーで返す。
 
 ## エラー時のふるまい
 

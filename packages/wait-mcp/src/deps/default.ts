@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { loadAccessPolicy } from "../policy.js";
 import type {
   CommandResult,
   CommandSpec,
@@ -38,6 +39,8 @@ async function httpRequest(request: HttpRequest): Promise<HttpResponse> {
     headers: request.headers,
     body: request.body,
     signal: AbortSignal.timeout(POLL_IO_TIMEOUT_MS),
+    // A redirect could lead off the allowed hosts; the watch sees the 3xx.
+    redirect: "manual",
   });
   return { status: response.status, body: await response.text() };
 }
@@ -51,12 +54,22 @@ async function statFile(path: string): Promise<FileStat | null> {
   }
 }
 
+async function realPath(path: string): Promise<string | null> {
+  try {
+    return await realpath(path);
+  } catch {
+    return null;
+  }
+}
+
 /** Real I/O implementation used by the running server. */
 export const defaultDeps: SourceDeps = {
   runCommand,
   httpRequest,
   readFileText: (path: string) => readFile(path, "utf8"),
   statFile,
+  realPath,
   env: (name: string) => process.env[name],
   now: () => Date.now(),
+  policy: loadAccessPolicy({ env: (name) => process.env[name], cwd: process.cwd() }),
 };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { regexField } from "./regex.js";
 import { evaluateExpectation, type HttpExpectation } from "./evaluate/http-expect.js";
+import { checkHttpUrl } from "../policy.js";
 import type { PollOutcome, WatchSource } from "./types.js";
 
 const expectationSchema = z.object({
@@ -26,6 +27,10 @@ export const httpSource: WatchSource<Config> = {
   summary: "Wait until an HTTP endpoint reports the expected state",
   detail: `Polls a URL and stops once every condition in \`expect\` holds.
 
+Only hosts listed in WAIT_MCP_HTTP_ALLOW_HOSTS (set where the server starts) can be watched, and
+redirects are not followed. The response body is returned in details only when
+WAIT_MCP_HTTP_RETURN_BODY=1.
+
 A body that is not valid JSON simply fails the json_* conditions instead of failing the poll, so a
 temporary 502 during a deploy does not kill the watch.
 
@@ -36,7 +41,11 @@ Examples:
   defaultIntervalMs: 30_000,
   minIntervalMs: 5_000,
   configSchema,
+  checkAccess({ config, policy }) {
+    checkHttpUrl({ policy, url: config.url });
+  },
   async poll({ config, deps }): Promise<PollOutcome> {
+    checkHttpUrl({ policy: deps.policy, url: config.url });
     const response = await deps.httpRequest({
       url: config.url,
       method: config.method,
@@ -50,7 +59,12 @@ Examples:
       summary: result.satisfied
         ? `expectation met (status ${response.status})`
         : `status ${response.status}; unmet: ${result.unmet.join("; ")}`,
-      details: { status: response.status, unmet: result.unmet, body: response.body.slice(0, 500) },
+      details: {
+        status: response.status,
+        unmet: result.unmet,
+        // Opt-in: otherwise this would hand the agent whatever the URL serves.
+        ...(deps.policy.returnHttpBody ? { body: response.body.slice(0, 500) } : {}),
+      },
       events: result.satisfied ? [`expectation met (status ${response.status})`] : [],
     };
   },

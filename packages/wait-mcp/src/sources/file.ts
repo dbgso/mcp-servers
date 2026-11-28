@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { regexField } from "./regex.js";
+import { checkFilePath, isInside } from "../policy.js";
 import type { FileStat, PollOutcome, SourceDeps, WatchSource } from "./types.js";
 
 const configSchema = z.object({
@@ -19,6 +20,8 @@ interface FileState extends Record<string, unknown> {
 }
 
 interface FileInput {
+  /** Resolved, policy-checked path. */
+  path: string;
   stat: FileStat | null;
   baseline: FileStat | null;
   config: Config;
@@ -59,7 +62,7 @@ async function evaluateMatches(input: FileInput): Promise<FileEvaluation> {
     return { satisfied: false, summary: "file does not exist yet" };
   }
   const pattern = input.config.pattern ?? "";
-  const content = await input.deps.readFileText(input.config.path);
+  const content = await input.deps.readFileText(input.path);
   const matched = new RegExp(pattern).test(content);
   return {
     satisfied: matched,
@@ -77,7 +80,8 @@ const CONDITIONS: Record<FileUntil, (input: FileInput) => Promise<FileEvaluation
 export const fileSource: WatchSource<Config> = {
   id: "file",
   summary: "Wait for a local file to appear, disappear, change or match",
-  detail: `Polls the file system with stat/read only.
+  detail: `Polls the file system with stat/read only, inside the directories in WAIT_MCP_FILE_ROOTS
+(default: the server's working directory). Symlinks that lead outside them are refused.
 
 \`changed\` compares against the mtime and size recorded at the first poll, so it never fires on the
 poll that established the baseline. The other conditions are absolute and can fire immediately.
@@ -89,6 +93,9 @@ Examples:
   defaultIntervalMs: 5_000,
   minIntervalMs: 1_000,
   configSchema,
+  checkAccess({ config, policy }) {
+    checkFilePath({ policy, file: config.path });
+  },
   async poll({ config, state, deps }): Promise<PollOutcome> {
     const until: FileUntil = config.until ?? "exists";
     // Matching without a pattern would accept any content
@@ -96,10 +103,19 @@ Examples:
       throw new Error('config.pattern is required when until="matches"');
     }
 
-    const stat = await deps.statFile(config.path);
+    const path = checkFilePath({ policy: deps.policy, file: config.path });
+    // A symlink inside a root can still point outside it
+    const real = await deps.realPath(path);
+    if (real !== null) {
+      const roots = await Promise.all(deps.policy.fileRoots.map(async (root) => (await deps.realPath(root)) ?? root));
+      if (!roots.some((root) => isInside({ root, target: real }))) {
+        throw new Error(`"${path}" resolves to "${real}", outside the directories the file source may read`);
+      }
+    }
+    const stat = await deps.statFile(path);
     const previous = state as FileState | undefined;
     const baseline = previous === undefined ? stat : previous.baseline;
-    const evaluation = await CONDITIONS[until]({ stat, baseline, config, deps });
+    const evaluation = await CONDITIONS[until]({ path, stat, baseline, config, deps });
 
     return {
       satisfied: evaluation.satisfied,
