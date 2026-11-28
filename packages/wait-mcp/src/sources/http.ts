@@ -1,13 +1,14 @@
 import { z } from "zod";
+import { regexField } from "./regex.js";
 import { evaluateExpectation, type HttpExpectation } from "./evaluate/http-expect.js";
 import type { PollOutcome, WatchSource } from "./types.js";
 
 const expectationSchema = z.object({
   status: z.union([z.number().int(), z.array(z.number().int())]).optional().describe("Expected status code(s)"),
-  body_matches: z.string().optional().describe("Regex the response body must match"),
+  body_matches: regexField("Regex the response body must match").optional(),
   json_path: z.string().optional().describe("Path into the JSON body, e.g. status.phase or items[0].id"),
   json_equals: z.unknown().optional().describe("Value json_path must equal"),
-  json_matches: z.string().optional().describe("Regex the json_path value must match"),
+  json_matches: regexField("Regex the json_path value must match").optional(),
 });
 
 const configSchema = z.object({

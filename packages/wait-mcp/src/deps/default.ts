@@ -11,12 +11,19 @@ import type {
 
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
+/**
+ * Upper bound on one piece of poll I/O. The watch loop already stops waiting
+ * for a poll at the watch's deadline; this also ends the request or process
+ * itself, so a hung endpoint or `gh` does not linger after the watch is gone.
+ */
+export const POLL_IO_TIMEOUT_MS = 30_000;
+
 function runCommand(spec: CommandSpec): Promise<CommandResult> {
   return new Promise<CommandResult>((resolve) => {
     execFile(
       spec.command,
       spec.args,
-      { cwd: spec.cwd, maxBuffer: MAX_OUTPUT_BYTES },
+      { cwd: spec.cwd, maxBuffer: MAX_OUTPUT_BYTES, timeout: POLL_IO_TIMEOUT_MS },
       (error, stdout, stderr) => {
         const exitCode = (error as { code?: number } | null)?.code ?? 0;
         resolve({ stdout, stderr, exitCode: typeof exitCode === "number" ? exitCode : 1 });
@@ -30,6 +37,7 @@ async function httpRequest(request: HttpRequest): Promise<HttpResponse> {
     method: request.method ?? "GET",
     headers: request.headers,
     body: request.body,
+    signal: AbortSignal.timeout(POLL_IO_TIMEOUT_MS),
   });
   return { status: response.status, body: await response.text() };
 }

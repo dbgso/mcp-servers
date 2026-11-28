@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { regexField } from "./regex.js";
 import { tryParseJson } from "./evaluate/json-path.js";
 import { describeMessage, latestTs, selectNewMessages, type SlackMessage } from "./evaluate/slack.js";
 import type { PollOutcome, WatchSource } from "./types.js";
@@ -9,7 +10,7 @@ const DEFAULT_TOKEN_ENV = "SLACK_BOT_TOKEN";
 const configSchema = z.object({
   channel: z.string().describe("Channel ID (e.g. C0123456789)"),
   thread_ts: z.string().optional().describe("Thread timestamp; omit to watch the channel itself"),
-  match: z.string().optional().describe("Regex the message text must match"),
+  match: regexField("Regex the message text must match").optional(),
   from: z.string().optional().describe("Only accept messages from this user ID"),
   token_env: z.string().optional().describe(`Env var holding the bot token (default: ${DEFAULT_TOKEN_ENV})`),
 });

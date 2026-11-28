@@ -58,6 +58,66 @@ describe("WatchManager", () => {
     expect(watch.summary).toContain("timed out");
   });
 
+  it("times out at the deadline even when a poll never returns", async () => {
+    const clock = new ManualClock();
+    const manager = new WatchManager({
+      clock,
+      deps: createFakeDeps({ httpRequest: () => new Promise<HttpResponse>(() => {}) }),
+    });
+
+    const watch = manager.create(healthWatch({ timeoutMs: 15_000 }));
+    await tick();
+    expect(watch.status).toBe("waiting");
+
+    await clock.advance(15_000);
+    expect(watch.status).toBe("timeout");
+    expect(watch.finishedAt).toBe(15_000);
+    expect(watch.polls).toBe(1);
+  });
+
+  it("ignores a poll that returns after the watch has settled", async () => {
+    let answer: (response: HttpResponse) => void = () => {};
+    let fail: (error: Error) => void = () => {};
+    const clock = new ManualClock();
+    const manager = new WatchManager({
+      clock,
+      deps: createFakeDeps({
+        httpRequest: () =>
+          new Promise<HttpResponse>((resolve, reject) => {
+            answer = resolve;
+            fail = reject;
+          }),
+      }),
+      maxWatches: 5,
+    });
+
+    const late = manager.create(healthWatch());
+    await tick();
+    manager.cancel(late.id);
+    answer(UP);
+    await tick();
+    expect(late.status).toBe("cancelled");
+
+    const failing = manager.create(healthWatch());
+    await tick();
+    manager.cancel(failing.id);
+    fail(new Error("boom"));
+    await tick();
+    expect(failing.status).toBe("cancelled");
+    expect(failing.consecutiveErrors).toBe(0);
+  });
+
+  it.each([
+    ["http", { url: URL, expect: { body_matches: "(" } }, "expect.body_matches"],
+    ["http", { url: URL, expect: { json_path: "a", json_matches: "[" } }, "expect.json_matches"],
+    ["file", { path: "./x.log", until: "matches", pattern: "*" }, "pattern"],
+    ["slack", { channel: "C1", match: "(?<" }, "match"],
+  ])("rejects an invalid %s regex when the watch is created", (source, config, field) => {
+    const { manager } = managerWith([]);
+    expect(() => manager.create({ source, config })).toThrow(/not a valid regular expression/);
+    expect(() => manager.create({ source, config })).toThrow(new RegExp(field.replace(".", "\\.")));
+  });
+
   it("backs off and gives up after repeated errors", async () => {
     const clock = new ManualClock();
     let attempts = 0;

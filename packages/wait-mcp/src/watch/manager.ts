@@ -223,22 +223,34 @@ export class WatchManager {
     return record;
   }
 
+  private remaining(record: WatchRecord): number {
+    return remainingMs({
+      startedAt: record.watch.createdAt,
+      timeoutMs: record.watch.timeoutMs,
+      now: this.clock.now(),
+    });
+  }
+
+  private finishTimedOut(record: WatchRecord): void {
+    this.finish({
+      record,
+      status: "timeout",
+      summary: `timed out after ${record.watch.timeoutMs}ms: ${record.watch.summary}`,
+    });
+  }
+
   private async runLoop(record: WatchRecord): Promise<void> {
     while (record.watch.status === "waiting") {
-      await this.pollOnce(record);
+      // A poll that never returns (an endpoint that stops answering, a hung
+      // `gh`) must not hold the watch past its deadline, so the poll races the
+      // time left. The poll itself carries on in the background; its result is
+      // ignored once the watch has settled.
+      await Promise.race([this.pollOnce(record), this.clock.sleep(this.remaining(record))]);
       if (record.watch.status !== "waiting") return;
 
-      const remaining = remainingMs({
-        startedAt: record.watch.createdAt,
-        timeoutMs: record.watch.timeoutMs,
-        now: this.clock.now(),
-      });
+      const remaining = this.remaining(record);
       if (remaining <= 0) {
-        this.finish({
-          record,
-          status: "timeout",
-          summary: `timed out after ${record.watch.timeoutMs}ms: ${record.watch.summary}`,
-        });
+        this.finishTimedOut(record);
         return;
       }
 
@@ -260,8 +272,11 @@ export class WatchManager {
         state: record.state,
         deps: this.deps,
       });
+      // Settled while this poll was in flight (deadline, cancel): too late.
+      if (record.watch.status !== "waiting") return;
       this.applyOutcome({ record, outcome });
     } catch (error) {
+      if (record.watch.status !== "waiting") return;
       this.applyError({ record, message: getErrorMessage(error) });
     }
   }

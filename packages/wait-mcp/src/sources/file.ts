@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { regexField } from "./regex.js";
 import type { FileStat, PollOutcome, SourceDeps, WatchSource } from "./types.js";
 
 const configSchema = z.object({
@@ -7,7 +8,7 @@ const configSchema = z.object({
     .enum(["exists", "missing", "changed", "matches"])
     .optional()
     .describe("Condition to wait for (default: exists)"),
-  pattern: z.string().optional().describe("Regex the content must match; required when until=matches"),
+  pattern: regexField("Regex the content must match; required when until=matches").optional(),
 });
 
 type Config = z.infer<typeof configSchema>;
