@@ -22,6 +22,7 @@ relatedDocs:
   - coding-rules__test-fixtures
   - coding-rules__combinatorial-testing
   - coding-rules__prefer-git-mcp
+  - coding-rules__complexity
 ---
 
 # Coding Standards
@@ -40,6 +41,7 @@ time either is edited.
 
 ## Control flow
 
+- `coding-rules__complexity` — what to do with a branchy function, by the kind of branching; which kinds lint reports.
 - `coding-rules__early-return` — return early rather than carrying a `let` or a ternary.
 - `coding-rules__polymorphism` — polymorphism instead of `if`/`switch`; interfaces implemented by classes.
 - `coding-rules__ternary-testability` — a ternary is hard to cover; extract it to a function.

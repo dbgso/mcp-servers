@@ -16,5 +16,7 @@ module.exports = {
     'no-branching-literal': require('./no-branching-literal'),
     'no-strict-scalar-in-untyped-args': require('./no-strict-scalar-in-untyped-args'),
     'no-arrow-class-method': require('./no-arrow-class-method'),
+    'no-discriminant-chain': require('./no-discriminant-chain'),
+    'no-repeated-comparison': require('./no-repeated-comparison'),
   },
 };
