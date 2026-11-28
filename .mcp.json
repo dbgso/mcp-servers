@@ -30,6 +30,10 @@
       "command": "./scripts/wait-for-session-setup.sh",
       "args": ["npx", "tsx", "./packages/kroki-mcp/src/index.ts"]
     },
+    "wait-mcp": {
+      "command": "npx",
+      "args": ["tsx", "./packages/wait-mcp/src/index.ts"]
+    },
     "ast-file-mcp": {
       "command": "./scripts/wait-for-session-setup.sh",
       "args": ["npx", "tsx", "./packages/ast-file-mcp/src/index.ts"]

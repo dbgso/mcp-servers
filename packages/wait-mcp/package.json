@@ -1,0 +1,58 @@
+{
+  "name": "wait-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that waits for CI, Slack replies and GitHub issue updates via server-side background polling",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "wait-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "wait",
+    "polling",
+    "ci",
+    "slack",
+    "github",
+    "model-context-protocol"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dbgso/mcp-servers.git",
+    "directory": "packages/wait-mcp"
+  },
+  "homepage": "https://github.com/dbgso/mcp-servers/tree/master/packages/wait-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dbgso/mcp-servers/issues?labels=pkg:wait-mcp"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "mcp-shared": "workspace:*",
+    "zod": "catalog:",
+    "zod-to-json-schema": "catalog:"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
+  }
+}

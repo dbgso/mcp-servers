@@ -1,0 +1,75 @@
+import { execFile } from "node:child_process";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { loadAccessPolicy } from "../policy.js";
+import type {
+  CommandResult,
+  CommandSpec,
+  FileStat,
+  HttpRequest,
+  HttpResponse,
+  SourceDeps,
+} from "../sources/types.js";
+
+const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Upper bound on one piece of poll I/O. The watch loop already stops waiting
+ * for a poll at the watch's deadline; this also ends the request or process
+ * itself, so a hung endpoint or `gh` does not linger after the watch is gone.
+ */
+export const POLL_IO_TIMEOUT_MS = 30_000;
+
+function runCommand(spec: CommandSpec): Promise<CommandResult> {
+  return new Promise<CommandResult>((resolve) => {
+    execFile(
+      spec.command,
+      spec.args,
+      { cwd: spec.cwd, maxBuffer: MAX_OUTPUT_BYTES, timeout: POLL_IO_TIMEOUT_MS },
+      (error, stdout, stderr) => {
+        const exitCode = (error as { code?: number } | null)?.code ?? 0;
+        resolve({ stdout, stderr, exitCode: typeof exitCode === "number" ? exitCode : 1 });
+      },
+    );
+  });
+}
+
+async function httpRequest(request: HttpRequest): Promise<HttpResponse> {
+  const response = await fetch(request.url, {
+    method: request.method ?? "GET",
+    headers: request.headers,
+    body: request.body,
+    signal: AbortSignal.timeout(POLL_IO_TIMEOUT_MS),
+    // A redirect could lead off the allowed hosts; the watch sees the 3xx.
+    redirect: "manual",
+  });
+  return { status: response.status, body: await response.text() };
+}
+
+async function statFile(path: string): Promise<FileStat | null> {
+  try {
+    const info = await stat(path);
+    return { mtimeMs: info.mtimeMs, size: info.size };
+  } catch {
+    return null;
+  }
+}
+
+async function realPath(path: string): Promise<string | null> {
+  try {
+    return await realpath(path);
+  } catch {
+    return null;
+  }
+}
+
+/** Real I/O implementation used by the running server. */
+export const defaultDeps: SourceDeps = {
+  runCommand,
+  httpRequest,
+  readFileText: (path: string) => readFile(path, "utf8"),
+  statFile,
+  realPath,
+  env: (name: string) => process.env[name],
+  now: () => Date.now(),
+  policy: loadAccessPolicy({ env: (name) => process.env[name], cwd: process.cwd() }),
+};
