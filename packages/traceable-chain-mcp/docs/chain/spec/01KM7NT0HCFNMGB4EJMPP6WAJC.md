@@ -4,7 +4,12 @@ type: spec
 title: Query操作仕様
 requires: 01KM7NM0AJHBXNE98J4VBX7DYX
 created: 2026-03-21T07:47:26.892Z
-updated: 2026-03-21T07:47:26.892Z
+updated: 2026-11-28T08:27:31.604Z
+baseline:
+  01KM7NM0AJHBXNE98J4VBX7DYX:
+    parent: e5701f24f3e3450a
+    self: 778bc766752db711
+    at: 2026-11-28T08:27:31.604Z
 ---
 
 ## 概要

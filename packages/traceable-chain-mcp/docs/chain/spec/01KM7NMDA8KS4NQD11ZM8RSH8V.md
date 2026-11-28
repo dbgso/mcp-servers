@@ -4,7 +4,12 @@ type: spec
 title: ドキュメント管理仕様
 requires: 01KM7NM0AJHBXNE98J4VBX7DYX
 created: 2026-03-21T07:44:23.369Z
-updated: 2026-03-21T07:44:23.369Z
+updated: 2026-11-28T08:27:31.603Z
+baseline:
+  01KM7NM0AJHBXNE98J4VBX7DYX:
+    parent: e5701f24f3e3450a
+    self: 460c53df5968b905
+    at: 2026-11-28T08:27:31.602Z
 ---
 
 ## 概要

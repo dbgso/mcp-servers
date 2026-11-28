@@ -249,7 +249,8 @@ describe("ChainManager", () => {
 
       // ID should be preserved
       expect(linked.id).toBe(originalId);
-      expect(linked.requires).toBe(design.id);
+      // Link adds a parent; the original one is kept
+      expect(linked.requires).toEqual([spec.id, design.id]);
     });
 
     test("throws for non-existent document", async () => {
@@ -265,7 +266,7 @@ describe("ChainManager", () => {
       // spec requires requirement, not another spec or requirement (already linked)
       // Try to link spec to req2 - should work
       const linked = await manager.link({ id: spec.id, parentId: req2.id });
-      expect(linked.requires).toBe(req2.id);
+      expect(linked.requires).toEqual([req1.id, req2.id]);
     });
 
     test("throws for non-existent parent", async () => {

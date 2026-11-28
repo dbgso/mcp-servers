@@ -96,7 +96,7 @@ describe("ChainDescribeHandler", () => {
 
       const text = result.content[0].text as string;
       expect(text).toContain("Type Hierarchy");
-      expect(text).toContain("requirement (root)");
+      expect(text).toContain("philosophy (root)");
       expect(text).toContain("spec");
       expect(text).toContain("proposal");
       expect(text).toContain("adr");
@@ -120,12 +120,21 @@ describe("ChainDescribeHandler", () => {
       expect(text).toContain("DON'T create");
     });
 
-    test("notes that requires field cannot be changed", async () => {
+    test("explains how parents are changed with link and unlink", async () => {
       const result = await handler.execute({ operation: "guide" });
 
       const text = result.content[0].text as string;
       expect(text).toContain("requires");
-      expect(text).toContain("cannot be changed");
+      expect(text).toContain("link the new parent first");
+    });
+
+    test("explains the change workflow and top-down resolution", async () => {
+      const result = await handler.execute({ operation: "guide" });
+
+      const text = result.content[0].text as string;
+      expect(text).toContain("Change Workflow");
+      expect(text).toContain("actionable: true");
+      expect(text).toContain("refuses while anything above");
     });
   });
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Operation, OperationContext } from "./types.js";
 import { getErrorMessage } from "mcp-shared";
+import { respondJson } from "./respond.js";
 
 const readArgsSchema = z.object({
   id: z.string().describe("Document ID (ULID)"),
@@ -138,4 +139,58 @@ Examples:
 
 export const validateOp = new ValidateOp();
 
-export const queryOperations = [readOp, listOp, traceOp, validateOp];
+const checkArgsSchema = z.object({});
+type CheckArgs = z.infer<typeof checkArgsSchema>;
+
+export class CheckOp implements Operation<CheckArgs> {
+  readonly id = "check";
+  readonly summary = "Mechanically check the whole chain";
+  readonly detail = `Run every check and report findings:
+- structure: unknown_type, root_has_parent, missing_parent, parent_not_found, invalid_parent_type, cycle, invalid_file
+- drift between documents: unreviewed_link, parent_changed (the parent moved), self_changed (this document moved)
+- drift against code: code_changed, code_missing, code_unreviewed
+- coverage (warnings): unrealized (no child realizes it), no_code (an implementation bound to nothing)
+
+"escalations" lists every drifted document with its ancestors up to the root.
+Work on the ones with actionable: true, top-down: re-read the document against the
+level above, then either confirm it or change it. A change is itself drift one level
+up, so the walk continues until a level holds or the root is reached.
+
+Examples:
+  operation: "check"
+  params: {}`;
+  readonly argsSchema = checkArgsSchema;
+  async execute(_args: CheckArgs, ctx: OperationContext): Promise<CallToolResult> {
+    return respondJson(() => ctx.manager.check());
+  }
+}
+
+export const checkOp = new CheckOp();
+
+const impactArgsSchema = z.object({
+  id: z.string().optional().describe("Document ID"),
+  path: z.string().optional().describe("Code path relative to the code root (instead of id)"),
+});
+type ImpactArgs = z.infer<typeof impactArgsSchema>;
+
+export class ImpactOp implements Operation<ImpactArgs> {
+  readonly id = "impact";
+  readonly summary = "Show what a change has to be checked against";
+  readonly detail = `For a document, or for a code path (resolved to the documents bound to it),
+list everything upstream to the roots (what the change must still satisfy) and
+everything downstream (what the change can invalidate). Use it before changing
+anything.
+
+Examples:
+  operation: "impact"
+  params: { id: "01HQXK4B9P..." }
+  params: { path: "packages/foo/src/auth.ts" }`;
+  readonly argsSchema = impactArgsSchema;
+  async execute(args: ImpactArgs, ctx: OperationContext): Promise<CallToolResult> {
+    return respondJson(() => ctx.manager.impact({ id: args.id, path: args.path }));
+  }
+}
+
+export const impactOp = new ImpactOp();
+
+export const queryOperations: Operation[] = [readOp, listOp, traceOp, validateOp, checkOp, impactOp];

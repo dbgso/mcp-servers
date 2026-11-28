@@ -4,6 +4,20 @@ import { ulid } from "ulid";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { Document, DocumentMeta, StorageConfig } from "../types.js";
 import { DocumentMetaSchema } from "../types.js";
+import { getErrorMessage } from "mcp-shared";
+import { parentIds } from "../graph.js";
+
+/**
+ * Fields an update may set. A key that is present replaces the stored value,
+ * even with undefined, so `requires` and `baseline` can be cleared.
+ */
+export interface DocumentUpdates {
+  title?: string;
+  content?: string;
+  requires?: string | string[];
+  baseline?: DocumentMeta["baseline"];
+  code?: DocumentMeta["code"];
+}
 
 /**
  * Parse a markdown file with YAML frontmatter
@@ -26,7 +40,8 @@ export function parseMarkdown(content: string): { meta: Record<string, unknown>;
  * Serialize document to markdown with frontmatter
  */
 export function serializeMarkdown({ meta, content }: { meta: DocumentMeta; content: string }): string {
-  const frontmatter = stringifyYaml(meta);
+  // Drop undefined fields so they are absent from the file rather than null
+  const frontmatter = stringifyYaml(JSON.parse(JSON.stringify(meta)));
   return `---\n${frontmatter}---\n\n${content}\n`;
 }
 
@@ -96,8 +111,18 @@ export class MarkdownStorage {
    * List all documents, optionally filtered by type
    */
   async list(type?: string): Promise<Document[]> {
+    const { documents } = await this.scan(type);
+    return documents;
+  }
+
+  /**
+   * List documents together with the files that could not be parsed, so a
+   * check can report them instead of silently skipping them.
+   */
+  async scan(type?: string): Promise<{ documents: Document[]; invalid: { filePath: string; error: string }[] }> {
     const types = type ? [type] : this.getTypes();
     const documents: Document[] = [];
+    const invalid: { filePath: string; error: string }[] = [];
 
     for (const t of types) {
       const typeDir = path.join(this.basePath, t);
@@ -112,20 +137,26 @@ export class MarkdownStorage {
           const { meta, body } = parseMarkdown(content);
           const parsed = DocumentMetaSchema.parse(meta);
           documents.push({ ...parsed, content: body, filePath });
-        } catch {
-          // Skip invalid files
+        } catch (error) {
+          invalid.push({ filePath, error: getErrorMessage(error) });
         }
       }
     }
 
-    return documents;
+    return { documents, invalid };
   }
 
   /**
    * Create a new document
    */
   async create(
-    { type, title, content, requires }: { type: string; title: string; content: string; requires?: string },
+    { type, title, content, requires, baseline }: {
+      type: string;
+      title: string;
+      content: string;
+      requires?: string | string[];
+      baseline?: DocumentMeta["baseline"];
+    },
   ): Promise<Document> {
     const id = generateId();
     const timestamp = now();
@@ -137,6 +168,7 @@ export class MarkdownStorage {
       requires,
       created: timestamp,
       updated: timestamp,
+      baseline,
     };
 
     const filePath = this.getFilePath({ type: type, id: id });
@@ -150,16 +182,20 @@ export class MarkdownStorage {
    * Update an existing document
    */
   async update(
-    { id, updates }: { id: string; updates: { title?: string; content?: string; requires?: string } },
+    { id, updates }: { id: string; updates: DocumentUpdates },
   ): Promise<Document | null> {
     const doc = await this.read(id);
     if (!doc) return null;
 
     const newMeta: DocumentMeta = {
-      ...doc,
+      id: doc.id,
+      type: doc.type,
       title: updates.title ?? doc.title,
-      requires: updates.requires ?? doc.requires,
+      requires: "requires" in updates ? updates.requires : doc.requires,
+      created: doc.created,
       updated: now(),
+      baseline: "baseline" in updates ? updates.baseline : doc.baseline,
+      code: "code" in updates ? updates.code : doc.code,
     };
 
     const newContent = updates.content ?? doc.content;
@@ -186,7 +222,7 @@ export class MarkdownStorage {
    */
   async findDependents(id: string): Promise<Document[]> {
     const all = await this.list();
-    return all.filter(doc => doc.requires === id);
+    return all.filter(doc => parentIds(doc).includes(id));
   }
 
   /**

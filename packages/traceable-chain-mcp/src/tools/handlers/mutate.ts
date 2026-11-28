@@ -13,7 +13,7 @@ type MutateArgs = z.infer<typeof MutateSchema>;
 
 export class ChainMutateHandler extends BaseToolHandler<MutateArgs> {
   readonly name = "chain_mutate";
-  readonly description = "Execute write operations: create, update, delete, link. Requires approval.";
+  readonly description = "Execute write operations: create, update, delete, link, unlink, confirm, bind_code, baseline. Requires approval.";
   readonly schema = MutateSchema;
   readonly inputSchema = {
     type: "object" as const,

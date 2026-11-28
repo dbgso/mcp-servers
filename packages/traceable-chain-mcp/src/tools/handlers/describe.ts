@@ -101,7 +101,11 @@ export class ChainDescribeHandler extends BaseToolHandler<DescribeArgs> {
         : Array.isArray(cfg.requires)
           ? cfg.requires.join(" | ")
           : cfg.requires;
-      lines.push(`- **${typeName}**: requires ${requires}${cfg.description ? ` - ${cfg.description}` : ""}`);
+      const extras = [
+        cfg.realizedBy ? `realized by ${cfg.realizedBy}` : "",
+        cfg.bindsCode ? "binds code" : "",
+      ].filter(Boolean).join(", ");
+      lines.push(`- **${typeName}**: requires ${requires}${extras ? ` (${extras})` : ""}${cfg.description ? ` - ${cfg.description}` : ""}`);
     }
 
     lines.push("");
@@ -127,25 +131,57 @@ export class ChainDescribeHandler extends BaseToolHandler<DescribeArgs> {
   }
 
   private getGuideContent(): string {
-    return `# Chain Structure Guide
+    return GUIDE;
+  }
+}
+
+const GUIDE = `# Chain Structure Guide
 
 ## Core Principle
 
-traceable-chain-mcp is designed to **trace dependencies**. When you call \`trace(direction: "up")\` from an ADR, you should be able to reach the original requirement in a single chain.
+Decisions are always made from the top. A philosophy decides requirements, a
+requirement decides specs, a spec decides designs, a design decides the
+implementation, and the implementation is bound to code. Every document links to
+the parent(s) it was derived from, so \`trace(direction: "up")\` from any document
+reaches the philosophy it serves.
 
-## Type Hierarchy
+## Type Hierarchy (default)
 
 \`\`\`
-requirement (root)
-  └── spec
-       └── design
-            └── implementation
-                 └── test
-
-requirement | spec | design | implementation
+philosophy (root)
+  └── requirement
+       └── spec
+            └── design
+                 └── implementation ──▶ code (bind_code)
+spec | design
+  └── test ──▶ test code
+philosophy | requirement | spec | design | implementation
   └── proposal
        └── adr
 \`\`\`
+
+## Change Workflow
+
+Every link remembers what both ends said when it was last confirmed. When either
+end changes, \`check\` flags the link. Nothing is cleared until a person decides.
+
+1. **Before a change**: \`chain_query({ operation: "impact", params: { id } })\`
+   (or \`{ path }\` for code) shows what it must still satisfy and what it can break.
+2. **After a change**: \`chain_query({ operation: "check" })\`.
+3. **Walk up**: take an escalation with \`actionable: true\`. Re-read the drifted
+   document against its parent.
+   - It still holds → \`chain_mutate({ operation: "confirm", params: { id } })\`.
+   - It does not → the parent is wrong. Update the parent; that is now drift one
+     level up. Repeat until a level holds or the root is reached.
+4. **Walk down**: every document you changed made its children \`parent_changed\`.
+   Re-read and confirm or update each, top-down, until the code.
+5. Repeat \`check\` until it is clean.
+
+A code change follows the same path: \`code_changed\` on the implementation, then
+design, spec, requirement, philosophy as far as the change reaches.
+
+\`confirm\` refuses while anything above the document is unresolved, and names
+it. This is what makes the walk top-down: the upper decision is settled first.
 
 ## Common Mistake: Orphaned Requirements
 
@@ -161,41 +197,25 @@ requirement | spec | design | implementation
 ### ✅ Correct
 
 \`\`\`
-[requirement] Feature A
-  └── [spec] Feature A details    ← Connected under requirement
-       └── [proposal] Implementation option
-            └── [adr] Decision
+[philosophy] Why the product exists
+  └── [requirement] Feature A
+       └── [spec] Feature A details
+            └── [proposal] Implementation option
+                 └── [adr] Decision
 \`\`\`
 
 ## Before Creating Documents
 
-### 1. Check existing chains
-
-\`\`\`
-chain_query({ operation: "list" })
-\`\`\`
-
-### 2. Identify the parent
-
-- **Detailing a requirement** → Create spec under existing requirement
-- **Design decision** → Create design under existing spec
-- **Proposing implementation** → Create proposal under requirement/spec/design
-- **Recording decision** → Create adr under proposal
-
-### 3. Verify after creation
-
-\`\`\`
-chain_query({
-  operation: "trace",
-  params: { id: "<adr-id>", direction: "up" }
-})
-\`\`\`
+1. \`chain_query({ operation: "list" })\` to see existing chains.
+2. Identify the parent: detailing a requirement → spec under it; a design
+   decision → design under the spec; implementation → implementation under the
+   design, then \`bind_code\` it.
+3. \`trace(direction: "up")\` after creating to verify the chain.
 
 ## When to Create New Requirement
 
 **DO create new requirement:**
-- Completely independent new feature/project
-- No relation to existing chains
+- A new thing that must be true, derived from an existing philosophy
 
 **DON'T create new requirement:**
 - Detailing existing requirement → Use spec
@@ -204,6 +224,11 @@ chain_query({
 
 ## Note on requires Field
 
-The \`requires\` field cannot be changed after creation. If you made a mistake, you must delete and recreate the document in the correct order (children first, then parents).`;
-  }
-}
+A document can have several parents. \`link\` adds one (confirmed as it is made),
+\`unlink\` removes one; a non-root document always keeps at least one. To move a
+document, link the new parent first, then unlink the old one.
+
+## Adopting Existing Documents
+
+Documents written before baselines existed report \`unreviewed_link\`. Run
+\`chain_mutate({ operation: "baseline" })\` once to accept the current state.`;
