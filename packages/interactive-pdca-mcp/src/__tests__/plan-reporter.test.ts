@@ -1530,6 +1530,86 @@ addressed_by: null
       expect(content).toContain("Completed task feedback");
     });
 
+    it("shows pending feedback under a pending_review task that has an output", async () => {
+      await planReader.addTask({
+        id: "out-fb-task",
+        title: "Output With Feedback",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      await planReader.updateStatus({
+        id: "out-fb-task",
+        status: "pending_review",
+        task_output: {
+          what: "Done",
+          why: "Complete",
+          how: "Manual",
+          blockers: [],
+          risks: [],
+          phase: "check",
+          test_target: "the parser",
+          references_used: [],
+          references_reason: "",
+        },
+      });
+      const fb = await feedbackReader.createDraftFeedback({
+        taskId: "out-fb-task",
+        original: "Cover the error path too",
+        decision: "adopted",
+      });
+      await feedbackReader.addInterpretation({
+        taskId: "out-fb-task",
+        feedbackId: fb.feedbackId!,
+        interpretation: "Add a failing-input test",
+      });
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(path.join(testDir, "PENDING_REVIEW.md"), "utf-8");
+      const report = content.slice(content.indexOf("## out-fb-task"));
+      expect(report).toContain("### Test Target\nthe parser");
+      expect(report).toContain("Cover the error path too");
+    });
+
+    it("skips a task with pending feedback that is gone by the time it is read", async () => {
+      await planReader.addTask({
+        id: "gone-task",
+        title: "Gone Task",
+        content: "",
+        parent: "",
+        dependencies: [],
+        dependency_reason: "",
+        prerequisites: "",
+        completion_criteria: "",
+        deliverables: [],
+        is_parallelizable: false,
+        references: [],
+      });
+      const fb = await feedbackReader.createDraftFeedback({
+        taskId: "gone-task",
+        original: "Some feedback",
+        decision: "adopted",
+      });
+      await feedbackReader.addInterpretation({
+        taskId: "gone-task",
+        feedbackId: fb.feedbackId!,
+        interpretation: "Noted",
+      });
+      planReader.getTask = async () => null;
+
+      await planReporter.updatePendingReviewFile();
+
+      const content = await fs.readFile(path.join(testDir, "PENDING_REVIEW.md"), "utf-8");
+      expect(content).not.toContain("Task is not pending review");
+    });
+
     it("should sort multiple feedback items by timestamp (newest first)", async () => {
       // Create a task
       await planReader.addTask({

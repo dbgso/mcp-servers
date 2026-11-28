@@ -2,6 +2,10 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { FeedbackEntry, FeedbackDecision, FeedbackStatus } from "../types/index.js";
 import { getErrorMessage } from "mcp-shared";
+import { withStringFields } from "../utils/metadata.js";
+
+/** The last id handed out in this process, shared by every reader. */
+let lastIssuedId = 0;
 
 export class FeedbackReader {
   private readonly baseDir: string;
@@ -19,9 +23,14 @@ export class FeedbackReader {
     return path.join(this.getTaskFeedbackDir(taskId), `${feedbackId}.md`);
   }
 
+  /**
+   * `fb-<milliseconds>`, but never the same number twice: two feedback entries
+   * created within one millisecond used to get the same id, and the second
+   * file overwrote the first.
+   */
   private generateFeedbackId(): string {
-    const timestamp = Date.now();
-    return `fb-${timestamp}`;
+    lastIssuedId = Math.max(Date.now(), lastIssuedId + 1);
+    return `fb-${lastIssuedId}`;
   }
 
   private parseYamlValue(value: string): string | boolean | null {
@@ -64,19 +73,13 @@ export class FeedbackReader {
       metadata[key] = this.parseYamlValue(value);
     }
 
-    // Validate required fields
-    if (
-      typeof metadata.id !== "string" ||
-      typeof metadata.task_id !== "string" ||
-      typeof metadata.original !== "string"
-    ) {
-      return null;
-    }
+    const required = withStringFields({ metadata, keys: ["id", "task_id", "original"] as const });
+    if (required === null) return null;
 
     return {
-      id: metadata.id,
-      task_id: metadata.task_id,
-      original: metadata.original,
+      id: required.id,
+      task_id: required.task_id,
+      original: required.original,
       interpretation: metadata.interpretation as string | null,
       decision: (metadata.decision as FeedbackDecision) || "rejected",
       status: (metadata.status as FeedbackStatus) || "draft",

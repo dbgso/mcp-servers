@@ -48,7 +48,7 @@ const baseOutput: TaskOutput = {
   how: "how",
   blockers: [],
   risks: [],
-  phase: "research",
+  phase: "plan",
   references_used: [],
   references_reason: "",
 };
@@ -278,21 +278,21 @@ describe("reading a task's output", () => {
     });
   }
 
-  it("says (none) for a research report with no findings or sources", async () => {
-    context.planReader = taskWith({ phase: "research" });
+  it("says (not recorded) for a plan report with no findings or sources", async () => {
+    context.planReader = taskWith({ phase: "plan" });
 
     const result = await new ReadOutputHandler().execute({
       rawParams: { id: "task-1" },
       context,
     });
 
-    expect(text(result)).toContain("## Findings\n(none)");
-    expect(text(result)).toContain("## Sources\n(none)");
+    expect(text(result)).toContain("## Findings\n(not recorded)");
+    expect(text(result)).toContain("## Sources\n- (none)");
   });
 
-  it("lists the sources a research report does carry", async () => {
+  it("lists the sources a plan report does carry", async () => {
     context.planReader = taskWith({
-      phase: "research",
+      phase: "plan",
       findings: "it works",
       sources: ["docs/a.md", "docs/b.md"],
     });
@@ -302,25 +302,25 @@ describe("reading a task's output", () => {
       context,
     });
 
-    expect(text(result)).toContain("docs/a.md, docs/b.md");
+    expect(text(result)).toContain("## Sources\n- docs/a.md\n- docs/b.md");
   });
 
-  it("says (none) for a verify report with none of its fields", async () => {
-    context.planReader = taskWith({ phase: "verify" });
+  it("says (not recorded) for a check report with none of its fields", async () => {
+    context.planReader = taskWith({ phase: "check" });
 
     const result = await new ReadOutputHandler().execute({
       rawParams: { id: "task-1" },
       context,
     });
 
-    expect(text(result)).toContain("## Test Target\n(none)");
-    expect(text(result)).toContain("## Test Results\n(none)");
-    expect(text(result)).toContain("## Coverage\n(none)");
+    expect(text(result)).toContain("## Test Target\n(not recorded)");
+    expect(text(result)).toContain("## Test Results\n(not recorded)");
+    expect(text(result)).toContain("## Coverage\n(not recorded)");
   });
 
-  it("reports a verify run that has them", async () => {
+  it("reports a check run that has them", async () => {
     context.planReader = taskWith({
-      phase: "verify",
+      phase: "check",
       test_target: "the parser",
       test_results: "12 passed",
       coverage: "97%",
@@ -335,14 +335,29 @@ describe("reading a task's output", () => {
     expect(text(result)).toContain("97%");
   });
 
-  it("leaves the changes section out when an implement report has none", async () => {
-    context.planReader = taskWith({ phase: "implement", changes: [] });
+  it("says so when a do report recorded no changes", async () => {
+    context.planReader = taskWith({ phase: "do", changes: [] });
 
     const result = await new ReadOutputHandler().execute({
       rawParams: { id: "task-1" },
       context,
     });
 
-    expect(text(result)).not.toContain("## Changes");
+    expect(text(result)).toContain("_(no changes recorded)_");
+  });
+
+  it("has no phase section for an output written under a phase name this version does not know", async () => {
+    // Outputs written before the PDCA names (research / implement / verify)
+    // are still on disk. They read without a phase section rather than failing.
+    context.planReader = taskWith({ phase: "research", findings: "old" });
+
+    const result = await new ReadOutputHandler().execute({
+      rawParams: { id: "task-1" },
+      context,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(text(result)).toContain("**Phase:** research");
+    expect(text(result)).not.toContain("## Findings");
   });
 });

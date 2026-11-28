@@ -1,8 +1,19 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { Task, TaskOutput, FeedbackEntry } from "../types/index.js";
+import type { Task, TaskOutput, TaskStatus, FeedbackEntry } from "../types/index.js";
 import type { PlanReader } from "./plan-reader.js";
 import type { FeedbackReader } from "./feedback-reader.js";
+import { phaseSections, renderSections, STATUS_STYLE, statusLookup } from "./task-presentation.js";
+
+const STATUS_ICON: Record<TaskStatus, string> = {
+  completed: "[done]",
+  self_review: "[self-review]",
+  pending_review: "[review]",
+  in_progress: "[wip]",
+  blocked: "[blocked]",
+  skipped: "[skip]",
+  pending: "[pending]",
+};
 
 export class PlanReporter {
   private readonly directory: string;
@@ -130,7 +141,7 @@ Approve: \`approve(target: "task", id: "${task.id}")\`
     }
 
     // Format phase-specific section
-    const phaseSection = this.formatPhaseSection(output);
+    const phaseSection = renderSections({ sections: phaseSections(output), level: 3 });
 
     // Format blockers & risks
     const blockersRisks = this.formatBlockersRisks(output);
@@ -180,54 +191,6 @@ Approve: \`approve(target: "task", id: "${task.id}")\`
 `;
   }
 
-  private formatPhaseSection(output: TaskOutput): string {
-    switch (output.phase) {
-      case "plan":
-        return `### Findings
-${output.findings || "(not recorded)"}
-
-### Sources
-${output.sources?.map((s) => `- ${s}`).join("\n") || "- (none)"}`;
-
-      case "do":
-        return `### Changes
-${this.formatChangesTable(output.changes)}
-
-### Design Decisions
-${output.design_decisions || "(not recorded)"}`;
-
-      case "check":
-        return `### Test Target
-${output.test_target || "(not recorded)"}
-
-### Test Results
-${output.test_results || "(not recorded)"}
-
-### Coverage
-${output.coverage || "(not recorded)"}`;
-
-      case "act":
-        return `### Changes
-${this.formatChangesTable(output.changes)}
-
-### Feedback Addressed
-${output.feedback_addressed || "(not recorded)"}`;
-
-      default:
-        return "";
-    }
-  }
-
-  private formatChangesTable(changes: TaskOutput["changes"]): string {
-    if (!changes || changes.length === 0) {
-      return "| File | Lines | Changes |\n|------|-------|---------|\n| _(no changes recorded)_ | - | - |";
-    }
-    const rows = changes.map(
-      (c) => `| \`${c.file}\` | ${c.lines} | ${c.description} |`
-    );
-    return `| File | Lines | Changes |\n|------|-------|---------|\n${rows.join("\n")}`;
-  }
-
   private formatBlockersRisks(output: TaskOutput): string {
     const blockers = output.blockers?.length
       ? output.blockers.map((b) => `- ${b}`).join("\n")
@@ -256,7 +219,7 @@ ${risks}`;
 
     // Define nodes
     for (const task of tasks) {
-      const icon = this.getStatusIcon(task.status);
+      const icon = statusLookup({ table: STATUS_ICON, status: task.status });
       // Escape quotes in title and wrap in quotes for Mermaid compatibility
       const escapedTitle = task.title.replace(/"/g, '\\"');
       const label = `"${escapedTitle} ${icon}"`;
@@ -293,7 +256,7 @@ ${risks}`;
     // Add styling
     for (const task of tasks) {
       const safeId = task.id.replace(/-/g, "_");
-      const style = this.getStatusStyle(task.status);
+      const style = statusLookup({ table: STATUS_STYLE, status: task.status });
       lines.push(`  style ${safeId} ${style}`);
     }
 
@@ -315,44 +278,6 @@ ${risks}`;
     const content = lines.join("\n") + "\n";
     const filePath = path.join(this.directory, "GRAPH.md");
     await fs.writeFile(filePath, content, "utf-8");
-  }
-
-  private getStatusIcon(status: string): string {
-    switch (status) {
-      case "completed":
-        return "[done]";
-      case "self_review":
-        return "[self-review]";
-      case "pending_review":
-        return "[review]";
-      case "in_progress":
-        return "[wip]";
-      case "blocked":
-        return "[blocked]";
-      case "skipped":
-        return "[skip]";
-      default:
-        return "[pending]";
-    }
-  }
-
-  private getStatusStyle(status: string): string {
-    switch (status) {
-      case "completed":
-        return "fill:#90EE90,stroke:#228B22";
-      case "self_review":
-        return "fill:#FFD700,stroke:#B8860B"; // Gold for self-review (AI reviewing)
-      case "pending_review":
-        return "fill:#DDA0DD,stroke:#8B008B";
-      case "in_progress":
-        return "fill:#87CEEB,stroke:#4682B4";
-      case "blocked":
-        return "fill:#FFB6C1,stroke:#DC143C";
-      case "skipped":
-        return "fill:#D3D3D3,stroke:#808080";
-      default:
-        return "fill:#FFFACD,stroke:#DAA520";
-    }
   }
 
   async updateAll(): Promise<void> {

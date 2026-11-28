@@ -72,31 +72,12 @@ plan(action: "update", id: "<task-id>", title?: "...", content?: "...", ...)
 
   protected async doExecute(params: { args: UpdateArgs; context: PlanActionContext }) {
     const { args, context } = params;
-    const {
-      id,
-      title,
-      content,
-      dependencies,
-      dependency_reason,
-      prerequisites,
-      completion_criteria,
-      is_parallelizable,
-      parallelizable_units,
-      references,
-    } = args;
+    // Everything the schema accepts besides `id` is a field to update, so the
+    // check below cannot fall behind the schema.
+    const { id, ...fields } = args;
+    const { dependencies, dependency_reason } = fields;
 
-    // Check if at least one field to update is provided
-    if (
-      title === undefined &&
-      content === undefined &&
-      dependencies === undefined &&
-      dependency_reason === undefined &&
-      prerequisites === undefined &&
-      completion_criteria === undefined &&
-      is_parallelizable === undefined &&
-      parallelizable_units === undefined &&
-      references === undefined
-    ) {
+    if (Object.values(fields).every((value) => value === undefined)) {
       return {
         content: [
           {
@@ -132,18 +113,7 @@ Please explain why this task depends on: ${dependencies.join(", ")}`,
       }
     }
 
-    const result = await planReader.updateTask({
-      id,
-      title,
-      content,
-      dependencies,
-      dependency_reason,
-      prerequisites,
-      completion_criteria,
-      is_parallelizable,
-      parallelizable_units,
-      references,
-    });
+    const result = await planReader.updateTask({ id, ...fields });
 
     if (!result.success) {
       return {

@@ -155,6 +155,23 @@ describe("GraphHandler", () => {
       expect(text).toContain("Skipped Task ⊘");
     });
 
+    it("shows a task in self_review with its own icon and style, not as pending", async () => {
+      // The graph used to have no entry for self_review and drew it as pending,
+      // while GRAPH.md drew it gold.
+      const mockTasks: TaskSummary[] = [
+        { id: "self-task", title: "Self Review", status: "self_review", dependencies: [], is_parallelizable: false, parent: "" },
+      ];
+      vi.mocked(mockPlanReader.listTasks).mockResolvedValue(mockTasks);
+      vi.mocked(mockPlanReader.getBlockedTasks).mockResolvedValue([]);
+
+      const rawParams: PlanRawParams = {};
+      const result = await handler.execute({ rawParams, context: mockContext });
+
+      const text = result.content[0].text;
+      expect(text).toContain("Self Review ◐");
+      expect(text).toContain("style self_task fill:#FFD700,stroke:#B8860B");
+    });
+
     it("should apply correct styling for different statuses", async () => {
       const mockTasks: TaskSummary[] = [
         { id: "completed-task", title: "Completed", status: "completed", dependencies: [], is_parallelizable: false, parent: "" },
@@ -170,7 +187,7 @@ describe("GraphHandler", () => {
 
       const text = result.content[0].text;
       expect(text).toContain("style completed_task fill:#90EE90,stroke:#228B22");
-      expect(text).toContain("style progress_task fill:#87CEEB,stroke:#4169E1");
+      expect(text).toContain("style progress_task fill:#87CEEB,stroke:#4682B4");
       expect(text).toContain("style review_task fill:#DDA0DD,stroke:#8B008B");
       expect(text).toContain("style skipped_task fill:#D3D3D3,stroke:#808080");
     });

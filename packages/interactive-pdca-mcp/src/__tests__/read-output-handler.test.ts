@@ -85,14 +85,14 @@ describe("ReadOutputHandler", () => {
       expect(text).toContain("(no task output yet)");
     });
 
-    it("should return research phase output", async () => {
+    it("should return plan phase output", async () => {
       const taskOutput: TaskOutput = {
         what: "Investigated the issue",
         why: "Need to understand the problem",
         how: "Code review and testing",
         blockers: [],
         risks: [],
-        phase: "research",
+        phase: "plan",
         references_used: ["doc-1"],
         references_reason: "Needed context",
         findings: "Found the bug in line 42",
@@ -124,7 +124,7 @@ describe("ReadOutputHandler", () => {
 
       const text = result.content[0].text;
       expect(text).toContain("# Task Output: Research Task");
-      expect(text).toContain("**Phase:** research");
+      expect(text).toContain("**Phase:** plan");
       expect(text).toContain("## What");
       expect(text).toContain("Investigated the issue");
       expect(text).toContain("## Why");
@@ -132,17 +132,17 @@ describe("ReadOutputHandler", () => {
       expect(text).toContain("## Findings");
       expect(text).toContain("Found the bug in line 42");
       expect(text).toContain("## Sources");
-      expect(text).toContain("src/main.ts, tests/unit.test.ts");
+      expect(text).toContain("- src/main.ts\n- tests/unit.test.ts");
     });
 
-    it("should return implement phase output with changes", async () => {
+    it("should return do phase output with changes", async () => {
       const taskOutput: TaskOutput = {
         what: "Implemented the fix",
         why: "To resolve the bug",
         how: "Added null check",
         blockers: [],
         risks: ["May affect performance"],
-        phase: "implement",
+        phase: "do",
         references_used: [],
         references_reason: "",
         changes: [
@@ -177,22 +177,22 @@ describe("ReadOutputHandler", () => {
 
       const text = result.content[0].text;
       expect(text).toContain("## Changes");
-      expect(text).toContain("src/main.ts:42-45 - Added null check");
-      expect(text).toContain("src/util.ts:10 - Export helper");
+      expect(text).toContain("| `src/main.ts` | 42-45 | Added null check |");
+      expect(text).toContain("| `src/util.ts` | 10 | Export helper |");
       expect(text).toContain("## Design Decisions");
       expect(text).toContain("Used early return pattern");
       expect(text).toContain("## Risks");
       expect(text).toContain("May affect performance");
     });
 
-    it("should return verify phase output", async () => {
+    it("should return check phase output", async () => {
       const taskOutput: TaskOutput = {
         what: "Verified the fix",
         why: "Ensure quality",
         how: "Unit tests and integration tests",
         blockers: ["Waiting for CI"],
         risks: [],
-        phase: "verify",
+        phase: "check",
         references_used: [],
         references_reason: "(none)",
         test_target: "validateForm function",
@@ -234,14 +234,14 @@ describe("ReadOutputHandler", () => {
       expect(text).toContain("Waiting for CI");
     });
 
-    it("should return fix phase output with feedback_addressed", async () => {
+    it("should return act phase output with feedback_addressed", async () => {
       const taskOutput: TaskOutput = {
         what: "Fixed the issue",
         why: "Address feedback",
         how: "Refactored code",
         blockers: [],
         risks: [],
-        phase: "fix",
+        phase: "act",
         references_used: [],
         references_reason: "",
         changes: [{ file: "src/main.ts", lines: "50-60", description: "Extracted helper" }],
@@ -273,7 +273,7 @@ describe("ReadOutputHandler", () => {
 
       const text = result.content[0].text;
       expect(text).toContain("## Changes");
-      expect(text).toContain("src/main.ts:50-60 - Extracted helper");
+      expect(text).toContain("| `src/main.ts` | 50-60 | Extracted helper |");
       expect(text).toContain("## Feedback Addressed");
       expect(text).toContain("Extract validation to reusable helper");
     });
