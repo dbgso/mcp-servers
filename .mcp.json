@@ -24,6 +24,10 @@
     },
     "traceable-chain-mcp": {
       "command": "./scripts/wait-for-session-setup.sh",
+      "args": ["npx", "tsx", "./packages/traceable-chain-mcp/src/index.ts", "./docs/chain"]
+    },
+    "traceable-chain-mcp-chain": {
+      "command": "./scripts/wait-for-session-setup.sh",
       "args": ["npx", "tsx", "./packages/traceable-chain-mcp/src/index.ts", "./packages/traceable-chain-mcp/docs/chain"]
     },
     "kroki-mcp": {
